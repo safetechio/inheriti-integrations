@@ -3,7 +3,7 @@ import type { NodeIntegrationCore, BusinessOrganization } from '@safetech/inheri
 import type { OperatorSessionStore } from '@safetech/inheriti-elements-core';
 import type { ExtensionConfiguration } from './configuration.js';
 
-const KEY = 'inheritiElements.businessOrganizations';
+const KEY = 'inheriti.businessOrganizations';
 
 async function selectionKey(core: NodeIntegrationCore, sessions: OperatorSessionStore, configuration: ExtensionConfiguration): Promise<string | undefined> {
   if (!(await core.getAccessToken())) return undefined;

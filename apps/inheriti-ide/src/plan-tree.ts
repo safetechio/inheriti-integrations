@@ -52,7 +52,7 @@ export class PlanTreeItem extends vscode.TreeItem {
     this.description = description;
     this.contextValue = contextValue;
     if (planId !== undefined) {
-      this.command = { command: 'inheritiElements.openPlan', title: 'Open plan', arguments: [planId] };
+      this.command = { command: 'inheriti.openPlan', title: 'Open plan', arguments: [planId] };
     }
   }
 }

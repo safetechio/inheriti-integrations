@@ -1,7 +1,7 @@
 import type { SecretStorage } from 'vscode';
 import { deriveMasterKey } from '@safetech/inheriti-core-sdk/crypto';
 
-export const MASTER_KEY_PASSPHRASE_SECRET = 'inheritiElements.masterKeyPassphrase';
+export const MASTER_KEY_PASSPHRASE_SECRET = 'inheriti.masterKeyPassphrase';
 
 /**
  * What custody this editor holds locally.

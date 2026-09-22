@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
   let revision = 0;
   const detailChanged = new vscode.EventEmitter<vscode.Uri>();
 
-  const configuration = () => resolveConfiguration((key) => vscode.workspace.getConfiguration('inheritiElements').get<string>(key));
+  const configuration = () => resolveConfiguration((key) => vscode.workspace.getConfiguration('inheriti').get<string>(key));
   const core = (scoped = true): NodeIntegrationCore => {
     const settings = configuration();
     if (scoped && settings.business && !selectedOrganization) {
@@ -124,9 +124,9 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
   context.subscriptions.push(
     activeReveals,
     detailChanged,
-    vscode.window.registerTreeDataProvider('inheritiElements.plans', plans),
+    vscode.window.registerTreeDataProvider('inheriti.plans', plans),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('inheritiElements')) {
+      if (event.affectsConfiguration('inheriti')) {
         void sessions.clear().then(() => changeOrganization()).then(refresh);
       }
     }),
@@ -150,7 +150,7 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
       },
     }),
 
-    vscode.commands.registerCommand('inheritiElements.signIn', async () => {
+    vscode.commands.registerCommand('inheriti.signIn', async () => {
       const started = revision;
       try {
         await vscode.window.withProgress(
@@ -176,7 +176,7 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
       await refresh();
     }),
 
-    vscode.commands.registerCommand('inheritiElements.signOut', async () => {
+    vscode.commands.registerCommand('inheriti.signOut', async () => {
       try {
         await core(false).auth.clear();
       } finally {
@@ -188,9 +188,9 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
       await vscode.window.showInformationMessage('Signed out of Inheriti.');
     }),
 
-    vscode.commands.registerCommand('inheritiElements.refresh', refresh),
+    vscode.commands.registerCommand('inheriti.refresh', refresh),
 
-    vscode.commands.registerCommand('inheritiElements.selectOrganization', async () => {
+    vscode.commands.registerCommand('inheriti.selectOrganization', async () => {
       try {
         const settings = configuration();
         if (!settings.business) { await vscode.window.showInformationMessage('Leave the Application id blank to use Business organizations.'); return; }
@@ -209,21 +209,21 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
     }),
 
     /** Drops the held key so the next reveal acquires it again. */
-    vscode.commands.registerCommand('inheritiElements.forgetMasterKey', async () => {
+    vscode.commands.registerCommand('inheriti.forgetMasterKey', async () => {
       await (await currentCore()).forgetMasterKey();
       await vscode.window.showInformationMessage(
         `Forgot the ${configuration().business ? 'organization' : 'Application'} key. The next reveal will acquire it again.`,
       );
     }),
 
-    ...(BUILD_DEPLOYMENT ? [] : [vscode.commands.registerCommand('inheritiElements.importConfiguration', async () => {
+    ...(BUILD_DEPLOYMENT ? [] : [vscode.commands.registerCommand('inheriti.importConfiguration', async () => {
       const file = await configurationFile();
       if (!file) return;
       try {
         const { settings, passphrase } = parseImportedConfiguration(Buffer.from(
           await vscode.workspace.fs.readFile(file),
         ).toString('utf8'));
-        const configuration = vscode.workspace.getConfiguration('inheritiElements');
+        const configuration = vscode.workspace.getConfiguration('inheriti');
         for (const [key, value] of Object.entries(settings)) {
           await configuration.update(key, value, vscode.ConfigurationTarget.Global);
         }
@@ -241,21 +241,21 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
       await refresh();
     })]),
 
-    vscode.commands.registerCommand('inheritiElements.openPlan', async (planId: string) => {
+    vscode.commands.registerCommand('inheriti.openPlan', async (planId: string) => {
       try { await currentCore(); } catch (error) { await vscode.window.showErrorMessage(messageFor(codeOf(error))); return; }
       const uri = vscode.Uri.parse(`${PLAN_SCHEME}:${planUriPath(planId)}`);
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
     }),
 
-    vscode.commands.registerCommand('inheritiElements.revealPlan', async (input?: string | { planId?: string }) => {
+    vscode.commands.registerCommand('inheriti.revealPlan', async (input?: string | { planId?: string }) => {
       await runRevealCommand(input);
     }),
 
-    vscode.commands.registerCommand('inheritiElements.insertField', async (input?: string | { planId?: string }) => {
+    vscode.commands.registerCommand('inheriti.insertField', async (input?: string | { planId?: string }) => {
       await runRevealCommand(input);
     }),
 
-    vscode.commands.registerCommand('inheritiElements.downloadAsset', async (input?: string | { planId?: string }) => {
+    vscode.commands.registerCommand('inheriti.downloadAsset', async (input?: string | { planId?: string }) => {
       const planId = typeof input === 'string' ? input : input?.planId;
       const selectedPlanId = planId ?? await vscode.window.showInputBox({ title: 'Download an asset', prompt: 'Enter the plan id.', ignoreFocusOut: true });
       if (!selectedPlanId) return;
@@ -284,7 +284,7 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
       }
     }),
 
-    vscode.commands.registerCommand('inheritiElements.abortPlanAccess', async (input?: string | { planId?: string }) => {
+    vscode.commands.registerCommand('inheriti.abortPlanAccess', async (input?: string | { planId?: string }) => {
       await runAbortCommand(input);
     }),
   );

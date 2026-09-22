@@ -1,6 +1,6 @@
 const SETTING_KEYS = ['deployment', 'apiUrl', 'applicationId', 'issuer', 'clientId', 'environment', 'masterKeySalt'] as const;
 const PASSPHRASE_KEY = 'masterKeyPassphrase';
-const PREFIX = 'inheritiElements.';
+const PREFIX = 'inheriti.';
 
 export interface ImportedConfiguration {
   settings: Record<string, string>;
@@ -15,7 +15,7 @@ export interface ImportedConfiguration {
  * now nothing ever put it there, so a reveal could never find it. Both halves come from one file so
  * a manual session is one command rather than six fields typed by hand.
  *
- * Accepts either shape the harness writes: dotted `inheritiElements.apiUrl` keys, or bare ones.
+ * Accepts either shape the harness writes: dotted `inheriti.apiUrl` keys, or bare ones.
  */
 export function parseImportedConfiguration(text: string): ImportedConfiguration {
   const parsed: unknown = JSON.parse(text);

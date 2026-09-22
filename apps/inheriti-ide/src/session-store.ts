@@ -1,7 +1,7 @@
 import type { SecretStorage } from 'vscode';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
 
-const SESSION_KEY = 'inheritiElements.operatorSession';
+const SESSION_KEY = 'inheriti.operatorSession';
 
 /**
  * The operator's session lives in VS Code's SecretStorage and nowhere else — never in workspace

@@ -40,13 +40,14 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   engines: manifest.engines,
   extensionKind: manifest.extensionKind,
   categories: manifest.categories,
+  icon: manifest.icon,
   main: manifest.main,
   activationEvents: manifest.activationEvents,
   contributes: {
     ...manifest.contributes,
-    commands: manifest.contributes.commands.filter(({ command }) => command !== 'inheritiElements.importConfiguration'),
+    commands: manifest.contributes.commands.filter(({ command }) => command !== 'inheriti.importConfiguration'),
     menus: Object.fromEntries(Object.entries(manifest.contributes.menus).map(([key, items]) => [
-      key, items.filter(({ command }) => command !== 'inheritiElements.importConfiguration'),
+      key, items.filter(({ command }) => command !== 'inheriti.importConfiguration'),
     ])),
     configuration: undefined,
   },

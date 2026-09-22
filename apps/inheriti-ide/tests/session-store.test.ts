@@ -31,14 +31,14 @@ describe('SecretSessionStore', () => {
     const store = new SecretSessionStore(secrets);
     await store.save(session);
     expect(await store.load()).toEqual(session);
-    expect([...values.keys()]).toEqual(['inheritiElements.operatorSession']);
+    expect([...values.keys()]).toEqual(['inheriti.operatorSession']);
   });
 
   it('discards an unreadable secret instead of trusting half a credential', async () => {
     const { secrets, values } = secretStorage();
     const store = new SecretSessionStore(secrets);
     await store.save(session);
-    values.set('inheritiElements.operatorSession', '{ not json');
+    values.set('inheriti.operatorSession', '{ not json');
     await expect(store.load()).resolves.toBeUndefined();
     expect(values.size).toBe(0);
   });
