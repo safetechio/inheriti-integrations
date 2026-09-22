@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-vscode-extension",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
   "type": "module",
