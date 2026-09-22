@@ -13,7 +13,7 @@ export const optionalDevtoolsPlugin = {
   name: 'stub-ink-devtools',
   setup(build) {
     build.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) => {
-      if (!args.importer.includes(`${'ink'}/build/`)) return undefined;
+      if (!/[\\/]ink[\\/]build[\\/]/.test(args.importer)) return undefined;
       return { path: 'ink-devtools', namespace: 'optional-devtools' };
     });
     build.onLoad({ filter: /.*/, namespace: 'optional-devtools' }, () => ({

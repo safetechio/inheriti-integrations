@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { matchingBuildDeployment } from './build-deployment.mjs';
+import { packageDirectory } from './package-directory.mjs';
 
 /**
  * Packages the extension as a real `.vsix`, the only thing `code --install-extension` accepts.
@@ -61,8 +62,9 @@ await writeFile(resolve(stage, 'README.md'), [
   '',
 ].join('\n'));
 
-const result = spawnSync('pnpm', [
-  'exec', 'vsce', 'package',
+const vsce = resolve(await packageDirectory(root, '@vscode/vsce'), 'vsce');
+const result = spawnSync(process.execPath, [
+  vsce, 'package',
   '--no-dependencies',
   '--allow-missing-repository',
   '--skip-license',
