@@ -1,0 +1,10 @@
+node_modules/
+.local/
+.idea/
+apps/*/artifacts/
+apps/*/dist/
+packages/*/artifacts/
+packages/*/dist/
+dist/
+npm-debug.log*
+pnpm-debug.log*

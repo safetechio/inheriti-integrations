@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>InheritiGuard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand" aria-label="InheritiGuard">
+        <svg class="brand-mark" viewBox="0 0 26 32" aria-hidden="true">
+          <path />
+        </svg>
+        <span class="brand-name"><strong>InheritiGuard</strong><span>Unified protection</span></span>
+      </div>
+      <div class="header-actions">
+        <div class="product-statuses" aria-label="Product status">
+          <span id="guard-header-status" class="header-status">Protection: checking</span>
+        </div>
+        <span class="sr-only" id="auth-status" aria-live="polite">Signed out</span>
+      </div>
+    </header>
+    <main id="app-main" data-authenticated="false">
+      <aside class="migration-notice" id="migration-notice" role="status" hidden>
+        <strong>InheritiGuard now includes Plan Access.</strong>
+        <span>Your Browser Protection settings were preserved.</span>
+        <button id="dismiss-migration" type="button" aria-label="Dismiss update notice">×</button>
+      </aside>
+      <div class="product-tabs" role="tablist" aria-label="InheritiGuard sections">
+        <button id="plan-access-tab" role="tab" aria-selected="true" aria-controls="plan-access-panel" tabindex="0" type="button">Plan Access</button>
+        <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button">Browser Protection</button>
+        <button id="activity-tab" role="tab" aria-selected="false" aria-controls="activity-panel" tabindex="-1" type="button">Activity</button>
+      </div>
+      <section id="plan-access-panel" class="product-panel plan-access" role="tabpanel" aria-labelledby="plan-access-tab" data-authenticated="false">
+      <section class="signed-out-view" id="signed-out-view" aria-labelledby="signed-out-title">
+        <div class="signed-out-mark" aria-hidden="true"><svg viewBox="0 0 26 32"><path /></svg></div>
+        <p class="eyebrow">Protection Plan Access</p>
+        <h1 id="signed-out-title">Sign in to continue</h1>
+        <p>Connect your account before viewing plans, inspecting fields, or enabling site autofill.</p>
+        <p class="signed-out-error" id="signed-out-error" role="alert" hidden></p>
+        <button class="button primary" id="sign-in" type="button">Sign in</button>
+        <button class="button secondary" id="open-options" type="button" hidden>Configure Plan Access</button>
+      </section>
+      <section class="account-area" id="account-area" aria-label="Plan Access account" hidden>
+        <span id="access-header-status" class="sr-only">Plan Access: signed out</span>
+        <div class="organization-choice" id="organization-choice" hidden>
+          <details id="organization-menu">
+            <summary id="organization-summary" aria-label="Choose organization">Choose an organization</summary>
+            <div class="organization-options" id="organization-options"></div>
+          </details>
+          <p id="organization-status" role="status"></p>
+        </div>
+        <button class="header-sign-out" id="sign-out" type="button" hidden>Sign out</button>
+      </section>
+      <div class="panel-tabs plan-tabs" role="tablist" aria-label="Plan Access views">
+        <button id="site-tab" role="tab" aria-selected="true" aria-controls="site-panel" tabindex="0" type="button">This site</button>
+        <button id="plans-tab" role="tab" aria-selected="false" aria-controls="plans-panel" tabindex="-1" type="button">My plans</button>
+      </div>
+
+      <div class="site-panel" id="site-panel" role="tabpanel" aria-labelledby="site-tab">
+      <div class="page-heading" id="current-page-heading">
+        <h1>Current page</h1>
+        <p class="origin" id="origin">Checking active tab…</p>
+      </div>
+
+      <section class="card site-access-card" id="autofill-panel" aria-labelledby="site-access-title">
+        <div class="section-heading">
+          <div class="section-title">
+            <span class="section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" /></svg>
+            </span>
+            <div><h2 id="site-access-title">Autofill on this site</h2><p>Optional controls beside compatible fields.</p></div>
+          </div>
+          <span class="status neutral" id="overlay-status">Checking</span>
+        </div>
+        <p class="site-access-message" id="overlay-message">The side panel always remains available.</p>
+        <button class="button secondary" id="enable-overlay" type="button" hidden>Enable autofill on this site</button>
+        <button class="button ghost" id="disable-overlay" type="button" hidden>Disable on this site</button>
+        <div class="authorized-sites" id="authorized-sites" hidden>
+          <p class="authorized-title">Authorized sites</p>
+          <ul id="authorized-origin-list"></ul>
+          <button class="compact-button danger" id="disable-all-overlays" type="button">Revoke all site access</button>
+        </div>
+      </section>
+
+      <section class="card page-card" id="fields-panel" aria-labelledby="inspection-title">
+        <div class="section-heading">
+          <div class="section-title">
+            <span class="section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 1 6 3.46M5 20a7 7 0 0 1 9.55-6.51M17 17v6m-3-3h6" /></svg>
+            </span>
+            <div><h2 id="inspection-title">Login fields</h2><p>Find compatible fields on this page.</p></div>
+          </div>
+          <span class="status neutral" id="status">Not inspected</span>
+        </div>
+        <button class="button primary" id="inspect" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
+          Inspect current page
+        </button>
+        <button class="button secondary" id="pick-page-field" type="button" disabled>Select a field on the page</button>
+        <dl id="summary" hidden>
+          <div><dt>Username candidates</dt><dd id="username-count">0</dd></div>
+          <div><dt>Password fields</dt><dd id="password-count">0</dd></div>
+        </dl>
+        <div class="page-field-list" id="page-field-list" hidden></div>
+      </section>
+      </div>
+
+      <section class="card plans-card" id="plans-panel" role="tabpanel" aria-labelledby="plans-tab" hidden>
+        <div class="section-heading">
+          <div class="section-title">
+            <span class="section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20v15H6.5A2.5 2.5 0 0 1 4 16.5v-10Zm0 10A2.5 2.5 0 0 1 6.5 14H20M8 8h7" /></svg>
+            </span>
+            <div><h2 id="plans-title">Protection plans</h2><p>Access plans available to this account.</p></div>
+          </div>
+        </div>
+        <div class="plan-tools" id="plan-tools" hidden>
+          <label class="plan-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg>
+            <span class="sr-only">Filter plans</span>
+            <input id="plan-filter" type="search" placeholder="Filter plans" autocomplete="off" />
+          </label>
+          <button class="icon-button" id="reload-plans" type="button" title="Refresh plans" aria-label="Refresh plans">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6" /></svg>
+          </button>
+        </div>
+        <div class="resume-reveal" id="resume-reveal" hidden>
+          <p id="resume-reveal-message" aria-live="polite"></p>
+          <div class="button-row">
+            <button class="button" id="resume-reveal-button" type="button">Resume reveal</button>
+            <button class="button ghost" id="discard-reveal-button" type="button">Discard</button>
+          </div>
+        </div>
+        <ul id="plans" aria-live="polite"></ul>
+        <div class="button-row">
+          <button class="button ghost" id="forget-master-key" type="button" hidden
+                  title="Drop the Application key held in memory. The next reveal asks for it again.">Lock key</button>
+        </div>
+      </section>
+
+      <dialog class="asset-dialog access-dialog" id="access-dialog" aria-labelledby="access-title">
+        <div class="modal-panel">
+          <div class="section-heading">
+            <div class="section-title">
+              <span class="section-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-5 5v3H5v10h14V11h-2V8a5 5 0 0 0-5-5Zm-3 8V8a3 3 0 0 1 6 0v3" /></svg>
+              </span>
+              <div><h2 id="access-title">Access plan</h2><p class="access-plan" id="access-plan"></p></div>
+            </div>
+            <button class="modal-close" id="close-access" type="button" aria-label="Close Access">×</button>
+          </div>
+          <p class="access-status" id="access-status" aria-live="polite">Loading access workspace…</p>
+          <div class="mapping-workspace" id="mapping-workspace"></div>
+          <ol class="reveal-progress" id="reveal-progress" aria-live="polite" hidden></ol>
+          <ul class="field-results" id="field-results" aria-live="polite" hidden></ul>
+          <button class="button primary reveal-confirm" id="confirm-reveal" type="button" disabled>Reveal and autofill</button>
+          <button class="button ghost" id="cancel-reveal" type="button" hidden>Cancel</button>
+          <button class="button ghost" id="abort-access" type="button" hidden>Abort open access</button>
+        </div>
+      </dialog>
+
+      <dialog class="asset-dialog" id="assets-dialog" aria-labelledby="assets-title">
+        <div class="modal-panel">
+          <div class="section-heading">
+            <div class="section-title">
+              <span class="section-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20v15H6.5A2.5 2.5 0 0 1 4 16.5v-10Zm0 10A2.5 2.5 0 0 1 6.5 14H20M8 8h7" /></svg>
+              </span>
+              <div><h2 id="assets-title">Plan assets</h2><p>Metadata only. Protected values stay hidden.</p></div>
+            </div>
+            <button class="modal-close" id="close-metadata" type="button" aria-label="Close">×</button>
+          </div>
+          <ul class="asset-metadata-list" id="asset-metadata" aria-live="polite"></ul>
+        </div>
+      </dialog>
+      </section>
+
+      <section id="browser-protection-panel" class="product-panel" role="tabpanel" aria-labelledby="browser-protection-tab" hidden>
+        <div class="page-heading"><p class="eyebrow">Browser Protection</p><h1>Protection controls</h1><p class="origin">Block unsafe sites, guard sensitive browser actions, and lock idle sessions.</p></div>
+        <section class="card protection-overview">
+          <div class="section-heading"><div class="section-title"><span class="shield-dot" aria-hidden="true"></span><div><h2>Browser Protection</h2><p>Block unsafe navigation while preserving trusted access.</p></div></div><label class="switch"><input id="guard-enabled" type="checkbox" /><span></span><span class="sr-only">Enable Browser Protection</span></label></div>
+        </section>
+        <section class="card settings-card" aria-labelledby="protection-features-title">
+          <h2 id="protection-features-title">Protection features</h2>
+          <label class="setting-row"><span><strong>Sensitive API protection</strong><small>Restrict access to sensitive browser capabilities.</small></span><input id="guard-sensitive-api" type="checkbox" /></label>
+          <label class="setting-row"><span><strong>Clipboard protection</strong><small>Prevent sensitive clipboard content leaking to untrusted sites.</small></span><input id="guard-clipboard" type="checkbox" /></label>
+          <label class="setting-row"><span><strong>Idle lock</strong><small>Secure ecosystem sessions after inactivity.</small></span><input id="guard-idle-lock" type="checkbox" /></label>
+          <label class="setting-row minutes-row" for="guard-idle-minutes"><span><strong>Lock after</strong><small>Between 1 and 120 minutes.</small></span><input id="guard-idle-minutes" type="number" min="1" max="120" inputmode="numeric" /></label>
+          <label class="setting-row"><span><strong>Risky download trap</strong><small>Block unsafe ecosystem-originated files and inline documents.</small></span><input id="guard-download-trap" type="checkbox" /></label>
+        </section>
+        <section class="card secure-logoff-card"><h2>Secure Logoff</h2><p>End Plan Access work, close ecosystem sessions, and clear scoped session data.</p><button class="button danger-button" id="secure-logoff" type="button">Secure Logoff</button></section>
+        <p id="guard-live-status" class="sr-only" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="activity-panel" class="product-panel" role="tabpanel" aria-labelledby="activity-tab" hidden>
+        <div class="page-heading"><p class="eyebrow">Activity</p><h1>Recent protection activity</h1><p class="origin">Sensitive values and URL parameters are never displayed.</p></div>
+        <section class="card"><div class="section-heading"><div><h2>Guard events</h2><p class="activity-help">Newest events appear first.</p></div><button id="clear-activity" class="compact-button danger" type="button">Clear</button></div><ul id="activity-list" class="activity-list" aria-live="polite"><li class="empty-activity">Loading activity…</li></ul></section>
+      </section>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "@safetech/inheriti-elements-brand",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --root . --config ../../vitest.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
+    "package": "pnpm run build && node ../../scripts/package-workspace.mjs"
+  }
+}

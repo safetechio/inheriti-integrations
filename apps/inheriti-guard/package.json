@@ -1,0 +1,26 @@
+{
+  "name": "@safetech/inheritiguard-chrome-extension",
+  "version": "1.0.6",
+  "private": true,
+  "type": "module",
+  "description": "InheritiGuard Chrome MV3 extension with Browser Protection and Plan Access",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/build-chrome-extension.mjs",
+    "test": "vitest run --root .",
+    "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs . && node ../../scripts/verify-chrome-security.mjs .",
+    "package": "pnpm run build && node ../../scripts/package-chrome-extension.mjs",
+    "release": "pnpm run lint && pnpm run build && node ../../scripts/package-chrome-extension.mjs --production"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.2.7",
+    "@safetech/inheriti-elements-test-kit": "workspace:*"
+  },
+  "dependencies": {
+    "@safetech/inheriti-elements-brand": "workspace:*",
+    "@safetech/inheriti-core-sdk": "4.0.25",
+    "@safetech/inheriti-elements-core": "workspace:*"
+  }
+}

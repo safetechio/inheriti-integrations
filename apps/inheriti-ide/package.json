@@ -1,0 +1,191 @@
+{
+  "name": "@safetech/inheriti-elements-vscode-extension",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "files": [
+    "dist",
+    "media/placeholder.svg"
+  ],
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:inheritiElements.plans",
+    "onCommand:inheritiElements.selectOrganization"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "inheritiElements",
+          "title": "Inheriti® IDE (Dev)",
+          "icon": "media/placeholder.svg"
+        }
+      ]
+    },
+    "views": {
+      "inheritiElements": [
+        {
+          "id": "inheritiElements.plans",
+          "name": "Plans"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "inheritiElements.signIn",
+        "title": "Inheriti: Sign In"
+      },
+      {
+        "command": "inheritiElements.signOut",
+        "title": "Inheriti: Sign Out"
+      },
+      {
+        "command": "inheritiElements.refresh",
+        "title": "Inheriti: Refresh Plans",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "inheritiElements.selectOrganization",
+        "title": "Inheriti: Select Business Organization"
+      },
+      {
+        "command": "inheritiElements.openPlan",
+        "title": "Inheriti: Open Plan"
+      },
+      {
+        "command": "inheritiElements.revealPlan",
+        "title": "Inheriti: Reveal Plan"
+      },
+      {
+        "command": "inheritiElements.insertField",
+        "title": "Inheriti: Insert Protected Field"
+      },
+      {
+        "command": "inheritiElements.downloadAsset",
+        "title": "Inheriti: Download Asset"
+      },
+      {
+        "command": "inheritiElements.abortPlanAccess",
+        "title": "Inheriti: Abort Plan Access"
+      },
+      {
+        "command": "inheritiElements.importConfiguration",
+        "title": "Inheriti: Import Configuration"
+      },
+      {
+        "command": "inheritiElements.forgetMasterKey",
+        "title": "Inheriti: Forget Held Key"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "inheritiElements.refresh",
+          "when": "view == inheritiElements.plans",
+          "group": "navigation"
+        },
+        {
+          "command": "inheritiElements.selectOrganization",
+          "when": "view == inheritiElements.plans",
+          "group": "navigation"
+        },
+        {
+          "command": "inheritiElements.signIn",
+          "when": "view == inheritiElements.plans",
+          "group": "1_auth"
+        },
+        {
+          "command": "inheritiElements.signOut",
+          "when": "view == inheritiElements.plans",
+          "group": "1_auth"
+        },
+        {
+          "command": "inheritiElements.importConfiguration",
+          "when": "view == inheritiElements.plans",
+          "group": "1_auth"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "inheritiElements.revealPlan",
+          "when": "view == inheritiElements.plans && viewItem == plan",
+          "group": "inline"
+        },
+        {
+          "command": "inheritiElements.downloadAsset",
+          "when": "view == inheritiElements.plans && viewItem == plan",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Inheriti",
+      "properties": {
+        "inheritiElements.deployment": {
+          "type": "string",
+          "enum": ["", "local", "dev", "stg", "prod"],
+          "default": "",
+          "description": "Business deployment. Resolves API, issuer and OAuth client; leave blank for standalone configuration."
+        },
+        "inheritiElements.apiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Plan Access API base URL."
+        },
+        "inheritiElements.applicationId": {
+          "type": "string",
+          "default": "",
+          "description": "Application id for standalone use. Leave blank for Business."
+        },
+        "inheritiElements.issuer": {
+          "type": "string",
+          "default": "",
+          "description": "SafeID issuer URL."
+        },
+        "inheritiElements.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "OAuth client id registered for this VS Code host."
+        },
+        "inheritiElements.environment": {
+          "type": "string",
+          "enum": [
+            "TEST"
+          ],
+          "default": "TEST",
+          "description": "Development builds support TEST only."
+        },
+        "inheritiElements.masterKeySalt": {
+          "type": "string",
+          "default": "",
+          "description": "Argon2 salt for the Application master key. The passphrase is read only from VS Code SecretStorage."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-vscode-extension.mjs",
+    "test": "vitest run --root . --config ../../vitest.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs . && node ../../scripts/verify-vscode-security.mjs .",
+    "package": "pnpm run build && node ../../scripts/package-vscode-extension.mjs",
+    "release": "pnpm run lint && pnpm run package"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.99.1"
+  },
+  "dependencies": {
+    "@safetech/inheriti-core-sdk": "4.0.25",
+    "@safetech/inheriti-elements-brand": "workspace:*",
+    "@safetech/inheriti-elements-core": "workspace:*"
+  }
+}

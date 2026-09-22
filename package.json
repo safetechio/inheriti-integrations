@@ -1,0 +1,33 @@
+{
+  "name": "@safetech/inheriti-integrations-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0 <23",
+    "pnpm": ">=10.14.0 <11"
+  },
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "build:all": "pnpm -r --if-present run build",
+    "test:all": "pnpm -r --if-present run test",
+    "lint:all": "pnpm -r --if-present run lint",
+    "check": "pnpm sdk:assert:registry && pnpm build:all && pnpm lint:all && pnpm test:all",
+    "package:cli:prod": "pnpm --filter \"./packages/*\" run build && pnpm --dir apps/inheriti-cli package:prod",
+    "package:all": "pnpm sdk:assert:registry && pnpm build:all && pnpm --filter \"./apps/*\" run package",
+    "release:all": "pnpm sdk:assert:registry && pnpm build:all && pnpm --filter \"./apps/*\" run release",
+    "sdk:assert:registry": "node scripts/assert-registry-sdk.mjs"
+  },
+  "pnpm": {
+    "overrides": {
+      "@safetech/inheriti-core-sdk": "4.0.25"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.14.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.8.3",
+    "vitest": "3.2.4"
+  }
+}

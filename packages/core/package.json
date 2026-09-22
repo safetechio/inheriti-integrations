@@ -1,0 +1,39 @@
+{
+  "name": "@safetech/inheriti-elements-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --root . --config ../../vitest.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
+    "package": "pnpm run build && node ../../scripts/package-workspace.mjs"
+  },
+  "dependencies": {
+    "@safetech/inheriti-client-sdk": "1.17.7"
+  },
+  "devDependencies": {
+    "@safetech/inheriti-elements-test-kit": "workspace:*"
+  }
+}

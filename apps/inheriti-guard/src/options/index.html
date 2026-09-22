@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>InheritiGuard — Plan Access configuration</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header><div class="brand-mark" aria-hidden="true"></div><div><p>InheritiGuard</p><h1>Plan Access configuration</h1></div></header>
+      <p class="hint">
+        Development build. Paste the harness's <code>chrome-configuration.json</code>, or fill the
+        fields in. Values are stored for this browser profile only.
+      </p>
+
+      <label for="paste">Harness configuration (optional)</label>
+      <textarea id="paste" rows="6" spellcheck="false" placeholder='{ "apiUrl": "…", "issuer": "…", "clientId": "…" }'></textarea>
+      <button id="apply-paste" type="button">Fill the fields from this JSON</button>
+
+      <label for="deployment">Business deployment</label>
+      <select id="deployment">
+        <option value="">Manual / standalone</option>
+        <option value="local">Local</option>
+        <option value="dev">Dev</option>
+        <option value="stg">Staging</option>
+        <option value="prod">Production</option>
+      </select>
+
+      <label for="apiUrl">Plan Access API URL</label>
+      <input id="apiUrl" type="url" autocomplete="off" spellcheck="false" />
+
+      <label for="issuer">SafeID issuer</label>
+      <input id="issuer" type="url" autocomplete="off" spellcheck="false" />
+
+      <label for="clientId">OAuth client id</label>
+      <input id="clientId" type="text" autocomplete="off" spellcheck="false" />
+
+      <label for="environment">Environment</label>
+      <input id="environment" type="text" value="TEST" readonly />
+
+      <label for="applicationId">Standalone Application id (leave blank for Business)</label>
+      <input id="applicationId" type="text" autocomplete="off" spellcheck="false" />
+
+      <div class="actions">
+        <button id="save" type="button">Save</button>
+        <span id="status" role="status"></span>
+      </div>
+
+      <p class="hint">Extension id: <code id="extension-id"></code></p>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

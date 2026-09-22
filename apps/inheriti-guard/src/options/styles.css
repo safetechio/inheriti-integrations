@@ -1,0 +1,64 @@
+:root { color-scheme: light; --brand-primary: #0066ff; color: #101828; background: #f8fbff; }
+
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+header { margin-bottom: 1.5rem; display: flex; align-items: center; gap: .8rem; }
+header p { margin: 0; color: var(--brand-primary); font-weight: 800; }
+.brand-mark { width: 34px; height: 40px; flex: none; background: var(--brand-primary); clip-path: polygon(50% 0, 93% 18%, 88% 68%, 50% 100%, 12% 68%, 7% 18%); }
+
+h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+
+label {
+  display: block;
+  margin: 1rem 0 .25rem;
+  font-weight: 600;
+}
+
+input, textarea, select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: .5rem;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: .375rem;
+  background: #fff;
+  color: inherit;
+}
+
+input[readonly] { opacity: .6; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+button {
+  margin-top: .5rem;
+  padding: .5rem .9rem;
+  font: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: .375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+#save { border-color: var(--brand-primary); color: #fff; background: var(--brand-primary); font-weight: 700; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: 1.5rem;
+}
+
+.hint { opacity: .7; }
+
+#status:not(:empty) { font-weight: 600; }

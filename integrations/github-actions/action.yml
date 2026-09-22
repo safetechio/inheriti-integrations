@@ -1,0 +1,32 @@
+name: Inheriti® secrets
+description: Run a command with fields released through the Inheriti® reveal protocol
+inputs:
+  plan:
+    description: Inheriti® plan id
+    required: true
+  env:
+    description: Newline-separated NAME=asset.field mappings
+    required: true
+  run:
+    description: Trusted command string to run on the GitHub runner
+    required: true
+  output:
+    description: Child output policy (suppress or inherit)
+    default: inherit
+    required: false
+  cli-version:
+    description: Published @safetech/inheriti-cli version
+    default: latest
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Run with Inheriti® secrets
+      shell: bash
+      env:
+        INHERITI_SECRETS_PLAN: ${{ inputs.plan }}
+        INHERITI_SECRETS_ENV: ${{ inputs.env }}
+        INHERITI_SECRETS_OUTPUT: ${{ inputs.output }}
+        INHERITI_SECRETS_COMMAND: ${{ inputs.run }}
+        INHERITI_CLI_VERSION: ${{ inputs.cli-version }}
+      run: bash "${GITHUB_ACTION_PATH}/entrypoint.sh"
