@@ -29,7 +29,6 @@ describe('Chrome MV3 manifest', () => {
     ) as { readonly name: string; readonly version: string };
 
     expect(packageManifest.name).toBe('@safetech/inheritiguard-chrome-extension');
-    expect(packageManifest.version).toBe('1.0.6');
     expect(manifest.name).toBe('InheritiGuard');
     expect(manifest.short_name).toBe('InheritiGuard');
     expect(manifest.version).toBe(packageManifest.version);
