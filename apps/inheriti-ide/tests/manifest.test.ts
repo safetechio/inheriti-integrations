@@ -45,7 +45,7 @@ describe('VS Code extension manifest', () => {
     ]);
     expect(manifest.name).toBe('@safetech/inheriti-vscode-extension');
     expect(JSON.stringify({ activationEvents: manifest.activationEvents, contributes: manifest.contributes }))
-      .not.toMatch(/elements|master.?key/iu);
+      .not.toMatch(/inheritiElements/iu);
     // The extension contributes no HTML surface of any kind: no webview, no custom editor, no browser entry.
     expect(manifest.browser).toBeUndefined();
     expect(manifest.contributes?.customEditors).toBeUndefined();

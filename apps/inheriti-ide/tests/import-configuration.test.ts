@@ -28,7 +28,8 @@ describe('imported configuration', () => {
     expect(parseImportedConfiguration(JSON.stringify({
       'inheritiElements.apiUrl': 'http://api',
       'inheritiElements.clientId': 'client-1',
-    })).settings).toEqual({ apiUrl: 'http://api', clientId: 'client-1' });
+      'inheritiElements.masterKeySalt': '00'.repeat(16),
+    })).settings).toEqual({ apiUrl: 'http://api', clientId: 'client-1', masterKeySalt: '00'.repeat(16) });
   });
 
   it('accepts bare keys too', () => {
