@@ -11,7 +11,7 @@ describe('reveal progress wording', () => {
   it('names the governance layers as the distinct waits they are', () => {
     expect(revealProgressMessage(progress('WAITING_FOR_DMS'))).toContain('dead man\'s switch');
     expect(revealProgressMessage(progress('WAITING_FOR_AUTHENTICATION'))).toBe(
-      'Confirm this access on SafeKey Mobile. The request was sent to your device.',
+      'Authentication request sent to SafeKey Mobile. Confirm it to continue.',
     );
     expect(revealProgressMessage(progress('WAITING_FOR_MODERATION'))).toContain('moderator');
   });
@@ -22,6 +22,12 @@ describe('reveal progress wording', () => {
     expect(revealProgressMessage(progress('RECONSTRUCTING'))).toBe('Reconstructing and decrypting shares.');
     expect(revealProgressMessage(progress('OPEN'))).toBe('Revealing the data.');
     expect(revealProgressMessage(progress('RELEASING_MATERIAL'))).not.toContain('storage');
+  });
+
+  it('names the key owner from the active integration context', () => {
+    expect(revealProgressMessage(progress('WAITING_FOR_MASTER_KEY'))).toContain('Application key');
+    expect(revealProgressMessage(progress('WAITING_FOR_MASTER_KEY'), { keyOwner: 'Organisation' }))
+      .toContain('Organisation key');
   });
 
   // The wait that used to be printed at the governance gate, telling a person to approve a request
@@ -44,6 +50,17 @@ describe('reveal progress wording', () => {
     expect(revealProgressMessage(waiting)).toBe('Waiting for moderators (1 of 2 approved).');
     expect(revealProgressMessage(waiting, { moderators: ['Ada', 'Grace'] }))
       .toBe('Waiting for moderators (1 of 2 approved). Moderators: Ada, Grace.');
+  });
+
+  it('identifies the denying governance decision and names only verified moderators', () => {
+    const names = new Map([['m1', 'Ada']]);
+    expect(revealProgressMessage(progress('DENIED', { deniedBy: 'AUTHENTICATION' })))
+      .toBe('Your authentication request was rejected in SafeKey Mobile. Access was denied.');
+    expect(revealProgressMessage(progress('DENIED', { deniedBy: 'MODERATION', moderators: [{ id: 'm1', status: 'REJECTED' }] }),
+      { moderatorNamesById: names })).toBe('Ada rejected the moderator approval request. Access was denied.');
+    expect(revealProgressMessage(progress('DENIED', { deniedBy: 'MODERATION' })))
+      .toBe('A moderator rejected the approval request. Access was denied.');
+    expect(revealProgressMessage(progress('DENIED'))).toBe('Access denied. The decision could not be identified.');
   });
 
   it('states a gate deadline as an absolute instant, and omits one it was not given', () => {

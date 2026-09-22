@@ -2,7 +2,7 @@ export type PanelState = (
   | { kind: 'SIGNED_OUT' }
   | { kind: 'SIGNING_IN' }
   | { kind: 'LOADING' }
-  | { kind: 'EMPTY' }
+  | { kind: 'EMPTY'; reason?: 'no-plans' | 'no-autofill-plans' }
   | { kind: 'ERROR'; code: string }
   | { kind: 'PLANS'; plans: readonly { id: string; name: string; status: string }[] }
   | { kind: 'SELECT_ORGANIZATION'; organizations: readonly { id: string; name: string }[]; reason?: string }
@@ -51,7 +51,10 @@ export function rowsFor(state: PanelState): readonly PanelRow[] {
   if (state.kind === 'SIGNED_OUT') return [{ label: 'Not signed in', detail: 'Choose Sign in to continue' }];
   if (state.kind === 'SIGNING_IN') return [{ label: 'Signing in…', detail: 'Finish in the browser window' }];
   if (state.kind === 'LOADING') return [{ label: 'Loading plans…', detail: '' }];
-  if (state.kind === 'EMPTY') return [{ label: 'No plans in this Application', detail: '' }];
+  if (state.kind === 'EMPTY') return [{
+    label: state.reason === 'no-autofill-plans' ? 'No plans support autofill' : 'No plans available',
+    detail: '',
+  }];
   if (state.kind === 'ERROR') return [{ label: messageFor(state.code), detail: state.code }];
   if (state.kind === 'SELECT_ORGANIZATION') return [{ label: state.organizations.length ? 'Choose an organization' : 'No organizations available', detail: state.reason ?? '' }];
   return state.plans.map((plan) => ({ label: plan.name, detail: plan.status, avatarId: plan.id, ...(plan.status.toUpperCase() === 'DRAFT' ? {} : { planId: plan.id }), draft: plan.status.toUpperCase() === 'DRAFT' }));

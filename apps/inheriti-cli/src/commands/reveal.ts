@@ -29,7 +29,6 @@ export async function resolvePlanField(
 export interface CliRevealPlan {
   assets: ReadonlyArray<{ id: string; code?: string; name?: string; fieldNames?: readonly string[] }>;
   governance?: { mode?: string | { kind: 'UNKNOWN'; raw: string } };
-  revealPolicy?: { custodian?: string };
   participants?: ReadonlyArray<{
     id?: string;
     displayName: string;
@@ -79,7 +78,10 @@ export async function revealPlan(
   }
   const selectedFields = [...new Set(fields)];
 
-  const presented = await consumePlanFields(context, terminal, planId, plan, selectedFields, options.signal, async (copied) => {
+  const copiedMessage = selectedFields.length === 1
+    ? `Copied ${selectedFields[0]} to the clipboard.`
+    : `Copied ${selectedFields.length} fields to the clipboard.`;
+  await consumePlanFields(context, terminal, planId, plan, selectedFields, options.signal, async (copied) => {
     try {
       await clipboard.write(copied.length === 1
         ? renderRequestedValue(copied[0]!.value)
@@ -87,12 +89,7 @@ export async function revealPlan(
     } catch (cause) {
       throw Object.assign(new Error('clipboard_unavailable', { cause }), { code: 'clipboard_unavailable' });
     }
-  });
-  if (!presented) {
-    terminal.write(selectedFields.length === 1
-      ? `Copied ${selectedFields[0]} to the clipboard.`
-      : `Copied ${selectedFields.length} fields to the clipboard.`);
-  }
+  }, { completion: copiedMessage });
   return 0;
 }
 
@@ -114,29 +111,36 @@ export async function consumePlanFields(
   }>,
   signal: AbortSignal | undefined,
   destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void>,
-  options: { quiet?: boolean } = {},
+  options: { quiet?: boolean; completion?: string } = {},
 ): Promise<boolean> {
   let lastLine: string | undefined;
   let lastProgress: RevealProgress | undefined;
+  let custodianShareDistributed = false;
   const moderators = (plan.participants ?? [])
     .filter((participant) => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'))
   const moderatorNames = moderators.map((participant) => participant.displayName);
   const moderatorNamesById = new Map(moderators
     .filter((participant): participant is typeof participant & { id: string } => participant.id !== undefined)
     .map((participant) => [participant.id, participant.displayName]));
-  const presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById);
+  const keyOwner = context.keyOwner ?? 'Application';
+  const presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
   if (!presenter && !options.quiet) terminal.write('Opening the plan.');
   try {
     await context.core.withReveal(planId, {
       mode: revealModeOf(plan),
       ...(signal === undefined ? {} : { signal }),
       onProgress: (progress) => {
+        // The SDK reports this only after its distribution call succeeds. Present it after delivery.
+        if ((progress.phase as string) === 'CUSTODIAN_SHARE_DISTRIBUTED') {
+          custodianShareDistributed = true;
+          return;
+        }
         lastProgress = progress;
         presenter?.progress(progress);
         // The command's own error path words a DMS stop, so printing it here would say it twice.
         if (progress.phase === 'STOPPED_BY_DMS') return;
         if (options.quiet) return;
-        const line = revealProgressMessage(progress, { moderators: moderatorNames });
+        const line = revealProgressMessage(progress, { moderators: moderatorNames, moderatorNamesById, keyOwner });
         if (line === lastLine) return;
         lastLine = line;
         if (!presenter) terminal.write(line);
@@ -152,12 +156,19 @@ export async function consumePlanFields(
         destination,
       );
     });
-    presenter?.complete('Secret delivered securely');
+    const completion = options.completion ?? 'Secret delivered securely';
+    const notice = 'The plan\'s custodian share was sent to SafeKey Mobile. Future accesses will require you to release it there.';
+    presenter?.complete(custodianShareDistributed ? `${completion}\n${notice}` : completion);
+    if (!presenter && options.completion) terminal.write(options.completion);
+    if (!presenter && !options.quiet && custodianShareDistributed) terminal.write(notice);
     return presenter !== undefined;
   } catch (error) {
     // The last server-owned state explains this better than the transport error does, and the
     // generic mapper would otherwise report a healthy stop as an unexplained failure.
     if (lastProgress?.phase === 'STOPPED_BY_DMS') throw new RevealStoppedByDeadManSwitch({ cause: error });
+    if (lastProgress?.phase === 'DENIED') {
+      throw Object.assign(new Error(revealProgressMessage(lastProgress, { moderatorNamesById })), { code: 'governance_denied' });
+    }
     throw error;
   } finally {
     presenter?.close();

@@ -17,7 +17,13 @@ export interface DownloadUi {
   savePath(fileName?: string): Promise<string | undefined>;
 }
 
-export async function downloadAsset(core: DownloadCore, ui: DownloadUi, active: ActiveRevealRegistry, planId: string): Promise<boolean> {
+export async function downloadAsset(
+  core: DownloadCore,
+  ui: DownloadUi,
+  active: ActiveRevealRegistry,
+  planId: string,
+  keyOwner: 'Application' | 'Organisation' = 'Application',
+): Promise<boolean> {
   const plan = await core.getPlan(planId);
   const assets = plan.assets.filter((asset) => asset.isBinary).map((asset) => ({
     label: asset.name ?? asset.fileName ?? asset.code ?? asset.id,
@@ -35,7 +41,7 @@ export async function downloadAsset(core: DownloadCore, ui: DownloadUi, active: 
       try {
         await core.withReveal(planId, {
           mode: revealModeOf(plan), signal: controller.signal,
-          onProgress: (value) => { const line = revealProgressMessage(value); if (line !== last) { progress.report({ message: line }); last = line; } },
+          onProgress: (value) => { const line = revealProgressMessage(value, { keyOwner }); if (line !== last) { progress.report({ message: line }); last = line; } },
         }, async (reveal) => {
           const selector = await ui.pickAsset(assets);
           if (!selector || controller.signal.aborted) throw canceled();

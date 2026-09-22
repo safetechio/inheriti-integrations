@@ -8,7 +8,13 @@ export async function downloadPlanAsset(
   context: CliContext, terminal: Terminal, planId: string, asset: string, output: string, signal?: AbortSignal,
 ): Promise<number> {
   const plan = await loadRevealPlan(context, planId);
+  const moderators = (plan.participants ?? [])
+    .filter(participant => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'));
+  const moderatorNamesById = new Map(moderators
+    .filter((participant): participant is typeof participant & { id: string } => participant.id !== undefined)
+    .map(participant => [participant.id, participant.displayName]));
   let stoppedByDms = false;
+  let deniedMessage: string | undefined;
   let lastLine: string | undefined;
   try {
     await context.core.withReveal(planId, {
@@ -16,7 +22,9 @@ export async function downloadPlanAsset(
       ...(signal === undefined ? {} : { signal }),
       onProgress: (progress) => {
         if (progress.phase === 'STOPPED_BY_DMS') { stoppedByDms = true; return; }
-        const line = revealProgressMessage(progress);
+        const line = revealProgressMessage(progress, { keyOwner: context.keyOwner ?? 'Application',
+          moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
+        if (progress.phase === 'DENIED') deniedMessage = line;
         if (line !== lastLine) { terminal.write(line); lastLine = line; }
       },
     }, async (reveal) => {
@@ -36,6 +44,7 @@ export async function downloadPlanAsset(
     });
   } catch (error) {
     if (stoppedByDms) throw new RevealStoppedByDeadManSwitch({ cause: error });
+    if (deniedMessage) throw Object.assign(new Error(deniedMessage), { code: 'governance_denied' });
     throw error;
   }
   terminal.write(`Saved ${asset} to ${output}.`);

@@ -15,7 +15,6 @@ export function PlansList({ plans, more, width }: { plans: readonly PlanSummary[
     <Box flexDirection="column">
       <Table
         columns={[
-          { header: '', value: () => '▀▀', render: (plan: PlanSummary) => <PlanAvatar planId={plan.id} /> },
           { header: 'name', value: (plan: PlanSummary) => plan.name, flexible: true, minimum: 12 },
           { header: 'id', value: (plan) => plan.id, dim: true },
           { header: 'status', value: (plan) => label(plan.status) },
@@ -43,12 +42,12 @@ export function PlansList({ plans, more, width }: { plans: readonly PlanSummary[
  * The asset table is the metadata the plan service holds — type, addressable code, the field names a reveal
  * can ask for — never a value; a value only ever arrives through `plans reveal`, one field at a time.
  */
-export function PlanView({ plan, width }: { plan: PlanDetail; width: number }) {
+export function PlanView({ plan, width, keyOwner = 'Application' }: { plan: PlanDetail; width: number; keyOwner?: 'Application' | 'Organisation' }) {
   const assets = plan.assets ?? [];
   const people = plan.participants ?? [];
   return (
     <Box flexDirection="column">
-      <Box><PlanAvatar planId={plan.id} /><Heading>{plan.name}</Heading></Box>
+      <Heading>{plan.name}</Heading>
       <Box flexDirection="column" marginTop={1}>
         <Field label="id" value={plan.id} />
         <Field label="description" value={plan.description ?? '—'} />
@@ -59,7 +58,7 @@ export function PlanView({ plan, width }: { plan: PlanDetail; width: number }) {
         <Field label="authentication" value={authentication(plan)} />
         <Field
           label="reveal policy"
-          value={`organisation key ${label(plan.revealPolicy?.masterKeyRelease)} · custodian ${label(plan.revealPolicy?.custodian)}`}
+          value={`${keyOwner} key required · custodian share required`}
         />
         <Field label="source" value={sourceOf(plan)} />
       </Box>
@@ -112,37 +111,6 @@ export function PlanView({ plan, width }: { plan: PlanDetail; width: number }) {
       </Box>
     </Box>
   );
-}
-
-const HUES = [
-  '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#f97316',
-  '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
-];
-
-function planAvatarColors(planId: string): readonly [string, string, string, string] {
-  let seed = 2166136261;
-  const identity = `${planId || 'empty'}-fill`;
-  for (let index = 0; index < identity.length; index += 1) {
-    seed = Math.imul(seed ^ identity.charCodeAt(index), 16777619);
-  }
-  const random = () => {
-    seed += 0x6d2b79f5;
-    let value = seed;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-  const colors = [...HUES];
-  for (let index = colors.length - 1; index > 0; index -= 1) {
-    const other = Math.floor(random() * (index + 1));
-    [colors[index], colors[other]] = [colors[other]!, colors[index]!];
-  }
-  return [colors[0]!, colors[1]!, colors[2]!, colors[3]!];
-}
-
-function PlanAvatar({ planId }: { planId: string }) {
-  const [topLeft, topRight, bottomLeft, bottomRight] = planAvatarColors(planId);
-  return <Text><Text color={topLeft} backgroundColor={bottomLeft}>▀</Text><Text color={topRight} backgroundColor={bottomRight}>▀</Text>  </Text>;
 }
 
 /** The names the developer gave the assets — far more use than the type codes they share. */

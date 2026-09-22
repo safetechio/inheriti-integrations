@@ -38,3 +38,21 @@ it('registers the download tool with a status-only MCP result', async () => {
   expect(reveal).toHaveBeenCalledWith('plan-1', 'file-1', 'ASSET');
   expect(result).toEqual({ content: [{ type: 'text', text: JSON.stringify({ jobId: 'job-1', status: 'WAITING', phase: 'STARTING' }) }] });
 });
+
+it('reports a named moderation denial without exposing delivered material', async () => {
+  const tools = new MetadataTools() as any;
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ governance: { mode: 'GOVERNED' }, participants: [{ id: 'm1',
+      displayName: 'Ada', lifecycle: 'ACTIVE', relationships: ['MODERATOR'] }] }),
+    withReveal: async (_planId: string, options: { onProgress: (progress: unknown) => void }) => {
+      options.onProgress({ phase: 'DENIED', session: { stage: 'DENIED', deniedBy: 'MODERATION',
+        moderators: [{ id: 'm1', status: 'REJECTED' }] } });
+      throw new Error('reveal_denied');
+    },
+  } });
+
+  const started = await tools.reveal('plan-1', 'asset.field');
+  await vi.waitFor(async () => expect((await tools.revealStatus(started.jobId)).status).toBe('FAILED'));
+  expect(await tools.revealStatus(started.jobId)).toMatchObject({ phase: 'DENIED',
+    message: 'Ada rejected the moderator approval request. Access was denied.' });
+});

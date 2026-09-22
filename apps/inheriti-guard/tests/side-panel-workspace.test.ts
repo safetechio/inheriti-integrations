@@ -11,6 +11,7 @@ describe('side-panel access workspace', () => {
     expect(main).toContain("type: 'load-access-workspace'");
     expect(main).toContain("type: 'load-plan-assets'");
     expect(main).toContain('response.suggestions');
+    expect(html).toContain('Only plans with username, email, or password fields available for autofill.');
   });
 
   it('uses the frozen mapping and batch messages', () => {

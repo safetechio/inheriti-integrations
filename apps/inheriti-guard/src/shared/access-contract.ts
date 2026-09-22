@@ -56,6 +56,7 @@ export interface AccessFieldSuggestion {
 /** A metadata-only protected-field option offered after the operator selects a page field. */
 export interface PageFirstFieldCandidate {
   readonly planName: string;
+  readonly assetFieldNames: readonly ProtectedFieldSemantic[];
   readonly suggestion: AccessFieldSuggestion;
 }
 

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 interface ExtensionManifest {
+  readonly name?: string;
   readonly private?: boolean;
   readonly browser?: string;
   readonly icon?: string;
@@ -42,6 +43,9 @@ describe('VS Code extension manifest', () => {
       'inheriti.importConfiguration',
       'inheriti.forgetMasterKey',
     ]);
+    expect(manifest.name).toBe('@safetech/inheriti-vscode-extension');
+    expect(JSON.stringify({ activationEvents: manifest.activationEvents, contributes: manifest.contributes }))
+      .not.toMatch(/elements|master.?key/iu);
     // The extension contributes no HTML surface of any kind: no webview, no custom editor, no browser entry.
     expect(manifest.browser).toBeUndefined();
     expect(manifest.contributes?.customEditors).toBeUndefined();

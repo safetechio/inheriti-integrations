@@ -134,7 +134,7 @@ export async function showPlan(
     return 0;
   }
   if (context.organization) terminal.write(`Organization: ${context.organization.name} (${context.organization.id})`);
-  renderTo(terminal, React.createElement(PlanView, { plan, width: terminal.columns }));
+  renderTo(terminal, React.createElement(PlanView, { plan, width: terminal.columns, keyOwner: context.keyOwner }));
   return 0;
 }
 

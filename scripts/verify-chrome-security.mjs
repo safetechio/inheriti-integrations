@@ -30,7 +30,9 @@ if (manifest.background?.type !== 'module') errors.push('service worker must be 
 if (manifest.side_panel?.default_path !== 'side-panel/index.html') errors.push('side panel entrypoint is missing');
 // A fixed id: the OAuth redirect is registered against it, so it must not move with the dist path.
 if (typeof manifest.key !== 'string' || manifest.key.length < 300) errors.push('manifest key is missing');
-if (manifest.options_ui?.page !== 'options/index.html') errors.push('options page entrypoint is missing');
+if (manifest.options_ui && manifest.options_ui.page !== 'options/index.html') {
+  errors.push('options page entrypoint is invalid');
+}
 
 const policy = manifest.content_security_policy?.extension_pages ?? '';
 // `'wasm-unsafe-eval'` is not `'unsafe-eval'` and must not be caught by a substring match. It permits

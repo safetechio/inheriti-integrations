@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { codeOf, messageFor, rowsFor } from '../src/shared/plan-view.js';
 import { ChromeConfigurationInvalid, resolveConfiguration } from '../src/shared/configuration.js';
 
@@ -17,6 +17,7 @@ describe('panel state', () => {
       .map((kind) => rowsFor({ kind })[0]?.label)
       .concat(rowsFor({ kind: 'ERROR', code: 'elements_api_unavailable' })[0]?.label);
     expect(new Set(labels).size).toBe(5);
+    expect(rowsFor({ kind: 'EMPTY', reason: 'no-autofill-plans' })[0]?.label).toBe('No plans support autofill');
   });
 
   it('gives a placeholder row no plan id, so it cannot be opened as a plan', () => {
@@ -95,19 +96,21 @@ describe('loadPlans', () => {
 
   it('is empty, not an error, when the Application has no plans', async () => {
     const { loadPlans } = await import('../src/background/plans.js');
-    await expect(loadPlans(coreWith({}))).resolves.toEqual({ kind: 'EMPTY' });
+    await expect(loadPlans(coreWith({}))).resolves.toEqual({ kind: 'EMPTY', reason: 'no-autofill-plans' });
   });
 
   it('renders real plans, flattening a status the SDK did not recognise', async () => {
     const { loadPlans } = await import('../src/background/plans.js');
+    const listPlans = vi.fn(async () => ({ items, nextCursor: null }));
     const items = [
       { id: 'plan-1', name: 'Vault', status: 'ACTIVE' },
       { id: 'plan-2', name: 'Backup', status: { kind: 'UNKNOWN', raw: 'SUSPENDED' } },
     ];
-    await expect(loadPlans(coreWith({ listPlans: async () => ({ items, nextCursor: null }) }))).resolves.toEqual({
+    await expect(loadPlans(coreWith({ listPlans }))).resolves.toEqual({
       kind: 'PLANS',
       plans: [{ id: 'plan-1', name: 'Vault', status: 'ACTIVE' }, { id: 'plan-2', name: 'Backup', status: 'SUSPENDED' }],
     });
+    expect(listPlans).toHaveBeenCalledWith({ assetType: 'USER-PSWD' });
   });
 
   it('maps a failure to a stable code instead of throwing into the panel', async () => {

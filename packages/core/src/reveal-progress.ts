@@ -10,7 +10,7 @@ import type { RevealPhase, RevealProgress } from '@safetech/inheriti-client-sdk'
  */
 export function revealProgressMessage(
   progress: RevealProgress,
-  options: { moderators?: readonly string[] } = {},
+  options: { moderators?: readonly string[]; moderatorNamesById?: ReadonlyMap<string, string>; keyOwner?: 'Application' | 'Organisation' } = {},
 ): string {
   // This workspace may consume the last published Client SDK while preparing the next additive
   // phase. Keep the shared renderer forward-compatible; hosts still receive one SDK-owned stream.
@@ -19,7 +19,7 @@ export function revealProgressMessage(
   // Reported before the reveal exists, so it is the one phase with no session to describe: the key
   // that opens the plan is resolved first, ahead of governance and ahead of any one-shot release.
   if (phase === 'WAITING_FOR_MASTER_KEY') {
-    return 'Release the Application key in SafeKey Mobile. This reveal will continue when it arrives.';
+    return `Release the ${options.keyOwner ?? 'Application'} key in SafeKey Mobile. This reveal will continue when it arrives.`;
   }
   if (phase === 'STARTING') return 'Opening the plan.';
   if (phase === 'STOPPED_BY_DMS') return 'The dead man\'s switch subject stopped this reveal. Nothing was released.';
@@ -27,7 +27,7 @@ export function revealProgressMessage(
     return `Waiting for the dead man's switch${untilDeadline(session?.dmsExpiresAt)}. The designated person can stop `
       + 'this reveal from SafeKey Mobile; otherwise it continues on its own.';
   }
-  if (phase === 'WAITING_FOR_AUTHENTICATION') return 'Confirm this access on SafeKey Mobile. The request was sent to your device.';
+  if (phase === 'WAITING_FOR_AUTHENTICATION') return 'Authentication request sent to SafeKey Mobile. Confirm it to continue.';
   if (phase === 'WAITING_FOR_MODERATION') return moderationMessage(progress, options.moderators ?? []);
   if (phase === 'WAITING_FOR_CUSTODIAN_CLAIM') {
     return 'Claim the custodian share in SafeKey Mobile. It must be stored there before this reveal can continue.';
@@ -38,7 +38,18 @@ export function revealProgressMessage(
   if (phase === 'RELEASING_MATERIAL') return 'Collecting encrypted data shares.';
   if (phase === 'RECONSTRUCTING') return 'Reconstructing and decrypting shares.';
   if (phase === 'OPEN') return 'Revealing the data.';
-  if (phase === 'DENIED') return 'Access denied.';
+  if (phase === 'DENIED') {
+    const deniedBy = (session as typeof session & { deniedBy?: 'AUTHENTICATION' | 'MODERATION' })?.deniedBy;
+    if (deniedBy === 'AUTHENTICATION') return 'Your authentication request was rejected in SafeKey Mobile. Access was denied.';
+    const rejected = session?.moderators?.filter((moderator) => moderator.status === 'REJECTED') ?? [];
+    if (deniedBy === 'MODERATION' || rejected.length > 0) {
+      const names = rejected.map((moderator) => options.moderatorNamesById?.get(moderator.id)).filter((name): name is string => !!name);
+      return names.length > 0
+        ? `${names.join(', ')} rejected the moderator approval request. Access was denied.`
+        : 'A moderator rejected the approval request. Access was denied.';
+    }
+    return 'Access denied. The decision could not be identified.';
+  }
   if (phase === 'EXPIRED') return 'Access expired.';
   if (phase === 'PARTICIPANT_REVOKED') return 'Access is no longer available because a participant was revoked.';
   if (phase === 'RECONCILIATION_REQUIRED') return 'Access is temporarily unavailable. Try again later.';
@@ -79,10 +90,10 @@ export function revealGateCountdown(progress: RevealProgress, now = Date.now()):
 
 function moderationMessage(progress: RevealProgress, moderators: readonly string[]): string {
   const { approvedModerators, requiredModerators } = progress.session ?? {};
-  if (approvedModerators === undefined || requiredModerators === undefined) {
-    return 'Waiting for moderator approval. Approval requests were sent to all plan moderators via SafeKey Mobile.';
-  }
   const people = moderators.length === 0 ? '' : ` Moderators: ${moderators.join(', ')}.`;
+  if (approvedModerators === undefined || requiredModerators === undefined) {
+    return `Waiting for moderator approval in SafeKey Mobile.${people}`;
+  }
   return `Waiting for moderators (${approvedModerators} of ${requiredModerators} approved).${people}`;
 }
 

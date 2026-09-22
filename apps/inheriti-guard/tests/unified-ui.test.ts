@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 const panel = readFileSync(new URL('../src/side-panel/index.html', import.meta.url), 'utf8');
 const panelMain = readFileSync(new URL('../src/side-panel/main.ts', import.meta.url), 'utf8');
 const blockedMain = readFileSync(new URL('../src/blocked/main.ts', import.meta.url), 'utf8');
-const options = readFileSync(new URL('../src/options/index.html', import.meta.url), 'utf8');
+const manifest = JSON.parse(readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 
 describe('unified InheritiGuard UI', () => {
   it('presents one product with three accessible top-level areas', () => {
@@ -41,14 +41,13 @@ describe('unified InheritiGuard UI', () => {
   it('uses shared branding on every extension-owned surface', () => {
     expect(panelMain).toContain("from '@safetech/inheriti-elements-brand'");
     expect(blockedMain).toContain("from '@safetech/inheriti-elements-brand'");
-    expect(options).toContain('InheritiGuard — Plan Access configuration');
     expect(blockedMain).toContain("blocked.origin}${blocked.pathname}");
     expect(panel).not.toContain('M14.2718');
     expect(panelMain).toContain("path.setAttribute('d', inheritiGuardShield.path)");
   });
 
-  it('keeps Application master-key configuration out of Options', () => {
-    expect(options).not.toMatch(/master key|masterKey|passphrase|Argon2/iu);
+  it('has no editable runtime or standalone configuration page', () => {
+    expect(manifest).not.toHaveProperty('options_ui');
   });
 
   it('renders each successful Activity response once', () => {

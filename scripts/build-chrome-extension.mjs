@@ -4,13 +4,13 @@ import { dirname, relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { optionalToastPlugin } from './optional-toast-plugin.mjs';
 import { packageDirectory } from './package-directory.mjs';
-import { buildDefines, buildDeployment, writeBuildDeployment } from './build-deployment.mjs';
+import { buildDefines, requiredBuildDeployment, writeBuildDeployment } from './build-deployment.mjs';
 import { manifestKeyForBuild } from './chrome-extension-id.mjs';
 
 const root = process.cwd();
 const source = resolve(root, 'src');
 const output = resolve(root, 'dist');
-const deployment = buildDeployment();
+const deployment = requiredBuildDeployment();
 
 const packageManifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const sourceManifest = JSON.parse(await readFile(resolve(source, 'manifest.json'), 'utf8'));
@@ -36,7 +36,6 @@ await build({
   entryPoints: {
     'background/service-worker': resolve(source, 'background/service-worker.ts'),
     'side-panel/main': resolve(source, 'side-panel/main.ts'),
-    ...(deployment === undefined ? { 'options/main': resolve(source, 'options/main.ts') } : {}),
     'blocked/main': resolve(source, 'blocked/main.ts'),
   },
   outdir: output,
@@ -120,7 +119,7 @@ const coreSdkDirectory = await packageDirectory(sdkDirectory, '@safetech/inherit
 await cp(resolve(coreSdkDirectory, 'dist', 'workers'), resolve(output, 'background', 'workers'), { recursive: true });
 await cp(resolve(source, 'icons'), resolve(output, 'icons'), { recursive: true });
 
-for (const page of deployment === undefined ? ['side-panel', 'options', 'blocked'] : ['side-panel', 'blocked']) {
+for (const page of ['side-panel', 'blocked']) {
   await mkdir(resolve(output, page), { recursive: true });
   await cp(resolve(source, page, 'index.html'), resolve(output, page, 'index.html'));
   await cp(resolve(source, page, 'styles.css'), resolve(output, page, 'styles.css'));
@@ -128,11 +127,8 @@ for (const page of deployment === undefined ? ['side-panel', 'options', 'blocked
 await cp(resolve(source, 'side-panel', 'font-app.ttf'), resolve(output, 'side-panel', 'font-app.ttf'));
 const manifest = { ...sourceManifest, version: packageManifest.version,
   key: manifestKeyForBuild(deployment, sourceManifest.key) };
-const builtManifest = deployment === undefined ? manifest
-  : Object.fromEntries(Object.entries(manifest)
-    .filter(([key]) => key !== 'options_ui'));
 await writeFile(
   resolve(output, 'manifest.json'),
-  `${JSON.stringify(builtManifest, null, 2)}\n`,
+  `${JSON.stringify(manifest, null, 2)}\n`,
 );
 await writeBuildDeployment(output);

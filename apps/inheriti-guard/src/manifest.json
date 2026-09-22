@@ -71,9 +71,5 @@
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'"
-  },
-  "options_ui": {
-    "page": "options/index.html",
-    "open_in_tab": true
   }
 }

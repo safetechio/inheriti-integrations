@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNodeIntegrationCore, selectBusinessOrganization } from '@safetech/inheriti-elements-core/node';
 import type { NodeIntegrationCore, OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
 import { planDetail, planSummary } from './metadata.js';
-import { revealModeOf } from '@safetech/inheriti-elements-core/node';
+import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/node';
 import { deliverAssetInBrowser, deliverInBrowser } from './local-browser.js';
 
 const configPath = () => resolve(process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config'), 'inheriti-elements', 'config.json');
@@ -49,7 +49,7 @@ export class MetadataTools {
   private core?: NodeIntegrationCore;
   private config?: Configuration;
   private sessions = new SessionStore();
-  private job?: { id: string; organizationId: string; phase: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
+  private job?: { id: string; organizationId: string; phase: string; message?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
 
@@ -155,14 +155,20 @@ export class MetadataTools {
     if (version !== this.selectionVersion) throw coded('organization_selection_changed');
     if (this.job?.status === 'WAITING') throw coded('reveal_in_progress');
     const controller = new AbortController();
-    const job = { id: crypto.randomUUID(), organizationId: selected.organizationId, phase: 'STARTING', status: 'WAITING' as 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED', controller, done: Promise.resolve() };
+    const job: NonNullable<typeof this.job> = { id: crypto.randomUUID(), organizationId: selected.organizationId, phase: 'STARTING', status: 'WAITING', controller, done: Promise.resolve() };
     this.job = job;
     job.done = (async () => {
       const plan = await selected.core.getPlan(planId);
+      const moderators = (plan.participants ?? [])
+        .filter(participant => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'));
+      const moderatorNamesById = new Map(moderators.map(participant => [participant.id, participant.displayName]));
       if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('organization_selection_changed');
       await selected.core.withReveal(planId, {
         mode: revealModeOf(plan), signal: controller.signal,
-        onProgress: progress => { job.phase = progress.phase; },
+        onProgress: progress => {
+          job.phase = progress.phase;
+          job.message = revealProgressMessage(progress, { moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
+        },
       }, async reveal => {
         if (kind === 'ASSET') {
           await reveal.exportAsset(selector, async asset => {
@@ -176,16 +182,20 @@ export class MetadataTools {
           });
         }
       });
-    })().then(() => { job.status = 'DELIVERED'; }).catch(() => { job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED'; });
+    })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(() => {
+      job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED';
+      if (job.status === 'CANCELED') job.message = 'Reveal canceled.';
+      else if (job.phase !== 'DENIED' && job.phase !== 'STOPPED_BY_DMS') job.message = 'Reveal could not continue.';
+    });
     const expiry = setTimeout(() => controller.abort(), 10 * 60_000);
     void job.done.finally(() => clearTimeout(expiry));
-    return { jobId: job.id, status: job.status, phase: job.phase };
+    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }) };
   }
   async revealStatus(jobId: string, cancel = false) {
     const job = this.job;
     if (!job || job.id !== jobId) throw coded('reveal_not_found');
     if (cancel && job.status === 'WAITING') { job.controller.abort(); await job.done; }
-    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.status === 'DELIVERED' ? { delivered: true } : {}) };
+    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }), ...(job.status === 'DELIVERED' ? { delivered: true } : {}) };
   }
 
 }

@@ -9,6 +9,7 @@ export interface CliContext {
   core: NodeIntegrationCore;
   sessions: FileOperatorSessionStore;
   organization?: BusinessOrganization;
+  keyOwner: 'Application' | 'Organisation';
 }
 
 /**
@@ -45,5 +46,5 @@ export function createCliContext(
     },
     sessions,
   });
-  return { core, sessions };
+  return { core, sessions, keyOwner: configuration.business ? 'Organisation' : 'Application' };
 }

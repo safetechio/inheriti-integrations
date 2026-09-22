@@ -199,7 +199,7 @@ export class FakeElementsApi {
       governance: { mode: this.options.governance, minimumApprovals: 0 },
       participantSummary: { owners: 1, mergers: 1, moderators: 0 },
       source: { kind: 'NATIVE' },
-      revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'BYPASS' },
+      revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'FORCE' },
       participants: [],
       assets: assets.map((asset) => ({
         id: asset.id,

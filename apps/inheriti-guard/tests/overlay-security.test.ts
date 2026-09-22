@@ -17,6 +17,10 @@ describe('in-page overlay security surface', () => {
     expect(source).toContain("type === 'inheriti-overlay-discover-targets'");
     expect(source).toContain('sendResponse([...controls.keys()]');
     expect(source).toContain('onOutsidePointerDown');
+    expect(source).toContain("position:fixed;width:0;height:0");
+    expect(source).toContain('document.documentElement.append(host)');
+    expect(source).toContain('positionControls();');
+    expect(source).not.toContain("insertAdjacentElement('afterend', host)");
   });
 
   it('exposes only the shared confirmation as a reveal-starting message', async () => {
@@ -34,5 +38,19 @@ describe('in-page overlay security surface', () => {
     expect(source).toContain("type: 'overlay-reveal-state'");
     expect(source).toContain("type: 'overlay-cancel-reveal'");
     expect(source).not.toContain('protectedValue');
+  });
+
+  it('explains distinct sign-in, load failure, and empty suggestion states', async () => {
+    const source = await readFile(new URL('../src/content/overlay.ts', import.meta.url), 'utf8');
+    for (const text of ['Sign in to use autofill', 'Plans could not be loaded', 'InheritiGuard did not respond',
+      'No plans support autofill', 'Selected plan unavailable', 'No autofill fields found', 'No matching ${semantic} field']) {
+      expect(source).toContain(text);
+    }
+    expect(source).not.toContain('Plan Access is not ready');
+    expect(source).not.toContain("return 'Denied'");
+    expect(source).toContain('Not allowed on this site');
+    expect(source).toContain('Autofill credentials');
+    expect(source).toContain("field${mappings.length === 1 ? '' : 's'} ready");
+    expect(source).toContain('candidate.assetFieldNames.map(titleCase)');
   });
 });

@@ -48,8 +48,10 @@ export function createCore(
 export async function loadPlans(core: BrowserIntegrationCore): Promise<PanelState> {
   if (!(await core.getAccessToken())) return { kind: 'SIGNED_OUT' };
   try {
-    const page = await core.listPlans();
-    return page.items.length === 0 ? { kind: 'EMPTY' } : { kind: 'PLANS', plans: page.items.map(summarise) };
+    const page = await core.listPlans({ assetType: 'USER-PSWD' });
+    return page.items.length === 0
+      ? { kind: 'EMPTY', reason: 'no-autofill-plans' }
+      : { kind: 'PLANS', plans: page.items.map(summarise) };
   } catch (error) {
     return { kind: 'ERROR', code: codeOf(error) };
   }

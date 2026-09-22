@@ -57,6 +57,7 @@ interface ChromeRevealCore extends BrowserIntegrationCore {
 }
 
 interface PlanForReveal extends PlanGovernanceView {
+  readonly participants?: readonly { readonly id: string; readonly displayName: string; readonly relationships: readonly string[]; readonly lifecycle: string }[];
   readonly assets: readonly {
     readonly id: string;
     readonly code?: string;
@@ -77,6 +78,7 @@ export class ChromeRevealController {
   public constructor(
     private readonly getCore: () => Promise<BrowserIntegrationCore>,
     private readonly storage: chrome.storage.StorageArea,
+    private readonly keyOwner: () => 'Application' | 'Organisation' = () => 'Application',
   ) {}
 
   public current(): RevealViewState { return this.state; }
@@ -117,6 +119,7 @@ export class ChromeRevealController {
     if (this.active !== undefined) return { kind: 'ERROR', message: 'A reveal is already in progress.' };
     const generation = this.shutdownGeneration;
     const plan = await this.planFor(input.planId);
+    const moderators = moderatorsOf(plan);
     if (generation !== this.shutdownGeneration) return { kind: 'ERROR', message: 'Reveal canceled.' };
     const options = this.fieldsOf(plan, input.planId, input.origin);
     const selected = options.kind === 'READY' ? options.fields.find((field) => field.selector === input.selector) : undefined;
@@ -149,7 +152,7 @@ export class ChromeRevealController {
         onProgress: (progress) => {
           if (!this.ownsOperation(generation, abort)) return;
           lastProgress = progress;
-          this.state = progressFor(progress);
+          this.state = progressFor(progress, this.keyOwner(), moderators);
           // The panel is rebuilt from this record after an eviction, so the phase a person is waiting
           // on has to be in it, not only in this worker's memory.
           void this.remember({});
@@ -175,7 +178,7 @@ export class ChromeRevealController {
       if (this.ownsOperation(generation, abort)) this.state = { kind: 'DONE', message: 'Field filled. Reveal closed.' };
     } catch (error) {
       if (this.active === abort && generation === this.shutdownGeneration) {
-        this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress) };
+        this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators) };
       }
     } finally {
       if (this.active === abort && generation === this.shutdownGeneration) {
@@ -191,6 +194,7 @@ export class ChromeRevealController {
     if (!validateAccessBatch(batch).valid) throw stableError('invalid-access-batch');
     const generation = this.shutdownGeneration;
     const plan = await this.planFor(batch.identity.planId);
+    const moderators = moderatorsOf(plan);
     if (generation !== this.shutdownGeneration) return resultsFor(batch, 'canceled');
     if (!batch.mappings.every((mapping) => protectedFieldExists(plan, mapping))) {
       return resultsFor(batch, 'field-unavailable');
@@ -231,7 +235,7 @@ export class ChromeRevealController {
         onProgress: (progress) => {
           if (!this.ownsOperation(generation, abort)) return;
           lastProgress = progress;
-          this.state = progressFor(progress);
+          this.state = progressFor(progress, this.keyOwner(), moderators);
           void this.remember({});
         },
       }, async (reveal) => {
@@ -284,7 +288,7 @@ export class ChromeRevealController {
         if (!outcomes.has(mapping.protectedField.selector)) outcomes.set(mapping.protectedField.selector, code);
       }
       if (this.active === abort && generation === this.shutdownGeneration) {
-        this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress) };
+        this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators) };
       }
     } finally {
       if (this.active === abort && generation === this.shutdownGeneration) {
@@ -430,8 +434,8 @@ export function isRevealDeadline(name: string): boolean { return name === DEADLI
  * The panel's view of a reveal step. The sequence is the Client SDK's and the words are the shared
  * ones; the panel only decides whether a phase is still running or is an error to show as one.
  */
-function progressFor(progress: RevealProgress): RevealViewState {
-  const message = revealProgressMessage(progress);
+function progressFor(progress: RevealProgress, keyOwner: 'Application' | 'Organisation', moderators: ReadonlyMap<string, string>): RevealViewState {
+  const message = revealProgressMessage(progress, { keyOwner, moderators: [...moderators.values()], moderatorNamesById: moderators });
   if (hasRevealFailed(progress.phase)) return { kind: 'ERROR', message };
   // STARTING and WAITING_FOR_MASTER_KEY precede creation of a reveal session.
   const session = progress.session as RevealSessionView | undefined;
@@ -447,21 +451,34 @@ function progressFor(progress: RevealProgress): RevealViewState {
   };
 }
 
-function messageFor(error: unknown, canceled: boolean, lastProgress?: RevealProgress): string {
+function messageFor(
+  error: unknown,
+  canceled: boolean,
+  lastProgress: RevealProgress | undefined,
+  keyOwner: 'Application' | 'Organisation',
+  moderators: ReadonlyMap<string, string>,
+): string {
   // The server's own explanation outranks the transport error and the generic fallback below.
   if (lastProgress?.phase === 'STOPPED_BY_DMS') {
     return 'The dead man\'s switch subject stopped this reveal. Nothing was released.';
+  }
+  if (lastProgress !== undefined && hasRevealFailed(lastProgress.phase)) {
+    return revealProgressMessage(lastProgress, { keyOwner, moderatorNamesById: moderators });
   }
   if (canceled) return 'Reveal canceled.';
   const code = (error as { code?: unknown })?.code;
   if (code === 'action_origin_denied') return 'This page origin is not approved for autofill.';
   if (code === 'stale_tab_context') return 'The page changed before autofill. Reveal again on the current page.';
-  // The Application's key is held by the operator, never by the plan service, so a missing one is a
-  // configuration answer rather than a failure to retry.
   if ((error as { name?: unknown })?.name === 'MasterKeyRequired') {
-    return 'This Application\'s master key is not available. Add it to the extension and reveal again.';
+    return `The ${keyOwner} key is not available from SafeKey Mobile for this account.`;
   }
   return 'Reveal could not continue. Try again.';
+}
+
+function moderatorsOf(plan: PlanForReveal): ReadonlyMap<string, string> {
+  return new Map((plan.participants ?? [])
+    .filter((participant) => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'))
+    .map((participant) => [participant.id, participant.displayName]));
 }
 
 function originOf(url: string | undefined): string | undefined {

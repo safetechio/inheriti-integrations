@@ -33,14 +33,14 @@ const MESSAGES: Readonly<Record<string, string>> = {
   EACCES: 'The chosen file cannot be created',
   reveal_authorization_ended: 'The reveal could not be authorized',
   reveal_stopped_by_dms: 'The dead man\'s switch subject stopped this reveal — nothing was released',
-  master_key_required: 'The organization key is unavailable on this host',
   organization_access_denied: 'The selected organization is no longer available',
   organization_required: 'No eligible Business organizations are available',
   organization_selection_required: 'Choose a Business organization to view plans',
   operator_not_signed_in: 'Sign in to choose a Business organization',
 };
 
-export function messageFor(code: string): string {
+export function messageFor(code: string, keyOwner: 'Application' | 'Organisation' = 'Application'): string {
+  if (code === 'master_key_required') return `The ${keyOwner} key is not available from SafeKey Mobile for this account`;
   return MESSAGES[code] ?? 'Could not load plans';
 }
 

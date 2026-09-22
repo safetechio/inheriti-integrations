@@ -14,7 +14,7 @@ _inheriti_complete() {
   candidates="$(inheriti __complete "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null | cut -f1)"
   COMPREPLY=($(compgen -W "\${candidates}" -- "\${COMP_WORDS[COMP_CWORD]}"))
 }
-complete -F _inheriti_complete inheriti
+complete -o bashdefault -o default -F _inheriti_complete inheriti
 `;
 
 const ZSH = `#compdef inheriti
@@ -32,7 +32,7 @@ function __inheriti_complete
   set -l tokens (commandline -opc) (commandline -ct)
   inheriti __complete $tokens[2..-1] 2>/dev/null
 end
-complete -c inheriti -f -a "(__inheriti_complete)"
+complete -c inheriti -a "(__inheriti_complete)"
 `;
 
 export function completionScript(shell: CompletionShell): string {

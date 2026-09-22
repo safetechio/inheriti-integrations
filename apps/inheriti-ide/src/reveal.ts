@@ -8,6 +8,7 @@ export interface VscodeRevealCore {
   getPlan(planId: string): Promise<PlanGovernanceView & {
     assets: ReadonlyArray<{ id: string; code?: string; name?: string; fieldNames?: readonly string[]; isBinary?: boolean }>;
     participants?: ReadonlyArray<{
+      id?: string;
       displayName: string;
       lifecycle: string | { kind: 'UNKNOWN'; raw: string };
       relationships: ReadonlyArray<string | { kind: 'UNKNOWN'; raw: string }>;
@@ -76,6 +77,7 @@ export async function revealAndInsert(
   ui: VscodeRevealUi,
   activeReveals: ActiveRevealRegistry,
   planId: string,
+  keyOwner: 'Application' | 'Organisation' = 'Application',
 ): Promise<void> {
   const plan = await core.getPlan(planId);
   const fields = plan.assets.flatMap((asset) => asset.isBinary ? [] : (asset.fieldNames ?? []).map((field) => ({
@@ -87,8 +89,11 @@ export async function revealAndInsert(
 
   // Named so "waiting for moderators" becomes a list of people to go and ask.
   const moderators = (plan.participants ?? [])
-    .filter((participant) => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'))
-    .map((participant) => participant.displayName);
+    .filter((participant) => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'));
+  const moderatorNames = moderators.map((participant) => participant.displayName);
+  const moderatorNamesById = new Map(moderators
+    .filter((participant): participant is typeof participant & { id: string } => participant.id !== undefined)
+    .map((participant) => [participant.id, participant.displayName]));
   const controller = activeReveals.create();
   try {
     await ui.withProgress(async (progress, token) => {
@@ -96,7 +101,7 @@ export async function revealAndInsert(
       if (token.isCancellationRequested) controller.abort();
       progress.report({ message: 'Opening the plan.' });
       let lastProgress: RevealProgress | undefined;
-      const governanceProgress = new GovernanceProgressPresenter(progress, moderators);
+      const governanceProgress = new GovernanceProgressPresenter(progress, moderatorNames, keyOwner);
       try {
         await core.withReveal(planId, {
           mode: revealModeOf(plan),
@@ -123,6 +128,9 @@ export async function revealAndInsert(
         // The server already said why this ended. Without this the generic error boundary would
         // relabel a healthy dead-man's-switch stop as an authorization failure.
         if (lastProgress?.phase === 'STOPPED_BY_DMS') throw new RevealStoppedByDeadManSwitch({ cause: error });
+        if (lastProgress?.phase === 'DENIED') {
+          throw Object.assign(new Error(revealProgressMessage(lastProgress, { moderatorNamesById })), { code: 'governance_denied' });
+        }
         throw error;
       } finally {
         governanceProgress.close();
@@ -138,8 +146,12 @@ export async function revealAndInsert(
  * The editor's line for a reveal step. The sequence is the Client SDK's; only the words are here,
  * and they are the shared ones so the editor, the CLI and the browser panel agree.
  */
-export function progressMessage(progress: RevealProgress, moderators: readonly string[] = []): string {
-  return revealProgressMessage(progress, { moderators });
+export function progressMessage(
+  progress: RevealProgress,
+  moderators: readonly string[] = [],
+  keyOwner: 'Application' | 'Organisation' = 'Application',
+): string {
+  return revealProgressMessage(progress, { moderators, keyOwner });
 }
 
 /** Repaints a gate's server deadline without taking ownership of expiration. */
@@ -150,6 +162,7 @@ export class GovernanceProgressPresenter {
   public constructor(
     private readonly reporter: RevealProgressReporter,
     private readonly moderators: readonly string[] = [],
+    private readonly keyOwner: 'Application' | 'Organisation' = 'Application',
   ) {}
 
   public update(progress: RevealProgress): void {
@@ -168,7 +181,7 @@ export class GovernanceProgressPresenter {
     if (!this.current) return;
     const countdown = revealGateCountdown(this.current);
     const suffix = countdown === undefined ? '' : ` Time remaining ${countdown}.`;
-    this.reporter.report({ message: `${progressMessage(this.current, this.moderators)}${suffix}` });
+    this.reporter.report({ message: `${progressMessage(this.current, this.moderators, this.keyOwner)}${suffix}` });
   }
 }
 

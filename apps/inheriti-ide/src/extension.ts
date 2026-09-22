@@ -16,16 +16,16 @@ import { parseImportedConfiguration } from './import-configuration.js';
 import { MASTER_KEY_PASSPHRASE_SECRET } from './master-keys.js';
 import { discoverOrganizations, saveOrganization } from './organizations.js';
 
-const PLAN_SCHEME = 'inheriti-elements-plan';
+const PLAN_SCHEME = 'inheriti-plan';
 
 /** What `activate` returns to VS Code, and to anything inspecting the extension through its exports. */
-export interface ElementsExtensionApi {
+export interface InheritiExtensionApi {
   /** The rows the plans view is showing right now — the same ones the tree paints. */
   currentRows(): readonly PlanRow[];
   refresh(): Promise<void>;
 }
 
-export function activate(context: vscode.ExtensionContext): ElementsExtensionApi {
+export function activate(context: vscode.ExtensionContext): InheritiExtensionApi {
   const plans = new PlanTreeProvider(context.globalStorageUri);
   let currentState: PlanViewState = { kind: 'SIGNED_OUT' };
   const render = (state: PlanViewState): void => { currentState = state; plans.render(state); };
@@ -204,7 +204,9 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
         await changeOrganization(organization);
         await refresh();
       } catch (error) {
-        await vscode.window.showErrorMessage(messageFor(codeOf(error)));
+        await vscode.window.showErrorMessage(messageFor(
+          codeOf(error), configuration().business ? 'Organisation' : 'Application',
+        ));
       }
     }),
 
@@ -276,11 +278,13 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
             if (uri && uri.scheme !== 'file') throw Object.assign(new Error('Choose a local file.'), { code: 'download_local_file_required' });
             return uri?.fsPath;
           },
-        }, activeReveals, selectedPlanId);
+        }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application');
         await vscode.window.showInformationMessage('Asset saved. Reveal closed.');
       } catch (error) {
         if ((error as { name?: unknown })?.name === 'AbortError') { await vscode.window.showInformationMessage('Download canceled.'); return; }
-        await vscode.window.showErrorMessage(messageFor(codeOf(error)));
+        await vscode.window.showErrorMessage(messageFor(
+          codeOf(error), configuration().business ? 'Organisation' : 'Application',
+        ));
       }
     }),
 
@@ -360,14 +364,20 @@ export function activate(context: vscode.ExtensionContext): ElementsExtensionApi
           if (!editor) return false;
           return editor.edit((edit) => edit.replace(editor.selection, value), { undoStopBefore: true, undoStopAfter: true });
         },
-      }, activeReveals, selectedPlanId);
+      }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application');
       await vscode.window.showInformationMessage('Protected field inserted. Reveal closed.');
     } catch (error) {
+      if (codeOf(error) === 'governance_denied') {
+        await vscode.window.showErrorMessage((error as Error).message);
+        return;
+      }
       if ((error as { name?: unknown })?.name === 'AbortError') {
         await vscode.window.showInformationMessage('Reveal canceled.');
         return;
       }
-      await vscode.window.showErrorMessage(messageFor(codeOf(error)));
+      await vscode.window.showErrorMessage(messageFor(
+        codeOf(error), configuration().business ? 'Organisation' : 'Application',
+      ));
     }
   }
 

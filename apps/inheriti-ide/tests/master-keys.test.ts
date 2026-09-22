@@ -12,7 +12,7 @@ function secretStorage(value?: string): SecretStorage {
  * This host declares custody and nothing else. Which key opens which plan, and whether to ask the
  * device holding it, is the Client SDK's decision and is covered by its suite.
  */
-describe('VS Code master-key custody', () => {
+describe('VS Code Master Key custody', () => {
   it('derives from the passphrase held in SecretStorage', async () => {
     const source = new SecretStorageMasterKeySource('00'.repeat(16), secretStorage('correct horse battery staple'));
 

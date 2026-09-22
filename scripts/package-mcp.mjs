@@ -17,7 +17,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   type: 'module',
   bin: manifest.bin,
   files: ['dist'],
-  engines: { node: '>=22 <23' },
+  engines: { node: '>=22' },
   private: false,
 }, null, 2)}\n`);
 const packed = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',

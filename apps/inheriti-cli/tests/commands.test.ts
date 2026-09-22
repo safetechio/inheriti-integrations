@@ -31,7 +31,10 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
     ...(overrides.auth as Record<string, unknown> ?? {}),
   };
   return {
-    sessions: { clear: async () => { cleared.push('sessions'); } },
+    sessions: {
+      clear: async () => { cleared.push('sessions'); },
+      load: async () => ({ principal: { issuer: 'issuer', environment: 'TEST', subject: 'operator' } }),
+    },
     cleared,
     core: {
       auth,
@@ -279,7 +282,7 @@ describe('plans', () => {
           relationships: ['OWNER', 'MODERATOR'], lifecycle: 'ACTIVE',
         }],
         authentication: [{ id: 'SK_MOBILE', status: 'ACTIVE' }],
-        revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'BYPASS' },
+        revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'FORCE' },
         source: { kind: 'NATIVE' },
       }),
     }), terminal, 'plan-1');
@@ -314,7 +317,7 @@ describe('plans', () => {
           { id: 'deed', code: 'deed', type: 'DOCUMENT', name: 'Deed', isBinary: true, fieldNames: [] },
         ],
         participants: [],
-        revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'BYPASS' },
+        revealPolicy: { masterKeyRelease: 'REQUIRED', custodian: 'FORCE' },
         source: { kind: 'NATIVE' },
       }),
     }), terminal, 'plan-1');
@@ -335,21 +338,65 @@ describe('completion', () => {
   it('prints a script a shell can source, and refuses a shell it has none for', async () => {
     const terminal = recordingTerminal(true);
     expect(printCompletionScript(terminal, 'bash')).toBe(0);
-    expect(terminal.lines[0]).toContain('complete -F _inheriti_complete inheriti');
+    expect(terminal.lines[0]).toContain('-F _inheriti_complete inheriti');
     expect(printCompletionScript(terminal, 'powershell')).toBe(1);
     expect(terminal.errors[0]).toContain('bash|zsh|fish');
   });
 
-  it('offers plan ids with their names after `plans show`', async () => {
+  it('offers commands, subcommands and plan ids at their actual shell cursor positions', async () => {
     const terminal = recordingTerminal(true);
     const items = [{ id: 'plan-1', name: 'Family vault' }, { id: 'plan-2', name: 'Recovery kit' }];
+    const context = contextWith({ listPlans: async () => ({ items, nextCursor: null }) });
+    await completeWords(context, terminal, ['pl'], { XDG_STATE_HOME: temporaryState() });
+    expect(terminal.lines).toContain('plans\tList and use plans');
+    terminal.lines.length = 0;
+    await completeWords(context, terminal, ['plans', ''], { XDG_STATE_HOME: temporaryState() });
+    expect(terminal.lines).toContain('show\tShow plan details');
+    terminal.lines.length = 0;
     await completeWords(
-      contextWith({ listPlans: async () => ({ items, nextCursor: null }) }),
+      context,
       terminal,
-      ['plans', 'show'],
+      ['plans', 'show', ''],
       { XDG_STATE_HOME: temporaryState() },
     );
     expect(terminal.lines).toEqual(['plan-1\tFamily vault', 'plan-2\tRecovery kit']);
+  });
+
+  it.each(['logs', 'reveal', 'download', 'use', 'abort'])('offers plan ids after `plans %s`', async (command) => {
+    const terminal = recordingTerminal(true);
+    await completeWords(
+      contextWith({ listPlans: async () => ({ items: [{ id: 'plan-1', name: 'Family vault' }], nextCursor: null }) }),
+      terminal,
+      ['plans', command, ''],
+      { XDG_STATE_HOME: temporaryState() },
+    );
+    expect(terminal.lines).toEqual(['plan-1\tFamily vault']);
+  });
+
+  it('offers plan ids while a plan id is partially typed', async () => {
+    const terminal = recordingTerminal(true);
+    await completeWords(
+      contextWith({ listPlans: async () => ({ items: [{ id: 'cd123', name: 'Family vault' }], nextCursor: null }) }),
+      terminal,
+      ['plans', 'reveal', 'cd'],
+      { XDG_STATE_HOME: temporaryState() },
+    );
+    expect(terminal.lines).toEqual(['cd123\tFamily vault']);
+  });
+
+  it('offers command options after a plan id', async () => {
+    const terminal = recordingTerminal(true);
+    await completeWords(contextWith(), terminal, ['plans', 'logs', 'plan-1', ''], { XDG_STATE_HOME: temporaryState() });
+    expect(terminal.lines).toEqual(expect.arrayContaining(['--limit\t', '--offset\t', '--json\t', '--table\t']));
+  });
+
+  it('offers organization ids where an organization value is expected', async () => {
+    const terminal = recordingTerminal(true);
+    const context = contextWith({
+      listOrganizations: async () => [{ id: 'org-1', name: 'Acme' }],
+    });
+    await completeWords(context, terminal, ['organizations', 'use', ''], { XDG_STATE_HOME: temporaryState() });
+    expect(terminal.lines).toEqual(['org-1\tAcme']);
   });
 
   it('offers the asset selectors of the plan already on the line after --field', async () => {
@@ -380,10 +427,35 @@ describe('completion', () => {
     expect(terminal.lines).toEqual(['database.password\t']);
   });
 
+  it('preserves a mapping name while completing its field selector', async () => {
+    const terminal = recordingTerminal(true);
+    await completeWords(
+      contextWith({ getPlan: async () => ({ assets: [{ id: 'a', code: 'database', fieldNames: ['password'] }] }) }),
+      terminal,
+      ['plans', 'use', 'plan-1', '--env', 'DATABASE_URL='],
+      { XDG_STATE_HOME: temporaryState() },
+    );
+    expect(terminal.lines).toEqual(['DATABASE_URL=database.password\t']);
+  });
+
+  it('offers binary and structured asset codes after download --asset', async () => {
+    const terminal = recordingTerminal(true);
+    await completeWords(
+      contextWith({ getPlan: async () => ({ assets: [
+        { id: 'asset-1', code: 'contract', name: 'Contract', fieldNames: [], isBinary: true },
+        { id: 'asset-2', code: 'database', name: 'Database', fieldNames: ['password'], isBinary: false },
+      ] }) }),
+      terminal,
+      ['plans', 'download', 'plan-1', '--asset', ''],
+      { XDG_STATE_HOME: temporaryState() },
+    );
+    expect(terminal.lines).toEqual(['contract\tContract', 'database\tDatabase']);
+  });
+
   it('answers nothing, successfully, when there is no session to ask with', async () => {
     const terminal = recordingTerminal(true);
     const context = contextWith({ auth: { getAccessToken: async () => undefined } });
-    await expect(completeWords(context, terminal, ['plans', 'show'], { XDG_STATE_HOME: temporaryState() }))
+    await expect(completeWords(context, terminal, ['plans', 'show', ''], { XDG_STATE_HOME: temporaryState() }))
       .resolves.toBe(0);
     expect(terminal.lines).toEqual([]);
   });
@@ -391,7 +463,7 @@ describe('completion', () => {
   it('stays silent when the API refuses, rather than corrupting the line being typed', async () => {
     const terminal = recordingTerminal(true);
     const context = contextWith({ listPlans: async () => { throw new Error('plan_request_failed'); } });
-    await expect(completeWords(context, terminal, ['plans', 'show'], { XDG_STATE_HOME: temporaryState() }))
+    await expect(completeWords(context, terminal, ['plans', 'show', ''], { XDG_STATE_HOME: temporaryState() }))
       .resolves.toBe(0);
     expect(terminal.lines).toEqual([]);
     expect(terminal.errors).toEqual([]);

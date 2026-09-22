@@ -2,7 +2,8 @@ type Semantic = 'username' | 'email' | 'password';
 interface FieldMetadata { targetId: string; origin: string; navigationId: string; semantic: Semantic; label: string }
 interface ProtectedField { assetName: string; fieldName: Semantic; matchesOrigin: boolean; planId: string; selector: string }
 interface Mapping { protectedField: ProtectedField; pageTarget: FieldMetadata }
-interface Candidate { planName: string; suggestion: { confidence: string; reason: string; mapping: Mapping } }
+interface Candidate { planName: string; assetFieldNames: readonly Semantic[];
+  suggestion: { confidence: string; reason: string; mapping: Mapping } }
 interface RevealState { kind: 'IDLE' | 'READY' | 'RUNNING' | 'DONE' | 'ERROR'; message?: string; expiresAt?: string; gateExpiresAt?: string }
 interface FieldResult { selector: string; targetId: string; code: string }
 interface Batch { identity: { planId: string }; mappings: readonly Mapping[] }
@@ -11,7 +12,7 @@ const STYLES = `
 :host{all:initial}
 @keyframes inheritiGlow{0%,100%{box-shadow:0 2px 8px #10182833,0 0 0 0 #0066ff55}50%{box-shadow:0 2px 8px #10182833,0 0 0 4px #0066ff22,0 0 15px #0066ff66}}
 @keyframes inheritiShimmer{0%{background-position:-160px 0}100%{background-position:160px 0}}
-.button{position:absolute;right:6px;bottom:6px;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:7px;background:#0066ff;color:#fff;cursor:pointer;box-shadow:0 2px 8px #10182833;animation:inheritiGlow 2.4s ease-in-out infinite}
+.button{position:absolute;right:0;top:-12px;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:7px;background:#0066ff;color:#fff;cursor:pointer;box-shadow:0 2px 8px #10182833;animation:inheritiGlow 2.4s ease-in-out infinite}
 .button:hover{box-shadow:0 2px 8px #10182833,0 0 16px #0066ff99}
 .button svg{width:14px;height:17px;fill:currentColor}
 .button:focus-visible{outline:3px solid #75a9ff}
@@ -56,7 +57,7 @@ const STYLES = `
 .reveal-head.success{color:#079455}
 .reveal-head.failed{color:#d92d20}
 .reveal-head .spinner,.reveal-head .glyph{width:13px;text-align:center;font-weight:800}
-.phase{flex:none;margin:0;color:#101828;font-size:13px;font-weight:600;line-height:1.35}
+.phase{flex:none;margin:0;color:#101828;font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .dots{display:inline-block;width:14px;text-align:left}
 .mapped.quiet .mapped-row{background:transparent;padding:2px 0;color:#98a2b3;font-size:9px}
 .mapped.quiet .mapped-page{color:#667085;font-weight:600}
@@ -108,12 +109,13 @@ function scan(): void {
     if (controls.has(input) || !compatible(input)) continue;
     attach(input);
   }
+  positionControls();
 }
 
 function attach(input: HTMLInputElement): void {
   const host = document.createElement('span');
   host.setAttribute(ROOT_ATTRIBUTE, '');
-  host.style.cssText = 'display:inline-block;position:relative;width:0;height:0;vertical-align:middle;z-index:2147483646';
+  host.style.cssText = 'all:initial;display:block;position:fixed;width:0;height:0;z-index:2147483646';
   const shadow = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
   style.textContent = STYLES;
@@ -135,7 +137,8 @@ function attach(input: HTMLInputElement): void {
   button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
   const tip = element('span', 'tip', 'Inheriti · fill a protected field');
   tip.setAttribute('role', 'tooltip');
-  shadow.append(style, button, tip); input.insertAdjacentElement('afterend', host); controls.set(input, host);
+  shadow.append(style, button, tip); document.documentElement.append(host); controls.set(input, host);
+  positionControl(input, host);
 }
 
 async function openChooser(input: HTMLInputElement, shadow: ShadowRoot, anchor: HTMLElement): Promise<void> {
@@ -143,7 +146,7 @@ async function openChooser(input: HTMLInputElement, shadow: ShadowRoot, anchor: 
   openPopoverHost = shadow.host as HTMLElement; openPopoverHost.style.zIndex = '2147483647';
   const popover = document.createElement('section'); popover.className = 'popover'; popover.setAttribute('role', 'dialog');
   popover.popover = 'manual';
-  popover.append(header('Choose a protected field'), skeleton());
+  popover.append(header('Autofill credentials'), skeleton());
   shadow.append(popover); openPopover = popover;
   popover.showPopover();
   place(anchor, popover);
@@ -151,25 +154,22 @@ async function openChooser(input: HTMLInputElement, shadow: ShadowRoot, anchor: 
   requestAnimationFrame(() => { if (popover === openPopover) popover.classList.add('shown'); });
   const target = register(input);
   const response = await chrome.runtime.sendMessage({ type: 'overlay-load-candidates', target }).catch(() => undefined) as
-    { ok?: boolean; candidates?: Candidate[]; batch?: Batch; pageTargets?: FieldMetadata[] } | undefined;
+    { ok?: boolean; candidates?: Candidate[]; batch?: Batch; pageTargets?: FieldMetadata[];
+      emptyReason?: 'no-autofill-plans' | 'selected-plan-unavailable' | 'no-protected-fields' | 'no-matching-field' } | undefined;
   if (popover !== openPopover) return;
   const failure = (response as { error?: string } | undefined)?.error;
   if (response?.ok !== true) {
-    // Only a successful, empty answer means nothing matched. Everything else has its own reason.
-    const signedOut = failure === 'signed-out' || response === undefined;
-    popover.replaceChildren(header(signedOut ? 'Log in first' : 'Plan Access is not ready'),
-      status(signedOut
-        ? 'Sign in to Inheriti to use your protected fields here.'
-        : loadError(failure)),
-      action(signedOut ? 'Log in' : 'Open side panel', signedOut ? 'primary' : 'ghost', openSidePanel));
+    const state = loadFailure(failure);
+    popover.replaceChildren(header(state.title), status(state.message),
+      action(state.action, state.primary ? 'primary' : 'ghost', state.close ? closePopover : openSidePanel));
     place(anchor, popover);
     return;
   }
   if (!response.candidates?.length) {
-    popover.replaceChildren(header('Choose a protected field'),
-      status('No protected field in your plans matches this input.'),
+    const state = emptyState(response.emptyReason, target.semantic);
+    popover.replaceChildren(header(state.title), status(state.message),
       action('Open side panel', 'ghost', openSidePanel));
-    place(input, popover);
+    place(anchor, popover);
     return;
   }
   // The worker owns page-target identity: this instance's own ids mean nothing to the shared batch.
@@ -206,8 +206,8 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
   let query = '';
 
   const filter = document.createElement('input');
-  filter.type = 'search'; filter.className = 'filter'; filter.placeholder = 'Filter by plan or asset';
-  filter.setAttribute('aria-label', 'Filter by plan or asset');
+  filter.type = 'search'; filter.className = 'filter'; filter.placeholder = 'Filter credentials';
+  filter.setAttribute('aria-label', 'Filter credentials');
   filter.addEventListener('input', ({ target: box }) => {
     // The overlay's own filter box, inside the closed shadow root. Page field values are never read.
     const { value } = box as HTMLInputElement;
@@ -232,10 +232,10 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
   };
 
   const paintMapped = (): void => {
-    const elsewhere = mappingsOf(batch).filter((mapping) => mapping.pageTarget.targetId !== target.targetId);
-    if (elsewhere.length === 0) { mapped.replaceChildren(); return; }
-    mapped.replaceChildren(element('p', 'mapped-title', 'Already chosen on this page'),
-      ...elsewhere.map((mapping) => {
+    const mappings = mappingsOf(batch);
+    if (mappings.length === 0) { mapped.replaceChildren(); return; }
+    mapped.replaceChildren(element('p', 'mapped-title', `${mappings.length} field${mappings.length === 1 ? '' : 's'} ready`),
+      ...mappings.map((mapping) => {
         const row = element('div', 'mapped-row');
         row.append(element('span', 'tick', '✓'), element('span', 'mapped-page', mapping.pageTarget.label),
           element('span', 'mapped-field', `${mapping.protectedField.assetName} · ${mapping.protectedField.fieldName}`));
@@ -249,7 +249,7 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
     actions.replaceChildren(
       action(count === 1 ? 'Reveal and autofill' : `Reveal and autofill ${count} fields`, 'primary',
         () => { void runReveal(batch!, candidates, popover); }),
-      action('Clear all', 'ghost', () => { void clearAll(); }),
+      action('Clear selection', 'ghost', () => { void clearAll(); }),
       action('Close', 'ghost', closePopover),
     );
   };
@@ -279,7 +279,7 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
   };
 
   repaint();
-  popover.replaceChildren(header('Choose a protected field'), filter, mapped, list, actions);
+  popover.replaceChildren(header('Autofill credentials'), filter, mapped, list, actions);
 }
 
 function mappingsOf(batch?: Batch): readonly Mapping[] {
@@ -307,12 +307,15 @@ function option(candidate: Candidate, state: { selected: boolean; pending: boole
   button.type = 'button';
   button.setAttribute('aria-pressed', String(state.selected));
   const body = element('span', 'item-body');
-  body.append(element('strong', '', candidate.planName),
-    element('span', '', `${field.assetName} · ${field.fieldName}${field.matchesOrigin ? ' · Exact origin' : ''}`));
+  const contents = candidate.assetFieldNames.map(titleCase).join(' + ');
+  body.append(element('strong', '', field.assetName),
+    element('span', '', `${candidate.planName} · ${contents}${field.matchesOrigin ? ' · Exact origin' : ''}`));
   button.append(body, element('span', 'tick', state.selected ? '✓' : state.pending ? '…' : ''));
   button.addEventListener('click', state.onPick);
   return button;
 }
+
+function titleCase(value: string): string { return `${value[0]?.toUpperCase() ?? ''}${value.slice(1)}`; }
 
 /** The CLI's reveal card, in the page: one phase at a time, with the fields it is working on. */
 async function runReveal(batch: Batch, candidates: readonly Candidate[], popover: HTMLElement): Promise<void> {
@@ -369,6 +372,8 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   ];
   const result = await chrome.runtime.sendMessage({ type: 'overlay-reveal-and-autofill', batch }).catch(() => undefined) as
     { ok?: boolean; results?: FieldResult[] } | undefined;
+  const finalState = await chrome.runtime.sendMessage({ type: 'overlay-reveal-state' }).catch(() => undefined) as
+    { ok?: boolean; reveal?: RevealState } | undefined;
   stopRevealTimers();
   if (popover !== openPopover || abandoned) return;
 
@@ -378,9 +383,10 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   heading.className = `reveal-head ${succeeded ? 'success' : 'failed'}`;
   spinner.className = 'glyph';
   spinner.textContent = succeeded ? '✓' : '✕';
-  title.textContent = succeeded ? 'Reveal complete' : 'Reveal did not finish';
+  const failure = finalState?.ok === true && finalState.reveal?.kind === 'ERROR' ? finalState.reveal.message : undefined;
+  title.textContent = succeeded ? 'Reveal complete' : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
   dots.textContent = '';
-  phaseText.textContent = succeeded ? 'Every field was written to the page' : 'The reveal stopped before it finished';
+  phaseText.textContent = succeeded ? 'Every field was written to the page' : failure ?? 'The reveal stopped before it finished';
   countdown.textContent = results.length === 0
     ? 'Autofill could not continue. Open the side panel for details.'
     : `${filled} of ${results.length} fields autofilled. The form was not submitted.`;
@@ -415,9 +421,31 @@ function labelFor(result: FieldResult, batch: Batch): string {
   return field === undefined ? result.selector : `${field.assetName} · ${field.fieldName}`;
 }
 
-function loadError(code?: string): string {
-  if (code === 'stale-page-context') return 'The page changed. Close this and open the field again.';
-  return 'Suggestions could not be loaded. Open the side panel for details.';
+function loadFailure(code?: string): { title: string; message: string; action: string; primary?: boolean; close?: boolean } {
+  if (code === 'signed-out') return { title: 'Sign in to use autofill',
+    message: 'Open InheritiGuard and sign in, then try this field again.', action: 'Open InheritiGuard', primary: true };
+  if (code === 'stale-page-context') return { title: 'This field changed',
+    message: 'The page changed after InheritiGuard found this input. Close this message and try the field again.', action: 'Close', close: true };
+  if (code === 'access-request-failed') return { title: 'Plans could not be loaded',
+    message: 'Open the side panel to check your account and try again.', action: 'Open side panel' };
+  if (code === undefined) return { title: 'InheritiGuard did not respond',
+    message: 'Reload this page, then try the field again.', action: 'Close', close: true };
+  return { title: 'Autofill is unavailable',
+    message: 'Open the side panel for details and try again.', action: 'Open side panel' };
+}
+
+function emptyState(
+  reason: 'no-autofill-plans' | 'selected-plan-unavailable' | 'no-protected-fields' | 'no-matching-field' | undefined,
+  semantic: Semantic,
+): { title: string; message: string } {
+  if (reason === 'no-autofill-plans') return { title: 'No plans support autofill',
+    message: 'No plan contains a username, email, or password asset.' };
+  if (reason === 'selected-plan-unavailable') return { title: 'Selected plan unavailable',
+    message: 'The plan already chosen for this page is no longer available. Clear the selection in the side panel and try again.' };
+  if (reason === 'no-protected-fields') return { title: 'No autofill fields found',
+    message: 'Your plans do not contain username, email, or password fields.' };
+  return { title: `No matching ${semantic} field`,
+    message: `Your plans have autofill fields, but none match this ${semantic} input.` };
 }
 
 function selectionError(code?: string): string {
@@ -430,7 +458,7 @@ function resultLabel(code: string): string {
   if (code === 'filled') return 'Filled';
   if (code === 'canceled') return 'Canceled';
   if (code === 'stale-page-context') return 'Page changed';
-  if (code === 'authorization-denied') return 'Denied';
+  if (code === 'authorization-denied') return 'Not allowed on this site';
   if (code === 'field-unavailable') return 'Unavailable';
   return 'Not filled';
 }
@@ -456,7 +484,18 @@ function place(anchor: HTMLElement, popover: HTMLElement): void {
 }
 
 function reposition(): void {
+  positionControls();
   if (anchored !== undefined) place(anchored.anchor, anchored.popover);
+}
+
+function positionControls(): void {
+  for (const [input, host] of controls) positionControl(input, host);
+}
+
+function positionControl(input: HTMLInputElement, host: HTMLElement): void {
+  const rect = input.getBoundingClientRect();
+  host.style.left = `${Math.round(rect.right - 6)}px`;
+  host.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
 }
 
 function register(input: HTMLInputElement): FieldMetadata {

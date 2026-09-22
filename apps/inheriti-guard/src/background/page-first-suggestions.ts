@@ -14,6 +14,9 @@ export function pageFirstSuggestions(
     .filter((protectedField) => protectedField.fieldName === pageTarget.semantic)
     .map((protectedField): PageFirstFieldCandidate => ({
       planName,
+      assetFieldNames: protectedFields
+        .filter((field) => field.assetId === protectedField.assetId)
+        .map((field) => field.fieldName),
       suggestion: {
         mapping: { protectedField, pageTarget, source: 'MANUAL' },
         confidence: protectedField.matchesOrigin ? 'HIGH' : 'MEDIUM',

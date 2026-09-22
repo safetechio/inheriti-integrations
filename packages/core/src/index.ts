@@ -110,6 +110,7 @@ export interface ScopedRevealProgress {
    * governance, and absent from a server older than the field.
    */
   readonly governanceGate?: 'DMS' | 'AUTHENTICATION' | 'MODERATION';
+  readonly deniedBy?: 'AUTHENTICATION' | 'MODERATION';
   readonly governanceExpiresAt?: string;
   readonly closedReason?: string;
 }

@@ -10,6 +10,7 @@ let businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name
 const selectedOrganizations: Record<string, string> = {};
 const coreOrganizations: Array<string | undefined> = [];
 const listedOrganizations: Array<string | undefined> = [];
+const planListInputs: unknown[] = [];
 const localValues: Record<string, unknown> = {};
 function storageArea(values: Record<string, unknown>) {
   return {
@@ -27,6 +28,8 @@ const discovered = [
     label: 'Login', autocomplete: 'username', inputType: 'text', name: 'login', elementId: 'login' },
 ];
 let workspaceFields = discovered;
+let overlayFields = discovered;
+let planFieldNames: Array<'username' | 'email' | 'password'> = ['username'];
 
 vi.mock('../src/background/reveal.js', () => ({
   ChromeRevealController: class {
@@ -56,12 +59,13 @@ vi.mock('../src/background/plans.js', () => ({
     forgetMasterKey: vi.fn(async () => undefined),
     getAccessToken: async () => 'operator-token',
     listOrganizations: async () => businessOrganizations,
-    listPlans: async () => {
+    listPlans: async (input?: unknown) => {
       listedOrganizations.push(organizationId);
+      planListInputs.push(input);
       return { items: [{ id: 'plan-1', name: 'Exact plan' }, { id: 'plan-2', name: 'Fallback plan' }] };
     },
     getPlan: async (planId: string) => ({ assets: [{ id: `asset-${planId}`, code: 'login', name: 'Login', type: 'USER-PSWD',
-      isBinary: false, fieldNames: ['username'], matchOrigins: planId === 'plan-1' ? ['https://example.test'] : [] }] }),
+      isBinary: false, fieldNames: planFieldNames, matchOrigins: planId === 'plan-1' ? ['https://example.test'] : [] }] }),
   }; },
   loadPlans: async () => ({ kind: 'EMPTY' }),
   loadPlanAssets: async () => [],
@@ -85,7 +89,7 @@ beforeAll(async () => {
     tabs: {
       query: vi.fn(async () => [{ id: 7, windowId: 2, url: 'https://example.test/login' }]),
       sendMessage: vi.fn(async (_tabId: number, message: { type?: string }) => message.type === 'inheriti-overlay-discover-targets'
-        ? discovered.map(({ targetId, origin, navigationId, semantic, label }) => ({ targetId, origin, navigationId, semantic, label }))
+        ? overlayFields.map(({ targetId, origin, navigationId, semantic, label }) => ({ targetId, origin, navigationId, semantic, label }))
         : undefined),
       onUpdated: { addListener: (listener: (...args: any[]) => any) => { listeners.updated = listener; } },
       onActivated: { addListener: (listener: (...args: any[]) => any) => { listeners.activated = listener; } },
@@ -125,7 +129,10 @@ beforeAll(async () => {
   await listeners.action!({ id: 7, windowId: 2, url: 'https://example.test/login' });
 });
 
-beforeEach(() => { fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); businessMode = false; workspaceFields = discovered; });
+beforeEach(() => {
+  fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear();
+  businessMode = false; workspaceFields = discovered; overlayFields = discovered; planFieldNames = ['username']; planListInputs.length = 0;
+});
 
 function request(message: unknown): Promise<any> {
   return new Promise((resolve) => { expect(listeners.message!(message, {}, resolve)).toBe(true); });
@@ -196,6 +203,7 @@ describe('service worker access routing', () => {
     const response = await request({ type: 'start-page-first-picker' });
     expect(response.pageTargets).toEqual([expect.objectContaining({ targetId: 'target-auto', label: 'Login' })]);
     expect(response.candidates).toHaveLength(2);
+    expect(planListInputs).toContainEqual({ assetType: 'USER-PSWD' });
     expect(response.candidates.every((candidate: any) => candidate.suggestion.mapping.pageTarget.targetId === 'target-auto')).toBe(true);
     expect(fillBatch).not.toHaveBeenCalled();
   });
@@ -203,6 +211,7 @@ describe('service worker access routing', () => {
   it('offers page-field-first candidates across plans and fixes selection to one plan', async () => {
     const candidates = await request({ type: 'load-page-first-candidates' });
     expect(candidates.ok).toBe(true);
+    expect(planListInputs).toContainEqual({ assetType: 'USER-PSWD' });
     expect(candidates.pageTargets).toHaveLength(2);
     expect(candidates.candidates.map((candidate: any) => [candidate.planName, candidate.suggestion.reason]))
       .toEqual([
@@ -290,9 +299,25 @@ describe('service worker access routing', () => {
       navigationId: 'nav-1', semantic: 'username', label: 'Login' };
     const response = await overlayRequest({ type: 'overlay-load-candidates', target });
     expect(response.ok).toBe(true);
+    expect(planListInputs).toContainEqual({ assetType: 'USER-PSWD' });
     expect(response.candidates).toHaveLength(2);
     expect(JSON.stringify(response)).not.toContain('value');
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('revalidates against the content script that owns the opaque target', async () => {
+    workspaceFields = [
+      { ...discovered[1]!, targetId: 'other-world-1' },
+      { ...discovered[1]!, targetId: 'other-world-2' },
+    ];
+    const target = { targetId: 'target-auto', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'username', label: 'Login' };
+
+    const candidates = await overlayRequest({ type: 'overlay-load-candidates', target });
+    expect(candidates).toMatchObject({ ok: true, pageTargets: [target] });
+    await expect(overlayRequest({ type: 'overlay-select-candidate',
+      mapping: candidates.candidates[0].suggestion.mapping, planName: candidates.candidates[0].planName }))
+      .resolves.toMatchObject({ ok: true, batch: { mappings: [{ pageTarget: target }] } });
   });
 
   it('shares the worker-owned draft from overlay to side panel without starting a reveal', async () => {
@@ -307,6 +332,28 @@ describe('service worker access routing', () => {
 
     expect(selected.batch.mappings).toHaveLength(1);
     expect(panel.batch).toEqual(selected.batch);
+    expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('maps the other unambiguous fields from the selected credential asset', async () => {
+    await request({ type: 'discard-access-workspace' });
+    planFieldNames = ['email', 'password'];
+    overlayFields = [
+      { targetId: 'target-email', origin: 'https://example.test', navigationId: 'nav-1', semantic: 'email', label: 'Email',
+        autocomplete: 'email', inputType: 'email', name: 'email', elementId: 'email' },
+      { targetId: 'target-password', origin: 'https://example.test', navigationId: 'nav-1', semantic: 'password', label: 'Password',
+        autocomplete: 'current-password', inputType: 'password', name: 'password', elementId: 'password' },
+    ];
+    const target = { targetId: 'target-email', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'email', label: 'Email' };
+    const candidates = await overlayRequest({ type: 'overlay-load-candidates', target });
+    const candidate = candidates.candidates.find((one: any) => one.planName === 'Exact plan');
+    const selected = await overlayRequest({ type: 'overlay-select-candidate',
+      mapping: candidate.suggestion.mapping, planName: candidate.planName });
+
+    expect(candidate.assetFieldNames).toEqual(['email', 'password']);
+    expect(selected.batch.mappings.map((mapping: any) => [mapping.protectedField.fieldName, mapping.pageTarget.targetId]))
+      .toEqual([['email', 'target-email'], ['password', 'target-password']]);
     expect(fillBatch).not.toHaveBeenCalled();
   });
 

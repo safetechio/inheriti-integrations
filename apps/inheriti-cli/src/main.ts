@@ -11,7 +11,7 @@ import type { ListPlansOptions, PlanLogsOptions } from './commands/plans.js';
 import { resolvePlanField, revealPlan } from './commands/reveal.js';
 import { downloadPlanAsset } from './commands/download.js';
 import { UsePlanInvalid, usePlan } from './commands/use.js';
-import { completeWords, printCompletionScript } from './commands/completion.js';
+import { completeWords, completionNeedsPlanContext, printCompletionScript } from './commands/completion.js';
 import { processTerminal } from './output.js';
 import { organizationCommand, selectedOrganization, OrganizationChoiceRequired } from './organizations.js';
 import type { Terminal } from './output.js';
@@ -119,10 +119,14 @@ export async function run(
     }
     if (command === '__complete') {
       if (!configuration.business) return await completeWords(context, terminal, rest, environmentVariables);
-      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
+      if (rest.at(-2) === '--organization') return await completeWords(context, terminal, rest, environmentVariables);
+      const parsed = extractOrganization(rest);
+      if ('error' in parsed) return 0;
+      if (!completionNeedsPlanContext(parsed.argv)) return await completeWords(context, terminal, parsed.argv, environmentVariables);
+      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, parsed.organizationId);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), 'interactive', organization.id);
       scoped.organization = organization;
-      return await completeWords(scoped, terminal, rest, environmentVariables);
+      return await completeWords(scoped, terminal, parsed.argv, environmentVariables);
     }
     if (command === 'login') return await (headless ? loginWithDevice(context, terminal) : login(context, terminal));
     if (command === 'logout') return await logout(context, terminal);
@@ -436,11 +440,49 @@ export function messageFor(error: unknown): string {
   if (error instanceof OrganizationChoiceRequired) return error.message;
   if (error instanceof CliConfigurationInvalid) return error.message;
   if (error instanceof UsePlanInvalid) return error.message;
-  const code = (error as { code?: unknown })?.code;
-  if (typeof code === 'string') return MESSAGES[code] ?? code;
   const name = (error as { name?: unknown })?.name;
-  return typeof name === 'string' ? MESSAGES[name] ?? name : 'The command failed.';
+  if (name === 'MasterKeyRequired') {
+    const system = (error as { ref?: { system?: unknown } }).ref?.system;
+    return system === 'INHERITI_BUSINESS'
+      ? 'The Organisation key is not available from SafeKey Mobile for this account.'
+      : 'The Application key is not available from SafeKey Mobile for this account.';
+  }
+  const code = (error as { code?: unknown })?.code;
+  if (code === 'governance_denied') return (error as Error).message;
+  const reason = (error as { reason?: unknown })?.reason;
+  if (code === 'plan_share_reconstruction_failed' && typeof reason === 'string') {
+    return RECONSTRUCTION_MESSAGES[reason] ?? MESSAGES.plan_share_reconstruction_failed!;
+  }
+  if (typeof code === 'string') return MESSAGES[code] ?? code;
+  return typeof name === 'string' && name !== 'Error' ? MESSAGES[name] ?? name : 'The command failed.';
 }
+
+const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
+  insufficient_valid_data_shards: 'The reveal did not receive enough data shares for this plan.',
+  insufficient_valid_key_shards: 'The reveal did not receive enough key shares for this plan.',
+  mixed_share_sets: 'The released shares belong to different plan generations.',
+  threshold_metadata_mismatch: 'The released shares do not match this plan\'s recovery threshold.',
+  duplicate_data_shard: 'The reveal received the same data share more than once.',
+  duplicate_key_shard: 'The reveal received the same key share more than once.',
+  plan_binding_mismatch: 'A released share belongs to a different plan.',
+  ciphertext_digest_mismatch: 'The released data shares could not recover the protected data.',
+  v2_authentication_failed: 'The released key shares could not open the protected data.',
+  shard_kind_mismatch: 'A released custodian share has the wrong type.',
+  invalid_envelope_magic: 'A released share is not valid SSDP+ v2 material.',
+  invalid_base64url: 'A released share has an invalid encoding.',
+  envelope_truncated: 'A released share is incomplete.',
+  crc32c_mismatch: 'A released share failed its integrity check.',
+  insufficient_shards: 'The reveal did not receive enough data shares for this plan.',
+  insufficient_key_shards: 'The reveal did not receive enough key shares for this plan.',
+  conflicting_key_shards: 'The released key shares do not belong together.',
+  duplicate_shard: 'The reveal received the same data share more than once.',
+  invalid_shard_kind: 'A released share has the wrong type.',
+  unsupported_envelope_version: 'A released share uses an unsupported SSDP+ version.',
+  unsupported_v2_suite: 'A released share uses an unsupported SSDP+ suite.',
+  ssdp_v2_worker_failed: 'The local SSDP+ reconstruction worker failed.',
+  ssdp_v2_worker_not_configured: 'The local SSDP+ reconstruction worker is unavailable.',
+  unexpected_ssdp_v2_worker_response: 'The local SSDP+ reconstruction worker returned an invalid response.',
+};
 
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
@@ -461,8 +503,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
-  MasterKeyRequired: 'The organisation key is unavailable. Check this host\'s key custody configuration.',
-  master_key_required: 'The organisation key is unavailable. Check this host\'s key custody configuration.',
+  master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
   MasterKeyRelayTimedOut: 'Nobody released the organisation key in SafeKey Mobile in time.',
   master_key_relay_timed_out: 'Nobody released the organisation key in SafeKey Mobile in time.',
   MasterKeyRelayExpired: 'The key release request expired before it was answered. Start the reveal again.',
@@ -476,6 +517,10 @@ const MESSAGES: Readonly<Record<string, string>> = {
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
   custodian_share_unavailable: 'SafeKey Mobile answered without a custodian share, so this plan cannot be opened.',
+  plan_key_unwrap_failed: 'The Organisation key released by SafeKey Mobile could not open this plan.',
+  plan_share_decryption_failed: 'One of the released plan shares could not be decrypted.',
+  plan_share_reconstruction_failed: 'The released shares could not reconstruct this plan.',
+  plan_reconstruction_failed: 'The plan could not be reconstructed from the released shares.',
   clipboard_unavailable: 'The reveal succeeded, but this terminal could not access the desktop clipboard. Nothing was printed.',
   EEXIST: 'The output file already exists. Choose a new path; downloads never overwrite files.',
   ENOENT: 'The output directory does not exist.',

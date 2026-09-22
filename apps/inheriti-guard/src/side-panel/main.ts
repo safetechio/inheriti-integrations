@@ -334,6 +334,8 @@ async function selectPageFirstCandidate(candidate: PageFirstFieldCandidate): Pro
 /** API values are assigned through textContent and are never interpreted as markup. */
 function renderPanel(state: PanelState): void {
   const organizations = state.organizations;
+  const keyOwner = organizations === undefined ? 'Application' : 'Organisation';
+  forgetKey.title = `Drop the ${keyOwner} key held in memory. The next reveal asks for it again.`;
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION';
   organizationChoice.hidden = organizations === undefined;
   planAccessPanel.dataset.organization = needsOrganization ? 'required' : 'selected';
@@ -801,7 +803,7 @@ function errorText(error: string): string {
   return 'The access request could not be completed.';
 }
 function resultLabel(code: AccessFieldResult['code']): string {
-  return ({ filled: 'Autofilled', 'authorization-denied': 'Not authorized', 'field-unavailable': 'Protected field unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
+  return ({ filled: 'Autofilled', 'authorization-denied': 'Not allowed on this site', 'field-unavailable': 'Protected field unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
 }
 function suggestionReason(reason: AccessFieldSuggestion['reason']): string {
   return ({ 'exact-origin': 'exact origin match', autocomplete: 'autocomplete match', 'input-type': 'input type match', 'accessible-label': 'accessible label match', name: 'field name match', id: 'field id match', 'inferred-semantic': 'inferred field type' })[reason];

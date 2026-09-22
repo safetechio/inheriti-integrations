@@ -19,7 +19,8 @@ import { GuardController } from './guard/controller.js';
 const pendingContext = new PendingTabContextStore();
 // Session-scoped, and unreachable from a content script. Never `chrome.storage.local`.
 const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session);
-const reveal = new ChromeRevealController(core, chrome.storage.session);
+let keyOwner: 'Application' | 'Organisation' = 'Application';
+const reveal = new ChromeRevealController(core, chrome.storage.session, () => keyOwner);
 const overlayPermissions = new OverlayPermissionController();
 let lifecycleLocked = false;
 const pendingSignIns = new Set<AbortController>();
@@ -55,6 +56,7 @@ let organizationSwitching = false;
 async function core(organizationId?: string) {
   const stored = await readStoredConfiguration(chrome.storage.local, chrome.storage.session);
   const configuration = resolveConfiguration(stored);
+  keyOwner = configuration.applicationId === undefined ? 'Organisation' : 'Application';
   const selected = configuration.applicationId === undefined
     ? organizationId ?? await selectedOrganization(configuration)
     : undefined;
@@ -369,13 +371,13 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
   if (pendingContext.get(tabId) === undefined && senderLocation !== undefined) pendingContext.set(tabId, senderLocation);
 
   if (request.type === 'overlay-load-candidates') {
-    const authoritative = await authoritativeOverlayTarget(tabId, frameId, origin, request.target);
-    if (authoritative === undefined) return { ok: false, error: 'stale-page-context' };
+    const page = await authoritativeOverlayTarget(tabId, frameId, origin, request.target);
+    if (page === undefined) return { ok: false, error: 'stale-page-context' };
     try {
       const client = await core();
       // A page must be able to say "sign in" rather than "nothing matched" when nobody is signed in.
       if (!await client.getAccessToken()) return { ok: false, error: 'signed-out' };
-      const plansPage = await client.listPlans();
+      const plansPage = await client.listPlans({ assetType: 'USER-PSWD' });
       const fixedPlanId = pendingContext.getDraft(tabId)?.identity.planId;
       const summaries = fixedPlanId === undefined ? plansPage.items : plansPage.items.filter(({ id }) => id === fixedPlanId);
       const plans = await Promise.all(summaries.map(async (summary) => ({
@@ -383,7 +385,12 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
         protectedFields: protectedFieldsOf(await client.getPlan(summary.id) as unknown as WorkspacePlan, summary.id, origin),
       })));
       const draft = pendingContext.getDraft(tabId);
-      return { ok: true, pageTargets: [authoritative], candidates: pageFirstSuggestions(plans, [authoritative]),
+      const candidates = pageFirstSuggestions(plans, [page.target]);
+      const emptyReason = summaries.length === 0
+        ? fixedPlanId === undefined ? 'no-autofill-plans' : 'selected-plan-unavailable'
+        : plans.every(({ protectedFields }) => protectedFields.length === 0) ? 'no-protected-fields' : 'no-matching-field';
+      return { ok: true, pageTargets: [page.target], candidates,
+        ...(candidates.length === 0 ? { emptyReason } : {}),
         ...(draft === undefined ? {} : { batch: { identity: draft.identity, mappings: draft.mappings } }) };
     } catch (error) {
       // An expired or rejected session is a sign-in answer too, never an empty suggestion list.
@@ -400,21 +407,19 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
   if (request.type === 'overlay-resume-reveal') return { ok: true, reveal: await reveal.resume() };
 
   if (request.type === 'overlay-select-candidate') {
-    const authoritative = await authoritativeOverlayTarget(tabId, frameId, origin, request.mapping.pageTarget);
-    if (authoritative === undefined || JSON.stringify(authoritative) !== JSON.stringify(request.mapping.pageTarget)) {
+    const page = await authoritativeOverlayTarget(tabId, frameId, origin, request.mapping.pageTarget);
+    if (page === undefined || JSON.stringify(page.target) !== JSON.stringify(request.mapping.pageTarget)) {
       return { ok: false, error: 'stale-page-context' };
     }
     const draft = pendingContext.getDraft(tabId);
     if (draft !== undefined) {
       if (draft.identity.planId !== request.mapping.protectedField.planId) return { ok: false, error: 'invalid-access-batch' };
-      if (!draft.pageTargets.some((target) => target.targetId === authoritative.targetId)) {
-        pendingContext.setDraft({ ...draft, pageTargets: [...draft.pageTargets, authoritative] });
-      }
-      return setAccessMapping(tabId, { ...request.mapping, source: 'MANUAL' });
+      pendingContext.setDraft({ ...draft, pageTargets: page.pageTargets });
+      return setAssetMappings(tabId, { ...request.mapping, source: 'MANUAL' });
     }
-    const loaded = await loadOverlayWorkspace(request.mapping.protectedField.planId, tabId, frameId, origin);
+    const loaded = await loadOverlayWorkspace(request.mapping.protectedField.planId, page.pageTargets);
     if (!loaded.ok || !('protectedFields' in loaded)) return loaded;
-    return setAccessMapping(tabId, { ...request.mapping, source: 'MANUAL' });
+    return setAssetMappings(tabId, { ...request.mapping, source: 'MANUAL' });
   }
 
   // The side panel opens in the message listener itself, before this async boundary.
@@ -433,22 +438,21 @@ async function authoritativeOverlayTarget(
   claimed: import('../shared/access-contract.js').PageFieldTarget,
 ) {
   // The content script cannot know Chrome-owned tab/frame ids. If a caller supplies them they must
-  // match, but authority always comes from MessageSender and the exact executeScript frame.
+  // match, but authority always comes from MessageSender and the content script in that exact frame.
   if ((claimed.tabId !== undefined && claimed.tabId !== tabId)
     || (claimed.frameId !== undefined && claimed.frameId !== frameId) || claimed.origin !== origin) return undefined;
-  const [injection] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, func: discoverPageFields });
-  const snapshot = injection?.result;
-  if (snapshot === undefined || snapshot.origin !== origin) return undefined;
-  const targets = scopePageFields(snapshot.fields, tabId, frameId);
-  const exact = targets.find((target) => target.targetId === claimed.targetId && target.origin === origin
+  const discovered = await chrome.tabs.sendMessage(tabId, { type: 'inheriti-overlay-discover-targets' }, { frameId })
+    .catch(() => undefined) as readonly Pick<DiscoveredPageField,
+      'targetId' | 'origin' | 'navigationId' | 'semantic' | 'label'>[] | undefined;
+  const exact = discovered?.find((target) => target.targetId === claimed.targetId && target.origin === origin
     && target.navigationId === claimed.navigationId && target.semantic === claimed.semantic && target.label === claimed.label);
-  if (exact !== undefined) return exact;
-  // A dynamically registered content script and executeScript have separate isolated globals. On
-  // the first overlay request, translate its trusted sender-owned target to the one authoritative
-  // page target only when metadata identifies exactly one compatible live field.
-  const compatible = targets.filter((target) => target.origin === origin
-    && target.semantic === claimed.semantic && target.label === claimed.label);
-  return compatible.length === 1 ? compatible[0] : undefined;
+  if (exact === undefined) return undefined;
+  return {
+    target: { ...exact, tabId, frameId },
+    pageTargets: discovered!
+      .filter((target) => target.origin === origin && target.navigationId === claimed.navigationId)
+      .map((target) => ({ ...target, tabId, frameId })),
+  };
 }
 
 interface WorkspacePlan {
@@ -470,7 +474,10 @@ async function loadPageFirstCandidates(tabId: number, origin: string): Promise<S
   pendingContext.clearDraft();
   try {
     const client = await core();
-    const [page, plansPage] = await Promise.all([discoverWorkspacePage(tabId, origin), client.listPlans()]);
+    const [page, plansPage] = await Promise.all([
+      discoverWorkspacePage(tabId, origin),
+      client.listPlans({ assetType: 'USER-PSWD' }),
+    ]);
     if (page === undefined) return { ok: false, error: 'stale-page-context' };
     const plans = await Promise.all(plansPage.items.map(async (summary) => ({
       id: summary.id, name: summary.name, plan: await client.getPlan(summary.id) as unknown as WorkspacePlan,
@@ -492,7 +499,7 @@ async function startPageFirstPicker(tabId: number, origin: string): Promise<Side
     const pageTarget = scopePageFields([field], tabId, 0)[0];
     if (pageTarget === undefined) return { ok: false, error: 'stale-page-context' };
     const client = await core();
-    const plansPage = await client.listPlans();
+    const plansPage = await client.listPlans({ assetType: 'USER-PSWD' });
     const plans = await Promise.all(plansPage.items.map(async (summary) => ({
       planName: summary.name,
       protectedFields: protectedFieldsOf(await client.getPlan(summary.id) as unknown as WorkspacePlan, summary.id, origin),
@@ -504,7 +511,7 @@ async function startPageFirstPicker(tabId: number, origin: string): Promise<Side
 async function selectPageFirstCandidate(tabId: number, origin: string, mapping: FieldMapping, planName: string): Promise<SidePanelResponse> {
   const loaded = await loadAccessWorkspace(mapping.protectedField.planId, tabId, origin);
   if (!loaded.ok || !('protectedFields' in loaded)) return loaded;
-  const selected = setAccessMapping(tabId, { ...mapping, source: 'MANUAL' });
+  const selected = setAssetMappings(tabId, { ...mapping, source: 'MANUAL' });
   if (!selected.ok || !('batch' in selected)) return selected;
   return { ...loaded, batch: selected.batch, planName } as SidePanelResponse;
 }
@@ -547,7 +554,13 @@ async function loadAccessWorkspace(planId: string, tabId: number, origin: string
 }
 
 /** Builds the same worker-owned workspace as the panel, scoped to the content script's exact frame. */
-async function loadOverlayWorkspace(planId: string, tabId: number, frameId: number, origin: string): Promise<SidePanelResponse> {
+async function loadOverlayWorkspace(
+  planId: string,
+  pageTargets: readonly import('../shared/access-contract.js').PageFieldTarget[],
+): Promise<SidePanelResponse> {
+  const target = pageTargets[0];
+  if (target === undefined) return { ok: false, error: 'stale-page-context' };
+  const { tabId, frameId, origin, navigationId } = target;
   const revision = organizationRevision;
   const existing = pendingContext.getDraft(tabId);
   if (existing !== undefined && existing.identity.planId === planId && existing.identity.origin === origin
@@ -562,18 +575,8 @@ async function loadOverlayWorkspace(planId: string, tabId: number, frameId: numb
   }
   pendingContext.clearDraft();
   try {
-    const [plan, injection] = await Promise.all([
-      (await core()).getPlan(planId) as unknown as Promise<WorkspacePlan>,
-      chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, func: discoverPageFields }),
-    ]);
-    const snapshot = injection[0]?.result;
-    if (snapshot === undefined || snapshot.origin !== origin
-      || snapshot.fields.some((field) => field.origin !== origin || field.navigationId !== snapshot.navigationId)) {
-      return { ok: false, error: 'stale-page-context' };
-    }
-    const navigationId = snapshot.navigationId;
+    const plan = await (await core()).getPlan(planId) as unknown as WorkspacePlan;
     const protectedFields = protectedFieldsOf(plan, planId, origin);
-    const pageTargets = scopePageFields(snapshot.fields, tabId, frameId);
     if (revision !== organizationRevision) return { ok: false, error: 'stale-page-context' };
     pendingContext.setDraft({
       identity: { planId, tabId, frameId, origin, navigationId }, protectedFields, pageTargets, mappings: [],
@@ -606,6 +609,24 @@ function setAccessMapping(tabId: number, mapping: FieldMapping): SidePanelRespon
   const mappings = draft.mappings.filter((current) => current.protectedField.selector !== mapping.protectedField.selector
     && current.pageTarget.targetId !== mapping.pageTarget.targetId);
   const batch = { identity: draft.identity, mappings: [...mappings, mapping] } satisfies AccessBatch;
+  if (!validateAccessBatch(batch).valid) return { ok: false, error: 'invalid-access-batch' };
+  pendingContext.updateMappings(tabId, batch.mappings);
+  return { ok: true, batch };
+}
+
+function setAssetMappings(tabId: number, selected: FieldMapping): SidePanelResponse {
+  const draft = pendingContext.getDraft(tabId);
+  if (draft === undefined || !sameProtectedField(draft.protectedFields, selected.protectedField)
+    || !samePageTarget(draft.pageTargets, selected.pageTarget)
+    || selected.protectedField.fieldName !== selected.pageTarget.semantic) return { ok: false, error: 'invalid-access-batch' };
+  const siblings = draft.protectedFields
+    .filter((field) => field.assetId === selected.protectedField.assetId && field.selector !== selected.protectedField.selector)
+    .flatMap((field): FieldMapping[] => {
+      const targets = draft.pageTargets.filter((target) => target.semantic === field.fieldName
+        && target.targetId !== selected.pageTarget.targetId);
+      return targets.length === 1 ? [{ protectedField: field, pageTarget: targets[0]!, source: 'SUGGESTED' }] : [];
+    });
+  const batch = { identity: draft.identity, mappings: [selected, ...siblings] } satisfies AccessBatch;
   if (!validateAccessBatch(batch).valid) return { ok: false, error: 'invalid-access-batch' };
   pendingContext.updateMappings(tabId, batch.mappings);
   return { ok: true, batch };

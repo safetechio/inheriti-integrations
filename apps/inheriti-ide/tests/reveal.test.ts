@@ -35,6 +35,22 @@ function fixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe('VS Code reveal and insert', () => {
+  it('reports the moderator who rejected access', async () => {
+    const { core, ui } = fixture({
+      getPlan: vi.fn().mockResolvedValue({ assets: [{ id: 'asset-1', fieldNames: ['password'] }],
+        participants: [{ id: 'm1', displayName: 'Ada', lifecycle: 'ACTIVE', relationships: ['MODERATOR'] }] }),
+      withReveal: vi.fn(async (_planId, options) => {
+        options.onProgress({ phase: 'DENIED', session: { stage: 'DENIED', deniedBy: 'MODERATION',
+          moderators: [{ id: 'm1', status: 'REJECTED' }] } });
+        throw new Error('reveal_denied');
+      }),
+    });
+
+    await expect(revealAndInsert(core as never, ui as never, new ActiveRevealRegistry(), 'plan-1'))
+      .rejects.toMatchObject({ code: 'governance_denied',
+        message: 'Ada rejected the moderator approval request. Access was denied.' });
+  });
+
   it('opens a direct reveal for a plan with no gate, without being told to', async () => {
     const { core } = fixture({
       getPlan: vi.fn().mockResolvedValue({
@@ -125,7 +141,7 @@ describe('VS Code reveal and insert', () => {
       session: { stage: 'WAITING_FOR_PARTICIPANTS' },
     } as never);
 
-    expect(text).toContain('Confirm this access on SafeKey Mobile');
+    expect(text).toContain('Authentication request sent to SafeKey Mobile');
     expect(text).not.toContain('moderator');
   });
 

@@ -47,6 +47,8 @@ export type BrowserIntegrationCore = ElementsIntegrationCore<ListPlansInput, Pla
 export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOptions): BrowserIntegrationCore {
   const auth: OperatorAuthFacade = createOperatorAuth(options);
   const bearer = async () => (await auth.getAccessToken()) ?? null;
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const bearerTransport: typeof fetch = (input, init) => fetchImpl(input, { ...init, credentials: 'omit' });
   const elements = createBrowserElementsClient({
     apiUrl: options.apiUrl,
     environment: options.environment,
@@ -55,7 +57,7 @@ export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOpti
       : { applicationId: options.applicationId }),
     ...(options.masterKeys ? { masterKeys: options.masterKeys } : {}),
     ...(options.masterKey ? { masterKey: options.masterKey } : {}),
-    ...(options.fetchImpl ? { transport: options.fetchImpl } : {}),
+    transport: bearerTransport,
     ...(options.reconstruction === undefined ? {} : { reconstruction: options.reconstruction }),
   });
   return new ElementsIntegrationCore<ListPlansInput, PlanPage, PlanDetail>({
@@ -66,7 +68,7 @@ export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOpti
     scopedReveals: elements,
     masterKeys: elements,
     ...(options.business ? { organizations: { listOrganizations: () => new HttpElementsApiPort(options.apiUrl,
-      options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.environment, bearer, bearerTransport,
       options.organizationId !== undefined ? { organizationId: options.organizationId } : {}).listBusinessOrganizations() } } : {}),
     ...composeRevealWorkflows(elements),
   });

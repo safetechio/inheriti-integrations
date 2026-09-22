@@ -12,7 +12,7 @@ function context(value = 'fixture-secret-never-print'): { core: Record<string, u
     getAccessToken: async () => 'token',
     getPlan: async () => ({
       assets: [{ id: 'asset-1', code: 'service', fieldNames: ['token'] }],
-      revealPolicy: { custodian: 'BYPASS' },
+      revealPolicy: { custodian: 'FORCE' },
     }),
     withReveal: vi.fn(async (_planId, _options, work) => work({
       consumeFields: async (

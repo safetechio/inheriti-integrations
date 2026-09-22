@@ -14,7 +14,11 @@ function resolverFor(keyHex: string | undefined): MasterKeyResolver {
   };
 }
 
-function browserCore(api: FakeElementsApi, masterKeys: MasterKeyResolver): ReturnType<typeof createBrowserIntegrationCore> {
+function browserCore(
+  api: FakeElementsApi,
+  masterKeys: MasterKeyResolver,
+  fetchImpl: typeof fetch = api.fetch,
+): ReturnType<typeof createBrowserIntegrationCore> {
   return createBrowserIntegrationCore({
     apiUrl: 'https://elements.example.test',
     environment: 'TEST',
@@ -28,11 +32,24 @@ function browserCore(api: FakeElementsApi, masterKeys: MasterKeyResolver): Retur
       redirectUri: 'https://host.chromiumapp.org/',
       scopes: ['openid'],
     },
-    fetchImpl: api.fetch,
+    fetchImpl,
   });
 }
 
 describe('browser integration core composition', () => {
+  it('never sends ambient browser cookies through the bearer API transport', async () => {
+    const api = await FakeElementsApi.create({ applicationId: APPLICATION_ID, masterKeyHex: MASTER_KEY });
+    const credentials: (RequestCredentials | undefined)[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      credentials.push(init?.credentials);
+      return api.fetch(input, init);
+    };
+
+    await browserCore(api, resolverFor(MASTER_KEY), fetchImpl).getPlan('plan-1');
+
+    expect(credentials).toEqual(['omit']);
+  });
+
   /**
    * The real factory with no injected facade — the shape a Chrome build actually gets — against
    * material that was genuinely split, encrypted and wrapped. This is the test the composition gap

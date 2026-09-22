@@ -433,7 +433,7 @@ describe('Chrome reveal controller', () => {
     expect(states[1]).toEqual({
       kind: 'RUNNING', revealId: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z',
       // The layer after the switch is the member's own confirmation, not moderation.
-      message: 'Confirm this access on SafeKey Mobile. The request was sent to your device.',
+      message: 'Authentication request sent to SafeKey Mobile. Confirm it to continue.',
     });
     // Recovery and the deadline alarm stay tied to the reveal session, never to the shorter gate.
     expect(alarmCreate).toHaveBeenCalledWith('inheritiElements.revealDeadline', {
@@ -556,6 +556,25 @@ describe('Chrome reveal controller', () => {
     expect(executeScript).not.toHaveBeenCalled();
   });
 
+  it('keeps the named moderator rejection in the final autofill state', async () => {
+    const instance = core({
+      getPlan: vi.fn(async () => ({ ...plan, participants: [{ id: 'm1', displayName: 'Ada',
+        lifecycle: 'ACTIVE', relationships: ['MODERATOR'] }] })),
+      withReveal: vi.fn(async (_planId, options) => {
+        options.onProgress({ phase: 'DENIED', session: { stage: 'DENIED', deniedBy: 'MODERATION',
+          moderators: [{ id: 'm1', status: 'REJECTED' }] } });
+        throw Object.assign(new Error('reveal_denied'), { code: 'reveal_denied' });
+      }),
+    });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+
+    await controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+
+    expect(controller.current()).toEqual({ kind: 'ERROR',
+      message: 'Ada rejected the moderator approval request. Access was denied.' });
+  });
+
   /**
    * The whole Chrome path with nothing mocked below the controller: the service worker's own
    * `createCore`, its own configuration resolution, its own master-key custody, and the real
@@ -587,7 +606,7 @@ describe('Chrome reveal controller', () => {
    * The honest replacement for the old "unavailable in this build" assertion. The build can reveal;
    * what it cannot do is invent an Application key Elements never held, and it says which one.
    */
-  it('reports a missing Application master key as configuration, not as a failed reveal', async () => {
+  it('asks SafeKey Mobile for a missing Application key', async () => {
     const api = await FakeElementsApi.create({ applicationId: 'application-1', masterKeyHex: await hostDerivedMasterKey() });
     const controller = new ChromeRevealController(async () => productionCore(api, { masterKeySecret: '' }), storage);
 
@@ -596,7 +615,7 @@ describe('Chrome reveal controller', () => {
       origin: 'https://db.example.test', tabId: 7,
     })).resolves.toEqual({
       kind: 'ERROR',
-      message: 'This Application\'s master key is not available. Add it to the extension and reveal again.',
+      message: 'The Application key is not available from SafeKey Mobile for this account.',
     });
     expect(executeScript).not.toHaveBeenCalled();
   });

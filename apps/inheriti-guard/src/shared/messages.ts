@@ -120,7 +120,13 @@ export type AccessWorkspaceResponse =
       readonly suggestions: readonly AccessFieldSuggestion[];
       readonly batch?: AccessBatch;
     }
-  | { readonly ok: true; readonly pageTargets: readonly PageFieldTarget[]; readonly candidates: readonly PageFirstFieldCandidate[]; readonly batch?: AccessBatch }
+  | {
+      readonly ok: true;
+      readonly pageTargets: readonly PageFieldTarget[];
+      readonly candidates: readonly PageFirstFieldCandidate[];
+      readonly emptyReason?: 'no-autofill-plans' | 'selected-plan-unavailable' | 'no-protected-fields' | 'no-matching-field';
+      readonly batch?: AccessBatch;
+    }
   | { readonly ok: true; readonly discarded: true }
   | { readonly ok: true; readonly batch: AccessBatch }
   | { readonly ok: true; readonly results: readonly AccessFieldResult[] }
