@@ -71,6 +71,7 @@ describe('browser integration core composition', () => {
     expect(value).toBe('alice');
     expect(stages).toEqual(['AUTHORIZED']);
     expect(api.reconstructionReported).toBe('SUCCEEDED');
+    expect(api.calls).toContainEqual({ method: 'POST', path: 'v1/reveals/reveal-1/custodian-share/distribute' });
     expect(api.closedWith).toBe('COMPLETED');
     expect(api.authorizedActions).toEqual([
       { assetId: 'login-id', fieldName: 'username', action: 'AUTOFILL_FIELD', origin: 'https://db.example.test' },

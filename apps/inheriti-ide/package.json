@@ -1,5 +1,5 @@
 {
-  "name": "@safetech/inheriti-elements-vscode-extension",
+  "name": "@safetech/inheriti-vscode-extension",
   "version": "0.0.1",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
@@ -169,7 +169,7 @@
         "inheriti.masterKeySalt": {
           "type": "string",
           "default": "",
-          "description": "Argon2 salt for the Application master key. The passphrase is read only from VS Code SecretStorage."
+          "description": "Argon2 salt for the Master Key. The passphrase is read only from VS Code SecretStorage."
         }
       }
     }
@@ -185,7 +185,7 @@
     "@types/vscode": "1.99.1"
   },
   "dependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.25",
+    "@safetech/inheriti-core-sdk": "4.0.28",
     "@safetech/inheriti-elements-brand": "workspace:*",
     "@safetech/inheriti-elements-core": "workspace:*"
   }

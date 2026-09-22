@@ -77,7 +77,7 @@ export class FakeElementsApi {
       sealShare(split.dataShares[0]!, 'DATA_SHARD', planKey),
       sealShare(split.dataShares[1]!, 'BACKUP_SHARD', planKey),
       sealShare(split.keyShares[0]!, 'VALIDATOR_SHARD', planKey),
-      sealShare(split.keyShares[1]!, 'VALIDATOR_SHARD', planKey),
+      sealShare(split.keyShares[1]!, 'CUSTODIAN_KEY_SHARD', planKey),
     ]);
 
     const material = {
@@ -161,6 +161,7 @@ export class FakeElementsApi {
       this.sharesCollected = true;
       return ok({});
     }
+    if (method === 'POST' && path === 'v1/reveals/reveal-1/custodian-share/distribute') return ok({});
     if (method === 'PUT' && path === 'v1/reveals/reveal-1/reconstruction') {
       this.reconstructionReported = String(body.status);
       return ok(this.session(this.reconstructionReported === 'SUCCEEDED' ? 'ACTIONS_OPEN' : 'AUTHORIZED'));
