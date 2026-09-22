@@ -10,9 +10,12 @@
   "packageManager": "pnpm@10.14.0",
   "scripts": {
     "build:all": "pnpm -r --if-present run build",
-    "test:all": "pnpm -r --if-present run test",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "test:all": "pnpm test:scripts && pnpm -r --if-present run test",
     "lint:all": "pnpm -r --if-present run lint",
     "check": "pnpm sdk:assert:registry && pnpm build:all && pnpm lint:all && pnpm test:all",
+    "package:cli:dev": "pnpm --filter \"./packages/*\" run build && pnpm --dir apps/inheriti-cli package:dev",
+    "package:cli:stg": "pnpm --filter \"./packages/*\" run build && pnpm --dir apps/inheriti-cli package:stg",
     "package:cli:prod": "pnpm --filter \"./packages/*\" run build && pnpm --dir apps/inheriti-cli package:prod",
     "package:all": "pnpm sdk:assert:registry && pnpm build:all && pnpm --filter \"./apps/*\" run package",
     "release:all": "pnpm sdk:assert:registry && pnpm build:all && pnpm --filter \"./apps/*\" run release",

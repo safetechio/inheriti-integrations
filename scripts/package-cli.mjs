@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { packageDirectory } from './package-directory.mjs';
-import { matchingBuildDeployment } from './build-deployment.mjs';
+import { matchingBuildDeployment, packageVersionForDeployment } from './build-deployment.mjs';
 
 /**
  * Packs the CLI as an installable tarball.
@@ -17,6 +17,7 @@ const artifacts = resolve(root, process.argv.find((value) => value.startsWith('-
 const stage = resolve(artifacts, 'stage');
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const packageVersion = packageVersionForDeployment(manifest.version, deployment);
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await cp(resolve(root, 'dist'), resolve(stage, 'dist'), { recursive: true });
@@ -32,7 +33,7 @@ await cp(
 
 await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   name: manifest.name,
-  version: manifest.version,
+  version: packageVersion,
   description: deployment === 'prod' ? 'Inheriti CLI.' : 'Inheriti CLI (TEST builds only).',
   type: manifest.type,
   bin: manifest.bin,

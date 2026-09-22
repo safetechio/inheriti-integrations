@@ -47,3 +47,9 @@ export function buildDefines(argv = process.argv.slice(2), environment = process
     ...(deployment === undefined ? {} : { __INHERITI_DEPLOYMENT__: JSON.stringify(deployment) }),
   };
 }
+
+export function packageVersionForDeployment(version, deployment) {
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error(`Invalid base package version: ${version}.`);
+  if (!DEPLOYMENTS.has(deployment)) throw new Error(`Unknown package deployment: ${deployment}.`);
+  return deployment === 'prod' ? version : `${version}-${deployment}.0`;
+}
