@@ -76,6 +76,7 @@ function title(phase: RevealProgress['phase'], keyOwner: 'Application' | 'Organi
     WAITING_FOR_MODERATION: 'Waiting for moderator approval',
     WAITING_FOR_CUSTODIAN_CLAIM: 'Waiting for the custodian share to be claimed',
     WAITING_FOR_CUSTODIAN: 'Waiting for the custodian share',
+    CONNECTING_SAFEKEY_PRO: 'Connect and touch SafeKey PRO',
     CUSTODIAN_SHARE_DISTRIBUTED: 'Custodian share sent to SafeKey Mobile',
     RELEASING_MATERIAL: 'Collecting encrypted data shares.',
     RECONSTRUCTING: 'Reconstructing and decrypting shares.',

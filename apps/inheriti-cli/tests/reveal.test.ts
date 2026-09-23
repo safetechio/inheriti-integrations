@@ -83,6 +83,43 @@ describe('plans reveal', () => {
     expect(withReveal).toHaveBeenCalledOnce();
   });
 
+  it('does not offer the local PRO device or prompt for a PIN in a headless reveal', async () => {
+    const output = terminal(false);
+    const proDevice = { write: vi.fn(), read: vi.fn() };
+    const withReveal = vi.fn(async (_planId, options, work) => {
+      expect(options.proDevice).toBeUndefined();
+      expect(options.selectCustodianDevice).toBeUndefined();
+      return work(consuming('private-value'));
+    });
+    await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: proDevice } as never, output, 'plan-1', { field: 'asset.password' });
+    expect(output.lines.join('\n')).not.toContain('private-value');
+  });
+
+  it('passes the connected PRO device to an interactive reveal', async () => {
+    const proDevice = { write: vi.fn(), read: vi.fn() };
+    const withReveal = vi.fn(async (_planId, options, work) => {
+      expect(options.proDevice).toBe(proDevice);
+      expect(options.selectCustodianDevice).toEqual(expect.any(Function));
+      return work(consuming('private-value'));
+    });
+    const output = terminal(true);
+    await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: proDevice } as never, output, 'plan-1', { field: 'asset.password' });
+    expect(output.lines.join('\n')).not.toContain('private-value');
+  });
+
+  it('does not redraw a live region over SafeKey PRO prompts', async () => {
+    const proDevice = { write: vi.fn(), read: vi.fn() };
+    const createLiveRegion = vi.fn(() => ({ update: vi.fn(), close: vi.fn() }));
+    const withReveal = vi.fn(async (_planId, options, work) => {
+      options.onProgress({ phase: 'CONNECTING_SAFEKEY_PRO', session: { stage: 'AUTHORIZED' } });
+      return work(consuming('private-value'));
+    });
+    const output = { ...terminal(true), createLiveRegion };
+    await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: proDevice } as never, output, 'plan-1', { field: 'asset.password' });
+    expect(createLiveRegion).not.toHaveBeenCalled();
+    expect(output.lines.join('\n')).not.toContain('private-value');
+  });
+
   it.each([false, true])('shows clipboard and first-access notice after delivery (live region: %s)', async (live) => {
     const frames: string[] = [];
     const output = {

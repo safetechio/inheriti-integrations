@@ -118,6 +118,13 @@ describe('CLI configuration', () => {
       .toThrow('production build is required');
   });
 
+  it('binds a configured SafeKey PRO device to the Business UI hostname', () => {
+    const configured = withConfigurationFile(JSON.stringify({ business: true, deployment: 'local', safeKeyProDevice: '/dev/hidraw4' }));
+    expect(resolveConfiguration(configured)).toMatchObject({ safeKeyProDevice: '/dev/hidraw4', safeKeyProRpId: 'business.localhost' });
+    expect(resolveConfiguration({ ...configured, INHERITI_SAFEKEY_PRO_DEVICE: '/dev/hidraw5' }))
+      .toMatchObject({ safeKeyProDevice: '/dev/hidraw5', safeKeyProRpId: 'business.localhost' });
+  });
+
   it('lets an exported variable win over the file rather than the other way round', () => {
     const configured = withConfigurationFile(JSON.stringify({
       apiUrl: 'http://127.0.0.1:3201',

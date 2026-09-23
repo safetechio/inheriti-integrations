@@ -21,6 +21,8 @@ export interface CliConfiguration {
   redirectUri: string;
   masterKeyPassphrase?: string;
   masterKeySalt?: string;
+  safeKeyProDevice?: string;
+  safeKeyProRpId?: string;
 }
 
 export class CliConfigurationInvalid extends Error {
@@ -59,6 +61,7 @@ const FILE_KEYS: Readonly<Record<string, string>> = {
   redirectUri: 'INHERITI_ELEMENTS_REDIRECT_URI',
   masterKeyPassphrase: 'INHERITI_ELEMENTS_MASTER_KEY_PASSPHRASE',
   masterKeySalt: 'INHERITI_ELEMENTS_MASTER_KEY_SALT',
+  safeKeyProDevice: 'INHERITI_SAFEKEY_PRO_DEVICE',
 };
 
 /**
@@ -120,6 +123,10 @@ export function resolveConfiguration(
       interactiveClientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       scopes: ['openid'],
       redirectUri: 'http://127.0.0.1:53682/oauth/callback',
+      ...(processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE ? {
+        safeKeyProDevice: processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE,
+        safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
+      } : {}),
     };
   }
   const file = readConfigurationFile(processEnvironment);
@@ -131,7 +138,8 @@ export function resolveConfiguration(
     INHERITI_ELEMENTS_INTERACTIVE_CLIENT_ID: BUSINESS_INTERACTIVE_CLIENT_ID,
   };
   const environmentVariables: Record<string, string | undefined> = file.business
-    ? { ...file.values, ...preset } : { ...file.values, ...defined(processEnvironment) };
+    ? { ...file.values, ...preset, INHERITI_SAFEKEY_PRO_DEVICE: processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE ?? file.values.INHERITI_SAFEKEY_PRO_DEVICE }
+    : { ...file.values, ...defined(processEnvironment) };
   const environment = readEnvironment(environmentVariables.INHERITI_ELEMENTS_ENVIRONMENT);
   if (environment === 'LIVE' && IS_DEVELOPMENT_BUILD) {
     throw new CliConfigurationInvalid(
@@ -164,7 +172,16 @@ export function resolveConfiguration(
     // The device grant never redirects, but the SDK's configuration requires the field.
     redirectUri: environmentVariables.INHERITI_ELEMENTS_REDIRECT_URI ?? 'http://127.0.0.1:53682/oauth/callback',
     ...(masterKeyPassphrase === undefined ? {} : { masterKeyPassphrase, masterKeySalt: masterKeySalt! }),
+    ...(file.business && file.deployment && environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE ? {
+      safeKeyProDevice: environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE,
+      safeKeyProRpId: businessUiRpId(file.deployment),
+    } : {}),
   };
+}
+
+function businessUiRpId(deployment: keyof typeof BUSINESS_DEPLOYMENTS): string {
+  return deployment === 'local' ? 'business.localhost' : deployment === 'prod'
+    ? 'business.inheriti.com' : `business-${deployment}.inheriti.com`;
 }
 
 function defined(

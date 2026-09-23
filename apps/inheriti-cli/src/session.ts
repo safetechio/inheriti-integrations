@@ -4,12 +4,16 @@ import type { CliConfiguration } from './configuration.js';
 import { FileOperatorSessionStore } from './session-store.js';
 import { createCliMasterKeySource } from './master-keys.js';
 import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node';
+import { createCliSafeKeyPro } from './safekey-pro.js';
+import type { Terminal } from './output.js';
+import { selectCliCustodianDevice } from './safekey-pro.js';
 
 export interface CliContext {
   core: NodeIntegrationCore;
   sessions: FileOperatorSessionStore;
   organization?: BusinessOrganization;
   keyOwner: 'Application' | 'Organisation';
+  safeKeyPro?: ReturnType<typeof createCliSafeKeyPro>;
 }
 
 /**
@@ -46,5 +50,14 @@ export function createCliContext(
     },
     sessions,
   });
-  return { core, sessions, keyOwner: configuration.business ? 'Organisation' : 'Application' };
+  const safeKeyPro = createCliSafeKeyPro(configuration);
+  return { core, sessions, keyOwner: configuration.business ? 'Organisation' : 'Application',
+    ...(safeKeyPro ? { safeKeyPro } : {}) };
+}
+
+export function cliCustodianOptions(context: CliContext, terminal: Terminal, signal?: AbortSignal) {
+  return context.safeKeyPro && terminal.interactive ? {
+    proDevice: context.safeKeyPro,
+    selectCustodianDevice: () => selectCliCustodianDevice(terminal, signal),
+  } : {};
 }

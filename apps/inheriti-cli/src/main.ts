@@ -460,6 +460,8 @@ export function messageFor(error: unknown): string {
       : 'The Application key is not available from SafeKey Mobile for this account.';
   }
   const code = (error as { code?: unknown })?.code;
+  const deviceError = (error as { message?: unknown })?.message;
+  if (typeof deviceError === 'string' && deviceError.startsWith('SAFEKEY_')) return MESSAGES[deviceError] ?? 'SafeKey PRO could not complete the operation.';
   if (code === 'governance_denied') return (error as Error).message;
   const reason = (error as { reason?: unknown })?.reason;
   if (code === 'plan_share_reconstruction_failed' && typeof reason === 'string') {
@@ -530,6 +532,14 @@ const MESSAGES: Readonly<Record<string, string>> = {
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
   custodian_share_unavailable: 'SafeKey Mobile answered without a custodian share, so this plan cannot be opened.',
   safekey_pro_local_device_required: 'This plan uses SafeKey PRO. Open it locally with a connected SafeKey PRO device; this runner cannot release that share.',
+  SAFEKEY_INTERACTIVE_REQUIRED: 'SafeKey PRO needs an interactive terminal to enter its PIN.',
+  SAFEKEY_ABORTED: 'SafeKey PRO operation canceled.',
+  SAFEKEY_TIMEOUT: 'SafeKey PRO did not respond in time. Try again.',
+  SAFEKEY_TOUCH_REQUIRED: 'SafeKey PRO did not confirm the touch. Try again.',
+  SAFEKEY_INVALID_PIN: 'SafeKey PRO rejected the PIN.',
+  SAFEKEY_NOT_FOUND: 'The plan share was not found on this SafeKey PRO.',
+  SAFEKEY_SHARE_MISMATCH: 'This SafeKey PRO share does not belong to the requested plan.',
+  SAFEKEY_DEVICE_FAILED: 'Could not communicate with SafeKey PRO. Check the device and try again.',
   plan_key_unwrap_failed: 'The Organisation key released by SafeKey Mobile could not open this plan.',
   plan_share_decryption_failed: 'One of the released plan shares could not be decrypted.',
   plan_share_reconstruction_failed: 'The released shares could not reconstruct this plan.',

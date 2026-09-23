@@ -28,6 +28,27 @@ describe('plans download', () => {
     expect(terminal.lines.join('\n')).not.toContain('255');
   });
 
+  it('does not offer the PRO device to a headless binary download', async () => {
+    const output = join(await mkdtemp(join(tmpdir(), 'inheriti-download-')), 'pro.pdf');
+    const { context, terminal, withReveal } = fixture();
+    const proDevice = { write: vi.fn(), read: vi.fn() };
+    (context as { safeKeyPro?: unknown }).safeKeyPro = proDevice;
+    await downloadPlanAsset(context, terminal, 'plan-1', 'runbook', output);
+    expect(withReveal.mock.calls[0]?.[1].proDevice).toBeUndefined();
+    expect(withReveal.mock.calls[0]?.[1].selectCustodianDevice).toBeUndefined();
+  });
+
+  it('passes the PRO device through an interactive binary download reveal', async () => {
+    const output = join(await mkdtemp(join(tmpdir(), 'inheriti-download-')), 'interactive.pdf');
+    const { context, terminal, withReveal } = fixture();
+    const proDevice = { write: vi.fn(), read: vi.fn() };
+    (context as { safeKeyPro?: unknown }).safeKeyPro = proDevice;
+    (terminal as { interactive: boolean }).interactive = true;
+    await downloadPlanAsset(context, terminal, 'plan-1', 'runbook', output);
+    expect(withReveal.mock.calls[0]?.[1].proDevice).toBe(proDevice);
+    expect(withReveal.mock.calls[0]?.[1].selectCustodianDevice).toEqual(expect.any(Function));
+  });
+
   it('never overwrites an existing file', async () => {
     const output = join(await mkdtemp(join(tmpdir(), 'inheriti-download-')), 'existing.pdf');
     await writeFile(output, 'old');

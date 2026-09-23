@@ -66,8 +66,8 @@ function matching(candidate: Candidate, query: string): boolean {
 }
 
 /** Resolves to the chosen value, or `undefined` when the operator cancels. */
-export async function promptSelect(title: string, candidates: readonly Candidate[]): Promise<string | undefined> {
-  if (candidates.length === 0) return undefined;
+export async function promptSelect(title: string, candidates: readonly Candidate[], signal?: AbortSignal): Promise<string | undefined> {
+  if (candidates.length === 0 || signal?.aborted) return undefined;
   let chosen: string | undefined;
   let stop = () => {};
   const instance = render(
@@ -80,7 +80,10 @@ export async function promptSelect(title: string, candidates: readonly Candidate
     { exitOnCtrlC: true },
   );
   stop = () => instance.unmount();
-  await instance.waitUntilExit();
+  signal?.addEventListener('abort', stop, { once: true });
+  if (signal?.aborted) stop();
+  try { await instance.waitUntilExit(); }
+  finally { signal?.removeEventListener('abort', stop); }
   return chosen;
 }
 

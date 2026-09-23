@@ -1,6 +1,7 @@
 import { open, unlink } from 'node:fs/promises';
 import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
 import type { CliContext } from '../session.js';
+import { cliCustodianOptions } from '../session.js';
 import type { Terminal } from '../output.js';
 import { loadRevealPlan, RevealStoppedByDeadManSwitch } from './reveal.js';
 
@@ -16,14 +17,27 @@ export async function downloadPlanAsset(
   let stoppedByDms = false;
   let deniedMessage: string | undefined;
   let lastLine: string | undefined;
+  const custodianOptions = cliCustodianOptions(context, terminal, signal);
+  let selectedPro = false;
   try {
     await context.core.withReveal(planId, {
       mode: revealModeOf(plan),
+      ...custodianOptions,
+      ...(custodianOptions.selectCustodianDevice ? { selectCustodianDevice: async () => {
+        const selected = await custodianOptions.selectCustodianDevice();
+        selectedPro = selected === 'SK_PRO';
+        return selected;
+      } } : {}),
       ...(signal === undefined ? {} : { signal }),
       onProgress: (progress) => {
+        if (progress.phase === 'CONNECTING_SAFEKEY_PRO') selectedPro = true;
         if (progress.phase === 'STOPPED_BY_DMS') { stoppedByDms = true; return; }
-        const line = revealProgressMessage(progress, { keyOwner: context.keyOwner ?? 'Application',
-          moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
+        const line = selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN_CLAIM'
+          ? 'Store the custodian share on your connected SafeKey PRO to continue.'
+          : selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN'
+            ? 'Read the custodian share from your connected SafeKey PRO to continue.'
+            : revealProgressMessage(progress, { keyOwner: context.keyOwner ?? 'Application',
+              moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
         if (progress.phase === 'DENIED') deniedMessage = line;
         if (line !== lastLine) { terminal.write(line); lastLine = line; }
       },
