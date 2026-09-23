@@ -188,6 +188,7 @@ export class MetadataTools {
       if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('organization_selection_changed');
       const prompt = await openSafeKeyProPrompt(this.config?.deployment, process.env.INHERITI_SAFEKEY_PRO_DEVICE,
         { organizationId: selected.organizationId, planId, selector, kind }, controller.signal);
+      let completed = false;
       try { await selected.core.withReveal(planId, {
         mode: revealModeOf(plan), signal: controller.signal,
         selectCustodianDevice: prompt.selectCustodianDevice,
@@ -200,7 +201,7 @@ export class MetadataTools {
         if (kind === 'ASSET') {
           await reveal.exportAsset(selector, async asset => {
             if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('local_delivery_canceled');
-            await deliverAssetInBrowser(asset.fileName ?? 'asset.bin', asset.bytes, { signal: controller.signal });
+            await deliverAssetInBrowser(asset.fileName ?? 'asset.bin', asset.bytes, { signal: controller.signal, ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) });
           });
         } else {
           await reveal.consumeFields([{ selector, options: { action: 'DELIVER_FIELD', destination: 'LOCAL_BROWSER' } }], async fields => {
@@ -208,7 +209,7 @@ export class MetadataTools {
             await deliverInBrowser(selector, fields[0]!.value, { signal: controller.signal });
           });
         }
-      }); } finally { prompt.close(); }
+      }); completed = true; } finally { prompt.close(completed ? 'complete' : controller.signal.aborted ? 'canceled' : 'failed'); }
     })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(() => {
       job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED';
       if (job.status === 'CANCELED') job.message = 'Reveal canceled.';

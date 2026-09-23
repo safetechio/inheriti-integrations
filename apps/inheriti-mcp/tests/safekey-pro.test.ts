@@ -62,7 +62,10 @@ it('binds a PRO choice to the Business RP ID and keeps PIN out of page responses
   expect(createNodeSafeKeyProDevice).toHaveBeenLastCalledWith(expect.objectContaining({ device: '/dev/hidraw4', rpId: 'business-dev.inheriti.com' }));
   const options = createNodeSafeKeyProDevice.mock.lastCall![0] as { getPin: () => Promise<Uint8Array>; onTouch: (operation: string, attempt: number, limit: number) => void };
   const requested = options.getPin();
-  expect(await (await fetch(url)).text()).toContain('type="password"');
+  const pinPage = await (await fetch(url)).text();
+  expect(pinPage).toContain('type="password"');
+  expect(pinPage).toContain('Write to device');
+  expect(pinPage).toContain('data:image/png;base64,');
   const response = await fetch(url, { method: 'POST', redirect: 'manual', headers: { Origin: origin }, body: 'pin=123456' });
   expect(response.status).toBe(303);
   expect(await response.text()).not.toContain('123456');
@@ -71,8 +74,14 @@ it('binds a PRO choice to the Business RP ID and keeps PIN out of page responses
   pin.fill(0);
   expect(Buffer.from(await options.getPin()).toString()).toBe('123456');
   expect(await (await fetch(url)).text()).not.toContain('type="password"');
+  options.onTouch('write', 1, 20);
+  expect(await (await fetch(url)).text()).toContain('Writing to SafeKey Pro');
   options.onTouch('read', 2, 20);
-  expect(await (await fetch(url)).text()).toContain('read 2/20');
+  const reading = await (await fetch(url)).text();
+  expect(reading).toContain('Reading from SafeKey Pro');
+  expect(reading).toContain('Touch request 2 of 20');
+  page.prompt.close('complete');
+  expect(await (await fetch(url)).text()).toContain('Request complete');
   page.prompt.close();
   await expect(fetch(url)).rejects.toThrow();
 });
@@ -87,6 +96,7 @@ it('opens the PIN page directly for an existing PRO claim without selecting a de
   expect(html).toContain('type="password"');
   expect(html).not.toContain('Where should this plan share');
   expect(html).toContain('Device PIN');
+  expect(html).toContain('Connect &amp; collect');
   controller.abort();
   await expect(requested).rejects.toThrow('local_delivery_canceled');
   page.prompt.close();

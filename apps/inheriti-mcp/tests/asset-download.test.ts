@@ -24,7 +24,7 @@ it('downloads a binary through the local page without returning bytes or a URL t
   expect(started).toEqual(expect.objectContaining({ status: 'WAITING' }));
   await vi.waitFor(async () => expect((await tools.revealStatus(started.jobId)).status).toBe('DELIVERED'));
   expect(exportAsset).toHaveBeenCalledWith('file-1', expect.any(Function));
-  expect(deliverAssetInBrowser).toHaveBeenCalledWith('report.pdf', bytes, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(deliverAssetInBrowser).toHaveBeenCalledWith('report.pdf', bytes, expect.objectContaining({ signal: expect.any(AbortSignal), mimeType: 'application/pdf' }));
   expect(JSON.stringify(started)).not.toContain('report.pdf');
   expect(JSON.stringify(started)).not.toContain('255');
   expect(JSON.stringify(started)).not.toContain('127.0.0.1');
