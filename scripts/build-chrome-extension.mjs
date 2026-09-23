@@ -50,6 +50,7 @@ await build({
   // without weakening the boundary or changing runtime behaviour.
   minifySyntax: true,
   minifyWhitespace: true,
+  legalComments: 'external',
   sourcemap: true,
   logLevel: 'info',
   plugins: [optionalToastPlugin],
