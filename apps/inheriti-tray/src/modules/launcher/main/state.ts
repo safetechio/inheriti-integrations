@@ -1,13 +1,19 @@
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
-import type { BusinessOrganization, NodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
-import { createServer } from 'node:http';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import type { BusinessOrganization, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
+import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
+import type { CreationState } from '../../quick-plan/main/quick-plans.js';
+import { trayMessages as messages } from '../../../messages.js';
 
 export type Deployment = keyof typeof BUSINESS_DEPLOYMENTS;
 export type TrayState = {
   status: 'signed-out' | 'authorizing' | 'signed-in' | 'error';
   message?: string;
   organizations: { id: string; name: string }[];
+  teams: { id: string; name: string }[];
+  assetCatalog: typeof quickPlanAssetCatalog;
   selectedId?: string;
+  creation?: CreationState;
 };
 
 export class TraySession {
@@ -18,6 +24,9 @@ export class TraySession {
   private message: string | undefined;
   private authorization: AbortController | undefined;
   private pendingSignIn: Promise<void> | undefined;
+  private selectionVersion = 0;
+  private pendingSelections = 0;
+  private readonly quickPlans: TrayQuickPlans;
 
   constructor(deployment: Deployment) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -33,24 +42,32 @@ export class TraySession {
         audience: 'inheriti-integrations-api',
         environment: config.environment,
         redirectUri: 'http://127.0.0.1:53682/oauth/callback',
-        scopes: ['openid'],
+        scopes: ['openid', 'plan:create', 'plan:configure'],
       },
     });
+    this.quickPlans = new TrayQuickPlans(config.apiUrl, config.environment, () => this.core.auth.getAccessToken());
   }
 
   state(): TrayState {
+    const quickPlans = this.quickPlans.state();
+    const message = quickPlans.message ?? this.message;
     return {
       status: this.status,
-      ...(this.message ? { message: this.message } : {}),
+      ...(message ? { message } : {}),
       organizations: this.organizations.map(({ id, name }) => ({ id, name })),
-      ...(this.selectedId ? { selectedId: this.selectedId } : {}),
+      teams: this.pendingSelections ? [] : quickPlans.teams,
+      assetCatalog: quickPlanAssetCatalog,
+      ...(this.selectedId && !this.pendingSelections ? { selectedId: this.selectedId } : {}),
+      ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
     };
   }
 
   signIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
     if (this.pendingSignIn) return this.pendingSignIn;
     const pending = this.runSignIn(onChange, openBrowser);
-    this.pendingSignIn = pending.finally(() => { this.pendingSignIn = undefined; });
+    this.pendingSignIn = pending.finally(() => {
+      this.pendingSignIn = undefined;
+    });
     return this.pendingSignIn;
   }
 
@@ -68,7 +85,7 @@ export class TraySession {
     } catch (error) {
       if (authorization.signal.aborted) return;
       this.status = 'error';
-      this.message = error instanceof Error ? error.message : 'Sign-in failed.';
+      this.message = error instanceof Error ? error.message : messages.signInFailed;
     }
     if (this.authorization === authorization) this.authorization = undefined;
     onChange();
@@ -82,6 +99,7 @@ export class TraySession {
       }
     } catch {}
     this.organizations = [];
+    this.quickPlans.clear();
     this.selectedId = undefined;
     this.status = 'signed-out';
     this.message = undefined;
@@ -89,15 +107,35 @@ export class TraySession {
 
   async select(id: string): Promise<void> {
     if (!this.organizations.some((organization) => organization.id === id)) throw new Error('organization_access_denied');
-    this.selectedId = id;
+    const version = ++this.selectionVersion;
+    this.pendingSelections += 1;
+    try {
+      await this.quickPlans.selectOrganization(id);
+      if (version === this.selectionVersion) this.selectedId = id;
+    } finally {
+      this.pendingSelections -= 1;
+    }
+  }
+
+  createQuickPlan(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
+    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
+    if (this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.quickPlans.create(input, onChange);
+  }
+
+  abandonCreation(): void {
+    this.quickPlans.abandon();
   }
 
   async signOut(): Promise<void> {
+    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
+    this.quickPlans.assertIdle();
     this.authorization?.abort();
     await this.pendingSignIn;
     this.authorization = undefined;
     await this.core.auth.clear();
     this.organizations = [];
+    this.quickPlans.clear();
     this.selectedId = undefined;
     this.status = 'signed-out';
     this.message = undefined;
@@ -108,43 +146,11 @@ export class TraySession {
     if (signal?.aborted) return;
     this.organizations = organizations;
     if (!this.organizations.some(({ id }) => id === this.selectedId)) {
+      this.quickPlans.clear();
       this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;
     }
     this.status = 'signed-in';
-    this.message = this.organizations.length === 0 ? 'No Business organizations are available.' : undefined;
+    this.message = this.organizations.length === 0 ? messages.noOrganizations : undefined;
+    if (this.selectedId) await this.quickPlans.selectOrganization(this.selectedId);
   }
-}
-
-function waitForCallback(authorizationUrl: string, openBrowser: (url: string) => Promise<void>, signal: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) { reject(new Error('Sign-in canceled')); return; }
-    const server = createServer((request, response) => {
-      let url: URL;
-      try { url = new URL(request.url ?? '/', 'http://127.0.0.1:53682'); }
-      catch { response.writeHead(400).end(); return; }
-      if (url.pathname !== '/oauth/callback') { response.writeHead(404).end(); return; }
-      server.close();
-      const error = url.searchParams.get('error');
-      if (error) { response.writeHead(400).end('Sign-in failed. Return to Inheriti.'); reject(new Error(error)); return; }
-      if (!url.searchParams.has('code') || !url.searchParams.has('state')) { response.writeHead(400).end(); reject(new Error('Invalid sign-in callback')); return; }
-      response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end('Signed in. Return to Inheriti.');
-      resolve(url.toString());
-    });
-    const timeout = setTimeout(() => { server.close(); reject(new Error('Sign-in timed out')); }, 300_000);
-    signal.addEventListener('abort', () => { server.close(); reject(new Error('Sign-in canceled')); }, { once: true });
-    server.once('close', () => clearTimeout(timeout));
-    server.once('error', reject);
-    server.listen(53682, '127.0.0.1', () => {
-      void openBrowser(authorizationUrl).catch((error: unknown) => { server.close(); reject(error); });
-    });
-  });
-}
-
-function untilCanceled<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(new Error('Sign-in canceled'));
-  return new Promise((resolve, reject) => {
-    const cancel = () => reject(new Error('Sign-in canceled'));
-    signal.addEventListener('abort', cancel, { once: true });
-    void operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancel));
-  });
 }

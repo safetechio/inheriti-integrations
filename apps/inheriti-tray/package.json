@@ -5,13 +5,15 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && cp src/launcher.html src/launcher.css src/launcher.js src/tray.png dist/",
+    "build": "tsc -p tsconfig.build.json && ../../node_modules/.bin/esbuild src/launcher.jsx --bundle --format=iife --jsx=automatic --minify --define:process.env.NODE_ENV='\"production\"' --outfile=dist/launcher.js && cp src/launcher.html src/launcher.css src/tray.png dist/",
     "test": "vitest run --root . --config ../../vitest.config.ts",
     "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
     "start": "electron ."
   },
   "dependencies": {
-    "@safetech/inheriti-elements-core": "workspace:*"
+    "@safetech/inheriti-elements-core": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "electron": "^38.0.0"

@@ -1,7 +1,17 @@
 :root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
 body { margin: 0; padding: 16px; }
-main { display: grid; gap: 10px; }
-h1 { margin: 0; }
-p { margin: 0; }
-button, select { font: inherit; padding: 9px; }
-section { display: grid; gap: 8px; }
+main, form, section, .field { display: grid; gap: 8px; }
+main { gap: 12px; }
+h1, h2, p, dl { margin: 0; }
+h2 { font-size: 16px; }
+label, dt { font-weight: 600; }
+button, select, input, textarea { font: inherit; padding: 9px; min-width: 0; }
+textarea { resize: vertical; }
+button { min-height: 40px; cursor: pointer; }
+button:disabled { cursor: default; opacity: .55; }
+:focus-visible { outline: 2px solid #397cb3; outline-offset: 2px; }
+.buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.buttons button { flex: 1; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.error { color: #b3261e; }

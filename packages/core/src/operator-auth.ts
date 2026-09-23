@@ -110,10 +110,10 @@ function decodeSegment(segment: string): Record<string, unknown> {
   }
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/gu, '+').replace(/_/gu, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
   const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Uint8Array(Array.from(binary, (character) => character.charCodeAt(0)));
 }
 
 /** Process-lifetime stores. A host that can reach secure storage supplies its own instead. */

@@ -107,6 +107,12 @@ importers:
       '@safetech/inheriti-elements-core':
         specifier: workspace:*
         version: link:../../packages/core
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
     devDependencies:
       electron:
         specifier: ^38.0.0
