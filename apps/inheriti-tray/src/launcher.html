@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>Inheriti</title>
+  <link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+  <main>
+    <h1>Inheriti</h1>
+    <p id="status" role="status"></p>
+    <button id="sign-in">Sign in</button>
+    <label for="organization">Organization</label>
+    <select id="organization" disabled></select>
+    <section aria-label="Actions">
+      <button class="action" disabled>Save privately</button>
+      <button class="action" disabled>Share with a team</button>
+      <button class="action" disabled>Add or edit an asset</button>
+    </section>
+    <button id="business">Open Business</button>
+    <button id="sign-out" hidden>Sign out</button>
+  </main>
+  <script src="launcher.js"></script>
+</body>
+</html>

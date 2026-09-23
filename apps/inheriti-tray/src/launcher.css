@@ -1,0 +1,7 @@
+:root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+body { margin: 0; padding: 16px; }
+main { display: grid; gap: 10px; }
+h1 { margin: 0; }
+p { margin: 0; }
+button, select { font: inherit; padding: 9px; }
+section { display: grid; gap: 8px; }

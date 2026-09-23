@@ -1,0 +1,19 @@
+{
+  "name": "@safetech/inheriti-tray",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp src/launcher.html src/launcher.css src/launcher.js src/tray.png dist/",
+    "test": "vitest run --root . --config ../../vitest.config.ts",
+    "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@safetech/inheriti-elements-core": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  }
+}

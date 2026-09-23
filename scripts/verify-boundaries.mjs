@@ -4,7 +4,7 @@ import { resolve, relative, sep } from 'node:path';
 const target = resolve(process.cwd(), process.argv[2] ?? '.');
 const workspace = resolve(import.meta.dirname, '..');
 const relativeTarget = relative(workspace, target).split(sep).join('/');
-const appNames = ['inheriti-cli', 'inheriti-guard', 'inheriti-ide', 'inheriti-mcp'];
+const appNames = ['inheriti-cli', 'inheriti-guard', 'inheriti-ide', 'inheriti-mcp', 'inheriti-tray'];
 const errors = [];
 
 try {
@@ -50,7 +50,7 @@ for (const file of await sourceFiles(target)) {
 // and the source rule above already refuses any non-test file that imports it, which is the property
 // that actually matters. Forbidding it outright meant a host's own tests could not drive the host
 // against a shared fixture, and that is exactly where a composition gap hides.
-for (const manifest of ['packages/core/package.json', 'packages/brand/package.json', 'apps/inheriti-cli/package.json', 'apps/inheriti-guard/package.json', 'apps/inheriti-ide/package.json']) {
+for (const manifest of ['packages/core/package.json', 'packages/brand/package.json', 'apps/inheriti-cli/package.json', 'apps/inheriti-guard/package.json', 'apps/inheriti-ide/package.json', 'apps/inheriti-tray/package.json']) {
   const value = JSON.parse(await readFile(resolve(workspace, manifest), 'utf8'));
   if (Object.keys(value.dependencies ?? {}).includes('@safetech/inheriti-elements-test-kit')) {
     errors.push(`${manifest}: production manifest depends on test-kit`);

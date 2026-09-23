@@ -22,6 +22,9 @@
     "sdk:assert:registry": "node scripts/assert-registry-sdk.mjs"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ],
     "overrides": {
       "@safetech/inheriti-core-sdk": "4.0.30"
     }
