@@ -21,11 +21,14 @@ it('keeps local choice off the model channel and closes after a mobile choice', 
   expect(await landing.text()).toContain('SafeKey PRO');
   expect(await (await fetch(url)).text()).toContain('A1.password');
   expect(landing.headers.get('cache-control')).toBe('no-store');
+  expect(landing.headers.get('referrer-policy')).toBe('same-origin');
   const origin = new URL(url).origin;
   const selected = await fetch(url, { method: 'POST', redirect: 'manual', headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'choice=mobile' });
   expect(selected.status).toBe(303);
   expect(selected.headers.get('location')).toBe(new URL(url).pathname);
   expect(await choice).toBe('SK_MOBILE');
+  const duplicate = await fetch(url, { method: 'POST', redirect: 'manual', headers: { Origin: origin }, body: 'choice=mobile' });
+  expect(duplicate.status).toBe(303);
   page.prompt.close();
   await expect(fetch(url)).rejects.toThrow();
 });

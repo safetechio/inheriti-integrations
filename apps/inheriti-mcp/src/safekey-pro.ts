@@ -30,7 +30,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
   const server = createServer((request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('Referrer-Policy', 'no-referrer');
+    response.setHeader('Referrer-Policy', 'same-origin');
     response.setHeader('Content-Security-Policy', "default-src 'none'; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
     if (request.headers.host !== `127.0.0.1:${port}` || request.url !== path) { response.writeHead(404).end(); return; }
     if (request.method === 'GET') {
@@ -42,7 +42,8 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(page(body, state === 'touch' || state === 'waiting'));
       return;
     }
-    if (request.method !== 'POST' || (state !== 'choice' && state !== 'pin') || request.headers.origin !== `http://127.0.0.1:${port}`) { response.writeHead(405).end(); return; }
+    if (request.method !== 'POST' || request.headers.origin !== `http://127.0.0.1:${port}`) { response.writeHead(405).end(); return; }
+    if (state !== 'choice' && state !== 'pin') { response.writeHead(303, { Location: path }).end(); return; }
     let body = '';
     request.on('data', chunk => { body += chunk; if (body.length > 512) request.destroy(); });
     request.on('end', () => {
