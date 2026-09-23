@@ -41,6 +41,7 @@ describe('reveal progress wording', () => {
   it('distinguishes a pending first claim from a later release approval', () => {
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('Claim the custodian share');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('then release it');
+    expect(revealProgressMessage(progress('CONNECTING_SAFEKEY_PRO'))).toContain('SafeKey PRO PIN');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).not.toContain('Approve');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN'))).toContain('Approve');
   });

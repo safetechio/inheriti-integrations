@@ -44,6 +44,12 @@ describe('plans reveal', () => {
     expect(messageFor({ code: 'safekey_pro_local_device_required' })).toContain('Open it locally');
   });
 
+  it('does not blame SafeKey Mobile for a missing or mismatched PRO share', () => {
+    expect(messageFor({ code: 'custodian_share_unavailable' })).toBe(
+      'The custodian share is unavailable or does not match this plan and device.',
+    );
+  });
+
   it('names the Business organisation in plan errors while preserving standalone copy', () => {
     expect(messageFor({ code: 'plan_not_found' }, true)).toBe('No such plan in this Organisation.');
     expect(messageFor({ code: 'plan_not_found' })).toBe('No such plan in this Application.');

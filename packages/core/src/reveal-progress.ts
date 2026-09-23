@@ -14,7 +14,7 @@ export function revealProgressMessage(
 ): string {
   // This workspace may consume the last published Client SDK while preparing the next additive
   // phase. Keep the shared renderer forward-compatible; hosts still receive one SDK-owned stream.
-  const phase = progress.phase as RevealPhase | 'WAITING_FOR_CUSTODIAN_CLAIM';
+  const phase = progress.phase as RevealPhase | 'WAITING_FOR_CUSTODIAN_CLAIM' | 'CONNECTING_SAFEKEY_PRO';
   const { session } = progress;
   // Reported before the reveal exists, so it is the one phase with no session to describe: the key
   // that opens the plan is resolved first, ahead of governance and ahead of any one-shot release.
@@ -35,6 +35,7 @@ export function revealProgressMessage(
   if (phase === 'WAITING_FOR_CUSTODIAN') {
     return 'Approve the custodian request using SafeKey Mobile. This reveal will continue when the share arrives.';
   }
+  if (phase === 'CONNECTING_SAFEKEY_PRO') return 'Enter your SafeKey PRO PIN, then touch the device when prompted.';
   if (phase === 'RELEASING_MATERIAL') return 'Collecting encrypted data shares.';
   if (phase === 'RECONSTRUCTING') return 'Reconstructing and decrypting shares.';
   if (phase === 'OPEN') return 'Revealing the data.';

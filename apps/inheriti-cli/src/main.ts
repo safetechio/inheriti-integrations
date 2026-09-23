@@ -534,7 +534,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   reveal_participant_revoked: 'A participant on this plan was revoked, so it cannot be opened.',
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
-  custodian_share_unavailable: 'SafeKey Mobile answered without a custodian share, so this plan cannot be opened.',
+  custodian_share_unavailable: 'The custodian share is unavailable or does not match this plan and device.',
   safekey_pro_local_device_required: 'This plan uses SafeKey PRO. Open it locally with a connected SafeKey PRO device; this runner cannot release that share.',
   SAFEKEY_INTERACTIVE_REQUIRED: 'SafeKey PRO needs an interactive terminal to enter its PIN.',
   SAFEKEY_ABORTED: 'SafeKey PRO operation canceled.',
