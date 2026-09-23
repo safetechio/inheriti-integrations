@@ -61,11 +61,15 @@ async function update(install: boolean): Promise<void> {
 }
 
 const args = process.argv.slice(2);
-if (args[0] === 'update' && (args.length === 1 || (args.length === 2 && args[1] === '--install'))) {
+if (args.length === 1 && args[0] === '--version') {
+  readFile(new URL('../package.json', import.meta.url), 'utf8')
+    .then((raw) => process.stdout.write(`${(JSON.parse(raw) as { version: string }).version}\n`))
+    .catch(() => { process.stderr.write('version_unavailable\n'); process.exitCode = 1; });
+} else if (args[0] === 'update' && (args.length === 1 || (args.length === 2 && args[1] === '--install'))) {
   update(args.includes('--install')).catch(() => { process.stderr.write('update_failed\n'); process.exitCode = 1; });
 } else if (args.length === 0 || (args.length === 1 && args[0] === '--local-delivery')) {
   runServer(args.includes('--local-delivery')).catch(() => { process.stderr.write('server_start_failed\n'); process.exitCode = 1; });
 } else {
-  process.stderr.write('Usage: inheriti-mcp [--local-delivery] | update [--install]\n');
+  process.stderr.write('Usage: inheriti-mcp [--local-delivery] | --version | update [--install]\n');
   process.exitCode = 1;
 }
