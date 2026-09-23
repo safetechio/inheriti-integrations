@@ -3,10 +3,13 @@ import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements
 import type { RevealProgress } from '@safetech/inheriti-elements-core';
 import { ActiveRevealRegistry } from './reveal.js';
 import type { RevealCancellationToken, RevealProgressReporter } from './reveal.js';
+import { selectIdeCustodianDevice } from './safekey-pro.js';
+import type { createIdeSafeKeyPro } from './safekey-pro.js';
 
 export interface DownloadCore {
   getPlan(planId: string): Promise<{ governance?: { mode?: string }; assets: ReadonlyArray<{ id: string; code?: string; name?: string; fileName?: string; isBinary?: boolean }> }>;
-  withReveal<T>(planId: string, options: { mode?: 'DIRECT' | 'GOVERNED'; signal: AbortSignal; onProgress: (progress: RevealProgress) => void }, work: (reveal: {
+  withReveal<T>(planId: string, options: { mode?: 'DIRECT' | 'GOVERNED'; signal: AbortSignal; onProgress: (progress: RevealProgress) => void;
+    proDevice?: NonNullable<ReturnType<typeof createIdeSafeKeyPro>>; selectCustodianDevice?: () => Promise<'SK_MOBILE' | 'SK_PRO'> }, work: (reveal: {
     exportAsset(selector: string, destination: (asset: { bytes: Uint8Array }) => Promise<void>): Promise<void>;
   }) => Promise<T>): Promise<T>;
 }
@@ -15,6 +18,7 @@ export interface DownloadUi {
   withProgress<T>(task: (progress: RevealProgressReporter, token: RevealCancellationToken) => Promise<T>): Promise<T>;
   pickAsset(items: readonly { label: string; description?: string; selector: string; fileName?: string }[]): Promise<string | undefined>;
   savePath(fileName?: string): Promise<string | undefined>;
+  pickCustodianDevice?: (signal?: AbortSignal) => Promise<'SK_MOBILE' | 'SK_PRO' | undefined>;
 }
 
 export async function downloadAsset(
@@ -23,6 +27,7 @@ export async function downloadAsset(
   active: ActiveRevealRegistry,
   planId: string,
   keyOwner: 'Application' | 'Organisation' = 'Application',
+  proDevice?: NonNullable<ReturnType<typeof createIdeSafeKeyPro>>,
 ): Promise<boolean> {
   const plan = await core.getPlan(planId);
   const assets = plan.assets.filter((asset) => asset.isBinary).map((asset) => ({
@@ -41,6 +46,7 @@ export async function downloadAsset(
       try {
         await core.withReveal(planId, {
           mode: revealModeOf(plan), signal: controller.signal,
+          ...(proDevice && ui.pickCustodianDevice ? { proDevice, selectCustodianDevice: () => selectIdeCustodianDevice(ui.pickCustodianDevice!, controller.signal) } : {}),
           onProgress: (value) => { const line = revealProgressMessage(value, { keyOwner }); if (line !== last) { progress.report({ message: line }); last = line; } },
         }, async (reveal) => {
           const selector = await ui.pickAsset(assets);

@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-vscode-extension",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
   "type": "module",
@@ -178,6 +178,11 @@
           "type": "string",
           "default": "",
           "description": "Argon2 salt for the Master Key. The passphrase is read only from VS Code SecretStorage."
+        },
+        "inheriti.safeKeyProDevice": {
+          "type": "string",
+          "default": "",
+          "description": "Local SafeKey PRO device path, for example /dev/hidraw4. Used only with a Business deployment."
         }
       }
     }

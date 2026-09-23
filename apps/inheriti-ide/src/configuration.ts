@@ -1,5 +1,5 @@
 import type { ElementsEnvironment } from '@safetech/inheriti-elements-core';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from '@safetech/inheriti-elements-core/node';
 
 export interface ExtensionConfiguration {
   apiUrl: string;
@@ -11,6 +11,8 @@ export interface ExtensionConfiguration {
   redirectUri: string;
   scopes: readonly string[];
   masterKeySalt?: string;
+  safeKeyProDevice?: string;
+  safeKeyProRpId?: string;
 }
 
 export class ExtensionConfigurationInvalid extends Error {
@@ -40,6 +42,9 @@ export function resolveConfiguration(read: SettingsReader): ExtensionConfigurati
       clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       redirectUri: REDIRECT_URI,
       scopes: ['openid'],
+      ...(read('safeKeyProDevice')?.trim() ? {
+        safeKeyProDevice: read('safeKeyProDevice')!.trim(), safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
+      } : {}),
     };
   }
   const deploymentValue = read('deployment');
@@ -66,6 +71,9 @@ export function resolveConfiguration(read: SettingsReader): ExtensionConfigurati
     redirectUri: REDIRECT_URI,
     scopes: read('applicationId')?.trim() ? SCOPES : ['openid'],
     ...(read('masterKeySalt')?.trim() ? { masterKeySalt: read('masterKeySalt')!.trim() } : {}),
+    ...(deployment && read('safeKeyProDevice')?.trim() ? {
+      safeKeyProDevice: read('safeKeyProDevice')!.trim(), safeKeyProRpId: businessUiRpId(deployment),
+    } : {}),
   };
 }
 

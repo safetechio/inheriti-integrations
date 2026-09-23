@@ -1,5 +1,7 @@
 import { revealGateCountdown, revealGateDeadline, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
 import type { PlanGovernanceView, RevealProgress, ScopedRevealProgress } from '@safetech/inheriti-elements-core';
+import type { createIdeSafeKeyPro } from './safekey-pro.js';
+import { selectIdeCustodianDevice } from './safekey-pro.js';
 
 /** The one shared progress shape; kept under the host's own name for its existing callers. */
 export type RevealSessionProgress = ScopedRevealProgress;
@@ -21,6 +23,8 @@ export interface VscodeRevealCore {
       signal?: AbortSignal;
       onProgress?: (progress: RevealProgress) => void;
       onSession?: (session: RevealSessionProgress) => void;
+      proDevice?: NonNullable<ReturnType<typeof createIdeSafeKeyPro>>;
+      selectCustodianDevice?: () => Promise<'SK_MOBILE' | 'SK_PRO'>;
     },
     work: (reveal: {
       session: { expiresAt: string };
@@ -39,6 +43,7 @@ export interface VscodeRevealUi {
   withProgress<TResult>(task: (progress: RevealProgressReporter, token: RevealCancellationToken) => Promise<TResult>): Promise<TResult>;
   pickField(items: readonly { label: string; description: string; selector: string }[]): Promise<string | undefined>;
   insertAtCursor(value: string): Promise<boolean>;
+  pickCustodianDevice?: (signal?: AbortSignal) => Promise<'SK_MOBILE' | 'SK_PRO' | undefined>;
 }
 
 /** The reveal ended because the dead-man's-switch subject answered, not because anything failed. */
@@ -78,6 +83,7 @@ export async function revealAndInsert(
   activeReveals: ActiveRevealRegistry,
   planId: string,
   keyOwner: 'Application' | 'Organisation' = 'Application',
+  proDevice?: NonNullable<ReturnType<typeof createIdeSafeKeyPro>>,
 ): Promise<void> {
   const plan = await core.getPlan(planId);
   const fields = plan.assets.flatMap((asset) => asset.isBinary ? [] : (asset.fieldNames ?? []).map((field) => ({
@@ -106,6 +112,7 @@ export async function revealAndInsert(
         await core.withReveal(planId, {
           mode: revealModeOf(plan),
           signal: controller.signal,
+          ...(proDevice && ui.pickCustodianDevice ? { proDevice, selectCustodianDevice: () => selectIdeCustodianDevice(ui.pickCustodianDevice!, controller.signal) } : {}),
           onProgress: (reported) => {
             lastProgress = reported;
             governanceProgress.update(reported);

@@ -81,6 +81,17 @@ describe('VS Code reveal and insert', () => {
     expect(reports.some((message) => message.includes('Data will be accessible for 10 minutes.'))).toBe(true);
   });
 
+  it('passes the local PRO device and human choice through the governed reveal', async () => {
+    const { core, ui, reports } = fixture();
+    const proDevice = { read: vi.fn(), write: vi.fn() };
+    Object.assign(ui, { pickCustodianDevice: vi.fn().mockResolvedValue('SK_PRO') });
+    await revealAndInsert(core as never, ui as never, new ActiveRevealRegistry(), 'plan-1', 'Organisation', proDevice as never);
+    const options = core.withReveal.mock.calls[0]?.[1];
+    expect(options.proDevice).toBe(proDevice);
+    await expect(options.selectCustodianDevice()).resolves.toBe('SK_PRO');
+    expect(reports.join(' ')).not.toContain('protected-value');
+  });
+
   it('aborts the scoped reveal when the progress notification is canceled', async () => {
     let cancel: (() => void) | undefined;
     const core = {

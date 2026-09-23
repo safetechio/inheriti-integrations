@@ -16,6 +16,7 @@ import { codeOf, loadPlans } from './plan-loader.js';
 import { planIdFromUriPath, planUriPath, renderPlanDetail } from './plan-detail.js';
 import { ActiveRevealRegistry, revealAndInsert } from './reveal.js';
 import { downloadAsset } from './download.js';
+import { createIdeSafeKeyPro } from './safekey-pro.js';
 import { parseImportedConfiguration } from './import-configuration.js';
 import { MASTER_KEY_PASSPHRASE_SECRET } from './master-keys.js';
 import { discoverOrganizations, saveOrganization } from './organizations.js';
@@ -43,6 +44,27 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
   const detailChanged = new vscode.EventEmitter<vscode.Uri>();
 
   const configuration = () => resolveConfiguration((key) => vscode.workspace.getConfiguration('inheriti').get<string>(key));
+  const withPromptCancellation = async <T>(signal: AbortSignal | undefined, show: (token: vscode.CancellationToken) => Thenable<T>): Promise<T> => {
+    const source = new vscode.CancellationTokenSource();
+    const abort = () => source.cancel();
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) source.cancel();
+    try { return await show(source.token); }
+    finally { signal?.removeEventListener('abort', abort); source.dispose(); }
+  };
+  const safeKeyPro = () => createIdeSafeKeyPro(configuration(), {
+    readPin: (signal) => withPromptCancellation(signal, (token) => vscode.window.showInputBox({
+      title: 'SafeKey PRO PIN', prompt: 'Enter the PIN for your connected SafeKey PRO.', password: true, ignoreFocusOut: true,
+    }, token)),
+    touch: (operation, attempt, limit) => { vscode.window.setStatusBarMessage(`SafeKey PRO ${operation} ${attempt}/${limit}: press and release the touch button.`, 30_000); },
+  });
+  const pickCustodianDevice = async (signal?: AbortSignal): Promise<'SK_MOBILE' | 'SK_PRO' | undefined> => {
+    const choice = await withPromptCancellation(signal, (token) => vscode.window.showQuickPick([
+      { label: 'SafeKey Mobile', value: 'SK_MOBILE' as const },
+      { label: 'SafeKey PRO (connected locally)', value: 'SK_PRO' as const },
+    ], { title: 'Where should this plan share be stored?', ignoreFocusOut: true }, token));
+    return choice?.value;
+  };
   const core = (scoped = true): NodeIntegrationCore => {
     const settings = configuration();
     if (scoped && settings.business && !selectedOrganization) {
@@ -329,6 +351,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         const client = await currentCore();
         const started = revision;
         await downloadAsset(client as never, {
+          pickCustodianDevice,
           withProgress: (task) => Promise.resolve(vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Inheriti', cancellable: true }, task)),
           pickAsset: async (items) => {
             if (started !== revision) return undefined;
@@ -342,10 +365,12 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
             if (uri && uri.scheme !== 'file') throw Object.assign(new Error('Choose a local file.'), { code: 'download_local_file_required' });
             return uri?.fsPath;
           },
-        }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application');
+        }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application', safeKeyPro());
         await vscode.window.showInformationMessage('Asset saved. Reveal closed.');
       } catch (error) {
-        if ((error as { name?: unknown })?.name === 'AbortError') { await vscode.window.showInformationMessage('Download canceled.'); return; }
+        if ((error as { name?: unknown })?.name === 'AbortError' || (error as Error)?.message === 'SAFEKEY_ABORTED') {
+          await vscode.window.showInformationMessage('Download canceled.'); return;
+        }
         await vscode.window.showErrorMessage(messageFor(
           codeOf(error), configuration().business ? 'Organisation' : 'Application',
         ));
@@ -394,6 +419,9 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
   }
 
   async function runRevealCommand(input?: string | { planId?: string }): Promise<void> {
+    const targetEditor = vscode.window.activeTextEditor;
+    const targetSelection = targetEditor?.selection;
+    const targetVersion = targetEditor?.document.version;
     const planId = typeof input === 'string' ? input : input?.planId;
     const selectedPlanId = planId ?? await vscode.window.showInputBox({
       title: 'Insert a protected field',
@@ -405,6 +433,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
       const client = await currentCore();
       const started = revision;
       await revealAndInsert(client as never, {
+        pickCustodianDevice,
         withProgress: (task) => Promise.resolve(vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
@@ -424,18 +453,19 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         },
         insertAtCursor: async (value) => {
           if (started !== revision) return false;
-          const editor = vscode.window.activeTextEditor;
-          if (!editor) return false;
-          return editor.edit((edit) => edit.replace(editor.selection, value), { undoStopBefore: true, undoStopAfter: true });
+          if (!targetEditor || !targetSelection || vscode.window.activeTextEditor !== targetEditor
+            || targetEditor.document.isClosed || targetEditor.document.version !== targetVersion
+            || !targetEditor.selection.isEqual(targetSelection)) return false;
+          return targetEditor.edit((edit) => edit.replace(targetSelection, value), { undoStopBefore: true, undoStopAfter: true });
         },
-      }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application');
+      }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application', safeKeyPro());
       await vscode.window.showInformationMessage('Protected field inserted. Reveal closed.');
     } catch (error) {
       if (codeOf(error) === 'governance_denied') {
         await vscode.window.showErrorMessage((error as Error).message);
         return;
       }
-      if ((error as { name?: unknown })?.name === 'AbortError') {
+      if ((error as { name?: unknown })?.name === 'AbortError' || (error as Error)?.message === 'SAFEKEY_ABORTED') {
         await vscode.window.showInformationMessage('Reveal canceled.');
         return;
       }

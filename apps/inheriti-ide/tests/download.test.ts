@@ -45,4 +45,15 @@ describe('VS Code binary download', () => {
     await expect(downloadAsset(second.core as never, second.ui as never, new ActiveRevealRegistry(), 'plan-1')).rejects.toMatchObject({ name: 'AbortError' });
     expect(second.exportAsset).not.toHaveBeenCalled();
   });
+
+  it('passes the same PRO device and human choice to binary export', async () => {
+    const path = join(await mkdtemp(join(tmpdir(), 'inheriti-ide-download-')), 'pro.pdf');
+    const { core, ui } = fixture(path);
+    const proDevice = { read: vi.fn(), write: vi.fn() };
+    Object.assign(ui, { pickCustodianDevice: vi.fn().mockResolvedValue('SK_PRO') });
+    await downloadAsset(core as never, ui as never, new ActiveRevealRegistry(), 'plan-1', 'Organisation', proDevice as never);
+    const options = core.withReveal.mock.calls[0]?.[1];
+    expect(options.proDevice).toBe(proDevice);
+    await expect(options.selectCustodianDevice()).resolves.toBe('SK_PRO');
+  });
 });
