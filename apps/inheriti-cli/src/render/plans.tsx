@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import type { PlanDetail, PlanSummary } from '@safetech/inheriti-elements-core';
+import { moderatorDisplayName, type PlanDetail, type PlanSummary } from '@safetech/inheriti-elements-core';
 import { Field, Heading, Table } from './table.js';
 import { count, label, labels, timestamp } from './values.js';
 
@@ -93,13 +93,12 @@ export function PlanView({ plan, width, keyOwner = 'Application' }: { plan: Plan
             columns={[
               {
                 header: 'name',
-                value: (person: PlanDetail['participants'][number]) => person.displayName,
+                value: (person: PlanDetail['participants'][number]) => moderatorDisplayName(person.displayName, person.id),
                 flexible: true,
                 minimum: 12,
               },
               { header: 'roles', value: (person) => labels(person.relationships) },
               { header: 'lifecycle', value: (person) => label(person.lifecycle) },
-              { header: 'id', value: (person) => person.id, dim: true },
             ]}
             rows={people}
             width={width}
@@ -130,7 +129,7 @@ function authentication(plan: PlanSummary): string {
 function moderators(plan: PlanDetail): string {
   const named = (plan.participants ?? [])
     .filter((person) => (person.relationships ?? []).some((relationship) => label(relationship) === 'MODERATOR'))
-    .map((person) => person.displayName);
+    .map((person) => moderatorDisplayName(person.displayName, person.id));
   if (named.length > 0) return `${named.length} · ${named.join(', ')}`;
   return count(plan.participantSummary?.moderators);
 }

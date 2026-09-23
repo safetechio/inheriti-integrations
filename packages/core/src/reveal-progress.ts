@@ -44,7 +44,9 @@ export function revealProgressMessage(
     if (deniedBy === 'AUTHENTICATION') return 'Your authentication request was rejected in SafeKey Mobile. Access was denied.';
     const rejected = session?.moderators?.filter((moderator) => moderator.status === 'REJECTED') ?? [];
     if (deniedBy === 'MODERATION' || rejected.length > 0) {
-      const names = rejected.map((moderator) => options.moderatorNamesById?.get(moderator.id)).filter((name): name is string => !!name);
+      const names = rejected.map((moderator) => options.moderatorNamesById?.get(moderator.id))
+        .filter((name): name is string => !!name)
+        .map((name) => moderatorDisplayName(name)).filter((name) => name !== 'Moderator');
       return names.length > 0
         ? `${names.join(', ')} rejected the moderator approval request. Access was denied.`
         : 'A moderator rejected the approval request. Access was denied.';
@@ -91,11 +93,16 @@ export function revealGateCountdown(progress: RevealProgress, now = Date.now()):
 
 function moderationMessage(progress: RevealProgress, moderators: readonly string[]): string {
   const { approvedModerators, requiredModerators } = progress.session ?? {};
-  const people = moderators.length === 0 ? '' : ` Moderators: ${moderators.join(', ')}.`;
+  const people = moderators.length === 0 ? '' : ` Moderators: ${moderators.map((name) => moderatorDisplayName(name)).join(', ')}.`;
   if (approvedModerators === undefined || requiredModerators === undefined) {
     return `Waiting for moderator approval in SafeKey Mobile.${people}`;
   }
   return `Waiting for moderators (${approvedModerators} of ${requiredModerators} approved).${people}`;
+}
+
+export function moderatorDisplayName(name: string, id?: string): string {
+  return name && name !== id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)
+    ? name : 'Moderator';
 }
 
 /**

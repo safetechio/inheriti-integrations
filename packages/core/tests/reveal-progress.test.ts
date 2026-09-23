@@ -52,6 +52,11 @@ describe('reveal progress wording', () => {
     expect(revealProgressMessage(waiting)).toBe('Waiting for moderators (1 of 2 approved).');
     expect(revealProgressMessage(waiting, { moderators: ['Ada', 'Grace'] }))
       .toBe('Waiting for moderators (1 of 2 approved). Moderators: Ada, Grace.');
+    const id = 'e01605b8-4ba7-49b8-8cf8-fbe576f113a5';
+    expect(revealProgressMessage(waiting, { moderators: [id] }))
+      .toBe('Waiting for moderators (1 of 2 approved). Moderators: Moderator.');
+    expect(revealProgressMessage(progress('DENIED', { deniedBy: 'MODERATION', moderators: [{ id, status: 'REJECTED' }] }),
+      { moderatorNamesById: new Map([[id, id]]) })).toBe('A moderator rejected the approval request. Access was denied.');
   });
 
   it('identifies the denying governance decision and names only verified moderators', () => {

@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { revealGateCountdown } from '@safetech/inheriti-elements-core';
+import { moderatorDisplayName, revealGateCountdown } from '@safetech/inheriti-elements-core';
 import type { RevealProgress } from '@safetech/inheriti-elements-core';
 import type { Terminal } from '../output.js';
 import { renderFrame } from './ink.js';
@@ -47,7 +47,7 @@ function RevealCard({ progress, moderatorNames, spinner, keyOwner, completed }: 
   const moderatorStates = (session?.moderators?.length ? session.moderators
     : [...moderatorNames.keys()].map((id) => ({ id, status: 'PENDING' as const }))).map((moderator) => ({
     id: moderator.id,
-    name: moderatorNames.get(moderator.id) ?? moderator.id,
+    name: moderatorDisplayName(moderatorNames.get(moderator.id) ?? '', moderator.id),
     status: moderator.status,
   }));
   const approved = session?.approvedModerators ?? moderatorStates.filter((one) => one.status === 'APPROVED').length;

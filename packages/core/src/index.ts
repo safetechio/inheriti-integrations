@@ -265,7 +265,7 @@ function stableErrorCode(error: unknown): string {
 export { JwksOperatorTokenValidator, MemoryOAuthTransactionStore, MemoryOperatorSessionStore, OperatorTokenInvalid } from './operator-auth.js';
 export { PlanRequestFailed, SdkPlanFacade, asPlanRequestFailed, revealModeOf } from './plans.js';
 export { composeRevealWorkflows } from './workflows.js';
-export { hasRevealEnded, hasRevealFailed, revealGateCountdown, revealGateDeadline, revealProgressMessage } from './reveal-progress.js';
+export { hasRevealEnded, hasRevealFailed, moderatorDisplayName, revealGateCountdown, revealGateDeadline, revealProgressMessage } from './reveal-progress.js';
 export type { SdkRevealWorkflow } from './workflows.js';
 export type { ElementsPlanFacade, PlanGovernanceView, SdkPlanReader } from './plans.js';
 
