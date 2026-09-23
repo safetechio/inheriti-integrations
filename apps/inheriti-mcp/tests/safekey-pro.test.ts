@@ -18,7 +18,13 @@ it('keeps local choice off the model channel and closes after a mobile choice', 
   const choice = page.prompt.selectCustodianDevice();
   const url = await page.url;
   const landing = await fetch(url);
-  expect(await landing.text()).toContain('SafeKey PRO');
+  const html = await landing.text();
+  expect(html).toContain('SafeKey Pro');
+  expect(html).toContain('Choose your custodian device');
+  expect(html).toContain('Inheriti Business');
+  expect(html).toContain('data:image/png;base64,');
+  expect(html).toContain('background:#2962ff');
+  expect(landing.headers.get('content-security-policy')).toContain('img-src data:');
   expect(await (await fetch(url)).text()).toContain('A1.password');
   expect(landing.headers.get('cache-control')).toBe('no-store');
   expect(landing.headers.get('referrer-policy')).toBe('same-origin');
@@ -80,6 +86,7 @@ it('opens the PIN page directly for an existing PRO claim without selecting a de
   const html = await (await fetch(url)).text();
   expect(html).toContain('type="password"');
   expect(html).not.toContain('Where should this plan share');
+  expect(html).toContain('Device PIN');
   controller.abort();
   await expect(requested).rejects.toThrow('local_delivery_canceled');
   page.prompt.close();

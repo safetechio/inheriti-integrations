@@ -24,6 +24,7 @@ await build({
   banner: { js: "import { createRequire as __nodeCreateRequire } from 'node:module';\nconst require = __nodeCreateRequire(import.meta.url);" },
 });
 await chmod(resolve(output, 'main.js'), 0o755);
+await cp(resolve(root, 'src', 'assets'), resolve(output, 'assets'), { recursive: true });
 const coreSdk = await packageDirectory(root, '@safetech/inheriti-core-sdk');
 const workers = resolve(coreSdk, 'dist', 'workers');
 if (existsSync(workers)) await cp(workers, resolve(output, 'workers'), { recursive: true });
