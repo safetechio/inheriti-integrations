@@ -22,7 +22,9 @@ it('keeps local choice off the model channel and closes after a mobile choice', 
   expect(await (await fetch(url)).text()).toContain('A1.password');
   expect(landing.headers.get('cache-control')).toBe('no-store');
   const origin = new URL(url).origin;
-  await fetch(url, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'choice=mobile' });
+  const selected = await fetch(url, { method: 'POST', redirect: 'manual', headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'choice=mobile' });
+  expect(selected.status).toBe(303);
+  expect(selected.headers.get('location')).toBe(new URL(url).pathname);
   expect(await choice).toBe('SK_MOBILE');
   page.prompt.close();
   await expect(fetch(url)).rejects.toThrow();
@@ -52,7 +54,8 @@ it('binds a PRO choice to the Business RP ID and keeps PIN out of page responses
   const options = createNodeSafeKeyProDevice.mock.lastCall![0] as { getPin: () => Promise<Uint8Array>; onTouch: (operation: string, attempt: number, limit: number) => void };
   const requested = options.getPin();
   expect(await (await fetch(url)).text()).toContain('type="password"');
-  const response = await fetch(url, { method: 'POST', headers: { Origin: origin }, body: 'pin=123456' });
+  const response = await fetch(url, { method: 'POST', redirect: 'manual', headers: { Origin: origin }, body: 'pin=123456' });
+  expect(response.status).toBe(303);
   expect(await response.text()).not.toContain('123456');
   const pin = await requested;
   expect(Buffer.from(pin).toString()).toBe('123456');

@@ -58,7 +58,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
         const bytes = Uint8Array.from(Buffer.from(value, 'ascii'));
         state = 'waiting'; pin?.(bytes); pin = undefined;
       }
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(page('<p>Continue with your SafeKey PRO device.</p>', true));
+      response.writeHead(303, { Location: path }).end();
     });
   });
   server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
