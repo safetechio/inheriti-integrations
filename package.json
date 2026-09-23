@@ -23,7 +23,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@safetech/inheriti-core-sdk": "4.0.28"
+      "@safetech/inheriti-core-sdk": "4.0.29"
     }
   },
   "devDependencies": {

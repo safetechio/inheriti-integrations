@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@safetech/inheriti-core-sdk': 4.0.28
+  '@safetech/inheriti-core-sdk': 4.0.29
 
 importers:
 
@@ -30,8 +30,8 @@ importers:
   apps/inheriti-cli:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.28
-        version: 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.29
+        version: 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -55,8 +55,8 @@ importers:
   apps/inheriti-guard:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.28
-        version: 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.29
+        version: 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -74,8 +74,8 @@ importers:
   apps/inheriti-ide:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.28
-        version: 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.29
+        version: 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -93,8 +93,8 @@ importers:
         specifier: ^1.12.0
         version: 1.30.0(zod@4.6.5)
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.28
-        version: 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.29
+        version: 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -107,8 +107,8 @@ importers:
   packages/core:
     dependencies:
       '@safetech/inheriti-client-sdk':
-        specifier: 1.17.10
-        version: 1.17.10(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 1.17.11
+        version: 1.17.11(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
     devDependencies:
       '@safetech/inheriti-elements-test-kit':
         specifier: workspace:*
@@ -117,8 +117,8 @@ importers:
   packages/test-kit:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.28
-        version: 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.29
+        version: 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
 
 packages:
 
@@ -191,6 +191,36 @@ packages:
   '@babel/runtime@7.29.7':
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
+
+  '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
+    resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@cbor-extract/cbor-extract-darwin-x64@2.2.2':
+    resolution: {integrity: sha512-32b1mgc+P61Js+KW9VZv/c+xRw5EfmOcPx990JbCBSkYJFY0l25VinvyyWfl+3KjibQmAcYwmyzKF9J4DyKP/Q==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@cbor-extract/cbor-extract-linux-arm64@2.2.2':
+    resolution: {integrity: sha512-wfqgzqCAy/Vn8i6WVIh7qZd0DdBFaWBjPdB6ma+Wihcjv0gHqD/mw3ouVv7kbbUNrab6dKEx/w3xQZEdeXIlzg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@cbor-extract/cbor-extract-linux-arm@2.2.2':
+    resolution: {integrity: sha512-tNg0za41TpQfkhWjptD+0gSD2fggMiDCSacuIeELyb2xZhr7PrhPe5h66Jc67B/5dmpIhI2QOUtv4SBsricyYQ==}
+    cpu: [arm]
+    os: [linux]
+
+  '@cbor-extract/cbor-extract-linux-x64@2.2.2':
+    resolution: {integrity: sha512-rpiLnVEsqtPJ+mXTdx1rfz4RtUGYIUg2rUAZgd1KjiC1SehYUSkJN7Yh+aVfSjvCGtVP0/bfkQkXpPXKbmSUaA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@cbor-extract/cbor-extract-win32-x64@2.2.2':
+    resolution: {integrity: sha512-dI+9P7cfWxkTQ+oE+7Aa6onEn92PHgfWXZivjNheCRmTBDBf2fx6RyTi0cmgpYLnD1KLZK9ZYrMxaPZ4oiXhGA==}
+    cpu: [x64]
+    os: [win32]
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -514,14 +544,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@safetech/inheriti-client-sdk@1.17.10':
-    resolution: {integrity: sha512-E6GfnIY7qx4uUEONHmJu0M/lGAYUsgPaXtRtVk0ho52Q8HHwmAwfY99IrCe/o55N6OYy19nEd0KK1MJXrJ3i6A==}
+  '@safetech/inheriti-client-sdk@1.17.11':
+    resolution: {integrity: sha512-GJ0JjpgBQ8CIsAIkLPFXS9goLmoBF+vLBzuuMuUoLNj2Bx1Mr+lgZ66cTMWRgrF+MExGRScdoPAWh17Mc0gLoA==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.1.0
 
-  '@safetech/inheriti-core-sdk@4.0.28':
-    resolution: {integrity: sha512-qzHpYf9HF9aSfbZgbzhdSyIPrVTghNE5vPQ+h9Pe2UBYCzD3KrErzSz9l3ks6+eQ5qh0vWoK/nfYUk8FX0xEHw==}
+  '@safetech/inheriti-core-sdk@4.0.29':
+    resolution: {integrity: sha512-4zPKx+7wfP5JrZBeVhubRmL/uNflc4fH+uZEqJu19kuAARAgMYEaPnvlrgkFdDDoxV1rd+3STBz+6Q5BbZxzyQ==}
     peerDependencies:
       '@tanstack/react-query': '*'
       react: ^18.2.0 || ^19.0.0
@@ -872,6 +902,13 @@ packages:
   call-bound@1.0.4:
     resolution: {integrity: sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==}
     engines: {node: '>= 0.4'}
+
+  cbor-extract@2.2.2:
+    resolution: {integrity: sha512-hlSxxI9XO2yQfe9g6msd3g4xCfDqK5T5P0fRMLuaLHhxn4ViPrm+a+MUfhrvH2W962RGxcBwEGzLQyjbDG1gng==}
+    hasBin: true
+
+  cbor-x@1.6.6:
+    resolution: {integrity: sha512-8QiD9PGOxyQHo7s2pzwTBH6lTjqekxPdl9Aq6fXvZgCuCJHOht1puDEA/fTr6mciB76c+M+Gi0qT2i1a4pm4Wg==}
 
   chai@5.3.3:
     resolution: {integrity: sha512-4zNhdJD/iOjSH0A05ea+Ke6MU5mmpQcbQsSOkgdaUMJ9zTlDTD/GYlwohmIE2u0gaxHYiVHEn1Fw9mZ/ktJWgw==}
@@ -1680,6 +1717,10 @@ packages:
 
   node-addon-api@4.3.0:
     resolution: {integrity: sha512-73sE9+3UaLYYFmDsFZnqCInzPyh3MqIwZO9cw58yIqAZhONrrabrYyYe3TuIqtIiOuTXVhsGau8hcrhhwSsDIQ==}
+
+  node-gyp-build-optional-packages@5.1.1:
+    resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
+    hasBin: true
 
   node-sarif-builder@3.4.0:
     resolution: {integrity: sha512-tGnJW6OKRii9u/b2WiUViTJS+h7Apxx17qsMUjsUeNDiMMX5ZFf8F8Fcz7PAQ6omvOxHZtvDTmOYKJQwmfpjeg==}
@@ -2569,6 +2610,24 @@ snapshots:
 
   '@babel/runtime@7.29.7': {}
 
+  '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
+    optional: true
+
+  '@cbor-extract/cbor-extract-darwin-x64@2.2.2':
+    optional: true
+
+  '@cbor-extract/cbor-extract-linux-arm64@2.2.2':
+    optional: true
+
+  '@cbor-extract/cbor-extract-linux-arm@2.2.2':
+    optional: true
+
+  '@cbor-extract/cbor-extract-linux-x64@2.2.2':
+    optional: true
+
+  '@cbor-extract/cbor-extract-win32-x64@2.2.2':
+    optional: true
+
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
 
@@ -2768,9 +2827,9 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.4':
     optional: true
 
-  '@safetech/inheriti-client-sdk@1.17.10(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-client-sdk@1.17.11(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
-      '@safetech/inheriti-core-sdk': 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+      '@safetech/inheriti-core-sdk': 4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/safekey-sdk': 1.0.0
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -2784,10 +2843,11 @@ snapshots:
       - utf-8-validate
       - zustand
 
-  '@safetech/inheriti-core-sdk@4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-core-sdk@4.0.29(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       '@tanstack/query-core': 5.103.2
       '@tanstack/react-query': 5.103.2(react@19.3.0)
+      cbor-x: 1.6.6
       crypto-js: 4.2.0
       date-fns: 4.4.0
       date-fns-tz: 3.2.0(date-fns@4.4.0)
@@ -3234,6 +3294,22 @@ snapshots:
     dependencies:
       call-bind-apply-helpers: 1.0.2
       get-intrinsic: 1.3.0
+
+  cbor-extract@2.2.2:
+    dependencies:
+      node-gyp-build-optional-packages: 5.1.1
+    optionalDependencies:
+      '@cbor-extract/cbor-extract-darwin-arm64': 2.2.2
+      '@cbor-extract/cbor-extract-darwin-x64': 2.2.2
+      '@cbor-extract/cbor-extract-linux-arm': 2.2.2
+      '@cbor-extract/cbor-extract-linux-arm64': 2.2.2
+      '@cbor-extract/cbor-extract-linux-x64': 2.2.2
+      '@cbor-extract/cbor-extract-win32-x64': 2.2.2
+    optional: true
+
+  cbor-x@1.6.6:
+    optionalDependencies:
+      cbor-extract: 2.2.2
 
   chai@5.3.3:
     dependencies:
@@ -4073,6 +4149,11 @@ snapshots:
     optional: true
 
   node-addon-api@4.3.0:
+    optional: true
+
+  node-gyp-build-optional-packages@5.1.1:
+    dependencies:
+      detect-libc: 2.1.2
     optional: true
 
   node-sarif-builder@3.4.0:

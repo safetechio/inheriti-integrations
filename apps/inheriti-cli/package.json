@@ -20,7 +20,7 @@
     "release": "pnpm run lint && pnpm run package"
   },
   "dependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.28",
+    "@safetech/inheriti-core-sdk": "4.0.29",
     "@safetech/inheriti-elements-brand": "workspace:*",
     "@safetech/inheriti-elements-core": "workspace:*",
     "clipboardy": "5.3.2",
