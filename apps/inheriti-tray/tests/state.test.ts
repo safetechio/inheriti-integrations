@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), operations: vi.fn() }));
 
+vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
+  isAvailable() { return true; }
+  getItem() { return null; }
+  setItem() {}
+  removeItem() {}
+} }));
+
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
   BUSINESS_DEPLOYMENTS: { dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
@@ -11,6 +18,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
 }));
 
 import { TraySession } from '../src/modules/launcher/main/state.js';
+import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
 
 const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'Note' }, secret: { text } });
 
@@ -121,25 +129,58 @@ describe('TraySession', () => {
     expect(session.state().creation).toMatchObject({ status: 'ready', teamId: 'team-1' });
   });
 
-  it('keeps the latest organization when team requests finish in reverse order', async () => {
+  it('keeps quick-plan creation on the current organization when edit rejects a switch', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    mock.create.mockResolvedValue({ status: 'READY', planId: 'plan-1' });
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    vi.spyOn(TrayPlanEdit.prototype, 'selectOrganization').mockRejectedValueOnce(new Error('edit_recovery_required'));
+
+    await expect(session.select('org-b')).rejects.toThrow('edit_recovery_required');
+    expect(session.state().selectedId).toBe('org-a');
+    await session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
+    expect(mock.operations).toHaveBeenCalledTimes(1);
+    expect(mock.operations).toHaveBeenCalledWith(expect.objectContaining({ organizationId: 'org-a' }));
+  });
+
+  it('keeps plan edit on the current organization when creation blocks a switch', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    mock.create.mockRejectedValue(new Error('network'));
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    await session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
+    const selectEdit = vi.spyOn(TrayPlanEdit.prototype, 'selectOrganization');
+
+    await expect(session.select('org-b')).rejects.toThrow('creation_abandon_required');
+    expect(session.state().selectedId).toBe('org-a');
+    expect(selectEdit).not.toHaveBeenCalled();
+    selectEdit.mockRestore();
+  });
+
+  it('rejects a selection while another is loading and allows retry afterward', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
     let releaseA!: (value: { teams: { id: string; name: string }[] }) => void;
-    let releaseB!: (value: { teams: { id: string; name: string }[] }) => void;
-    mock.teams
-      .mockReturnValueOnce(new Promise((resolve) => { releaseA = resolve; }))
-      .mockReturnValueOnce(new Promise((resolve) => { releaseB = resolve; }));
+    mock.teams.mockReturnValueOnce(new Promise((resolve) => { releaseA = resolve; }))
+      .mockResolvedValueOnce({ teams: [{ id: 'team-b', name: 'B team' }] });
     const session = new TraySession('dev');
     await session.restore();
     const selectingA = session.select('org-a');
-    const selectingB = session.select('org-b');
+    await vi.waitFor(() => expect(mock.teams).toHaveBeenCalledTimes(1));
+    await expect(session.select('org-b')).rejects.toThrow('organization_selection_in_progress');
     expect(session.state().selectedId).toBeUndefined();
     expect(() => session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {})).toThrow('organization_selection_in_progress');
-    releaseB({ teams: [{ id: 'team-b', name: 'B team' }] });
-    await selectingB;
-    expect(session.state().selectedId).toBeUndefined();
     releaseA({ teams: [{ id: 'team-a', name: 'A team' }] });
     await selectingA;
+    expect(session.state()).toMatchObject({ selectedId: 'org-a', teams: [{ id: 'team-a', name: 'A team' }] });
+    await session.select('org-b');
     expect(session.state()).toMatchObject({ selectedId: 'org-b', teams: [{ id: 'team-b', name: 'B team' }] });
+    expect(mock.teams).toHaveBeenCalledTimes(2);
   });
 });

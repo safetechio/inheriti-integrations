@@ -2,7 +2,7 @@ export async function buildAsset(input, definition) {
   const meta = { name: input.assetName.trim() };
   const secret = {};
 
-  if (isMedia(definition.id)) {
+  if (isMedia(definition)) {
     const file = input.file;
     if (!file) throw new Error('file_required');
     if (file.size > 18_000_000) throw new Error('file_too_large');
@@ -25,8 +25,8 @@ export async function buildAsset(input, definition) {
   return { type: definition.id, meta, secret };
 }
 
-export function isMedia(type) {
-  return type === 'DOCUMENT' || type === 'IMAGE' || type === 'VIDEO';
+export function isMedia(definition) {
+  return definition.category === 'MEDIA-FILES';
 }
 
 function readFile(file) {

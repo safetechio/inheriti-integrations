@@ -71,6 +71,8 @@ export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/node';
 export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-client-sdk/node';
 export { latestIntegrationBuild } from './node-update.js';
 export { createQuickPlanOperations, quickPlanAssetCatalog } from './quick-plan.js';
+export { createPlanEditOperations } from './plan-edit.js';
+export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node';
 export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';

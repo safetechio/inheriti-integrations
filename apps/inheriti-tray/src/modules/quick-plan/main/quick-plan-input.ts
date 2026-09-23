@@ -20,7 +20,7 @@ function parseAsset(value: unknown): QuickPlanInput['asset'] {
   const definition = quickPlanAssetCatalog.find(({ id }) => id === input.type);
   if (!definition) throw invalidInput();
 
-  const fields = definition.fields.concat(isMedia(definition.id) ? ['fileName'] : []);
+  const fields = definition.fields.concat(definition.category === 'MEDIA-FILES' ? ['fileName'] : []);
   if (Object.keys(secret).some((field) => !fields.includes(field))) throw invalidInput();
 
   const parsedSecret: Record<string, string | string[]> = {};
@@ -65,10 +65,6 @@ function assertSize(value: Record<string, unknown>): void {
     if (JSON.stringify(value).length <= 25_000_000) return;
   } catch {}
   throw invalidInput();
-}
-
-function isMedia(type: string): boolean {
-  return type === 'DOCUMENT' || type === 'IMAGE' || type === 'VIDEO';
 }
 
 function invalidInput(): Error {

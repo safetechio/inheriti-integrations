@@ -1,5 +1,5 @@
 import { createNodeQuickPlanCreator, HttpQuickPlanPort, DataAssetDefinitionService } from '@safetech/inheriti-client-sdk/node';
-import type { BusinessPlanCreateContext, QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
+import type { QuickPlanCreateContext, QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
 export const quickPlanAssetCatalog = new DataAssetDefinitionService().getCoreDefinitions()
   .map(({ id, category, fields }) => ({ id, category, fields }));
@@ -23,7 +23,7 @@ export function createQuickPlanOperations(options: {
   return {
     createContext: () => port.createContext(options.organizationId),
     teams: () => port.teams(options.organizationId),
-    create: (input: { context: BusinessPlanCreateContext; title: string; asset: QuickPlanInput['asset']; teamId?: string }) => creator.createQuickPlan({
+    create: (input: { context: QuickPlanCreateContext; title: string; asset: QuickPlanInput['asset']; teamId?: string }) => creator.createQuickPlan({
       organizationId: options.organizationId,
       planId: input.context.planId,
       title: input.title,

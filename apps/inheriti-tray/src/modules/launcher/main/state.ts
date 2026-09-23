@@ -2,6 +2,8 @@ import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegra
 import type { BusinessOrganization, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
+import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
+import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import { trayMessages as messages } from '../../../messages.js';
 
@@ -14,6 +16,7 @@ export type TrayState = {
   assetCatalog: typeof quickPlanAssetCatalog;
   selectedId?: string;
   creation?: CreationState;
+  edit: PlanEditState;
 };
 
 export class TraySession {
@@ -24,9 +27,9 @@ export class TraySession {
   private message: string | undefined;
   private authorization: AbortController | undefined;
   private pendingSignIn: Promise<void> | undefined;
-  private selectionVersion = 0;
   private pendingSelections = 0;
   private readonly quickPlans: TrayQuickPlans;
+  private readonly planEdit: TrayPlanEdit;
 
   constructor(deployment: Deployment) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -42,10 +45,11 @@ export class TraySession {
         audience: 'inheriti-integrations-api',
         environment: config.environment,
         redirectUri: 'http://127.0.0.1:53682/oauth/callback',
-        scopes: ['openid', 'plan:create', 'plan:configure'],
+        scopes: ['openid', 'plan:create', 'plan:configure', 'plan:edit'],
       },
     });
     this.quickPlans = new TrayQuickPlans(config.apiUrl, config.environment, () => this.core.auth.getAccessToken());
+    this.planEdit = new TrayPlanEdit(config.apiUrl, config.environment, () => this.core.auth.getAccessToken());
   }
 
   state(): TrayState {
@@ -59,6 +63,7 @@ export class TraySession {
       assetCatalog: quickPlanAssetCatalog,
       ...(this.selectedId && !this.pendingSelections ? { selectedId: this.selectedId } : {}),
       ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
+      edit: this.planEdit.state(),
     };
   }
 
@@ -100,18 +105,21 @@ export class TraySession {
     } catch {}
     this.organizations = [];
     this.quickPlans.clear();
+    this.planEdit.reset();
     this.selectedId = undefined;
     this.status = 'signed-out';
     this.message = undefined;
   }
 
   async select(id: string): Promise<void> {
+    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     if (!this.organizations.some((organization) => organization.id === id)) throw new Error('organization_access_denied');
-    const version = ++this.selectionVersion;
     this.pendingSelections += 1;
     try {
+      this.quickPlans.assertCanSelectOrganization(id);
+      await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
-      if (version === this.selectionVersion) this.selectedId = id;
+      this.selectedId = id;
     } finally {
       this.pendingSelections -= 1;
     }
@@ -127,12 +135,27 @@ export class TraySession {
     this.quickPlans.abandon();
   }
 
+  loadEditablePlans(onChange: () => void): Promise<void> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.planEdit.load(onChange);
+  }
+
+  addPlanAsset(planId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.planEdit.add(planId, asset, onChange);
+  }
+
+  async discardPlanEdit(): Promise<void> { await this.planEdit.discard(); }
+  recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
+
   async signOut(): Promise<void> {
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
+    this.planEdit.assertIdle();
     this.authorization?.abort();
     await this.pendingSignIn;
     this.authorization = undefined;
+    await this.planEdit.clear();
     await this.core.auth.clear();
     this.organizations = [];
     this.quickPlans.clear();
@@ -147,10 +170,14 @@ export class TraySession {
     this.organizations = organizations;
     if (!this.organizations.some(({ id }) => id === this.selectedId)) {
       this.quickPlans.clear();
+      this.planEdit.reset();
       this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;
     }
     this.status = 'signed-in';
     this.message = this.organizations.length === 0 ? messages.noOrganizations : undefined;
-    if (this.selectedId) await this.quickPlans.selectOrganization(this.selectedId);
+    if (this.selectedId) {
+      await this.quickPlans.selectOrganization(this.selectedId);
+      await this.planEdit.selectOrganization(this.selectedId);
+    }
   }
 }

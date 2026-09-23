@@ -57,7 +57,7 @@ it.skipIf(!chrome)('locks capture details while a file is being prepared', () =>
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
       const organizations=[{id:'org-1',name:'First'},{id:'org-2',name:'Second'}];
-      const base={status:'signed-in',organizations,teams:[],assetCatalog:[{id:'DOCUMENT',fields:['data','mimeType']}]};
+      const base={status:'signed-in',organizations,teams:[],assetCatalog:[{id:'DOCUMENT',category:'MEDIA-FILES',fields:['data','mimeType']}]};
       window.inheritiTray={state:async()=>({...base,selectedId:'org-1'}),onStateChanged:()=>()=>{},onAction:()=>()=>{},signIn:async()=>{},signOut:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{}};
       window.FileReader=class{readAsDataURL(){setTimeout(()=>{this.result='data:application/pdf;base64,YWJj';this.onload();},500)}};
       function fill(id,value){const input=document.getElementById(id);const prototype=input instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(input,value);input.dispatchEvent(new Event(input instanceof HTMLSelectElement?'change':'input',{bubbles:true}));}

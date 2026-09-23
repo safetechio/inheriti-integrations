@@ -36,9 +36,13 @@ export class TrayQuickPlans {
     if (this.pending) throw new Error('creation_in_progress');
   }
 
-  async selectOrganization(id: string): Promise<void> {
+  assertCanSelectOrganization(id: string): void {
     this.assertIdle();
     if (this.organizationId !== id && this.context) throw new Error('creation_abandon_required');
+  }
+
+  async selectOrganization(id: string): Promise<void> {
+    this.assertCanSelectOrganization(id);
     if (this.organizationId !== id) {
       this.clear();
       this.organizationId = id;

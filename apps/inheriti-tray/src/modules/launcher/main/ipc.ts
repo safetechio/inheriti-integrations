@@ -30,6 +30,29 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     publish();
     return session.state();
   });
+  ipcMain.handle('tray:editable-plans', async (event) => {
+    trusted(event);
+    await session.loadEditablePlans(publish);
+    return session.state();
+  });
+  ipcMain.handle('tray:add-plan-asset', async (event, planId: unknown, input: unknown) => {
+    trusted(event);
+    if (typeof planId !== 'string' || !planId || planId.length > 200) throw new Error('Invalid plan');
+    const asset = parseQuickPlanInput({ title: 'Added asset', asset: input }).asset;
+    await session.addPlanAsset(planId, asset, publish);
+    return session.state();
+  });
+  ipcMain.handle('tray:discard-plan-edit', async (event) => {
+    trusted(event);
+    await session.discardPlanEdit();
+    publish();
+    return session.state();
+  });
+  ipcMain.handle('tray:recover-plan-edit', async (event) => {
+    trusted(event);
+    await session.recoverPlanEdit(publish);
+    return session.state();
+  });
   ipcMain.handle('tray:open-app', (event) => {
     trusted(event);
     if (!appUrl) throw new Error(messages.appUrlNotConfigured);

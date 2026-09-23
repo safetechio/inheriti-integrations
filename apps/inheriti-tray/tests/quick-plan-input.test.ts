@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@safetech/inheriti-elements-core/node', () => ({ quickPlanAssetCatalog: [
-  { id: 'PLAIN-TEXT', fields: ['text'] },
-  { id: 'DOCUMENT', fields: ['data', 'mimeType'] },
+  { id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] },
+  { id: 'DOCUMENT', category: 'MEDIA-FILES', fields: ['data', 'mimeType'] },
 ] }));
 import { parseQuickPlanInput } from '../src/modules/quick-plan/main/quick-plan-input.js';
 
