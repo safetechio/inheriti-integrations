@@ -63,6 +63,8 @@ it('binds a PRO choice to the Business RP ID and keeps PIN out of page responses
   const pin = await requested;
   expect(Buffer.from(pin).toString()).toBe('123456');
   pin.fill(0);
+  expect(Buffer.from(await options.getPin()).toString()).toBe('123456');
+  expect(await (await fetch(url)).text()).not.toContain('type="password"');
   options.onTouch('read', 2, 20);
   expect(await (await fetch(url)).text()).toContain('read 2/20');
   page.prompt.close();

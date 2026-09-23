@@ -23,6 +23,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
   let touch = '';
   let choose: ((value: 'SK_MOBILE' | 'SK_PRO') => void) | undefined;
   let pin: ((value: Uint8Array) => void) | undefined;
+  let cachedPin: Uint8Array | undefined;
   let rejectChoice: ((reason: Error) => void) | undefined;
   let rejectPin: ((reason: Error) => void) | undefined;
   const sockets = new Set<Socket>();
@@ -56,14 +57,15 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       } else {
         const value = fields.get('pin');
         if (!value || value.length > 128 || !/^[\x20-\x7e]+$/.test(value)) { response.writeHead(400).end(); return; }
-        const bytes = Uint8Array.from(Buffer.from(value, 'ascii'));
-        state = 'waiting'; pin?.(bytes); pin = undefined;
+        cachedPin = Uint8Array.from(Buffer.from(value, 'ascii'));
+        state = 'waiting'; pin?.(cachedPin.slice()); pin = undefined;
       }
       response.writeHead(303, { Location: path }).end();
     });
   });
   server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
-  const abort = () => { rejectChoice?.(canceled()); rejectPin?.(canceled()); };
+  const clearPin = () => { cachedPin?.fill(0); cachedPin = undefined; };
+  const abort = () => { clearPin(); rejectChoice?.(canceled()); rejectPin?.(canceled()); };
   signal.addEventListener('abort', abort, { once: true });
   try {
     server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -83,6 +85,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
     const proDevice = device && rpId ? createNodeSafeKeyProDevice({ device, rpId,
       getPin: async () => {
         if (signal.aborted) throw canceled();
+        if (cachedPin) return cachedPin.slice();
         state = 'pin';
         const requested = new Promise<Uint8Array>((resolve, reject) => { pin = resolve; rejectPin = reject; });
         openPage();
@@ -96,7 +99,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       const choice = new Promise<'SK_MOBILE' | 'SK_PRO'>((resolve, reject) => { choose = resolve; rejectChoice = reject; });
       openPage();
       return choice;
-    }, proDevice, close: () => { signal.removeEventListener('abort', abort); rejectChoice?.(canceled()); rejectPin?.(canceled()); for (const socket of sockets) socket.destroy(); server.close(); } };
+    }, proDevice, close: () => { signal.removeEventListener('abort', abort); clearPin(); rejectChoice?.(canceled()); rejectPin?.(canceled()); for (const socket of sockets) socket.destroy(); server.close(); } };
   } catch (error) {
     signal.removeEventListener('abort', abort); for (const socket of sockets) socket.destroy(); server.close(); throw error;
   }
