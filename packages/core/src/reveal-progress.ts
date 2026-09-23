@@ -30,7 +30,7 @@ export function revealProgressMessage(
   if (phase === 'WAITING_FOR_AUTHENTICATION') return 'Authentication request sent to SafeKey Mobile. Confirm it to continue.';
   if (phase === 'WAITING_FOR_MODERATION') return moderationMessage(progress, options.moderators ?? []);
   if (phase === 'WAITING_FOR_CUSTODIAN_CLAIM') {
-    return 'Claim the custodian share in SafeKey Mobile. It must be stored there before this reveal can continue.';
+    return 'Claim the custodian share in SafeKey Mobile first, then release it for this access.';
   }
   if (phase === 'WAITING_FOR_CUSTODIAN') {
     return 'Approve the custodian request using SafeKey Mobile. This reveal will continue when the share arrives.';
