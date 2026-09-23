@@ -32,7 +32,7 @@ export interface InheritiExtensionApi {
 }
 
 export function activate(context: vscode.ExtensionContext): InheritiExtensionApi {
-  const plans = new PlanTreeProvider(context.globalStorageUri);
+  const plans = new PlanTreeProvider(context.globalStorageUri, () => keyOwner());
   let currentState: PlanViewState = { kind: 'SIGNED_OUT' };
   const render = (state: PlanViewState): void => { currentState = state; plans.render(state); };
   const sessions = new SecretSessionStore(context.secrets);
@@ -44,6 +44,10 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
   const detailChanged = new vscode.EventEmitter<vscode.Uri>();
 
   const configuration = () => resolveConfiguration((key) => vscode.workspace.getConfiguration('inheriti').get<string>(key));
+  const keyOwner = (): 'Application' | 'Organisation' => {
+    try { return configuration().business ? 'Organisation' : 'Application'; }
+    catch { return BUILD_DEPLOYMENT ? 'Organisation' : 'Application'; }
+  };
   const withPromptCancellation = async <T>(signal: AbortSignal | undefined, show: (token: vscode.CancellationToken) => Thenable<T>): Promise<T> => {
     const source = new vscode.CancellationTokenSource();
     const abort = () => source.cancel();
@@ -186,7 +190,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
           const plan = await (await currentCore()).getPlan(planIdFromUriPath(uri.path));
           return started === revision ? renderPlanDetail(plan) : '';
         } catch (error) {
-          return messageFor(codeOf(error));
+          return messageFor(codeOf(error), keyOwner());
         }
       },
     }),
@@ -212,7 +216,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         await vscode.window.showInformationMessage('Signed in to Inheriti.');
         void notifyUpdate();
       } catch (error) {
-        await vscode.window.showErrorMessage(messageFor(codeOf(error)));
+        await vscode.window.showErrorMessage(messageFor(codeOf(error), keyOwner()));
       }
       await changeOrganization();
       await refresh();
@@ -291,7 +295,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         await refresh();
       } catch (error) {
         await vscode.window.showErrorMessage(messageFor(
-          codeOf(error), configuration().business ? 'Organisation' : 'Application',
+          codeOf(error), keyOwner(),
         ));
       }
     }),
@@ -330,7 +334,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
     })]),
 
     vscode.commands.registerCommand('inheriti.openPlan', async (planId: string) => {
-      try { await currentCore(); } catch (error) { await vscode.window.showErrorMessage(messageFor(codeOf(error))); return; }
+      try { await currentCore(); } catch (error) { await vscode.window.showErrorMessage(messageFor(codeOf(error), keyOwner())); return; }
       const uri = vscode.Uri.parse(`${PLAN_SCHEME}:${planUriPath(planId)}`);
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
     }),
@@ -365,14 +369,14 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
             if (uri && uri.scheme !== 'file') throw Object.assign(new Error('Choose a local file.'), { code: 'download_local_file_required' });
             return uri?.fsPath;
           },
-        }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application', safeKeyPro());
+        }, activeReveals, selectedPlanId, keyOwner(), safeKeyPro());
         await vscode.window.showInformationMessage('Asset saved. Reveal closed.');
       } catch (error) {
         if ((error as { name?: unknown })?.name === 'AbortError' || (error as Error)?.message === 'SAFEKEY_ABORTED') {
           await vscode.window.showInformationMessage('Download canceled.'); return;
         }
         await vscode.window.showErrorMessage(messageFor(
-          codeOf(error), configuration().business ? 'Organisation' : 'Application',
+          codeOf(error), keyOwner(),
         ));
       }
     }),
@@ -402,7 +406,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         ? 'Access aborted. The next reveal of this plan will start a new request.'
         : 'No access is open on this plan.');
     } catch (error) {
-      await vscode.window.showErrorMessage(messageFor(codeOf(error)));
+      await vscode.window.showErrorMessage(messageFor(codeOf(error), keyOwner()));
     }
   }
 
@@ -458,7 +462,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
             || !targetEditor.selection.isEqual(targetSelection)) return false;
           return targetEditor.edit((edit) => edit.replace(targetSelection, value), { undoStopBefore: true, undoStopAfter: true });
         },
-      }, activeReveals, selectedPlanId, configuration().business ? 'Organisation' : 'Application', safeKeyPro());
+      }, activeReveals, selectedPlanId, keyOwner(), safeKeyPro());
       await vscode.window.showInformationMessage('Protected field inserted. Reveal closed.');
     } catch (error) {
       if (codeOf(error) === 'governance_denied') {
@@ -470,7 +474,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
         return;
       }
       await vscode.window.showErrorMessage(messageFor(
-        codeOf(error), configuration().business ? 'Organisation' : 'Application',
+        codeOf(error), keyOwner(),
       ));
     }
   }
@@ -478,7 +482,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
   void refresh();
   void notifyUpdate();
 
-  return { currentRows: () => rowsFor(currentState), refresh };
+  return { currentRows: () => rowsFor(currentState, keyOwner()), refresh };
 }
 
 export function deactivate(): void {}

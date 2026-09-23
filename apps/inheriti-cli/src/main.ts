@@ -110,8 +110,10 @@ export async function run(
   if (topic) { terminal.write(commandUsage(topic, environmentVariables)); return 0; }
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
+  let business = Boolean(BUILD_DEPLOYMENT);
   try {
     const configuration = resolveConfiguration(environmentVariables, environmentVariables.INHERITI_ELEMENTS_CONFIRM_LIVE);
+    business = configuration.business === true;
     // The device grant is a different OAuth client, so the choice has to be made before the context
     // exists — and every later command reads whichever session that login wrote.
     const headless = command === 'login' && rest.includes('--device');
@@ -155,7 +157,7 @@ export async function run(
     return 1;
   } catch (error) {
     if (command === '__complete') return 0;
-    terminal.writeError(messageFor(error));
+    terminal.writeError(messageFor(error, business));
     return 1;
   }
 }
@@ -448,7 +450,7 @@ function durationMs(value: string): number | undefined {
 const GOVERNED_FLAG_REMOVED = 'Reveals no longer take --governed: the plan applies its own approval rules automatically.';
 
 /** Operators see a mapped message; a stable code is kept for support without a stack trace. */
-export function messageFor(error: unknown): string {
+export function messageFor(error: unknown, business = false): string {
   if (error instanceof OrganizationChoiceRequired) return error.message;
   if (error instanceof CliConfigurationInvalid) return error.message;
   if (error instanceof UsePlanInvalid) return error.message;
@@ -460,6 +462,8 @@ export function messageFor(error: unknown): string {
       : 'The Application key is not available from SafeKey Mobile for this account.';
   }
   const code = (error as { code?: unknown })?.code;
+  if (business && code === 'plan_not_found') return 'No such plan in this Organisation.';
+  if (business && code === 'action_not_allowed') return 'This Organisation is not allowed to open that. Check the integration capabilities and the asset type.';
   const deviceError = (error as { message?: unknown })?.message;
   if (typeof deviceError === 'string' && deviceError.startsWith('SAFEKEY_')) return MESSAGES[deviceError] ?? 'SafeKey PRO could not complete the operation.';
   if (code === 'governance_denied') return (error as Error).message;

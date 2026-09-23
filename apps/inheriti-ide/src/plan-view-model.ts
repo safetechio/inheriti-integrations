@@ -18,7 +18,6 @@ export interface PlanRow {
 
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_reauthentication_required: 'Session expired — sign in again',
-  plan_not_found: 'No such plan in this Application',
   plan_request_rate_limited: 'Too many requests — try again shortly',
   elements_api_unavailable: 'The plan service is unavailable — try again shortly',
   plan_request_failed: 'Could not reach the plan service',
@@ -40,6 +39,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
 };
 
 export function messageFor(code: string, keyOwner: 'Application' | 'Organisation' = 'Application'): string {
+  if (code === 'plan_not_found') return `No such plan in this ${keyOwner}`;
   if (code === 'master_key_required') return `The ${keyOwner} key is not available from SafeKey Mobile for this account`;
   return MESSAGES[code] ?? 'Could not load plans';
 }
@@ -48,15 +48,15 @@ export function messageFor(code: string, keyOwner: 'Application' | 'Organisation
  * Every state renders as a distinct row, so "signed out", "no plans" and "the request failed" are
  * never the same blank list. Server facts only: a row shows what the plan says, nothing derived.
  */
-export function rowsFor(state: PlanViewState): readonly PlanRow[] {
+export function rowsFor(state: PlanViewState, keyOwner: 'Application' | 'Organisation' = 'Application'): readonly PlanRow[] {
   if (state.kind === 'SIGNED_OUT') return [message('Not signed in', 'Run “Inheriti: Sign In”')];
   if (state.kind === 'LOADING') return [message('Loading plans…', '')];
   if (state.kind === 'SELECT_ORGANIZATION') return [message(
     state.count === 0 ? 'No eligible Business organizations' : 'Choose a Business organization',
     state.count === 0 ? '' : 'Run “Inheriti: Select Business Organization”',
   )];
-  if (state.kind === 'EMPTY') return [message(state.organization ? `No plans in ${state.organization}` : 'No plans in this Application', '')];
-  if (state.kind === 'ERROR') return [message(messageFor(state.code), state.code)];
+  if (state.kind === 'EMPTY') return [message(state.organization ? `No plans in ${state.organization}` : `No plans in this ${keyOwner}`, '')];
+  if (state.kind === 'ERROR') return [message(messageFor(state.code, keyOwner), state.code)];
   return [
     ...(state.organization ? [message(`Organization: ${state.organization}`, '')] : []),
     ...state.plans.map((plan) => ({

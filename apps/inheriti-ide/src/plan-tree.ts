@@ -9,7 +9,7 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<PlanTreeItem> {
   private readonly changed = new vscode.EventEmitter<PlanTreeItem | undefined>();
   private state: PlanViewState = { kind: 'SIGNED_OUT' };
 
-  public constructor(private readonly avatarRoot?: vscode.Uri) {}
+  public constructor(private readonly avatarRoot?: vscode.Uri, private readonly keyOwner: () => 'Application' | 'Organisation' = () => 'Application') {}
 
   public readonly onDidChangeTreeData = this.changed.event;
 
@@ -23,7 +23,7 @@ export class PlanTreeProvider implements vscode.TreeDataProvider<PlanTreeItem> {
   }
 
   public getChildren(): PlanTreeItem[] | Promise<PlanTreeItem[]> {
-    const items = rowsFor(this.state).map((row) => new PlanTreeItem(row.label, row.description, row.contextValue, row.planId));
+    const items = rowsFor(this.state, this.keyOwner()).map((row) => new PlanTreeItem(row.label, row.description, row.contextValue, row.planId));
     if (!this.avatarRoot) return items;
     return this.withAvatars(items, this.avatarRoot);
   }

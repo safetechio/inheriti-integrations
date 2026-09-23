@@ -40,4 +40,10 @@ describe('plan view model', () => {
     expect(messageFor('operator_reauthentication_required')).toMatch(/sign in again/iu);
     expect(messageFor('something_new_from_the_server')).toBe('Could not load plans');
   });
+
+  it('names the selected plan scope in missing-plan copy', () => {
+    expect(messageFor('plan_not_found', 'Organisation')).toBe('No such plan in this Organisation');
+    expect(messageFor('plan_not_found', 'Application')).toBe('No such plan in this Application');
+    expect(rowsFor({ kind: 'ERROR', code: 'plan_not_found' }, 'Organisation')[0]?.label).toBe('No such plan in this Organisation');
+  });
 });

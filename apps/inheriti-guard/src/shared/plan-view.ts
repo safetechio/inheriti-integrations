@@ -10,7 +10,6 @@ export type PanelState = (
 
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_reauthentication_required: 'Session expired — sign in again',
-  plan_not_found: 'No such plan in this Application',
   plan_request_rate_limited: 'Too many requests — try again shortly',
   elements_api_unavailable: 'The plan service is unavailable — try again shortly',
   plan_request_failed: 'Could not reach the plan service',
@@ -35,7 +34,8 @@ export function codeOf(error: unknown, fallback = 'plan_request_failed'): string
   return fallback;
 }
 
-export function messageFor(code: string): string {
+export function messageFor(code: string, business = false): string {
+  if (code === 'plan_not_found') return `No such plan in this ${business ? 'Organisation' : 'Application'}`;
   return MESSAGES[code] ?? 'Something went wrong';
 }
 
@@ -55,7 +55,7 @@ export function rowsFor(state: PanelState): readonly PanelRow[] {
     label: state.reason === 'no-autofill-plans' ? 'No plans support autofill' : 'No plans available',
     detail: '',
   }];
-  if (state.kind === 'ERROR') return [{ label: messageFor(state.code), detail: state.code }];
+  if (state.kind === 'ERROR') return [{ label: messageFor(state.code, Boolean(state.organizationId)), detail: state.code }];
   if (state.kind === 'SELECT_ORGANIZATION') return [{ label: state.organizations.length ? 'Choose an organization' : 'No organizations available', detail: state.reason ?? '' }];
   return state.plans.map((plan) => ({ label: plan.name, detail: plan.status, avatarId: plan.id, ...(plan.status.toUpperCase() === 'DRAFT' ? {} : { planId: plan.id }), draft: plan.status.toUpperCase() === 'DRAFT' }));
 }

@@ -44,6 +44,11 @@ describe('plans reveal', () => {
     expect(messageFor({ code: 'safekey_pro_local_device_required' })).toContain('Open it locally');
   });
 
+  it('names the Business organisation in plan errors while preserving standalone copy', () => {
+    expect(messageFor({ code: 'plan_not_found' }, true)).toBe('No such plan in this Organisation.');
+    expect(messageFor({ code: 'plan_not_found' })).toBe('No such plan in this Application.');
+  });
+
   // Interactively this opens the picker; piped, it stays the printed list a script can read.
   it('lists selectors without opening or printing secret values when no field was requested', async () => {
     const output = terminal(false);

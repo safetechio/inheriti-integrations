@@ -44,6 +44,8 @@ describe('panel state', () => {
     expect(codeOf(Object.assign(new Error('x'), { code: 'plan_not_found' }))).toBe('plan_not_found');
     expect(messageFor('sign_in_failed')).toBe('Could not sign in');
     expect(messageFor('ERR_INVALID_URL')).toBe('Something went wrong');
+    expect(rowsFor({ kind: 'ERROR', code: 'plan_not_found', organizationId: 'org-1' })[0]?.label).toBe('No such plan in this Organisation');
+    expect(messageFor('plan_not_found')).toBe('No such plan in this Application');
   });
 });
 

@@ -409,7 +409,7 @@ function renderPanel(state: PanelState): void {
   signOut.hidden = !signedIn;
   // The plans list carries an error only once signed in; before that this is the one place to say it.
   signedOutError.hidden = state.kind !== 'ERROR';
-  signedOutError.textContent = state.kind === 'ERROR' ? messageFor(state.code) : '';
+  signedOutError.textContent = state.kind === 'ERROR' ? messageFor(state.code, Boolean(state.organizationId)) : '';
   // Sign-in needs a configured plan service, so an unconfigured
   // extension offers the page that configures it instead of a sign-in that cannot succeed.
   const needsConfiguration = state.kind === 'ERROR' && CONFIGURATION_CODES.has(state.code);
