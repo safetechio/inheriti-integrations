@@ -6,6 +6,7 @@ import { inheritiGuardBrand, inheritiGuardShield, planAvatarSvg } from '@safetec
 import type { GuardActivityEntry, GuardSettings } from '../shared/guard-contract.js';
 
 const origin = required('origin');
+required('guard-version').textContent = `Unified protection · v${chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}`;
 const appMain = required<HTMLElement>('app-main');
 const planAccessPanel = required<HTMLElement>('plan-access-panel');
 const panelTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.plan-tabs [role="tab"]'));

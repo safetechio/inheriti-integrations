@@ -1,10 +1,11 @@
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNodeIntegrationCore, selectBusinessOrganization } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization } from '@safetech/inheriti-elements-core/node';
 import type { NodeIntegrationCore, OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
 import { planDetail, planSummary } from './metadata.js';
 import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/node';
@@ -15,7 +16,7 @@ const coded = (code: string) => Object.assign(new Error(code), { code });
 declare const __INHERITI_PRODUCTION_BUILD__: boolean;
 declare const __INHERITI_DEPLOYMENT__: string;
 const developmentBuild = typeof __INHERITI_PRODUCTION_BUILD__ !== 'boolean' || !__INHERITI_PRODUCTION_BUILD__;
-const lockedDeployment = typeof __INHERITI_DEPLOYMENT__ === 'string'
+export const lockedDeployment = typeof __INHERITI_DEPLOYMENT__ === 'string'
   ? businessDeployment(__INHERITI_DEPLOYMENT__) : undefined;
 
 type Configuration = { apiUrl: string; issuer: string; clientId: string; environment: 'TEST' | 'LIVE'; redirectUri: string };
@@ -52,6 +53,27 @@ export class MetadataTools {
   private job?: { id: string; organizationId: string; phase: string; message?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
+
+  async updateAccess(onChallenge: (uri: string, code: string) => void): Promise<NodeIntegrationCore> {
+    const initial = await this.ready();
+    if ('core' in initial) return initial.core;
+    onChallenge(initial.login.verificationUri, initial.login.userCode);
+    const core = await this.client();
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (await core.getAccessToken()) return core;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    throw coded('authorization_timed_out');
+  }
+
+  async checkUpdate() {
+    const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
+    if (!lockedDeployment) return { version, updateAvailable: false, reason: 'Updates require a channel-locked build.' };
+    const ready = await this.ready(); if ('login' in ready) return ready;
+    const build = latestIntegrationBuild(await ready.core.listInternalBuilds(), 'mcp', version, `${process.platform}-${process.arch}`);
+    return { version, updateAvailable: Boolean(build), latestVersion: build?.version,
+      instruction: build ? 'Ask the operator to run inheriti-mcp update --install in a terminal, then restart this MCP server.' : undefined };
+  }
 
   private async client(): Promise<NodeIntegrationCore> {
     if (!this.core) {
@@ -218,9 +240,10 @@ export function registerRevealTools(server: McpServer, tools: MetadataTools) {
 }
 
 export async function runServer(localDelivery = false) {
-  const server = new McpServer({ name: 'inheriti-mcp', version: '0.0.0' });
+  const server = new McpServer({ name: 'inheriti-mcp', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version });
   const tools = new MetadataTools();
   server.registerTool('list_organizations', { description: 'List available organizations and the current selection. May return a sign-in code.', inputSchema: z.object({}) }, safeResult(() => tools.listOrganizations()));
+  server.registerTool('check_update', { description: 'Check this MCP server version and whether an update exists in its locked channel. Does not expose a download URL.', inputSchema: z.object({}) }, safeResult(() => tools.checkUpdate()));
   server.registerTool('select_organization', { description: 'Select an organization by ID from list_organizations.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.selectOrganization(id)));
   server.registerTool('list_backup_plans', { description: 'List plan metadata in the selected organization. May return a sign-in code.', inputSchema: z.object({ cursor: z.string().optional() }) }, safeResult(({ cursor }: { cursor?: string | undefined }) => tools.listPlans(cursor)));
   server.registerTool('get_backup_plan', { description: 'Get safe metadata for one plan in the selected organization.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.getPlan(id)));

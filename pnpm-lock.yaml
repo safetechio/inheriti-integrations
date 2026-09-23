@@ -107,8 +107,8 @@ importers:
   packages/core:
     dependencies:
       '@safetech/inheriti-client-sdk':
-        specifier: 1.17.8
-        version: 1.17.8(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 1.17.9
+        version: 1.17.9(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
     devDependencies:
       '@safetech/inheriti-elements-test-kit':
         specifier: workspace:*
@@ -514,8 +514,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@safetech/inheriti-client-sdk@1.17.8':
-    resolution: {integrity: sha512-iFV/TOGeB3IEqTayg7902vLBo5SNyDmuBw3KBKpo1cnXHabIuv02lpTdWVARJwYy0XNixfFBgTC+7UVIbOswJA==}
+  '@safetech/inheriti-client-sdk@1.17.9':
+    resolution: {integrity: sha512-OYRWUZd7am+mOle2q6Tc1TphimT1poTqJWlq6xY1FxKO9k/Vazne50zUIhQlFqsoQj5j3zijhSoMzhO/zhh3FA==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.1.0
@@ -2768,7 +2768,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.4':
     optional: true
 
-  '@safetech/inheriti-client-sdk@1.17.8(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-client-sdk@1.17.9(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       '@safetech/inheriti-core-sdk': 4.0.28(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/safekey-sdk': 1.0.0

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { BUILD_DEPLOYMENT, CliConfigurationInvalid, defaultConfigurationPath, resolveConfiguration } from './configuration.js';
 import { defaultSessionPath } from './session-store.js';
@@ -14,6 +14,7 @@ import { UsePlanInvalid, usePlan } from './commands/use.js';
 import { completeWords, completionNeedsPlanContext, printCompletionScript } from './commands/completion.js';
 import { processTerminal } from './output.js';
 import { organizationCommand, selectedOrganization, OrganizationChoiceRequired } from './organizations.js';
+import { notifyCliUpdate, updateCli } from './commands/update.js';
 import type { Terminal } from './output.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
 
@@ -50,6 +51,7 @@ inheriti <command>
   secrets resolve [id] --field asset.field
                      Resolve one field for a machine wrapper. Raw output is intended for a pipe.
   completion <shell> Print the tab-completion script for bash, zsh or fish
+  update [--install] Check for a newer CLI build; install after confirmation
   help [command]    Show detailed usage without signing in
 
 An id or a --field left out is asked for in a terminal, and refused in a pipe.
@@ -78,6 +80,7 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
     'plans abort': `Usage: inheriti plans abort PLAN_ID\n\nAbandon the current access request for this operator. The next reveal starts a new access flow.`,
     completion: `Usage: inheriti completion <bash|zsh|fish>\n\nPrint a shell-completion script. This command does not require configuration or sign-in.`,
+    update: `Usage: inheriti update [--install]\n\nCheck for an update in this build's channel. --install confirms and installs it with npm.`,
     help: `Usage: inheriti help [COMMAND [SUBCOMMAND]]\n\nExamples:\n  inheriti help plans reveal\n  inheriti plans reveal --help`,
   };
   return details[command] ?? usage(environmentVariables);
@@ -98,6 +101,10 @@ export async function run(
 ): Promise<number> {
   const [command, ...rest] = argv;
   if (command === undefined) { terminal.write(usage(environmentVariables)); return 1; }
+  if (command === '--version' || command === 'version') {
+    terminal.write(`${JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version}\n`);
+    return 0;
+  }
   if (command === '--help') { terminal.write(usage(environmentVariables)); return 0; }
   const topic = helpTopic(argv);
   if (topic) { terminal.write(commandUsage(topic, environmentVariables)); return 0; }
@@ -113,6 +120,11 @@ export async function run(
       defaultSessionPath(environmentVariables),
       headless ? 'device' : 'interactive',
     );
+    if (command === 'update') {
+      if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--install')) { terminal.writeError(commandUsage(['update'], environmentVariables)); return 1; }
+      if (!configuration.business || !BUILD_DEPLOYMENT) { terminal.writeError('Updates require a channel-locked Business build.'); return 1; }
+      return await updateCli(context, terminal, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, rest[0] === '--install');
+    }
     if (command === 'organizations') {
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
@@ -541,4 +553,17 @@ const MESSAGES: Readonly<Record<string, string>> = {
 // npm links the global binary, so argv[1] is the symlink while `import.meta.url` is its target.
 const isEntrypoint = process.argv[1] !== undefined
     && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
-if (isEntrypoint) process.exitCode = await run(process.argv.slice(2), process.env, processTerminal());
+if (isEntrypoint) {
+  const terminal = processTerminal();
+  const argv = process.argv.slice(2);
+  process.exitCode = await run(argv, process.env, terminal);
+  if (process.exitCode === 0 && terminal.interactive && ['login', 'organizations', 'plans'].includes(argv[0] ?? '')) {
+    try {
+      const configuration = resolveConfiguration(process.env, process.env.INHERITI_ELEMENTS_CONFIRM_LIVE);
+      if (configuration.business && BUILD_DEPLOYMENT) {
+        await notifyCliUpdate(createCliContext(configuration, defaultSessionPath(process.env)), terminal,
+          JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, defaultSessionPath(process.env));
+      }
+    } catch { /* Update notices never change command results. */ }
+  }
+}

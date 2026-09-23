@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { chromeExtensionId } from './chrome-extension-id.mjs';
-import { matchingBuildDeployment } from './build-deployment.mjs';
+import { matchingBuildDeployment, packageVersionForDeployment } from './build-deployment.mjs';
 
 const root = process.cwd();
 const deployment = await matchingBuildDeployment(root);
@@ -15,6 +15,8 @@ if (builtManifest.version !== packageManifest.version) {
     `Refusing to package version drift: package.json=${packageManifest.version}, dist/manifest.json=${builtManifest.version}`,
   );
 }
+const version = packageVersionForDeployment(packageManifest.version, deployment);
+if (builtManifest.version_name !== version) throw new Error(`Refusing to package version drift: expected ${version}, got ${builtManifest.version_name}`);
 
 const EXPECTED_PRODUCTION_ID = 'kebghapddpgnfjpkecphjecbffdhodln';
 const extensionId = chromeExtensionId(builtManifest.key);
@@ -24,7 +26,7 @@ if (deployment === 'prod' && extensionId !== EXPECTED_PRODUCTION_ID) {
   );
 }
 
-const archive = resolve(artifacts, `InheritiGuard-${packageManifest.version}.zip`);
+const archive = resolve(artifacts, `InheritiGuard-${version}.zip`);
 await mkdir(artifacts, { recursive: true });
 await rm(archive, { force: true });
 

@@ -4,7 +4,7 @@ import { dirname, relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import { optionalToastPlugin } from './optional-toast-plugin.mjs';
 import { packageDirectory } from './package-directory.mjs';
-import { buildDefines, requiredBuildDeployment, writeBuildDeployment } from './build-deployment.mjs';
+import { buildDefines, packageVersionForDeployment, requiredBuildDeployment, writeBuildDeployment } from './build-deployment.mjs';
 import { manifestKeyForBuild } from './chrome-extension-id.mjs';
 
 const root = process.cwd();
@@ -126,6 +126,7 @@ for (const page of ['side-panel', 'blocked']) {
 }
 await cp(resolve(source, 'side-panel', 'font-app.ttf'), resolve(output, 'side-panel', 'font-app.ttf'));
 const manifest = { ...sourceManifest, version: packageManifest.version,
+  version_name: packageVersionForDeployment(packageManifest.version, deployment),
   key: manifestKeyForBuild(deployment, sourceManifest.key) };
 await writeFile(
   resolve(output, 'manifest.json'),

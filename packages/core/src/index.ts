@@ -64,6 +64,11 @@ export interface BusinessOrganizationFacade {
   listOrganizations(): Promise<import('@safetech/inheriti-client-sdk').BusinessOrganization[]>;
 }
 
+export interface InternalBuildFacade {
+  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuild[]>;
+  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuildDownload>;
+}
+
 export interface ScopedRevealHandle {
   readonly session: { id: string; expiresAt: string };
   field<TValue = unknown>(selector: string, options?: {
@@ -165,6 +170,7 @@ export interface IntegrationCoreOptions<TListInput, TPage, TDetail> {
   scopedReveals?: ScopedRevealFacade;
   masterKeys?: MasterKeyFacade;
   organizations?: BusinessOrganizationFacade;
+  internalBuilds?: InternalBuildFacade;
 }
 
 /** Composition only: protocol and product behavior stay in the Client SDK and Elements API. */
@@ -177,6 +183,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   private readonly scopedReveals: ScopedRevealFacade | undefined;
   private readonly masterKeys: MasterKeyFacade | undefined;
   private readonly organizations: BusinessOrganizationFacade | undefined;
+  private readonly internalBuilds: InternalBuildFacade | undefined;
   private readonly elements: PlanFacade<TListInput, TPage, TDetail>;
 
   constructor(options: IntegrationCoreOptions<TListInput, TPage, TDetail>) {
@@ -190,9 +197,18 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
     this.scopedReveals = options.scopedReveals;
     this.masterKeys = options.masterKeys;
     this.organizations = options.organizations;
+    this.internalBuilds = options.internalBuilds;
   }
 
   getAccessToken(): Promise<string | undefined> { return this.auth.getAccessToken(); }
+  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuild[]> {
+    if (!this.internalBuilds) throw new Error('business_context_required');
+    return this.internalBuilds.listInternalBuilds();
+  }
+  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuildDownload> {
+    if (!this.internalBuilds) throw new Error('business_context_required');
+    return this.internalBuilds.requestInternalBuildDownload(id);
+  }
   listOrganizations(): Promise<import('@safetech/inheriti-client-sdk').BusinessOrganization[]> {
     if (!this.organizations) throw new Error('business_context_required');
     return this.organizations.listOrganizations();

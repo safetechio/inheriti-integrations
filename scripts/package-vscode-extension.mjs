@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { matchingBuildDeployment } from './build-deployment.mjs';
+import { matchingBuildDeployment, packageVersionForDeployment } from './build-deployment.mjs';
 import { packageDirectory } from './package-directory.mjs';
 
 /**
@@ -25,6 +25,7 @@ const artifacts = resolve(root, process.argv.find((value) => value.startsWith('-
 const stage = resolve(artifacts, 'stage');
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const version = packageVersionForDeployment(manifest.version === '0.0.0' ? '0.0.1' : manifest.version, deployment);
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await cp(resolve(root, 'dist'), resolve(stage, 'dist'), { recursive: true });
@@ -34,7 +35,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   name: NAME,
   displayName: production ? 'Inheriti® IDE for VS Code' : 'Inheriti® IDE for VS Code (Development Only)',
   publisher: PUBLISHER,
-  version: manifest.version === '0.0.0' ? '0.0.1' : manifest.version,
+  version,
   description: manifest.description,
   license: 'SEE LICENSE IN README.md',
   engines: manifest.engines,
@@ -69,7 +70,7 @@ const result = spawnSync(process.execPath, [
   '--no-dependencies',
   '--allow-missing-repository',
   '--skip-license',
-  '--out', resolve(artifacts, `${NAME}-${manifest.version === '0.0.0' ? '0.0.1' : manifest.version}.vsix`),
+  '--out', resolve(artifacts, `${NAME}-${version}.vsix`),
 ], { cwd: stage, stdio: 'inherit' });
 if (result.status !== 0) process.exit(result.status ?? 1);
 await rm(stage, { recursive: true, force: true });

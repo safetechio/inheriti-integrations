@@ -59,12 +59,17 @@ export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): 
     ...(options.business ? { organizations: { listOrganizations: () => new HttpElementsApiPort(options.apiUrl,
       options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
       options.organizationId !== undefined ? { organizationId: options.organizationId } : {}).listBusinessOrganizations() } } : {}),
+    ...(options.business ? { internalBuilds: new HttpElementsApiPort(options.apiUrl,
+      options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) } : {}),
     ...composeRevealWorkflows(elements),
   });
 }
 
 export { selectBusinessOrganization, BusinessOrganizationSelectionError } from '@safetech/inheriti-client-sdk/node';
 export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/node';
+export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-client-sdk/node';
+export { latestIntegrationBuild } from './node-update.js';
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';
 export { revealModeOf } from './plans.js';

@@ -34,6 +34,8 @@ describe('VS Code extension manifest', () => {
       'inheriti.signIn',
       'inheriti.signOut',
       'inheriti.refresh',
+      'inheriti.checkUpdate',
+      'inheriti.showVersion',
       'inheriti.selectOrganization',
       'inheriti.openPlan',
       'inheriti.revealPlan',

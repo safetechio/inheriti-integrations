@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-vscode-extension",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
   "type": "module",
@@ -54,6 +54,14 @@
         "command": "inheriti.refresh",
         "title": "Inheriti: Refresh Plans",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "inheriti.checkUpdate",
+        "title": "Inheriti: Check for Updates"
+      },
+      {
+        "command": "inheriti.showVersion",
+        "title": "Inheriti: Show Version"
       },
       {
         "command": "inheriti.selectOrganization",

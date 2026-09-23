@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheritiguard-chrome-extension",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "type": "module",
   "description": "InheritiGuard Chrome MV3 extension with Browser Protection and Plan Access",
