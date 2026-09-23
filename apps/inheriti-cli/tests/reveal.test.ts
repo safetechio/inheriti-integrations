@@ -40,6 +40,10 @@ describe('plans reveal', () => {
     );
   });
 
+  it('guides a direct runner away from a claimed SafeKey PRO share', () => {
+    expect(messageFor({ code: 'safekey_pro_local_device_required' })).toContain('Open it locally');
+  });
+
   // Interactively this opens the picker; piped, it stays the printed list a script can read.
   it('lists selectors without opening or printing secret values when no field was requested', async () => {
     const output = terminal(false);

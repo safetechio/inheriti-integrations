@@ -529,6 +529,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
   custodian_share_unavailable: 'SafeKey Mobile answered without a custodian share, so this plan cannot be opened.',
+  safekey_pro_local_device_required: 'This plan uses SafeKey PRO. Open it locally with a connected SafeKey PRO device; this runner cannot release that share.',
   plan_key_unwrap_failed: 'The Organisation key released by SafeKey Mobile could not open this plan.',
   plan_share_decryption_failed: 'One of the released plan shares could not be decrypted.',
   plan_share_reconstruction_failed: 'The released shares could not reconstruct this plan.',
