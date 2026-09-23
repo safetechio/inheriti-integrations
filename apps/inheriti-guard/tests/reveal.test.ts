@@ -23,7 +23,10 @@ beforeEach(() => {
   Object.assign(globalThis, {
     chrome: {
       scripting: { executeScript },
-      tabs: { query: vi.fn(async () => [{ id: 7, url: 'https://db.example.test/login' }]) },
+      tabs: {
+        get: vi.fn(async () => ({ id: 7, windowId: 17, url: 'https://db.example.test/login' })),
+        query: vi.fn(async () => [{ id: 7, windowId: 17, url: 'https://db.example.test/login' }]),
+      },
       alarms: { create: alarmCreate, clear: alarmClear },
       identity: { getRedirectURL: (path: string) => `https://host.chromiumapp.org/${path}` },
     },
@@ -319,6 +322,22 @@ describe('Chrome reveal controller', () => {
     expect((instance.withReveal as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toMatchObject({ mode: 'GOVERNED' });
   });
 
+  it('passes the Core SafeKey PRO device to a governed reveal and closes the panel operation', async () => {
+    const instance = core({ getPlan: vi.fn(async () => ({ ...plan, governance: { mode: 'GOVERNED' } })) });
+    const device = { write: vi.fn(), read: vi.fn() };
+    const choose = vi.fn(async () => 'SK_PRO' as const);
+    const finish = vi.fn();
+    const controller = new ChromeRevealController(async () => asCore(instance), storage, () => 'Organisation',
+      async () => ({ selectCustodianDevice: choose, proDevice: device, finish }));
+
+    await controller.fill({ planId: 'plan-1', selector: 'prod-db.username', origin: 'https://db.example.test', tabId: 7 });
+
+    expect((instance.withReveal as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toMatchObject({
+      mode: 'GOVERNED', selectCustodianDevice: choose, proDevice: device,
+    });
+    expect(finish).toHaveBeenCalledOnce();
+  });
+
   it('authorizes AUTOFILL_FIELD for the active origin and injects only the selected value after a click', async () => {
     const instance = core();
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
@@ -335,6 +354,20 @@ describe('Chrome reveal controller', () => {
     expect([...values.keys()]).toEqual([]);
     expect(alarmCreate).toHaveBeenCalled();
     expect(alarmClear).toHaveBeenCalled();
+  });
+
+  it('fills the original browser window while the SafeKey PRO popup has focus', async () => {
+    const query = chrome.tabs.query as ReturnType<typeof vi.fn>;
+    query.mockImplementation(async (details: chrome.tabs.QueryInfo) => details.windowId === 17
+      ? [{ id: 7, windowId: 17, url: 'https://db.example.test/login' }]
+      : [{ id: 99, windowId: 99, url: 'chrome-extension://guard/safekey-popup/index.html' }]);
+    const controller = new ChromeRevealController(async () => asCore(core()), storage);
+
+    await expect(controller.fill({
+      planId: 'plan-1', selector: 'prod-db.username', origin: 'https://db.example.test', tabId: 7,
+    })).resolves.toEqual({ kind: 'DONE', message: 'Field filled. Reveal closed.' });
+    expect(query).toHaveBeenCalledWith({ active: true, windowId: 17 });
+    expect(executeScript).toHaveBeenCalledOnce();
   });
 
   it('closes a persisted reveal after service-worker eviction without restoring plaintext', async () => {

@@ -5,10 +5,11 @@ import { isGuardContentRequest, isGuardRequest, isOverlayRequest, isSidePanelReq
 import { SessionStorageOperatorSessionStore } from './session-store.js';
 import { signIn } from './auth.js';
 import { createCore, loadPlanAssets, loadPlans } from './plans.js';
-import type { BrowserIntegrationCore, BusinessOrganization } from '@safetech/inheriti-elements-core/browser';
+import { BUSINESS_DEPLOYMENTS, businessUiRpId, type BrowserIntegrationCore, type BusinessOrganization } from '@safetech/inheriti-elements-core/browser';
 import { resolveConfiguration, type ChromeConfiguration } from '../shared/configuration.js';
 import { codeOf, type PanelState } from '../shared/plan-view.js';
 import { ChromeRevealController, isRevealDeadline } from './reveal.js';
+import { SafeKeyProPanelBridge } from './safekey-pro-bridge.js';
 import { readBusinessOrganization, readStoredConfiguration, writeBusinessOrganization } from '../shared/stored-configuration.js';
 import { suggestFieldMappings } from './field-suggestions.js';
 import { pageFirstSuggestions } from './page-first-suggestions.js';
@@ -20,7 +21,19 @@ const pendingContext = new PendingTabContextStore();
 // Session-scoped, and unreachable from a content script. Never `chrome.storage.local`.
 const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session);
 let keyOwner: 'Application' | 'Organisation' = 'Application';
-const reveal = new ChromeRevealController(core, chrome.storage.session, () => keyOwner);
+const proPanel = new SafeKeyProPanelBridge(() => { if (reveal.current().kind === 'RUNNING') reveal.cancel(); });
+const reveal = new ChromeRevealController(core, chrome.storage.session, () => keyOwner, async (signal) => {
+  const configuration = resolveConfiguration(await readStoredConfiguration(chrome.storage.local, chrome.storage.session));
+  if (configuration.applicationId !== undefined) return undefined;
+  const deployment = (Object.keys(BUSINESS_DEPLOYMENTS) as Array<keyof typeof BUSINESS_DEPLOYMENTS>)
+    .find((key) => BUSINESS_DEPLOYMENTS[key].apiUrl === configuration.apiUrl);
+  if (!deployment) return undefined;
+  return {
+    selectCustodianDevice: () => proPanel.choose(signal),
+    proDevice: proPanel.device(businessUiRpId(deployment)),
+    finish: () => proPanel.finish(),
+  };
+});
 const overlayPermissions = new OverlayPermissionController();
 let lifecycleLocked = false;
 const pendingSignIns = new Set<AbortController>();
@@ -208,6 +221,8 @@ if ((chrome as typeof chrome & { permissions?: chrome.permissions.Permissions })
     void overlayPermissions.permissionRemoved(removed.origins ?? []);
   });
 }
+
+chrome.runtime.onConnect.addListener((port) => proPanel.attach(port));
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   // Opening the side panel spends the page's user gesture, which does not survive an await. It is

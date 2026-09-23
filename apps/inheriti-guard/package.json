@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@safetech/inheriti-elements-brand": "workspace:*",
-    "@safetech/inheriti-core-sdk": "4.0.29",
+    "@safetech/inheriti-core-sdk": "4.0.30",
     "@safetech/inheriti-elements-core": "workspace:*"
   }
 }

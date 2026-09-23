@@ -570,18 +570,21 @@ function cleanup(): void {
   document.removeEventListener('pointerdown', onOutsidePointerDown, true);
   window.removeEventListener('scroll', reposition, true);
   window.removeEventListener('resize', reposition);
+  chrome.runtime.onMessage.removeListener(onOverlayMessage);
   closePopover();
   for (const host of controls.values()) host.remove(); controls.clear();
 }
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+function onOverlayMessage(message: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void): boolean {
+  if (document.documentElement.getAttribute(CLAIM_ATTRIBUTE) !== claim) return false;
   const type = (message as { type?: unknown })?.type;
   if (type === 'inheriti-overlay-teardown') cleanup();
   if (type === 'inheriti-overlay-discover-targets') {
     sendResponse([...controls.keys()].filter(compatible).map(register));
   }
   return false;
-});
+}
 window.addEventListener('pagehide', cleanup, { once: true });
 overlayGlobal[INSTANCE_KEY] = { destroy: cleanup };
 boot();
+chrome.runtime.onMessage.addListener(onOverlayMessage);

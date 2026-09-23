@@ -106,7 +106,10 @@ beforeAll(async () => {
       remove: vi.fn(async () => true),
       onRemoved: { addListener: vi.fn() },
     },
-    runtime: { onMessage: { addListener: (listener: (...args: any[]) => any) => { listeners.message = listener; } } },
+    runtime: {
+      onMessage: { addListener: (listener: (...args: any[]) => any) => { listeners.message = listener; } },
+      onConnect: { addListener: (listener: (...args: any[]) => any) => { listeners.connect = listener; } },
+    },
     declarativeNetRequest: { getDynamicRules: vi.fn(async () => []), updateDynamicRules: vi.fn(async () => undefined) },
     idle: { setDetectionInterval: vi.fn(), onStateChanged: { addListener: vi.fn() } },
     downloads: { onCreated: { addListener: vi.fn() }, cancel: vi.fn(), erase: vi.fn() },

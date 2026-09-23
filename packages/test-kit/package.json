@@ -19,6 +19,6 @@
     "package": "pnpm run build && node ../../scripts/package-workspace.mjs"
   },
   "dependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.29"
+    "@safetech/inheriti-core-sdk": "4.0.30"
   }
 }

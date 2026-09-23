@@ -36,6 +36,7 @@ await build({
   entryPoints: {
     'background/service-worker': resolve(source, 'background/service-worker.ts'),
     'side-panel/main': resolve(source, 'side-panel/main.ts'),
+    'safekey-popup/main': resolve(source, 'safekey-popup/main.ts'),
     'blocked/main': resolve(source, 'blocked/main.ts'),
   },
   outdir: output,
@@ -45,11 +46,7 @@ await build({
   splitting: true,
   chunkNames: 'chunks/[name]-[hash]',
   target: 'chrome116',
-  // Keep identifiers readable in stack traces while compacting syntax and whitespace. The
-  // published Client SDK grew when its browser entry was added; this preserves the worker budget
-  // without weakening the boundary or changing runtime behaviour.
-  minifySyntax: true,
-  minifyWhitespace: true,
+  minify: true,
   legalComments: 'external',
   sourcemap: true,
   logLevel: 'info',
@@ -120,12 +117,13 @@ const coreSdkDirectory = await packageDirectory(sdkDirectory, '@safetech/inherit
 await cp(resolve(coreSdkDirectory, 'dist', 'workers'), resolve(output, 'background', 'workers'), { recursive: true });
 await cp(resolve(source, 'icons'), resolve(output, 'icons'), { recursive: true });
 
-for (const page of ['side-panel', 'blocked']) {
+for (const page of ['side-panel', 'safekey-popup', 'blocked']) {
   await mkdir(resolve(output, page), { recursive: true });
   await cp(resolve(source, page, 'index.html'), resolve(output, page, 'index.html'));
   await cp(resolve(source, page, 'styles.css'), resolve(output, page, 'styles.css'));
 }
 await cp(resolve(source, 'side-panel', 'font-app.ttf'), resolve(output, 'side-panel', 'font-app.ttf'));
+await cp(resolve(source, 'side-panel', 'assets'), resolve(output, 'side-panel', 'assets'), { recursive: true });
 const manifest = { ...sourceManifest, version: packageManifest.version,
   version_name: packageVersionForDeployment(packageManifest.version, deployment),
   key: manifestKeyForBuild(deployment, sourceManifest.key) };

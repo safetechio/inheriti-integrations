@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InheritiGuard · SafeKey Pro</title>
+  <link rel="stylesheet" href="../side-panel/styles.css">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="main.js"></script>
+</head>
+<body>
+  <main>
+    <div class="modal-panel safekey-dialog" id="safekey-dialog">
+      <img class="safekey-business-logo" src="../side-panel/assets/inheriti-business-logo.png" alt="Inheriti Business">
+      <p class="eyebrow">Local approval · Plan Access</p>
+      <h1 id="safekey-title">Choose a custodian device</h1>
+      <p id="safekey-intro" class="safekey-intro">Save the plan share to a device for this and future access.</p>
+      <p id="safekey-status" class="access-status" role="status" aria-live="polite"></p>
+      <div id="safekey-choice" class="safekey-choices" hidden>
+        <button class="safekey-option" id="safekey-pro" type="button"><img src="../side-panel/assets/safekey-pro.png" alt=""><span><strong>SafeKey Pro</strong><small>Use your connected hardware device.</small></span></button>
+        <button class="safekey-option" id="safekey-mobile" type="button"><img src="../side-panel/assets/safekey-mobile.png" alt=""><span><strong>SafeKey Mobile</strong><small>Approve the share claim in your mobile app.</small></span></button>
+      </div>
+      <form id="safekey-pin-form" hidden>
+        <div class="safekey-device"><img src="../side-panel/assets/safekey-pro.png" alt="SafeKey Pro device"><span>Keep your device connected during this request.</span></div>
+        <label class="safekey-pin-label" for="safekey-pin">SafeKey Pro PIN</label>
+        <input id="safekey-pin" type="password" autocomplete="off" maxlength="128" required>
+        <button class="button primary" type="submit">Connect and continue</button>
+      </form>
+      <div id="safekey-touch" class="safekey-device" hidden><img src="../side-panel/assets/safekey-pro.png" alt="SafeKey Pro device"><span>Press and release the button when your device asks for a touch.</span></div>
+      <button class="button ghost" id="safekey-cancel" type="button">Cancel</button>
+      <p id="guard-version" class="popup-version"></p>
+    </div>
+  </main>
+</body>
+</html>

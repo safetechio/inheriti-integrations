@@ -4,7 +4,6 @@ import type { GuardRequest, GuardResponse, SidePanelRequest, SidePanelResponse }
 import { messageFor, rowsFor, type PanelState } from '../shared/plan-view.js';
 import { inheritiGuardBrand, inheritiGuardShield, planAvatarSvg } from '@safetech/inheriti-elements-brand';
 import type { GuardActivityEntry, GuardSettings } from '../shared/guard-contract.js';
-
 const origin = required('origin');
 required('guard-version').textContent = `Unified protection · v${chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}`;
 const appMain = required<HTMLElement>('app-main');
@@ -514,8 +513,13 @@ function applyFilter(): void {
 }
 
 async function requestState(type: 'sign-in' | 'sign-out' | 'load-plans' | 'forget-master-key'): Promise<void> {
-  const response = await send({ type });
-  if (response.ok && 'state' in response) renderPanel(response.state);
+  try {
+    const response = await send({ type });
+    if (response.ok && 'state' in response) renderPanel(response.state);
+    else renderPanel({ kind: 'ERROR', code: type === 'sign-in' ? 'sign_in_failed' : 'plan_request_failed' });
+  } catch {
+    renderPanel({ kind: 'ERROR', code: type === 'sign-in' ? 'sign_in_failed' : 'plan_request_failed' });
+  }
 }
 
 planFilter.addEventListener('input', applyFilter);

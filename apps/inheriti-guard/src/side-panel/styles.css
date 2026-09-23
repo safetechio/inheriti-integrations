@@ -211,6 +211,24 @@ h2 { margin: 0; font-size: 15px; line-height: 21px; font-weight: 700; letter-spa
 .asset-dialog { width: calc(100% - 32px); max-width: 380px; max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 0; border-radius: 16px; color: var(--ink); background: transparent; box-shadow: 0 20px 48px rgba(16, 24, 40, .24); }
 .access-dialog { overflow: hidden; }
 .asset-dialog::backdrop { background: rgba(16, 24, 40, .48); backdrop-filter: blur(2px); }
+.safekey-dialog { z-index: 100; }
+.safekey-dialog [hidden] { display: none; }
+.safekey-business-logo { display: block; width: 142px; height: auto; margin: 0 0 16px; }
+.safekey-intro { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.safekey-choices { display: grid; gap: 10px; margin-top: 16px; }
+.safekey-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.safekey-option:hover { border-color: var(--primary); background: var(--primary5); }
+.safekey-option:focus-visible { outline: 3px solid #75a9ff; outline-offset: 2px; }
+.safekey-option img { width: 50px; height: 50px; flex: none; object-fit: contain; }
+.safekey-option strong, .safekey-option small { display: block; }
+.safekey-option small { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.safekey-dialog form { margin-top: 16px; }
+.safekey-device { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--primary-soft); border-radius: 9px; background: var(--primary5); color: var(--muted); font-size: 11px; }
+.safekey-device img { width: 58px; height: 58px; flex: none; object-fit: contain; }
+.safekey-dialog .button.ghost { margin-top: 10px; }
+.safekey-pin-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 700; }
+.safekey-dialog input { width: 100%; min-height: 42px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.safekey-dialog input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .modal-panel { max-height: calc(100dvh - 32px); padding: 18px; overflow-y: auto; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
 .modal-close { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 8px; color: #667085; background: transparent; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
 .modal-close:hover { color: var(--ink); background: var(--surface-muted); }

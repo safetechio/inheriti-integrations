@@ -1,5 +1,5 @@
 import { hasRevealFailed, revealGateDeadline, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/browser';
-import type { BrowserIntegrationCore, PlanGovernanceView, RevealProgress, ScopedRevealHandle, ScopedRevealProgress } from '@safetech/inheriti-elements-core/browser';
+import type { BrowserIntegrationCore, PlanGovernanceView, RevealProgress, ScopedRevealHandle, ScopedRevealOptions, ScopedRevealProgress } from '@safetech/inheriti-elements-core/browser';
 import type { RevealFieldOption, RevealViewState } from '../shared/messages.js';
 import type { AccessBatch, AccessFieldResult, AccessFieldResultCode, FieldMapping } from '../shared/access-contract.js';
 import { validateAccessBatch } from '../shared/access-contract.js';
@@ -46,6 +46,8 @@ interface ChromeRevealCore extends BrowserIntegrationCore {
       signal?: AbortSignal;
       onProgress?: (progress: RevealProgress) => void;
       onSession?: (session: RevealSessionView) => void;
+      selectCustodianDevice?: ScopedRevealOptions['selectCustodianDevice'];
+      proDevice?: ScopedRevealOptions['proDevice'];
     },
     // The handle the SDK actually passes. It was narrowed here to the two members this host uses,
     // which never type-checked: a callback that accepts less than what is passed is unsound in a
@@ -55,6 +57,8 @@ interface ChromeRevealCore extends BrowserIntegrationCore {
     work: (reveal: ScopedRevealHandle) => Promise<TResult>,
   ): Promise<TResult>;
 }
+
+type ProOptions = Pick<ScopedRevealOptions, 'selectCustodianDevice' | 'proDevice'> & { finish(): void };
 
 interface PlanForReveal extends PlanGovernanceView {
   readonly participants?: readonly { readonly id: string; readonly displayName: string; readonly relationships: readonly string[]; readonly lifecycle: string }[];
@@ -79,6 +83,7 @@ export class ChromeRevealController {
     private readonly getCore: () => Promise<BrowserIntegrationCore>,
     private readonly storage: chrome.storage.StorageArea,
     private readonly keyOwner: () => 'Application' | 'Organisation' = () => 'Application',
+    private readonly proOptions?: (signal: AbortSignal) => Promise<ProOptions | undefined>,
   ) {}
 
   public current(): RevealViewState { return this.state; }
@@ -142,12 +147,15 @@ export class ChromeRevealController {
       return { kind: 'ERROR', message: 'Reveal canceled.' };
     }
     let lastProgress: RevealProgress | undefined;
+    let pro: ProOptions | undefined;
     try {
       const core = await this.getCore() as ChromeRevealCore;
       if (!this.ownsOperation(generation, abort)) throw stableError('access-request-failed');
+      pro = await this.proOptions?.(abort.signal);
       await core.withReveal(input.planId, {
         mode: revealModeOf(plan),
         signal: abort.signal,
+        ...(pro ? { selectCustodianDevice: pro.selectCustodianDevice, proDevice: pro.proDevice } : {}),
         onSession: (session) => { if (this.ownsOperation(generation, abort)) void this.remember(session); },
         onProgress: (progress) => {
           if (!this.ownsOperation(generation, abort)) return;
@@ -163,7 +171,8 @@ export class ChromeRevealController {
         const value = await reveal.field<unknown>(input.selector, { action: 'AUTOFILL_FIELD', origin: input.origin });
         if (!this.ownsOperation(generation, abort)) throw stableError('access-request-failed');
         if (typeof value !== 'string') throw new Error('asset_value_invalid');
-        const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const targetTab = await chrome.tabs.get(input.tabId);
+        const [active] = await chrome.tabs.query({ active: true, windowId: targetTab.windowId });
         if (!this.ownsOperation(generation, abort)) throw stableError('access-request-failed');
         if (active?.id !== input.tabId || originOf(active.url) !== input.origin) {
           throw Object.assign(new Error('stale_tab_context'), { code: 'stale_tab_context' });
@@ -181,6 +190,7 @@ export class ChromeRevealController {
         this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators) };
       }
     } finally {
+      pro?.finish();
       if (this.active === abort && generation === this.shutdownGeneration) {
         await this.forget();
         if (this.active === abort) this.active = undefined;
@@ -226,11 +236,14 @@ export class ChromeRevealController {
     }
     const outcomes = new Map<string, AccessFieldResultCode>();
     let lastProgress: RevealProgress | undefined;
+    let pro: ProOptions | undefined;
     try {
       const core = await this.getCore() as ChromeRevealCore;
       if (!this.ownsOperation(generation, abort)) throw stableError('access-request-failed');
+      pro = await this.proOptions?.(abort.signal);
       await core.withReveal(batch.identity.planId, {
         mode: revealModeOf(plan), signal: abort.signal,
+        ...(pro ? { selectCustodianDevice: pro.selectCustodianDevice, proDevice: pro.proDevice } : {}),
         onSession: (session) => { if (this.ownsOperation(generation, abort)) void this.remember(session); },
         onProgress: (progress) => {
           if (!this.ownsOperation(generation, abort)) return;
@@ -291,6 +304,7 @@ export class ChromeRevealController {
         this.state = { kind: 'ERROR', message: messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators) };
       }
     } finally {
+      pro?.finish();
       if (this.active === abort && generation === this.shutdownGeneration) {
         await this.forget();
         if (this.active === abort) this.active = undefined;
@@ -466,7 +480,13 @@ function messageFor(
     return revealProgressMessage(lastProgress, { keyOwner, moderatorNamesById: moderators });
   }
   if (canceled) return 'Reveal canceled.';
-  const code = (error as { code?: unknown })?.code;
+  const code = (error as { code?: unknown; message?: unknown })?.code
+    ?? (error as { message?: unknown })?.message;
+  if (code === 'SAFEKEY_PANEL_REQUIRED' || code === 'SAFEKEY_PANEL_CLOSED')
+    return 'The SafeKey PRO window closed. Try again to continue.';
+  if (code === 'SAFEKEY_ABORTED') return 'SafeKey PRO operation canceled.';
+  if (typeof code === 'string' && code.startsWith('SAFEKEY_'))
+    return 'SafeKey PRO could not read this plan. Check the device and try again.';
   if (code === 'action_origin_denied') return 'This page origin is not approved for autofill.';
   if (code === 'stale_tab_context') return 'The page changed before autofill. Reveal again on the current page.';
   if ((error as { name?: unknown })?.name === 'MasterKeyRequired') {

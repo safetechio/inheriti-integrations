@@ -1,0 +1,6 @@
+body { min-width: 0; }
+main { padding: 20px; }
+.modal-panel { padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-card); }
+.safekey-dialog h1 { font-size: 20px; line-height: 1.25; }
+.safekey-dialog .button { width: 100%; }
+.popup-version { margin: 14px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
