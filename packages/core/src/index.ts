@@ -1,4 +1,5 @@
 import type { MasterKeyRef, RevealActionOutcome, RevealActionType as SdkRevealActionType, RevealProgress } from '@safetech/inheriti-client-sdk';
+import type { OpenRevealOptions } from '@safetech/inheriti-client-sdk/browser';
 
 export type RevealActionDestination = 'STDIN' | 'ENVIRONMENT' | 'FILE_DESCRIPTOR' | 'LOCAL_SOCKET' | 'TEMPORARY_FILE' | 'LOCAL_BROWSER';
 export type IntegrationRevealActionType = SdkRevealActionType | 'USE_FIELD';
@@ -120,7 +121,7 @@ export interface ScopedRevealProgress {
   readonly closedReason?: string;
 }
 
-export interface ScopedRevealOptions {
+export interface ScopedRevealOptions extends Partial<Pick<OpenRevealOptions, 'selectCustodianDevice' | 'proDevice'>> {
   mode?: 'DIRECT' | 'GOVERNED';
   /** Every step of the reveal, named by the Client SDK that runs it. */
   onProgress?: (progress: RevealProgress) => void;

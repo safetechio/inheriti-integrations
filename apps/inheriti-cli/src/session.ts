@@ -19,9 +19,8 @@ export interface CliContext {
 /**
  * One composition point, so no command builds its own client or re-solves refresh.
  *
- * `client` selects which registration the operator signs in as. They differ in one thing that
- * matters: only the interactive one may open a governed reveal, because the API forbids a
- * device-authorization client from carrying the capability that allows it.
+ * `client` selects the registered OAuth flow. Business accepts both verified client IDs;
+ * reveal policy and the signed client ID still bind each session on the server.
  */
 export function createCliContext(
   configuration: CliConfiguration,

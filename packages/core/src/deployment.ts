@@ -30,3 +30,8 @@ export function businessDeployment(value: unknown): BusinessDeployment | undefin
   return typeof value === 'string' && Object.hasOwn(BUSINESS_DEPLOYMENTS, value)
     ? value as BusinessDeployment : undefined;
 }
+
+export function businessUiRpId(deployment: BusinessDeployment): string {
+  return deployment === 'local' ? 'business.localhost' : deployment === 'prod'
+    ? 'business.inheriti.com' : `business-${deployment}.inheriti.com`;
+}
