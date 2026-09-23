@@ -83,8 +83,10 @@ export function useQuickPlanFlow({ state, setState, messages }) {
       setDraft(input);
       setError('');
       setStep('review');
-    } catch {
-      if (generation.current === currentGeneration) setError(messages.fileReadError);
+    } catch (cause) {
+      if (generation.current === currentGeneration) {
+        setError(cause instanceof Error && cause.message === 'file_too_large' ? messages.fileLimit : messages.fileReadError);
+      }
     } finally {
       if (generation.current === currentGeneration) setPreparing(false);
     }

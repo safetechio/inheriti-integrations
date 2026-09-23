@@ -5,6 +5,7 @@ export async function buildAsset(input, definition) {
   if (isMedia(definition.id)) {
     const file = input.file;
     if (!file) throw new Error('file_required');
+    if (file.size > 18_000_000) throw new Error('file_too_large');
     const dataUrl = await readFile(file);
     const mimeType = file.type || 'application/octet-stream';
     meta.isMedia = true;

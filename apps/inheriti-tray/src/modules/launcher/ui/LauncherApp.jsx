@@ -58,7 +58,7 @@ export function LauncherApp({ messages }) {
       onSubmit={() => void flow.submitCapture()}
     />}
     {flow.step === 'ready' && <ReadyPlan
-      messages={messages}
+      messages={messages} state={state}
       onNew={() => { flow.clearDraft(); flow.openCapture(); }}
     />}
     <button id="app" type="button" onClick={() => void session.openApp()}>{messages.openApp}</button>

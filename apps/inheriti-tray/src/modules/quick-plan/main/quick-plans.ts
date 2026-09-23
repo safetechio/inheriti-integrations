@@ -3,7 +3,7 @@ import type { QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { creationErrorMessage } from './creation-error.js';
 import { trayMessages as messages } from '../../../messages.js';
 
-export type CreationState = { status: 'securing' | 'ready' | 'error'; message?: string; planId?: string };
+export type CreationState = { status: 'securing' | 'ready' | 'error'; message?: string; planId?: string; teamId?: string };
 type Operations = ReturnType<typeof createQuickPlanOperations>;
 type CreateContext = Awaited<ReturnType<Operations['createContext']>>;
 
@@ -97,7 +97,7 @@ export class TrayQuickPlans {
       onChange();
       const result = await operations.create({ context: this.context, title: input.title, asset: input.asset, ...(input.teamId ? { teamId: input.teamId } : {}) });
       this.creation = result.status === 'READY'
-        ? { status: 'ready', planId: result.planId }
+        ? { status: 'ready', planId: result.planId, ...(input.teamId ? { teamId: input.teamId } : {}) }
         : { status: 'error', planId: result.planId, message: messages.protectionPending };
     } catch (error) {
       this.creation = { status: 'error', ...(this.context ? { planId: this.context.planId } : {}), message: creationErrorMessage(error) };

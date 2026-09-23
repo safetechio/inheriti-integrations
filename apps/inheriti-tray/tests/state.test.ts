@@ -118,6 +118,7 @@ describe('TraySession', () => {
     await expect(session.createQuickPlan({ title: 'Shared', teamId: 'unknown', asset: asset('secret') }, () => {})).rejects.toThrow('selected team');
     await session.createQuickPlan({ title: 'Shared', teamId: 'team-1', asset: asset('secret') }, () => {});
     expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-1', context: { planId: 'plan-1' } }));
+    expect(session.state().creation).toMatchObject({ status: 'ready', teamId: 'team-1' });
   });
 
   it('keeps the latest organization when team requests finish in reverse order', async () => {

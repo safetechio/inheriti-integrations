@@ -33,6 +33,7 @@ export const trayMessages = Object.freeze({
   assetName: 'Asset name',
   assetFile: 'Choose a file',
   fileReadError: 'Could not read the selected file.',
+  fileLimit: 'Choose a file smaller than 18 MB.',
   reviewPlan: 'Review plan',
   teamsUnavailable: 'Could not load teams. Private plans remain available.',
   assetTypes: {
