@@ -47,3 +47,26 @@ it('reserves a reveal before plan detail and blocks delivery after organization 
   expect(withReveal).not.toHaveBeenCalled();
   expect((await tools.revealStatus(started.jobId)).status).toBe('CANCELED');
 });
+
+it('reports moderator approvals without counting authentication', async () => {
+  const tools = new MetadataTools() as any;
+  const pending = deferred<void>();
+  let onProgress!: (progress: unknown) => void;
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ governance: { mode: 'MODERATED' }, participants: [] }),
+    withReveal: async (_planId: string, options: { onProgress: typeof onProgress }) => {
+      onProgress = options.onProgress;
+      await pending.promise;
+    },
+  } });
+  const { jobId } = await tools.reveal('plan', 'account.password');
+  await vi.waitFor(() => expect(onProgress).toBeTypeOf('function'));
+
+  onProgress({ phase: 'WAITING_FOR_AUTHENTICATION', session: { approvedModerators: 0, requiredModerators: 1 } });
+  expect((await tools.revealStatus(jobId)).message).toBe('Authentication request sent to SafeKey Mobile. Confirm it to continue.');
+  onProgress({ phase: 'WAITING_FOR_MODERATION', session: { approvedModerators: 0, requiredModerators: 1 } });
+  expect((await tools.revealStatus(jobId)).message).toBe('Waiting for moderators (0 of 1 approved).');
+  onProgress({ phase: 'WAITING_FOR_MODERATION', session: { approvedModerators: 1, requiredModerators: 1 } });
+  expect((await tools.revealStatus(jobId)).message).toBe('Waiting for moderators (1 of 1 approved).');
+  pending.resolve(undefined);
+});
