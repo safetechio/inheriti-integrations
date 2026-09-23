@@ -5,6 +5,7 @@ vi.mock('../src/local-browser.js', () => ({
   deliverInBrowser: vi.fn(),
   deliverAssetInBrowser,
 }));
+vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
 
 import { MetadataTools, registerRevealTools } from '../src/server.js';
 

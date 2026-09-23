@@ -1,6 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { MetadataTools } from '../src/server.js';
 
+vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
+
 it('uses the selected organization core for plan logs and returns the safe page', async () => {
   const tools = new MetadataTools() as any;
   const listPlanLogs = vi.fn().mockResolvedValue({ items: [{ id: 'log-1', event: 'PLAN_UPDATED', details: [] }], total: 1 });

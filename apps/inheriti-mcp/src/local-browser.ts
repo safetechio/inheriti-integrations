@@ -51,7 +51,7 @@ export async function deliverInBrowser(selector: string, value: unknown, options
     const url = `http://127.0.0.1:${port}${path}`;
     if (options.open) options.open(url);
     else {
-      const child = spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' });
+      const child = spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open', [url], { detached: true, stdio: 'ignore' });
       child.on('error', () => fail?.(new Error('local_browser_unavailable')));
       child.unref();
     }
@@ -104,7 +104,7 @@ export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array,
     const url = `http://127.0.0.1:${port}${path}`;
     if (options.open) options.open(url);
     else {
-      const child = spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' });
+      const child = spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open', [url], { detached: true, stdio: 'ignore' });
       child.on('error', () => fail?.(new Error('local_browser_unavailable')));
       child.unref();
     }

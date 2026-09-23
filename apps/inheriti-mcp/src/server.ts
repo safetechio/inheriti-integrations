@@ -10,6 +10,7 @@ import type { NodeIntegrationCore, OperatorSession, OperatorSessionStore } from 
 import { planDetail, planSummary } from './metadata.js';
 import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/node';
 import { deliverAssetInBrowser, deliverInBrowser } from './local-browser.js';
+import { openSafeKeyProPrompt } from './safekey-pro.js';
 
 const configPath = () => resolve(process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config'), 'inheriti-elements', 'config.json');
 const coded = (code: string) => Object.assign(new Error(code), { code });
@@ -19,10 +20,10 @@ const developmentBuild = typeof __INHERITI_PRODUCTION_BUILD__ !== 'boolean' || !
 export const lockedDeployment = typeof __INHERITI_DEPLOYMENT__ === 'string'
   ? businessDeployment(__INHERITI_DEPLOYMENT__) : undefined;
 
-type Configuration = { apiUrl: string; issuer: string; clientId: string; environment: 'TEST' | 'LIVE'; redirectUri: string };
+type Configuration = { apiUrl: string; issuer: string; clientId: string; environment: 'TEST' | 'LIVE'; redirectUri: string; deployment?: string };
 async function configuration(): Promise<Configuration> {
   if (lockedDeployment) {
-    return { ...BUSINESS_DEPLOYMENTS[lockedDeployment], clientId: BUSINESS_DEVICE_CLIENT_ID,
+    return { ...BUSINESS_DEPLOYMENTS[lockedDeployment], deployment: lockedDeployment, clientId: BUSINESS_DEVICE_CLIENT_ID,
       redirectUri: 'http://127.0.0.1:53682/oauth/callback' };
   }
   const raw: unknown = JSON.parse(await readFile(configPath(), 'utf8'));
@@ -32,7 +33,7 @@ async function configuration(): Promise<Configuration> {
     const deployment = businessDeployment(value.deployment);
     if (!deployment || value.business !== true) throw coded('configuration_invalid');
     if (deployment === 'prod' && developmentBuild) throw coded('live_environment_unavailable_in_development_build');
-    return { ...BUSINESS_DEPLOYMENTS[deployment], clientId: BUSINESS_DEVICE_CLIENT_ID,
+    return { ...BUSINESS_DEPLOYMENTS[deployment], deployment, clientId: BUSINESS_DEVICE_CLIENT_ID,
       redirectUri: typeof value.redirectUri === 'string' ? value.redirectUri : 'http://127.0.0.1:53682/oauth/callback' };
   }
   if (typeof value.apiUrl !== 'string' || typeof value.issuer !== 'string' || typeof value.clientId !== 'string' || !['TEST', 'LIVE'].includes(String(value.environment))) throw coded('configuration_invalid');
@@ -185,8 +186,12 @@ export class MetadataTools {
         .filter(participant => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'));
       const moderatorNamesById = new Map(moderators.map(participant => [participant.id, participant.displayName]));
       if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('organization_selection_changed');
-      await selected.core.withReveal(planId, {
+      const prompt = await openSafeKeyProPrompt(this.config?.deployment, process.env.INHERITI_SAFEKEY_PRO_DEVICE,
+        { organizationId: selected.organizationId, planId, selector, kind }, controller.signal);
+      try { await selected.core.withReveal(planId, {
         mode: revealModeOf(plan), signal: controller.signal,
+        selectCustodianDevice: prompt.selectCustodianDevice,
+        ...(prompt.proDevice ? { proDevice: prompt.proDevice } : {}),
         onProgress: progress => {
           job.phase = progress.phase;
           job.message = revealProgressMessage(progress, { moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
@@ -203,7 +208,7 @@ export class MetadataTools {
             await deliverInBrowser(selector, fields[0]!.value, { signal: controller.signal });
           });
         }
-      });
+      }); } finally { prompt.close(); }
     })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(() => {
       job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED';
       if (job.status === 'CANCELED') job.message = 'Reveal canceled.';
