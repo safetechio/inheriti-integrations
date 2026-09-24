@@ -89,3 +89,64 @@ it('closes the popup on finish and opens a fresh one for the next reveal', async
   second.disconnects[0]!();
   await expect(next).rejects.toThrow('SAFEKEY_PANEL_CLOSED');
 });
+
+it('allows a new device choice after a PRO claim window closes before write completes', async () => {
+  const first = panelPort();
+  const canceled = vi.fn();
+  const bridge = new SafeKeyProPanelBridge(canceled);
+  const writing = bridge.device('business.localhost').write({} as never);
+  bridge.attach(first.port);
+  await vi.waitFor(() => expect(first.sent).toHaveBeenCalledWith(expect.objectContaining({ operation: 'write' })));
+  first.disconnects[0]!();
+  await expect(writing).rejects.toThrow('SAFEKEY_PANEL_CLOSED');
+  expect(canceled).toHaveBeenCalledOnce();
+  bridge.finish();
+
+  const second = panelPort();
+  const choosing = bridge.choose();
+  bridge.attach(second.port);
+  await vi.waitFor(() => expect(second.sent).toHaveBeenCalledWith(expect.objectContaining({ operation: 'choose' })));
+  const id = second.sent.mock.calls[0]![0].id;
+  second.messages[0]!({ id, ok: true, value: 'SK_MOBILE' });
+  await expect(choosing).resolves.toBe('SK_MOBILE');
+  expect(chrome.windows.create).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the reveal active when the PRO window closes before PIN confirmation', async () => {
+  const first = panelPort();
+  const canceled = vi.fn();
+  const bridge = new SafeKeyProPanelBridge(canceled);
+  const preparing = bridge.prepare();
+  bridge.attach(first.port);
+  await vi.waitFor(() => expect(first.sent).toHaveBeenCalledWith(expect.objectContaining({ operation: 'prepare' })));
+  first.disconnects[0]!();
+  await expect(preparing).rejects.toThrow('SAFEKEY_PANEL_CLOSED');
+  expect(canceled).not.toHaveBeenCalled();
+});
+
+it('cancels the reveal when the PRO window closes after PIN confirmation', async () => {
+  const panel = panelPort();
+  const canceled = vi.fn();
+  const bridge = new SafeKeyProPanelBridge(canceled);
+  const preparing = bridge.prepare();
+  bridge.attach(panel.port);
+  await vi.waitFor(() => expect(panel.sent).toHaveBeenCalledWith(expect.objectContaining({ operation: 'prepare' })));
+  const id = panel.sent.mock.calls[0]![0].id;
+  panel.messages[0]!({ id, ok: true, value: true });
+  await expect(preparing).resolves.toBeUndefined();
+  panel.disconnects[0]!();
+  expect(canceled).toHaveBeenCalledOnce();
+});
+
+it('cancels if the window closes after PIN submit but before the prepare reply', async () => {
+  const panel = panelPort();
+  const canceled = vi.fn();
+  const bridge = new SafeKeyProPanelBridge(canceled);
+  const preparing = bridge.prepare();
+  bridge.attach(panel.port);
+  await vi.waitFor(() => expect(panel.sent).toHaveBeenCalledWith(expect.objectContaining({ operation: 'prepare' })));
+  panel.messages[0]!({ operation: 'pin-confirmed' });
+  panel.disconnects[0]!();
+  await expect(preparing).rejects.toThrow('SAFEKEY_PANEL_CLOSED');
+  expect(canceled).toHaveBeenCalledOnce();
+});

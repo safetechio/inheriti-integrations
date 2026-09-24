@@ -21,4 +21,9 @@ describe('model-facing metadata', () => {
     const result = await safeResult(async () => { throw Object.assign(new Error('Bearer secret'), { code: 'Bearer secret' }); })({});
     expect(result).toMatchObject({ isError: true, content: [{ text: 'request_failed' }] });
   });
+  it('preserves only the stable interrupted reveal code', async () => {
+    const result = await safeResult(async () => { throw Object.assign(new Error('private diagnostic'), { code: 'reveal_restart_required' }); })({});
+    expect(result).toMatchObject({ isError: true, content: [{ text: 'reveal_restart_required' }] });
+    expect(JSON.stringify(result)).not.toContain('private diagnostic');
+  });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PlanRequestFailed, SdkPlanFacade, asPlanRequestFailed } from '../src/plans.js';
 
 const page = { items: [], nextCursor: null };
@@ -12,6 +12,18 @@ function facadeThatFailsWith(error: unknown): SdkPlanFacade {
 }
 
 describe('SdkPlanFacade', () => {
+  it('reads only the active reveal metadata through the SDK', async () => {
+    const getActivePlanReveal = vi.fn(async () => ({ id: 'reveal-1' }));
+    const facade = new SdkPlanFacade({ getActivePlanReveal } as never);
+    await expect(facade.getActivePlanReveal('plan-1')).resolves.toEqual({ id: 'reveal-1' });
+    expect(getActivePlanReveal).toHaveBeenCalledWith('plan-1');
+  });
+  it('forwards the observed reveal id for a conditional access abort', async () => {
+    const abortPlanAccess = vi.fn(async () => ({ aborted: false }));
+    const facade = new SdkPlanFacade({ abortPlanAccess } as never);
+    await expect(facade.abortPlanAccess('plan-1', 'observed-reveal-1')).resolves.toEqual({ aborted: false });
+    expect(abortPlanAccess).toHaveBeenCalledWith('plan-1', 'observed-reveal-1');
+  });
   it('passes list input through to the SDK and returns its page unchanged', async () => {
     const seen: unknown[] = [];
     const facade = new SdkPlanFacade({

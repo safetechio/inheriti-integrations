@@ -196,7 +196,12 @@ async function secrets(
     const parsed = parseResolveOptions(hasPlanId ? rest.slice(1) : rest);
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
     const resolved = await resolvePlanId(context, terminal, planId);
-    return await resolvePlanField(context, terminal, resolved, parsed.field);
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    process.once('SIGINT', cancel);
+    process.once('SIGTERM', cancel);
+    try { return await resolvePlanField(context, terminal, resolved, parsed.field, controller.signal); }
+    finally { process.off('SIGINT', cancel); process.off('SIGTERM', cancel); }
   }
   terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets resolve <id> --field asset.field');
   return 1;
@@ -248,10 +253,12 @@ async function plans(
     const controller = new AbortController();
     const cancel = () => controller.abort();
     process.once('SIGINT', cancel);
+    process.once('SIGTERM', cancel);
     try {
       return await revealPlan(context, terminal, resolved, { ...parsed, signal: controller.signal });
     } finally {
       process.off('SIGINT', cancel);
+      process.off('SIGTERM', cancel);
     }
   }
   if (subcommand === 'download') {
@@ -533,6 +540,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   reveal_denied: 'A participant denied this reveal. Nothing was released.',
   reveal_participant_revoked: 'A participant on this plan was revoked, so it cannot be opened.',
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
+  reveal_restart_required: 'An earlier reveal of this plan cannot continue. Run `inheriti plans abort PLAN_ID` with this plan ID, then retry your reveal command.',
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
   custodian_share_unavailable: 'The custodian share is unavailable or does not match this plan and device.',
   safekey_pro_local_device_required: 'This plan uses SafeKey PRO. Open it locally with a connected SafeKey PRO device; this runner cannot release that share.',

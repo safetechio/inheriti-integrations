@@ -72,3 +72,17 @@ it('reports moderator approvals without counting authentication', async () => {
   expect((await tools.revealStatus(jobId)).message).toBe('Waiting for moderators (1 of 1 approved).');
   pending.resolve(undefined);
 });
+
+it('reports an interrupted reveal without leaking the underlying error or opening a new request', async () => {
+  const tools = new MetadataTools() as any;
+  const withReveal = vi.fn().mockRejectedValue(Object.assign(new Error('secret diagnostic'), { code: 'reveal_restart_required' }));
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }), withReveal,
+  } });
+  const { jobId } = await tools.reveal('plan-1', 'account.password');
+  await vi.waitFor(async () => expect((await tools.revealStatus(jobId)).status).toBe('FAILED'));
+  const status = await tools.revealStatus(jobId);
+  expect(status).toMatchObject({ code: 'reveal_restart_required', message: expect.stringContaining('Inheriti Business') });
+  expect(JSON.stringify(status)).not.toContain('secret diagnostic');
+  expect(withReveal).toHaveBeenCalledTimes(1);
+});

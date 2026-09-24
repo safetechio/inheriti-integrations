@@ -58,7 +58,8 @@ export interface PlanFacade<TListInput, TPage, TDetail> {
   listPlans(input?: TListInput): Promise<TPage>;
   getPlan(planId: string): Promise<TDetail>;
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage>;
-  abortPlanAccess(planId: string): Promise<{ aborted: boolean }>;
+  getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
+  abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }>;
 }
 
 export interface BusinessOrganizationFacade {
@@ -121,7 +122,7 @@ export interface ScopedRevealProgress {
   readonly closedReason?: string;
 }
 
-export interface ScopedRevealOptions extends Partial<Pick<OpenRevealOptions, 'selectCustodianDevice' | 'proDevice'>> {
+export interface ScopedRevealOptions extends Partial<Pick<OpenRevealOptions, 'selectCustodianDevice' | 'proDevice' | 'onRelaySession'>> {
   mode?: 'DIRECT' | 'GOVERNED';
   /** Every step of the reveal, named by the Client SDK that runs it. */
   onProgress?: (progress: RevealProgress) => void;
@@ -150,6 +151,7 @@ export function stoppedByDeadManSwitch(session: ScopedRevealProgress | undefined
  */
 export interface MasterKeyFacade {
   forgetMasterKey(ref?: MasterKeyRef): Promise<void>;
+  cancelMasterKeyRelaySession?(sessionId: string): Promise<void>;
 }
 
 export interface ScopedRevealFacade {
@@ -216,9 +218,14 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   }
   /** Drops the held master key so the next reveal acquires it again. Nothing to do if none is held. */
   async forgetMasterKey(ref?: MasterKeyRef): Promise<void> { await this.masterKeys?.forgetMasterKey(ref); }
+  async cancelMasterKeyRelaySession(sessionId: string): Promise<void> {
+    if (!this.masterKeys?.cancelMasterKeyRelaySession) throw new Error('master_key_relay_unavailable');
+    await this.masterKeys.cancelMasterKeyRelaySession(sessionId);
+  }
   listPlans(input?: TListInput): Promise<TPage> { return this.elements.listPlans(input); }
   getPlan(planId: string): Promise<TDetail> { return this.elements.getPlan(planId); }
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage> { return this.elements.listPlanLogs(planId, input); }
+  getActivePlanReveal(planId: string): Promise<{ id: string } | null> { return this.elements.getActivePlanReveal(planId); }
   /**
    * Gives up the governed access this operator holds on a plan.
    *
@@ -226,7 +233,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
    * stopped. A host offers this for the other case: the access is not wanted, and the next reveal
    * should start clean. `aborted: false` means there was nothing open.
    */
-  abortPlanAccess(planId: string): Promise<{ aborted: boolean }> { return this.elements.abortPlanAccess(planId); }
+  abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }> { return this.elements.abortPlanAccess(planId, expectedRevealId); }
   withReveal<TResult>(
     planId: string,
     options: Parameters<ScopedRevealFacade['withReveal']>[1],

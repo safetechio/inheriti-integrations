@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assertEnvironmentAllowed, composeRevealWorkflows, ELEMENTS_INTEGRATION_CONTRACT_VERSION, ElementsIntegrationCore, LiveEnvironmentConfirmationRequired } from '../src/index.js';
 
 describe('integration contract version', () => {
@@ -16,7 +16,7 @@ describe('integration contract version', () => {
     const core = new ElementsIntegrationCore({
       environment: 'TEST',
       auth: { beginAuthorizationCode: async () => ({ authorizationUrl: '', expiresAt: 0 }), completeAuthorizationCode: noop, beginDeviceAuthorization: noop, pollDeviceAuthorization: noop, getAccessToken: async () => undefined, refresh: noop, clear: noop },
-      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), abortPlanAccess: async () => ({ aborted: false }) },
+      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), getActivePlanReveal: async () => null, abortPlanAccess: async () => ({ aborted: false }) },
       interactions,
     });
     await expect(core.performAuthorizedInteraction({ revealId: 'reveal', assetId: 'asset', action: 'COPY_FIELD', fieldName: 'password', context: {}, idempotencyKey: 'key' }, async () => 'protected-value'))
@@ -35,7 +35,7 @@ describe('integration contract version', () => {
     const core = new ElementsIntegrationCore({
       environment: 'TEST',
       auth: { beginAuthorizationCode: async () => ({ authorizationUrl: '', expiresAt: 0 }), completeAuthorizationCode: noop, beginDeviceAuthorization: noop, pollDeviceAuthorization: noop, getAccessToken: async () => undefined, refresh: noop, clear: noop },
-      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), abortPlanAccess: async () => ({ aborted: false }) },
+      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), getActivePlanReveal: async () => null, abortPlanAccess: async () => ({ aborted: false }) },
       interactions,
     });
     const failure = Object.assign(new Error('secret must not escape'), { code: 'field_write_failed' });
@@ -55,7 +55,7 @@ describe('integration contract version', () => {
     const core = new ElementsIntegrationCore({
       environment: 'TEST',
       auth: { beginAuthorizationCode: async () => ({ authorizationUrl: '', expiresAt: 0 }), completeAuthorizationCode: noop, beginDeviceAuthorization: noop, pollDeviceAuthorization: noop, getAccessToken: async () => undefined, refresh: noop, clear: noop },
-      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), abortPlanAccess: async () => ({ aborted: false }) },
+      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), getActivePlanReveal: async () => null, abortPlanAccess: async () => ({ aborted: false }) },
       interactions: {
         authorize: async (input: unknown) => { authorized.push(input); return { id: 'action-3' }; },
         report: noop,
@@ -100,13 +100,26 @@ describe('integration contract version', () => {
     const core = new ElementsIntegrationCore({
       environment: 'TEST',
       auth: { beginAuthorizationCode: async () => ({ authorizationUrl: '', expiresAt: 0 }), completeAuthorizationCode: noop, beginDeviceAuthorization: noop, pollDeviceAuthorization: noop, getAccessToken: async () => undefined, refresh: noop, clear: noop },
-      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), abortPlanAccess: async () => ({ aborted: false }) },
+      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), getActivePlanReveal: async () => null, abortPlanAccess: async () => ({ aborted: false }) },
       scopedReveals: { withReveal },
     });
 
     await expect(core.withReveal('plan-1', { mode: 'DIRECT' }, (reveal) => reveal.field('prod-db.password')))
       .resolves.toBe('requested-value');
     expect(JSON.stringify(core)).not.toContain('requested-value');
+  });
+
+  it('delegates relay cancellation without exposing master-key material', async () => {
+    const noop = async () => undefined;
+    const cancelMasterKeyRelaySession = vi.fn(async (_sessionId: string) => undefined);
+    const core = new ElementsIntegrationCore({
+      environment: 'TEST',
+      auth: { beginAuthorizationCode: async () => ({ authorizationUrl: '', expiresAt: 0 }), completeAuthorizationCode: noop, beginDeviceAuthorization: noop, pollDeviceAuthorization: noop, getAccessToken: async () => undefined, refresh: noop, clear: noop },
+      elements: { listPlans: async () => [], getPlan: async () => ({}), listPlanLogs: async () => ({ items: [], total: 0 }), getActivePlanReveal: async () => null, abortPlanAccess: async () => ({ aborted: false }) },
+      masterKeys: { forgetMasterKey: noop, cancelMasterKeyRelaySession },
+    });
+    await core.cancelMasterKeyRelaySession('relay-1');
+    expect(cancelMasterKeyRelaySession).toHaveBeenCalledWith('relay-1');
   });
 
   it('defaults safely by requiring an explicit LIVE confirmation', () => {

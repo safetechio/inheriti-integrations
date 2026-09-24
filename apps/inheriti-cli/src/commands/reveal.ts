@@ -19,9 +19,10 @@ export async function resolvePlanField(
   terminal: Terminal,
   planId: string,
   selector: string,
+  signal?: AbortSignal,
 ): Promise<number> {
   const plan = await loadRevealPlan(context, planId);
-  await consumePlanFields(context, terminal, planId, plan, [selector], undefined, async (fields) => {
+  await consumePlanFields(context, terminal, planId, plan, [selector], signal, async (fields) => {
     terminal.write(renderRequestedValue(fields[0]?.value));
   }, { quiet: true });
   return 0;

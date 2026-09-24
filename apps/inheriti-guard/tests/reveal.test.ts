@@ -65,6 +65,7 @@ const batch: AccessBatch = {
 function core(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     getPlan: vi.fn(async () => plan),
+    getActivePlanReveal: vi.fn(async () => null),
     reveals: { close: vi.fn(async () => undefined) },
     withReveal: vi.fn(async (_planId, options, work) => {
       options.onSession({ id: 'reveal-1', stage: 'AUTHORIZED', expiresAt: '2030-01-01T00:00:00.000Z' });
@@ -114,6 +115,63 @@ function hostDerivedMasterKey(): Promise<string> {
 }
 
 describe('Chrome reveal controller', () => {
+  it('does not start a reveal when cancellation lands during target preflight', async () => {
+    let finishPreflight!: (value: Array<{ result: boolean }>) => void;
+    executeScript.mockImplementationOnce(() => new Promise((resolve) => { finishPreflight = resolve; }));
+    const instance = core({ abortPlanAccess: vi.fn(async () => ({ aborted: false })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const filling = controller.fillBatch(batch);
+    await vi.waitFor(() => expect(executeScript).toHaveBeenCalledOnce());
+    await controller.abortPlanAccess('plan-1');
+    finishPreflight([{ result: true }]);
+    await expect(filling).resolves.toEqual(batch.mappings.map((mapping) => ({
+      selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'canceled',
+    })));
+    expect(instance.withReveal).not.toHaveBeenCalled();
+  });
+
+  it('does not start a field reveal when cancellation lands during plan lookup', async () => {
+    let finishLookup!: (value: typeof plan) => void;
+    const instance = core({ getPlan: vi.fn(async () => new Promise<typeof plan>((resolve) => { finishLookup = resolve; })),
+      abortPlanAccess: vi.fn(async () => ({ aborted: false })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const filling = controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    await vi.waitFor(() => expect(instance.getPlan).toHaveBeenCalledOnce());
+    await controller.abortPlanAccess('plan-1');
+    finishLookup(plan);
+    await expect(filling).resolves.toMatchObject({ kind: 'ERROR', message: 'Reveal canceled.' });
+    expect(instance.withReveal).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old reveal finish a newer SafeKey PRO popup', async () => {
+    let finishOld!: () => void;
+    let finishNew!: () => void;
+    const oldGate = new Promise<void>((resolve) => { finishOld = resolve; });
+    const newGate = new Promise<void>((resolve) => { finishNew = resolve; });
+    const finishes = [vi.fn(), vi.fn()];
+    const withReveal = vi.fn()
+      .mockImplementationOnce(async () => oldGate)
+      .mockImplementationOnce(async () => newGate);
+    const instance = core({ withReveal, abortPlanAccess: vi.fn(async () => ({ aborted: true })) });
+    const proOptions = vi.fn(async () => ({ selectCustodianDevice: async () => 'SK_PRO' as const,
+      proDevice: { read: vi.fn(), write: vi.fn() }, finish: finishes[proOptions.mock.calls.length - 1]! }));
+    const controller = new ChromeRevealController(async () => asCore(instance), storage, () => 'Organisation', proOptions);
+    const old = controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    await vi.waitFor(() => expect(withReveal).toHaveBeenCalledTimes(1));
+    await controller.abortPlanAccess('plan-1');
+    expect(finishes[0]).toHaveBeenCalledOnce();
+    const next = controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    await vi.waitFor(() => expect(withReveal).toHaveBeenCalledTimes(2));
+    finishOld();
+    await old;
+    expect(finishes[1]).not.toHaveBeenCalled();
+    finishNew();
+    await next;
+    expect(finishes[1]).toHaveBeenCalledOnce();
+  });
   it('does not start a reveal when Secure Logoff lands during target preflight', async () => {
     let finishPreflight!: (value: Array<{ result: boolean }>) => void;
     executeScript.mockImplementationOnce(() => new Promise((resolve) => { finishPreflight = resolve; }));
@@ -258,6 +316,71 @@ describe('Chrome reveal controller', () => {
     expect(instance.withReveal).not.toHaveBeenCalled();
   });
 
+  it('uses the in-page chooser only for an overlay initiated batch', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const proOptions = vi.fn(async () => undefined);
+    const controller = new ChromeRevealController(async () => asCore(core()), storage, undefined, proOptions);
+    await controller.fillBatch(batch);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(proOptions).toHaveBeenNthCalledWith(1, expect.any(AbortSignal), undefined);
+    expect(proOptions).toHaveBeenNthCalledWith(2, expect.any(AbortSignal), batch);
+  });
+
+  it('explains an active access owned by another integration', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const instance = core({ withReveal: vi.fn(async () => { throw new Error('merge_process_already_active'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(controller.current()).toEqual({ kind: 'ERROR',
+      message: 'Another access is open for this plan. Finish it in the integration where it started, then try again.' });
+  });
+
+  it('keeps a released access available for an explicit restart', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const close = vi.fn();
+    const revealId = 'b02121ed-cf51-4b91-8062-9072f2e3a2d5';
+    const instance = core({ reveals: { close }, getActivePlanReveal: vi.fn(async () => ({ id: revealId })),
+      withReveal: vi.fn(async () => { throw Object.assign(new Error('reveal_restart_required'),
+      { code: 'reveal_restart_required', revealId }); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(controller.current()).toEqual({ kind: 'WARNING', code: 'reveal_restart_required', planId: 'plan-1', revealId,
+      message: 'This plan has an open access request. You can cancel it and start again.',
+      detail: 'A previous access cannot continue after the browser closed. Restart it to open this plan again; approvals will be requested again.' });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it.each(['STARTING', 'MATERIAL_RELEASED'])('offers conditional cancellation after a generic failure with active %s access', async (stage) => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const revealId = 'b02121ed-cf51-4b91-8062-9072f2e3a2d5';
+    const instance = core({ getActivePlanReveal: vi.fn(async () => ({ id: revealId, stage })),
+      withReveal: vi.fn(async () => { throw new Error('network_failed SECRET_SHOULD_NOT_LEAK'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(controller.current()).toMatchObject({ kind: 'WARNING', code: 'active_access_open',
+      planId: 'plan-1', revealId });
+    expect(JSON.stringify(controller.current())).not.toContain('SECRET_SHOULD_NOT_LEAK');
+    expect(instance.getActivePlanReveal).toHaveBeenCalledWith('plan-1');
+  });
+
+  it('keeps a genuine failure as an error when no access remains active', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const instance = core({ withReveal: vi.fn(async () => { throw new Error('network_failed'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(controller.current()).toEqual({ kind: 'ERROR', message: 'Reveal could not continue. Try again.' });
+    expect(instance.getActivePlanReveal).toHaveBeenCalledWith('plan-1');
+  });
+
+  it('reports a stale conditional restart without closing the newer access', async () => {
+    const abortPlanAccess = vi.fn(async () => ({ aborted: false }));
+    const revealId = '11111111-1111-4111-8111-111111111111';
+    const controller = new ChromeRevealController(async () => asCore(core({ abortPlanAccess,
+      getActivePlanReveal: vi.fn(async () => ({ id: revealId })) })), storage);
+    await expect(controller.abortPlanAccess('plan-1', 'old-reveal')).resolves.toMatchObject({ kind: 'WARNING', revealId });
+    expect(abortPlanAccess).toHaveBeenCalledWith('plan-1', 'old-reveal');
+  });
+
   it('stops remaining writes after navigation becomes stale during delivery', async () => {
     executeScript
       .mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: true }])
@@ -400,6 +523,228 @@ describe('Chrome reveal controller', () => {
 
     await expect(controller.resume()).resolves.toEqual({ kind: 'DONE', message: 'Field filled. Reveal closed.' });
     expect((instance.withReveal as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toBe('plan-1');
+  });
+
+  it('reconciles an interrupted key release and permits canceling its pending intent', async () => {
+    values.set('inheritiElements.openReveal', {
+      planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch },
+    });
+    const instance = core();
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(instance.getActivePlanReveal).toHaveBeenCalledWith('plan-1');
+  });
+
+  it('cancels in one click when the pending request reached the server', async () => {
+    const revealId = '11111111-1111-4111-8111-111111111111';
+    values.set('inheritiElements.openReveal', {
+      planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch },
+    });
+    const serverAbort = vi.fn(async () => ({ aborted: true }));
+    const instance = core({ getActivePlanReveal: vi.fn(async () => ({ id: revealId })), abortPlanAccess: serverAbort });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'WARNING', planId: 'plan-1', revealId });
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(serverAbort).toHaveBeenCalledWith('plan-1', undefined);
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+  });
+
+  it('cancels a request that becomes server-active after the pending card appeared', async () => {
+    const revealId = '11111111-1111-4111-8111-111111111111';
+    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } });
+    const active = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: revealId });
+    const serverAbort = vi.fn(async () => ({ aborted: true }));
+    const controller = new ChromeRevealController(async () => asCore(core({
+      getActivePlanReveal: active, abortPlanAccess: serverAbort,
+    })), storage);
+    expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RESUMABLE' });
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(serverAbort).toHaveBeenCalledWith('plan-1', undefined);
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+  });
+
+  it('persists only relay metadata and cancels it after the reveal worker is replaced', async () => {
+    const relayValues = new Map<string, unknown>();
+    const relayStorage = {
+      get: async (key: string) => relayValues.has(key) ? { [key]: relayValues.get(key) } : {},
+      set: async (entries: Record<string, unknown>) => { Object.entries(entries).forEach(([key, value]) => relayValues.set(key, value)); },
+      remove: async (key: string) => { relayValues.delete(key); },
+    } as chrome.storage.StorageArea;
+    const owner = { issuer: 'https://safeid.test', subject: 'user-1', organizationId: 'org-1' };
+    const relayId = '11111111-1111-4111-8111-111111111111';
+    const instance = core({ withReveal: vi.fn(async (_planId, options) => {
+      await options.onRelaySession({ sessionId: relayId, expiresAt: '2030-01-01T00:00:00.000Z' });
+      throw new Error('worker-stopped');
+    }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage,
+      () => 'Organisation', undefined, { storage: relayStorage, owner: async () => owner });
+    await controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    expect(relayValues.get('inheritiGuard.pendingKeyRelay')).toEqual({ ...owner, planId: 'plan-1',
+      sessionId: relayId, expiresAt: '2030-01-01T00:00:00.000Z' });
+    const cancelMasterKeyRelaySession = vi.fn(async () => undefined);
+    const restarted = new ChromeRevealController(async () => asCore(core({ cancelMasterKeyRelaySession })), storage,
+      () => 'Organisation', undefined, { storage: relayStorage, owner: async () => owner });
+    expect(await restarted.reconcile('plan-1')).toMatchObject({ kind: 'RESUMABLE' });
+    expect(await restarted.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(cancelMasterKeyRelaySession).toHaveBeenCalledWith(relayId);
+    expect(relayValues.size).toBe(0);
+  });
+
+  it('cancels an older plan relay before opening a different plan', async () => {
+    const relayId = '11111111-1111-4111-8111-111111111111';
+    const owner = { issuer: 'https://safeid.test', subject: 'user-1', organizationId: 'org-1' };
+    const relayValues = new Map<string, unknown>([['inheritiGuard.pendingKeyRelay', {
+      ...owner, planId: 'plan-1', sessionId: relayId, expiresAt: '2030-01-01T00:00:00.000Z',
+    }]]);
+    const relayStorage = {
+      get: async (key: string) => relayValues.has(key) ? { [key]: relayValues.get(key) } : {},
+      set: async (entries: Record<string, unknown>) => { Object.entries(entries).forEach(([key, value]) => relayValues.set(key, value)); },
+      remove: async (key: string) => { relayValues.delete(key); },
+    } as chrome.storage.StorageArea;
+    const cancelMasterKeyRelaySession = vi.fn(async () => undefined);
+    const instance = core({ cancelMasterKeyRelaySession });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage,
+      () => 'Organisation', undefined, { storage: relayStorage, owner: async () => owner });
+    await controller.fill({ planId: 'plan-2', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    expect(cancelMasterKeyRelaySession).toHaveBeenCalledWith(relayId);
+    expect(instance.withReveal).toHaveBeenCalledWith('plan-2', expect.anything(), expect.anything());
+    expect(relayValues.size).toBe(0);
+  });
+
+  it('reconciles and cancels a running key release after the overlay reply is lost', async () => {
+    const instance = core();
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const abort = new AbortController();
+    Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Release the Organisation key.' },
+      intent: { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } } });
+    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } });
+    expect(controller.current().kind).toBe('RUNNING');
+    expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RUNNING' });
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(abort.signal.aborted).toBe(true);
+    expect(controller.current()).toMatchObject({ kind: 'DONE', message: 'Pending request canceled. You can start again.' });
+  });
+
+  it('does not cancel a pending request when server access status cannot be checked', async () => {
+    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } });
+    const instance = core({ getActivePlanReveal: vi.fn(async () => { throw new Error('offline'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
+    expect(values.has('inheritiElements.openReveal')).toBe(true);
+  });
+
+  it('keeps a running reveal owned when the cancellation status check fails', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const withReveal = vi.fn(async () => { await gate; });
+    const instance = core({ withReveal, getActivePlanReveal: vi.fn(async () => { throw new Error('offline'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const pending = controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 });
+    await vi.waitFor(() => expect(withReveal).toHaveBeenCalledOnce());
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
+    release();
+    await pending;
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    await expect(controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
+      origin: 'https://db.example.test', tabId: 7 })).resolves.toMatchObject({ kind: 'DONE' });
+  });
+
+  it('releases the local reveal when relay cancellation fails and retains the relay for retry', async () => {
+    const owner = { issuer: 'https://safeid.test', subject: 'user-1', organizationId: 'org-1' };
+    const relayId = '11111111-1111-4111-8111-111111111111';
+    const relayValues = new Map<string, unknown>([['inheritiGuard.pendingKeyRelay', {
+      ...owner, planId: 'plan-1', sessionId: relayId, expiresAt: '2030-01-01T00:00:00.000Z',
+    }]]);
+    const relayStorage = {
+      get: async (key: string) => relayValues.has(key) ? { [key]: relayValues.get(key) } : {},
+      set: async (entries: Record<string, unknown>) => { Object.entries(entries).forEach(([key, value]) => relayValues.set(key, value)); },
+      remove: async (key: string) => { relayValues.delete(key); },
+    } as chrome.storage.StorageArea;
+    const cancelMasterKeyRelaySession = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    const controller = new ChromeRevealController(async () => asCore(core({ cancelMasterKeyRelaySession })), storage,
+      () => 'Organisation', undefined, { storage: relayStorage, owner: async () => owner });
+    const abort = new AbortController();
+    const recovery = { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } };
+    Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Release the Organisation key.' }, intent: recovery });
+    values.set('inheritiElements.openReveal', recovery);
+    await expect(controller.cancelPending('plan-1')).rejects.toThrow('offline');
+    expect(abort.signal.aborted).toBe(true);
+    expect((controller as unknown as { active?: AbortController }).active).toBeUndefined();
+    expect(relayValues.has('inheritiGuard.pendingKeyRelay')).toBe(true);
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
+    expect(cancelMasterKeyRelaySession).toHaveBeenCalledTimes(2);
+    expect(relayValues.size).toBe(0);
+  });
+
+  it('preserves another plan while canceling a stale card', async () => {
+    const abort = new AbortController();
+    const serverAbort = vi.fn(async () => ({ aborted: true }));
+    const controller = new ChromeRevealController(async () => asCore(core({ abortPlanAccess: serverAbort })), storage);
+    const recovery = { planId: 'plan-2', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } };
+    Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Opening another plan.' }, intent: recovery });
+    values.set('inheritiElements.openReveal', recovery);
+    expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RUNNING' });
+    expect(await controller.abortPlanAccess('plan-1')).toMatchObject({ kind: 'RUNNING' });
+    expect(serverAbort).not.toHaveBeenCalled();
+    expect(abort.signal.aborted).toBe(false);
+    expect(values.get('inheritiElements.openReveal')).toBe(recovery);
+    expect(controller.current()).toMatchObject({ kind: 'RUNNING' });
+  });
+
+  it('stops an in-memory reveal before canceling its observed server access', async () => {
+    const revealId = '11111111-1111-4111-8111-111111111111';
+    const abort = new AbortController();
+    const serverAbort = vi.fn(async () => { expect(abort.signal.aborted).toBe(true); return { aborted: true }; });
+    const controller = new ChromeRevealController(async () => asCore(core({ abortPlanAccess: serverAbort })), storage);
+    Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Opening the plan.' },
+      intent: { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } } });
+    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } });
+    expect(await controller.abortPlanAccess('plan-1', revealId)).toMatchObject({ kind: 'DONE' });
+    expect(serverAbort).toHaveBeenCalledWith('plan-1', revealId);
+    expect(values.has('inheritiElements.openReveal')).toBe(false);
+  });
+
+  it('blocks a new reveal until server cancellation and local cleanup finish', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const serverAbort = vi.fn(async () => { await gate; return { aborted: true }; });
+    const controller = new ChromeRevealController(async () => asCore(core({ abortPlanAccess: serverAbort })), storage);
+    const pending = controller.abortPlanAccess('plan-1');
+    await vi.waitFor(() => expect(serverAbort).toHaveBeenCalledOnce());
+    await expect(controller.fillBatch(batch)).rejects.toMatchObject({ code: 'access-request-failed' });
+    release();
+    await expect(pending).resolves.toMatchObject({ kind: 'DONE' });
+    await expect(controller.fillBatch(batch)).resolves.toBeDefined();
+  });
+
+  it('blocks a new reveal while pending-request cleanup is awaiting storage', async () => {
+    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'BATCH', batch } });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    (storage.remove as ReturnType<typeof vi.fn>).mockImplementationOnce(async (key: string) => {
+      await gate;
+      values.delete(key);
+    });
+    const controller = new ChromeRevealController(async () => asCore(core()), storage);
+    const pending = controller.cancelPending('plan-1');
+    await vi.waitFor(() => expect(storage.remove).toHaveBeenCalledOnce());
+    await expect(controller.fillBatch(batch)).rejects.toMatchObject({ code: 'access-request-failed' });
+    release();
+    await expect(pending).resolves.toMatchObject({ kind: 'DONE' });
+    await expect(controller.fillBatch(batch)).resolves.toBeDefined();
   });
 
   it('closes a reveal whose recovery record is past its deadline instead of offering it', async () => {

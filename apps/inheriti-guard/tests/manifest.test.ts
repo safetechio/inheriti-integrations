@@ -17,6 +17,7 @@ interface ChromeManifest {
   readonly short_name?: string;
   readonly version?: string;
   readonly key?: string;
+  readonly web_accessible_resources?: readonly { readonly resources: readonly string[]; readonly matches: readonly string[] }[];
 }
 
 describe('Chrome MV3 manifest', () => {
@@ -70,6 +71,11 @@ describe('Chrome MV3 manifest', () => {
     });
     expect(manifest.side_panel?.default_path).toBe('side-panel/index.html');
     expect(manifest.content_security_policy?.extension_pages).toBe("script-src 'self' 'wasm-unsafe-eval'; object-src 'none'");
+    expect(manifest.web_accessible_resources?.[1]).toEqual({
+      resources: ['side-panel/assets/inheriti-business-logo.png', 'side-panel/assets/safekey-pro.png',
+        'side-panel/assets/safekey-mobile.png'],
+      matches: ['https://*/*'],
+    });
     const worker = await readFile(new URL('../src/background/service-worker.ts', import.meta.url), 'utf8');
     expect(worker).toContain('chrome.webNavigation?.onBeforeNavigate.addListener');
     expect(worker).toContain('guard.inlineNavigation(details)');

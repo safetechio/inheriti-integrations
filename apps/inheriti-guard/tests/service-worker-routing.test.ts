@@ -1,10 +1,15 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listeners: Record<string, ((...args: any[]) => any) | undefined> = {};
-const fillBatch = vi.fn(async (_batch: unknown) => [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }]);
+const fillBatch = vi.fn(async (_batch: unknown, _initiator?: string) => [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }]);
 const clearSession = vi.fn(async () => undefined);
 const signInMock = vi.fn(async (_auth?: unknown, _signal?: AbortSignal) => undefined);
 const shutdownReveal = vi.fn(async () => undefined);
+const abortPlanAccess = vi.fn(async (_planId: string, _expectedRevealId?: string) => ({ kind: 'DONE', message: 'Access aborted.' }));
+const cancelPending = vi.fn(async (_planId: string) => ({ kind: 'DONE', message: 'Request canceled.' }));
+const reconcileReveal = vi.fn(async (_planId: string) => ({ kind: 'WARNING', message: 'Access still open',
+  detail: '', code: 'active_access_open', planId: _planId, revealId: '22222222-2222-4222-8222-222222222222' }));
+let revealState: Record<string, unknown> = { kind: 'IDLE' };
 let businessMode = false;
 let businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }];
 const selectedOrganizations: Record<string, string> = {};
@@ -33,14 +38,16 @@ let planFieldNames: Array<'username' | 'email' | 'password'> = ['username'];
 
 vi.mock('../src/background/reveal.js', () => ({
   ChromeRevealController: class {
-    current() { return { kind: 'IDLE' }; }
+    current() { return revealState; }
     cancel() { return { kind: 'RUNNING', message: 'Canceling reveal…' }; }
-    async abortPlanAccess() { return { kind: 'DONE', message: 'No access is open on this plan.' }; }
+    abortPlanAccess = abortPlanAccess;
+    cancelPending = cancelPending;
+    reconcile = reconcileReveal;
     async closeAbandoned() {}
     async shutdown() { await shutdownReveal(); }
     async recoverAbandoned() {}
     async resume() { return { kind: 'IDLE' }; }
-    async fillBatch(batch: unknown) { return fillBatch(batch); }
+    async fillBatch(batch: unknown, initiator?: string) { return fillBatch(batch, initiator); }
     async fields() { return { kind: 'READY', planId: 'plan-1', fields: [] }; }
   },
   isRevealDeadline: () => false,
@@ -112,6 +119,7 @@ beforeAll(async () => {
     },
     declarativeNetRequest: { getDynamicRules: vi.fn(async () => []), updateDynamicRules: vi.fn(async () => undefined) },
     idle: { setDetectionInterval: vi.fn(), onStateChanged: { addListener: vi.fn() } },
+    webNavigation: { onBeforeNavigate: { addListener: (listener: (...args: any[]) => any) => { listeners.beforeNavigate = listener; } } },
     downloads: { onCreated: { addListener: vi.fn() }, cancel: vi.fn(), erase: vi.fn() },
     notifications: { create: vi.fn(async () => undefined) }, browsingData: { remove: vi.fn(async () => undefined) },
     cookies: { getAll: vi.fn(async () => []), remove: vi.fn(async () => undefined) },
@@ -133,7 +141,8 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear();
+  fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
+  revealState = { kind: 'IDLE' };
   businessMode = false; workspaceFields = discovered; overlayFields = discovered; planFieldNames = ['username']; planListInputs.length = 0;
 });
 
@@ -148,6 +157,13 @@ function overlayRequest(message: unknown, sender: Record<string, unknown> = {
 }
 
 describe('service worker access routing', () => {
+  it('reconciles a valid plan UUID before returning overlay reveal state', async () => {
+    const planId = '04912bb5-4d0c-410a-bde8-b341eaf13883';
+    const result = await overlayRequest({ type: 'overlay-reveal-state', planId });
+    expect(reconcileReveal).toHaveBeenCalledWith(planId);
+    expect(result).toMatchObject({ ok: true, reveal: { kind: 'WARNING', planId } });
+  });
+
   it('selects Business organizations per identity and invalidates the held core on switch or stale choice', async () => {
     businessMode = true;
     businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }];
@@ -276,6 +292,7 @@ describe('service worker access routing', () => {
       ok: true, results: [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }],
     });
     expect(fillBatch).toHaveBeenCalledTimes(1);
+    expect(fillBatch).toHaveBeenCalledWith(saved.batch, 'PANEL');
   });
 
   it('invalidates the draft on sign-out', async () => {
@@ -285,6 +302,15 @@ describe('service worker access routing', () => {
       protectedField: loaded.protectedFields[0], pageTarget: loaded.pageTargets[0], source: 'MANUAL',
     } })).resolves.toEqual({ ok: false, error: 'stale-page-context' });
     expect(clearSession).toHaveBeenCalledOnce();
+  });
+
+  it('invalidates selected fields on a same-URL page reload', async () => {
+    const loaded = await request({ type: 'load-access-workspace', planId: 'plan-1' });
+    const mapping = { protectedField: loaded.protectedFields[0], pageTarget: loaded.pageTargets[0], source: 'MANUAL' };
+    expect((await request({ type: 'set-access-mapping', mapping })).batch.mappings).toHaveLength(1);
+    listeners.beforeNavigate!({ tabId: 7, frameId: 0, url: 'https://example.test/login' });
+    await expect(request({ type: 'set-access-mapping', mapping }))
+      .resolves.toEqual({ ok: false, error: 'stale-page-context' });
   });
 
   it('discards an access workspace without requiring or returning page metadata', async () => {
@@ -306,6 +332,28 @@ describe('service worker access routing', () => {
     expect(response.candidates).toHaveLength(2);
     expect(JSON.stringify(response)).not.toContain('value');
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('aborts an unfinished access only after an explicit, authorized overlay request', async () => {
+    businessMode = true;
+    await expect(overlayRequest({ type: 'overlay-abort-plan-access', planId: 'invalid' }))
+      .resolves.toEqual({ ok: false, error: 'invalid-access-batch' });
+    expect(abortPlanAccess).not.toHaveBeenCalled();
+    const planId = '04912bb5-4d0c-410a-bde8-b341eaf13883';
+    await expect(overlayRequest({ type: 'overlay-abort-plan-access', planId }))
+      .resolves.toEqual({ ok: true, reveal: { kind: 'DONE', message: 'Access aborted.' } });
+    expect(abortPlanAccess).toHaveBeenCalledWith(planId);
+  });
+
+  it.each(['overlay-abort-plan-access', 'overlay-cancel-pending-access'])
+  ('clears the inline selection after %s succeeds', async (type) => {
+    const planId = '04912bb5-4d0c-410a-bde8-b341eaf13883';
+    const loaded = await request({ type: 'load-access-workspace', planId });
+    const mapping = { protectedField: loaded.protectedFields[0], pageTarget: loaded.pageTargets[0], source: 'MANUAL' };
+    expect((await request({ type: 'set-access-mapping', mapping })).batch.mappings).toHaveLength(1);
+    expect((await overlayRequest({ type, planId })).reveal.kind).toBe('DONE');
+    await expect(request({ type: 'set-access-mapping', mapping }))
+      .resolves.toEqual({ ok: false, error: 'stale-page-context' });
   });
 
   it('revalidates against the content script that owns the opaque target', async () => {
@@ -336,6 +384,24 @@ describe('service worker access routing', () => {
     expect(selected.batch.mappings).toHaveLength(1);
     expect(panel.batch).toEqual(selected.batch);
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('switches plans from the overlay by replacing old mappings', async () => {
+    await request({ type: 'discard-access-workspace' });
+    const target = { targetId: 'target-auto', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'username', label: 'Login' };
+    const first = await overlayRequest({ type: 'overlay-load-candidates', target });
+    const selectedFirst = await overlayRequest({ type: 'overlay-select-candidate',
+      mapping: first.candidates.find((one: any) => one.planName === 'Exact plan').suggestion.mapping,
+      planName: 'Exact plan' });
+    expect(selectedFirst.batch.identity.planId).toBe('plan-1');
+    const allPlans = await overlayRequest({ type: 'overlay-load-candidates', target });
+    const other = allPlans.candidates.find((one: any) => one.planName === 'Fallback plan');
+    expect(other).toBeDefined();
+    const switched = await overlayRequest({ type: 'overlay-select-candidate',
+      mapping: other.suggestion.mapping, planName: other.planName });
+    expect(switched.batch.identity.planId).toBe('plan-2');
+    expect(switched.batch.mappings.every((mapping: any) => mapping.protectedField.planId === 'plan-2')).toBe(true);
   });
 
   it('maps the other unambiguous fields from the selected credential asset', async () => {

@@ -6,7 +6,8 @@ export interface SdkPlanReader {
   listPlans(input?: ListPlansInput): Promise<PlanPage>;
   getPlan(planId: string): Promise<PlanDetail>;
   listPlanLogs(planId: string, input?: ListPlanLogsInput): Promise<PlanLogPage>;
-  abortPlanAccess(planId: string): Promise<{ aborted: boolean }>;
+  getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
+  abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }>;
 }
 
 export type ElementsPlanFacade = PlanFacade<ListPlansInput, PlanPage, PlanDetail>;
@@ -59,9 +60,14 @@ export class SdkPlanFacade implements ElementsPlanFacade {
     return this.guard(() => this.reader.listPlanLogs(planId, input));
   }
 
-  abortPlanAccess(planId: string): Promise<{ aborted: boolean }> {
+  getActivePlanReveal(planId: string): Promise<{ id: string } | null> {
     if (!planId) throw new PlanRequestFailed('plan_id_required');
-    return this.guard(() => this.reader.abortPlanAccess(planId));
+    return this.guard(() => this.reader.getActivePlanReveal(planId));
+  }
+
+  abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }> {
+    if (!planId) throw new PlanRequestFailed('plan_id_required');
+    return this.guard(() => this.reader.abortPlanAccess(planId, expectedRevealId));
   }
 
   private async guard<TResult>(call: () => Promise<TResult>): Promise<TResult> {

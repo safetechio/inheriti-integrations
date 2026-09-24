@@ -51,7 +51,7 @@ export class MetadataTools {
   private core?: NodeIntegrationCore;
   private config?: Configuration;
   private sessions = new SessionStore();
-  private job?: { id: string; organizationId: string; phase: string; message?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
+  private job?: { id: string; organizationId: string; phase: string; message?: string; code?: 'reveal_restart_required'; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
 
@@ -210,20 +210,24 @@ export class MetadataTools {
           });
         }
       }); completed = true; } finally { prompt.close(completed ? 'complete' : controller.signal.aborted ? 'canceled' : 'failed'); }
-    })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(() => {
+    })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(error => {
       job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED';
       if (job.status === 'CANCELED') job.message = 'Reveal canceled.';
+      else if ((error as { code?: unknown })?.code === 'reveal_restart_required') {
+        job.code = 'reveal_restart_required';
+        job.message = 'This plan has an interrupted open request. Finish or cancel it in Inheriti Business, then start a new reveal.';
+      }
       else if (job.phase !== 'DENIED' && job.phase !== 'STOPPED_BY_DMS') job.message = 'Reveal could not continue.';
     });
     const expiry = setTimeout(() => controller.abort(), 10 * 60_000);
     void job.done.finally(() => clearTimeout(expiry));
-    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }) };
+    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }), ...(job.code ? { code: job.code } : {}) };
   }
   async revealStatus(jobId: string, cancel = false) {
     const job = this.job;
     if (!job || job.id !== jobId) throw coded('reveal_not_found');
     if (cancel && job.status === 'WAITING') { job.controller.abort(); await job.done; }
-    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }), ...(job.status === 'DELIVERED' ? { delivered: true } : {}) };
+    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.message === undefined ? {} : { message: job.message }), ...(job.code ? { code: job.code } : {}), ...(job.status === 'DELIVERED' ? { delivered: true } : {}) };
   }
 
 }
@@ -233,7 +237,7 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
     try { return { content: [{ type: 'text' as const, text: JSON.stringify(await work(args)) }] }; }
     catch (error) {
       const code = (error as { code?: unknown })?.code;
-      const safe = typeof code === 'string' && /^(organization_(?:required|selection_required|access_denied|preference_invalid)|plan_not_found|operator_reauthentication_required|plan_request_rate_limited)$/.test(code) ? code : 'request_failed';
+      const safe = typeof code === 'string' && /^(organization_(?:required|selection_required|access_denied|preference_invalid)|plan_not_found|operator_reauthentication_required|plan_request_rate_limited|reveal_restart_required)$/.test(code) ? code : 'request_failed';
       return { isError: true, content: [{ type: 'text' as const, text: safe }] };
     }
   };

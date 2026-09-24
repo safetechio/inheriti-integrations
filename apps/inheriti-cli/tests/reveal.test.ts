@@ -50,6 +50,12 @@ describe('plans reveal', () => {
     );
   });
 
+  it('explains how to restart an interrupted governed reveal without exposing its raw code', () => {
+    expect(messageFor({ code: 'reveal_restart_required' })).toBe(
+      'An earlier reveal of this plan cannot continue. Run `inheriti plans abort PLAN_ID` with this plan ID, then retry your reveal command.',
+    );
+  });
+
   it('names the Business organisation in plan errors while preserving standalone copy', () => {
     expect(messageFor({ code: 'plan_not_found' }, true)).toBe('No such plan in this Organisation.');
     expect(messageFor({ code: 'plan_not_found' })).toBe('No such plan in this Application.');

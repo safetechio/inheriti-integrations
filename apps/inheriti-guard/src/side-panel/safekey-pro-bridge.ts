@@ -1,6 +1,6 @@
 import { createBrowserSafeKeyProDevice } from '@safetech/inheriti-core-sdk/safekey-pro/browser';
 
-type Request = { id: number; operation: 'choose' | 'write' | 'read' | 'finish' | 'cancel'; rpId?: string; share?: unknown; request?: unknown };
+type Request = { id: number; operation: 'choose' | 'prepare' | 'write' | 'read' | 'finish' | 'cancel'; rpId?: string; share?: unknown; request?: unknown };
 
 const title = document.querySelector<HTMLElement>('#safekey-title')!;
 const intro = document.querySelector<HTMLElement>('#safekey-intro')!;
@@ -19,6 +19,7 @@ let active: AbortController | undefined;
 let device: ReturnType<typeof createBrowserSafeKeyProDevice> | undefined;
 let deviceRpId: string | undefined;
 let currentOperation: 'read' | 'write' = 'read';
+let preparingPin = false;
 
 function clear(): void {
   active?.abort(); active = undefined;
@@ -40,19 +41,20 @@ function askChoice(): Promise<'SK_MOBILE' | 'SK_PRO'> {
   });
 }
 
-function askPin(): Promise<string> {
+function askPin(onSubmit?: () => void): Promise<string> {
   if (cachedPin) return Promise.resolve(cachedPin);
   choice.hidden = true; pinForm.hidden = false; touch.hidden = true;
   title.textContent = currentOperation === 'write' ? 'Save to SafeKey Pro' : 'Collect from SafeKey Pro';
   intro.textContent = currentOperation === 'write'
     ? 'Enter your PIN to save the custodian share to your device.'
     : 'Enter your PIN to read the custodian share from your device.';
-  status.textContent = 'Your PIN stays in this Guard window.';
+  status.textContent = 'Your PIN stays in this InheritiGuard window.';
   pinInput.focus();
   return new Promise((resolve, reject) => {
     pending = { reject };
     pinForm.onsubmit = (event) => {
       event.preventDefault();
+      onSubmit?.();
       cachedPin = pinInput.value;
       pinInput.value = '';
       pinForm.hidden = true;
@@ -77,6 +79,7 @@ function errorCode(error: unknown): string {
 export function connectSafeKeyProPanel(): void {
   const port = chrome.runtime.connect({ name: 'inheriti-safekey-pro' });
   const cancelReveal = () => {
+    if (preparingPin) { window.close(); return; }
     clear();
     try { port.postMessage({ operation: 'cancel-reveal' }); } catch { /* The worker has stopped. */ }
     window.close();
@@ -96,17 +99,24 @@ export function connectSafeKeyProPanel(): void {
         if (message.operation === 'choose') {
           port.postMessage({ id: message.id, ok: true, value: await askChoice() }); return;
         }
+        if (message.operation === 'prepare') {
+          currentOperation = 'write';
+          preparingPin = true;
+          await askPin(() => { preparingPin = false; port.postMessage({ operation: 'pin-confirmed' }); });
+          preparingPin = false;
+          port.postMessage({ id: message.id, ok: true, value: true }); return;
+        }
         if (message.operation !== 'read' && message.operation !== 'write') throw new Error('SAFEKEY_DEVICE_FAILED');
         currentOperation = message.operation;
         if (!validRpId(message.rpId) || (deviceRpId && deviceRpId !== message.rpId)) throw new Error('SAFEKEY_DEVICE_FAILED');
         deviceRpId = message.rpId;
         device ??= createBrowserSafeKeyProDevice({
           rpId: message.rpId,
-          getPin: askPin,
+          getPin: () => askPin(),
           onTouch: () => {
             pinForm.hidden = true; touch.hidden = false;
             title.textContent = 'Confirm on SafeKey Pro';
-            intro.textContent = 'Keep your device connected while Guard opens the plan.';
+            intro.textContent = 'Keep your device connected while InheritiGuard opens the plan.';
             status.textContent = 'Press and release when Chrome asks. Several touches may be needed.';
           },
         });
@@ -118,7 +128,8 @@ export function connectSafeKeyProPanel(): void {
         port.postMessage({ id: message.id, ok: true, value });
       } catch (error) {
         active = undefined;
-        port.postMessage({ id: message.id, ok: false, error: errorCode(error) });
+        try { port.postMessage({ id: message.id, ok: false, error: errorCode(error) }); }
+        catch { /* The secure window closed before it could answer. */ }
       }
     })();
   });

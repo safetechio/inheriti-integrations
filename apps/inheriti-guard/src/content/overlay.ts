@@ -4,7 +4,7 @@ interface ProtectedField { assetName: string; fieldName: Semantic; matchesOrigin
 interface Mapping { protectedField: ProtectedField; pageTarget: FieldMetadata }
 interface Candidate { planName: string; assetFieldNames: readonly Semantic[];
   suggestion: { confidence: string; reason: string; mapping: Mapping } }
-interface RevealState { kind: 'IDLE' | 'READY' | 'RUNNING' | 'DONE' | 'ERROR'; message?: string; expiresAt?: string; gateExpiresAt?: string }
+interface RevealState { kind: 'IDLE' | 'READY' | 'RUNNING' | 'DONE' | 'ERROR' | 'WARNING' | 'RESUMABLE'; planId?: string; message?: string; detail?: string; code?: 'reveal_restart_required' | 'reveal_access_changed' | 'active_access_open'; revealId?: string; expiresAt?: string; gateExpiresAt?: string }
 interface FieldResult { selector: string; targetId: string; code: string }
 interface Batch { identity: { planId: string }; mappings: readonly Mapping[] }
 
@@ -19,6 +19,20 @@ const STYLES = `
 @media(prefers-reduced-motion:reduce){.button{animation:none}}
 .popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:7px;width:292px;max-width:min(292px,calc(100vw - 24px));padding:10px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#101828;font:12px/1.4 system-ui;box-shadow:0 12px 32px #10182833;overflow:hidden}
 .popover.shown{opacity:1;transform:none}
+.popover.device-choice{box-sizing:border-box;width:360px;max-width:calc(100vw - 24px);gap:0;padding:18px;border-color:#d0d5dd;border-radius:16px;box-shadow:0 20px 48px #1018283d}
+.device-logo{display:block;width:142px;max-width:100%;height:auto;margin:0 0 16px}
+.device-eyebrow{margin:0 0 4px;color:#0066ff;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.device-title{margin:0;color:#101828;font-size:20px;font-weight:800;line-height:1.2;letter-spacing:-.03em}
+.device-intro{margin:8px 0 16px;color:#667085;font-size:14px;line-height:1.5}
+.device-options{display:grid;gap:10px}
+.device-option{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#101828;text-align:left;font:inherit;cursor:pointer}
+.device-option:hover{border-color:#0066ff;background:#f0f6ff}
+.device-option:focus-visible,.device-cancel:focus-visible{outline:3px solid #75a9ff;outline-offset:2px}
+.device-option img{width:50px;height:50px;flex:none;object-fit:contain}
+.device-option strong,.device-option small{display:block}
+.device-option strong{font-size:14px}
+.device-option small{margin-top:3px;color:#667085;font-size:12px;line-height:1.4}
+.device-cancel{align-self:flex-start;margin:14px 0 0;padding:6px 0;border:0;background:transparent;color:#475467;font:inherit;font-weight:700;cursor:pointer}
 @media(prefers-reduced-motion:reduce){.popover{transition:none}}
 .title{flex:none;margin:0;font-weight:800;letter-spacing:.01em}
 .filter{flex:none;box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#101828;font:inherit}
@@ -56,6 +70,14 @@ const STYLES = `
 .reveal-head{flex:none;display:flex;align-items:center;gap:7px;color:#0066ff;font-size:12px}
 .reveal-head.success{color:#079455}
 .reveal-head.failed{color:#d92d20}
+.reveal-head.warning{color:#101828;font-size:20px;line-height:1.2}
+.reveal-head.warning .glyph{display:grid;place-items:center;flex:none;width:24px;height:24px;border:1px solid #fae17d;border-radius:50%;background:#fff9e9;color:#dd9509;font-size:16px}
+.popover.warning-state{box-sizing:border-box;width:360px;max-width:calc(100vw - 24px);border-color:#fff8c5;background:#fffcf3}
+.warning-state .title{overflow-wrap:anywhere}
+.warning-state .phase{font-size:14px}
+.warning-state .countdown{color:#475467;font-size:12px;line-height:1.5}
+.warning-state .action.primary{background:#934508}
+.warning-state .action.primary:hover{background:#783708}
 .reveal-head .spinner,.reveal-head .glyph{width:13px;text-align:center;font-weight:800}
 .phase{flex:none;margin:0;color:#101828;font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .dots{display:inline-block;width:14px;text-align:left}
@@ -77,6 +99,8 @@ let openPopover: HTMLElement | undefined;
 let openPopoverHost: HTMLElement | undefined;
 let revealTimers: number[] = [];
 let anchored: { anchor: HTMLElement; popover: HTMLElement } | undefined;
+let activeRevealIdentity: Batch['identity'] | undefined;
+let cancelCustodianChoice: (() => void) | undefined;
 const CLAIM_ATTRIBUTE = 'data-inheriti-elements-overlay-claim';
 const claim = crypto.randomUUID();
 const overlayGlobal = globalThis as typeof globalThis & { [INSTANCE_KEY]?: { destroy(): void } };
@@ -216,15 +240,16 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
   });
   filter.addEventListener('keydown', (event) => { if (event.key === 'Escape') closePopover(); });
 
-  const chosenHere = (): string | undefined => mappingsOf(batch)
-    .find((mapping) => mapping.pageTarget.targetId === target.targetId)?.protectedField.selector;
+  const chosenHere = () => mappingsOf(batch)
+    .find((mapping) => mapping.pageTarget.targetId === target.targetId)?.protectedField;
 
   const paintList = (pending?: Candidate): void => {
     const visible = matching(candidates, query);
-    const selector = chosenHere();
+    const selected = chosenHere();
     if (visible.length === 0) { list.replaceChildren(status('No plan or asset matches that filter.')); return; }
     list.replaceChildren(...visible.map((candidate) => option(candidate, {
-      selected: candidate.suggestion.mapping.protectedField.selector === selector,
+      selected: candidate.suggestion.mapping.protectedField.planId === selected?.planId
+        && candidate.suggestion.mapping.protectedField.selector === selected.selector,
       pending: sameCandidate(candidate, pending),
       onPick: () => { void choose(candidate); },
     })));
@@ -296,7 +321,7 @@ function matching(candidates: readonly Candidate[], query: string): readonly Can
 }
 
 function sameCandidate(candidate: Candidate, other?: Candidate): boolean {
-  return other !== undefined && other.planName === candidate.planName
+  return other !== undefined && other.suggestion.mapping.protectedField.planId === candidate.suggestion.mapping.protectedField.planId
     && other.suggestion.mapping.protectedField.selector === candidate.suggestion.mapping.protectedField.selector
     && other.suggestion.mapping.pageTarget.targetId === candidate.suggestion.mapping.pageTarget.targetId;
 }
@@ -319,6 +344,7 @@ function titleCase(value: string): string { return `${value[0]?.toUpperCase() ??
 
 /** The CLI's reveal card, in the page: one phase at a time, with the fields it is working on. */
 async function runReveal(batch: Batch, candidates: readonly Candidate[], popover: HTMLElement): Promise<void> {
+  activeRevealIdentity = batch.identity;
   const planName = candidates.find((candidate) => candidate.suggestion.mapping.protectedField.planId === batch.identity.planId)?.planName;
   const spinner = element('span', 'spinner', SPINNER[0]);
   const title = element('strong', '', 'Revealing your plan');
@@ -372,7 +398,9 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   ];
   const result = await chrome.runtime.sendMessage({ type: 'overlay-reveal-and-autofill', batch }).catch(() => undefined) as
     { ok?: boolean; results?: FieldResult[] } | undefined;
-  const finalState = await chrome.runtime.sendMessage({ type: 'overlay-reveal-state' }).catch(() => undefined) as
+  activeRevealIdentity = undefined;
+  cancelCustodianChoice?.();
+  const finalState = await chrome.runtime.sendMessage({ type: 'overlay-reveal-state', planId: batch.identity.planId }).catch(() => undefined) as
     { ok?: boolean; reveal?: RevealState } | undefined;
   stopRevealTimers();
   if (popover !== openPopover || abandoned) return;
@@ -380,14 +408,21 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   const results = result?.results ?? [];
   const filled = results.filter((one) => one.code === 'filled').length;
   const succeeded = result?.ok === true && results.length > 0 && filled === results.length;
-  heading.className = `reveal-head ${succeeded ? 'success' : 'failed'}`;
+  const interrupted = finalState?.reveal?.kind === 'RESUMABLE' && finalState.reveal.planId === batch.identity.planId
+    || finalState?.reveal?.kind === 'RUNNING';
+  const warning = finalState?.reveal?.kind === 'WARNING' || interrupted;
+  popover.classList.toggle('warning-state', warning);
+  heading.className = `reveal-head ${succeeded ? 'success' : warning ? 'warning' : 'failed'}`;
   spinner.className = 'glyph';
-  spinner.textContent = succeeded ? '✓' : '✕';
+  spinner.textContent = succeeded ? '✓' : warning ? '!' : '✕';
   const failure = finalState?.ok === true && finalState.reveal?.kind === 'ERROR' ? finalState.reveal.message : undefined;
-  title.textContent = succeeded ? 'Reveal complete' : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
+  title.textContent = succeeded ? 'Reveal complete' : interrupted ? 'Access interrupted' : warning ? 'Access still open'
+    : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
   dots.textContent = '';
-  phaseText.textContent = succeeded ? 'Every field was written to the page' : failure ?? 'The reveal stopped before it finished';
-  countdown.textContent = results.length === 0
+  phaseText.textContent = succeeded ? 'Every field was written to the page' : warning
+    ? finalState?.reveal?.message ?? 'This plan has an open access request.'
+    : failure ?? 'The reveal stopped before it finished';
+  countdown.textContent = warning ? (finalState?.reveal?.kind === 'WARNING' ? finalState.reveal.detail ?? '' : 'No fields were filled.') : results.length === 0
     ? 'Autofill could not continue. Open the side panel for details.'
     : `${filled} of ${results.length} fields autofilled. The form was not submitted.`;
   const outcomes = element('ul', 'results');
@@ -396,8 +431,49 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
     item.append(element('span', '', labelFor(one, batch)), element('strong', '', resultLabel(one.code)));
     return item;
   }));
-  popover.replaceChildren(header(planName ?? 'Protected plan'), heading, phase, countdown, outcomes,
-    action('Done', 'ghost', closePopover));
+  const retry = () => {
+    popover.classList.remove('warning-state');
+    const shadow = popover.getRootNode() as ShadowRoot;
+    const input = [...controls].find(([, host]) => host === shadow.host)?.[0];
+    const anchor = shadow.querySelector<HTMLElement>('.button');
+    if (input && anchor) void chrome.runtime.sendMessage({ type: 'overlay-discard-selection' })
+      .catch(() => undefined).then(() => { if (popover === openPopover) void openChooser(input, shadow, anchor); });
+    else closePopover();
+  };
+  const observedRevealId = finalState?.reveal?.kind === 'WARNING' ? finalState.reveal.revealId : undefined;
+  const finish = typeof observedRevealId === 'string'
+    ? action('Cancel active access', 'primary', () => {
+      finish.disabled = true;
+      phaseText.textContent = 'Canceling the active access…';
+      void chrome.runtime.sendMessage({ type: 'overlay-abort-plan-access', planId: batch.identity.planId })
+        .then((response: { ok?: boolean; reveal?: RevealState; error?: string }) => {
+          if (popover !== openPopover) return;
+          if (response?.ok && response.reveal?.kind === 'DONE') {
+            closePopover();
+          }
+          else { phaseText.textContent = 'Could not cancel this access. Try again or open InheritiGuard.'; finish.disabled = false; }
+        })
+        .catch(() => { phaseText.textContent = 'Could not cancel this access. Try again or open InheritiGuard.'; finish.disabled = false; });
+    })
+    : interrupted ? action('Cancel pending request', 'primary', () => {
+      finish.disabled = true;
+      phaseText.textContent = 'Checking the pending request…';
+      void chrome.runtime.sendMessage({ type: 'overlay-cancel-pending-access', planId: batch.identity.planId })
+        .then((response: { ok?: boolean; reveal?: RevealState }) => {
+          if (popover !== openPopover) return;
+          if (response?.ok && response.reveal?.kind === 'DONE') {
+            closePopover();
+          } else if (response?.ok && response.reveal?.kind === 'WARNING') {
+            phaseText.textContent = 'An access request opened while checking. Try again to review and cancel it.';
+            finish.replaceWith(action('Review access', 'primary', retry));
+          } else { phaseText.textContent = 'Could not check this request. Try again.'; finish.disabled = false; }
+          reposition();
+        })
+        .catch(() => { phaseText.textContent = 'Could not check this request. Try again.'; finish.disabled = false; });
+    })
+    : action(succeeded ? 'Done' : 'Try again', succeeded ? 'ghost' : 'primary', succeeded ? closePopover : retry);
+  popover.replaceChildren(header(planName ?? 'Protected plan'), heading, phase, countdown, outcomes, finish,
+    ...(warning ? [action(interrupted ? 'Close' : 'Leave access open', 'ghost', closePopover)] : []));
   reposition();
 }
 
@@ -450,7 +526,7 @@ function emptyState(
 
 function selectionError(code?: string): string {
   if (code === 'stale-page-context') return 'The page changed. Close this and open the field again.';
-  if (code === 'invalid-access-batch') return 'One reveal covers one plan. Clear all to switch to another plan.';
+  if (code === 'invalid-access-batch') return 'That field is no longer available. Choose it again.';
   return 'That field could not be added. Open the side panel to continue.';
 }
 
@@ -558,6 +634,8 @@ function stopRevealTimers(): void {
   revealTimers = [];
 }
 function closePopover(): void {
+  activeRevealIdentity = undefined;
+  cancelCustodianChoice?.();
   stopRevealTimers();
   anchored = undefined;
   if (openPopover?.matches(':popover-open')) openPopover.hidePopover();
@@ -579,6 +657,46 @@ function onOverlayMessage(message: unknown, _sender: chrome.runtime.MessageSende
   if (document.documentElement.getAttribute(CLAIM_ATTRIBUTE) !== claim) return false;
   const type = (message as { type?: unknown })?.type;
   if (type === 'inheriti-overlay-teardown') cleanup();
+  if (type === 'inheriti-overlay-choose-custodian') {
+    const identity = (message as { identity?: unknown }).identity;
+    if (openPopover === undefined || activeRevealIdentity === undefined
+      || JSON.stringify(identity) !== JSON.stringify(activeRevealIdentity)) { sendResponse(undefined); return false; }
+    const popover = openPopover;
+    const previous = Array.from(popover.children);
+    let answered = false;
+    const answer = (choice?: 'SK_MOBILE' | 'SK_PRO') => {
+      if (answered) return;
+      answered = true;
+      cancelCustodianChoice = undefined;
+      if (popover === openPopover) { popover.classList.remove('device-choice'); popover.replaceChildren(...previous); reposition(); }
+      sendResponse(choice);
+    };
+    cancelCustodianChoice = () => answer();
+    const logo = document.createElement('img');
+    logo.className = 'device-logo'; logo.alt = 'Inheriti Business';
+    logo.src = chrome.runtime.getURL('side-panel/assets/inheriti-business-logo.png');
+    const options = element('div', 'device-options');
+    for (const [choice, title, detail, image] of [
+      ['SK_PRO', 'SafeKey PRO', 'Use your connected hardware device.', 'safekey-pro.png'],
+      ['SK_MOBILE', 'SafeKey Mobile', 'Approve the share claim in your mobile app.', 'safekey-mobile.png'],
+    ] as const) {
+      const button = element('button', 'device-option'); button.type = 'button';
+      const picture = document.createElement('img'); picture.alt = '';
+      picture.src = chrome.runtime.getURL(`side-panel/assets/${image}`);
+      const copy = element('span', '');
+      copy.append(element('strong', '', title), element('small', '', detail));
+      button.append(picture, copy); button.addEventListener('click', () => answer(choice));
+      options.append(button);
+    }
+    const cancel = element('button', 'device-cancel', 'Cancel reveal');
+    cancel.type = 'button'; cancel.addEventListener('click', () => answer());
+    popover.classList.add('device-choice');
+    popover.replaceChildren(logo, element('p', 'device-eyebrow', 'InheritiGuard · Plan access'),
+      element('h2', 'device-title', 'Choose a custodian device'),
+      element('p', 'device-intro', 'This is your first time opening this plan. Choose a custodian device to save your share. Next time, InheritiGuard will read the share from that device.'), options, cancel);
+    reposition();
+    return true;
+  }
   if (type === 'inheriti-overlay-discover-targets') {
     sendResponse([...controls.keys()].filter(compatible).map(register));
   }

@@ -64,6 +64,10 @@
     {
       "resources": ["blocked/index.html"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["side-panel/assets/inheriti-business-logo.png", "side-panel/assets/safekey-pro.png", "side-panel/assets/safekey-mobile.png"],
+      "matches": ["https://*/*"]
     }
   ],
   "side_panel": {

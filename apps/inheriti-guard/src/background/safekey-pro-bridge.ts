@@ -9,6 +9,7 @@ export class SafeKeyProPanelBridge {
   private opening: Promise<chrome.runtime.Port> | undefined;
   private connected: ((port: chrome.runtime.Port) => void) | undefined;
   private finishing = false;
+  private preparing = false;
   private sequence = 0;
   private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
 
@@ -30,8 +31,15 @@ export class SafeKeyProPanelBridge {
     this.port = port;
     this.connected?.(port);
     this.connected = undefined;
-    port.onMessage.addListener((reply: Reply | { operation: 'cancel-reveal' }) => {
-      if (this.port === port && reply && 'operation' in reply && reply.operation === 'cancel-reveal') { this.onDisconnect(); return; }
+    port.onMessage.addListener((reply: Reply | { operation: 'cancel-reveal' | 'pin-confirmed' }) => {
+      if (this.port === port && reply && 'operation' in reply && reply.operation === 'pin-confirmed') {
+        this.preparing = false;
+        return;
+      }
+      if (this.port === port && reply && 'operation' in reply && reply.operation === 'cancel-reveal') {
+        if (!this.preparing) this.onDisconnect();
+        return;
+      }
       if (this.port !== port || !reply || !('id' in reply) || !Number.isSafeInteger(reply.id) || typeof reply.ok !== 'boolean') return;
       const waiting = this.pending.get(reply.id);
       if (!waiting) return;
@@ -45,14 +53,24 @@ export class SafeKeyProPanelBridge {
       this.port = undefined;
       for (const waiting of this.pending.values()) waiting.reject(new Error('SAFEKEY_PANEL_CLOSED'));
       this.pending.clear();
-      if (!this.finishing) this.onDisconnect();
+      if (!this.finishing && !this.preparing) this.onDisconnect();
     });
   }
 
   async choose(signal?: AbortSignal): Promise<'SK_MOBILE' | 'SK_PRO'> {
-    const value = await this.call('choose', {}, signal);
-    if (value !== 'SK_MOBILE' && value !== 'SK_PRO') throw new Error('SAFEKEY_DEVICE_FAILED');
-    return value;
+    for (;;) {
+      const value = await this.call('choose', {}, signal);
+      if (value === 'SK_MOBILE') return value;
+      if (value !== 'SK_PRO') throw new Error('SAFEKEY_DEVICE_FAILED');
+      try { await this.prepare(signal); return value; }
+      catch (error) { if ((error as Error).message !== 'SAFEKEY_PANEL_CLOSED') throw error; }
+    }
+  }
+
+  async prepare(signal?: AbortSignal): Promise<void> {
+    this.preparing = true;
+    try { await this.call('prepare', {}, signal); }
+    finally { this.preparing = false; }
   }
 
   device(rpId: string): ProDevice {
@@ -95,7 +113,7 @@ export class SafeKeyProPanelBridge {
     return this.opening;
   }
 
-  private async call(operation: 'choose' | 'write' | 'read', payload: object, signal?: AbortSignal): Promise<unknown> {
+  private async call(operation: 'choose' | 'prepare' | 'write' | 'read', payload: object, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted) return Promise.reject(new Error('SAFEKEY_ABORTED'));
     const port = await this.ready();
     if (signal?.aborted) throw new Error('SAFEKEY_ABORTED');

@@ -42,7 +42,8 @@ export type RevealViewState =
   // A reveal this worker no longer runs but the server still holds open, waiting to be taken up.
   | { readonly kind: 'RESUMABLE'; readonly planId: string; readonly message: string }
   | { readonly kind: 'DONE'; readonly message: string }
-  | { readonly kind: 'ERROR'; readonly message: string };
+  | { readonly kind: 'WARNING'; readonly message: string; readonly detail: string; readonly code: 'reveal_restart_required' | 'active_access_open'; readonly planId: string; readonly revealId: string }
+  | { readonly kind: 'ERROR'; readonly message: string; readonly code?: 'reveal_restart_required' | 'reveal_access_changed' };
 
 type ExistingSidePanelRequest =
   | { readonly type: 'get-active-context' }
@@ -84,9 +85,11 @@ export type OverlayRequest =
   | { readonly type: 'overlay-select-candidate'; readonly mapping: FieldMapping; readonly planName: string }
   | { readonly type: 'overlay-reveal-and-autofill'; readonly batch: AccessBatch }
   // View state only: the same reveal phases the side panel polls, so the in-page card can show them.
-  | { readonly type: 'overlay-reveal-state' }
+  | { readonly type: 'overlay-reveal-state'; readonly planId?: string }
   | { readonly type: 'overlay-discard-selection' }
   | { readonly type: 'overlay-cancel-reveal' }
+  | { readonly type: 'overlay-abort-plan-access'; readonly planId: string }
+  | { readonly type: 'overlay-cancel-pending-access'; readonly planId: string }
   | { readonly type: 'overlay-resume-reveal' }
   | { readonly type: 'overlay-open-side-panel' };
 
@@ -146,7 +149,7 @@ export type SidePanelResponse =
   | { readonly ok: true; readonly reveal: RevealViewState }
   | { readonly ok: true; readonly overlay: { readonly currentOrigin?: string; readonly currentEnabled: boolean; readonly enabledOrigins: readonly string[] } }
   | AccessWorkspaceResponse
-  | { readonly ok: false; readonly error: 'no-active-tab' | 'stale-tab-context' | 'unsupported-page' | 'plan-request-failed' | 'guard-denied' };
+  | { readonly ok: false; readonly error: 'no-active-tab' | 'stale-tab-context' | 'unsupported-page' | 'plan-request-failed' | 'guard-denied' | 'reveal-access-changed' };
 
 export type GuardResponse =
   | { readonly ok: true; readonly guard: GuardSettings }
@@ -191,6 +194,6 @@ export function isSidePanelRequest(value: unknown): value is SidePanelRequest {
 
 export function isOverlayRequest(value: unknown): value is OverlayRequest {
   if (typeof value !== 'object' || value === null || !('type' in value)) return false;
-  return ['overlay-load-candidates', 'overlay-select-candidate', 'overlay-reveal-and-autofill', 'overlay-reveal-state', 'overlay-cancel-reveal', 'overlay-resume-reveal', 'overlay-discard-selection', 'overlay-open-side-panel']
+  return ['overlay-load-candidates', 'overlay-select-candidate', 'overlay-reveal-and-autofill', 'overlay-reveal-state', 'overlay-cancel-reveal', 'overlay-abort-plan-access', 'overlay-cancel-pending-access', 'overlay-resume-reveal', 'overlay-discard-selection', 'overlay-open-side-panel']
     .includes((value as { type: unknown }).type as string);
 }

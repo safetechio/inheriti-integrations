@@ -10,6 +10,7 @@ import { resolveConfiguration, type ChromeConfiguration } from '../shared/config
 import { codeOf, type PanelState } from '../shared/plan-view.js';
 import { ChromeRevealController, isRevealDeadline } from './reveal.js';
 import { SafeKeyProPanelBridge } from './safekey-pro-bridge.js';
+import { choosePreparedCustodianInOverlay } from './overlay-custodian-choice.js';
 import { readBusinessOrganization, readStoredConfiguration, writeBusinessOrganization } from '../shared/stored-configuration.js';
 import { suggestFieldMappings } from './field-suggestions.js';
 import { pageFirstSuggestions } from './page-first-suggestions.js';
@@ -22,18 +23,27 @@ const pendingContext = new PendingTabContextStore();
 const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session);
 let keyOwner: 'Application' | 'Organisation' = 'Application';
 const proPanel = new SafeKeyProPanelBridge(() => { if (reveal.current().kind === 'RUNNING') reveal.cancel(); });
-const reveal = new ChromeRevealController(core, chrome.storage.session, () => keyOwner, async (signal) => {
+const reveal = new ChromeRevealController(core, chrome.storage.session, () => keyOwner, async (signal, batch) => {
   const configuration = resolveConfiguration(await readStoredConfiguration(chrome.storage.local, chrome.storage.session));
   if (configuration.applicationId !== undefined) return undefined;
   const deployment = (Object.keys(BUSINESS_DEPLOYMENTS) as Array<keyof typeof BUSINESS_DEPLOYMENTS>)
     .find((key) => BUSINESS_DEPLOYMENTS[key].apiUrl === configuration.apiUrl);
   if (!deployment) return undefined;
   return {
-    selectCustodianDevice: () => proPanel.choose(signal),
+    selectCustodianDevice: () => batch
+      ? choosePreparedCustodianInOverlay(batch, signal, (requestSignal) => proPanel.prepare(requestSignal))
+      : proPanel.choose(signal),
     proDevice: proPanel.device(businessUiRpId(deployment)),
     finish: () => proPanel.finish(),
   };
-});
+}, { storage: chrome.storage.local, owner: async () => {
+  const session = await sessions.load();
+  const configuration = resolveConfiguration(await readStoredConfiguration(chrome.storage.local, chrome.storage.session));
+  const organizationId = await selectedOrganization(configuration);
+  return session?.principal.issuer && session.principal.subject && organizationId
+    ? { issuer: session.principal.issuer, subject: session.principal.subject, organizationId } : undefined;
+} });
+
 const overlayPermissions = new OverlayPermissionController();
 let lifecycleLocked = false;
 const pendingSignIns = new Set<AbortController>();
@@ -206,13 +216,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.idle?.onStateChanged.addListener((state) => { void guard.idle(state).catch(() => undefined); });
 chrome.downloads?.onCreated.addListener((item) => { void guard.download(item).catch(() => undefined); });
 chrome.webNavigation?.onBeforeNavigate.addListener((details) => {
+  if (details.frameId === 0) pendingContext.invalidateForNavigation(details.tabId, details.url);
   void guard.inlineNavigation(details).catch(() => undefined);
 });
 
 // A persisted id means a previous worker vanished with an open reveal. Plaintext was memory-only and
 // is already gone, but the reveal itself is not: the gates a person is answering right now still hold
 // it open. Only an expired one is closed; a live one is offered back to the panel to be resumed.
-void reveal.recoverAbandoned();
+const revealRecovery = reveal.recoverAbandoned().catch(() => undefined);
 void guard.initialize().catch(() => undefined);
 if ((chrome as typeof chrome & { permissions?: chrome.permissions.Permissions }).permissions !== undefined) {
   void overlayPermissions.restore();
@@ -381,6 +392,7 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
     || !(await overlayPermissions.state(origin)).currentEnabled) {
     return { ok: false, error: 'stale-page-context' };
   }
+  await revealRecovery;
   // A permitted cross-origin iframe has its own authoritative origin. Do not replace the toolbar's
   // top-frame context; the worker-owned draft below carries the exact frame/origin identity.
   if (pendingContext.get(tabId) === undefined && senderLocation !== undefined) pendingContext.set(tabId, senderLocation);
@@ -393,8 +405,7 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
       // A page must be able to say "sign in" rather than "nothing matched" when nobody is signed in.
       if (!await client.getAccessToken()) return { ok: false, error: 'signed-out' };
       const plansPage = await client.listPlans({ assetType: 'USER-PSWD' });
-      const fixedPlanId = pendingContext.getDraft(tabId)?.identity.planId;
-      const summaries = fixedPlanId === undefined ? plansPage.items : plansPage.items.filter(({ id }) => id === fixedPlanId);
+      const summaries = plansPage.items;
       const plans = await Promise.all(summaries.map(async (summary) => ({
         planName: summary.name,
         protectedFields: protectedFieldsOf(await client.getPlan(summary.id) as unknown as WorkspacePlan, summary.id, origin),
@@ -402,7 +413,7 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
       const draft = pendingContext.getDraft(tabId);
       const candidates = pageFirstSuggestions(plans, [page.target]);
       const emptyReason = summaries.length === 0
-        ? fixedPlanId === undefined ? 'no-autofill-plans' : 'selected-plan-unavailable'
+        ? 'no-autofill-plans'
         : plans.every(({ protectedFields }) => protectedFields.length === 0) ? 'no-protected-fields' : 'no-matching-field';
       return { ok: true, pageTargets: [page.target], candidates,
         ...(candidates.length === 0 ? { emptyReason } : {}),
@@ -417,8 +428,28 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
     pendingContext.clearDraft();
     return { ok: true, discarded: true };
   }
-  if (request.type === 'overlay-reveal-state') return { ok: true, reveal: reveal.current() };
+  if (request.type === 'overlay-reveal-state') {
+    await revealRecovery;
+    return { ok: true, reveal: typeof request.planId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.planId)
+      ? await reveal.reconcile(request.planId) : reveal.current() };
+  }
   if (request.type === 'overlay-cancel-reveal') return { ok: true, reveal: reveal.cancel() };
+  if (request.type === 'overlay-cancel-pending-access') {
+    if (typeof request.planId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.planId))
+      return { ok: false, error: 'invalid-access-batch' };
+    await revealRecovery;
+    const state = await reveal.cancelPending(request.planId);
+    if (state.kind === 'DONE') pendingContext.clearDraft();
+    return { ok: true, reveal: state };
+  }
+  if (request.type === 'overlay-abort-plan-access') {
+    if (typeof request.planId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.planId))
+      return { ok: false, error: 'invalid-access-batch' };
+    const state = await reveal.abortPlanAccess(request.planId);
+    if (state.kind === 'DONE') pendingContext.clearDraft();
+    return { ok: true, reveal: state };
+  }
   if (request.type === 'overlay-resume-reveal') return { ok: true, reveal: await reveal.resume() };
 
   if (request.type === 'overlay-select-candidate') {
@@ -427,8 +458,7 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
       return { ok: false, error: 'stale-page-context' };
     }
     const draft = pendingContext.getDraft(tabId);
-    if (draft !== undefined) {
-      if (draft.identity.planId !== request.mapping.protectedField.planId) return { ok: false, error: 'invalid-access-batch' };
+    if (draft !== undefined && draft.identity.planId === request.mapping.protectedField.planId) {
       pendingContext.setDraft({ ...draft, pageTargets: page.pageTargets });
       return setAssetMappings(tabId, { ...request.mapping, source: 'MANUAL' });
     }
@@ -443,7 +473,7 @@ async function respondOverlay(request: OverlayRequest, sender: chrome.runtime.Me
   if (draft === undefined || JSON.stringify(request.batch) !== JSON.stringify({ identity: draft.identity, mappings: draft.mappings })) {
     return { ok: false, error: 'invalid-access-batch' };
   }
-  return revealAndAutofill(tabId, origin, request.batch);
+  return revealAndAutofill(tabId, origin, request.batch, 'OVERLAY');
 }
 
 async function authoritativeOverlayTarget(
@@ -667,13 +697,14 @@ async function startPicker(tabId: number, protectedField: ProtectedFieldRef): Pr
   } catch { return { ok: false, error: 'stale-page-context' }; }
 }
 
-async function revealAndAutofill(tabId: number, origin: string, batch: AccessBatch): Promise<SidePanelResponse> {
+async function revealAndAutofill(tabId: number, origin: string, batch: AccessBatch,
+  initiator: 'PANEL' | 'OVERLAY' = 'PANEL'): Promise<SidePanelResponse> {
   const draft = pendingContext.getDraft(tabId);
   if (draft === undefined || origin !== draft.identity.origin || !sameBatch(batch, draft.identity, draft.mappings)
     || !validateAccessBatch(batch).valid || batch.mappings.some((mapping) => mapping.protectedField.planId !== draft.identity.planId)) {
     return { ok: false, error: 'invalid-access-batch' };
   }
-  try { return { ok: true, results: await reveal.fillBatch(batch) }; }
+  try { return { ok: true, results: await reveal.fillBatch(batch, initiator) }; }
   catch (error) { return { ok: false, error: stableAccessError(error) }; }
   finally { pendingContext.clearDraft(); }
 }
