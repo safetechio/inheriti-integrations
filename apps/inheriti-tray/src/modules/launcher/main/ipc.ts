@@ -42,6 +42,24 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     await session.addPlanAsset(planId, asset, publish);
     return session.state();
   });
+  ipcMain.handle('tray:list-plan-assets', async (event, planId: unknown) => {
+    trusted(event);
+    if (typeof planId !== 'string' || !planId || planId.length > 200) throw new Error('Invalid plan');
+    await session.listPlanAssets(planId, publish);
+    return session.state();
+  });
+  ipcMain.handle('tray:get-plan-asset', async (event, planId: unknown, assetId: unknown) => {
+    trusted(event);
+    if (typeof planId !== 'string' || !planId || planId.length > 200 || typeof assetId !== 'string' || !assetId || assetId.length > 200) throw new Error(messages.invalidAsset);
+    return session.getPlanAsset(planId, assetId);
+  });
+  ipcMain.handle('tray:replace-plan-asset', async (event, planId: unknown, assetId: unknown, input: unknown) => {
+    trusted(event);
+    if (typeof planId !== 'string' || !planId || planId.length > 200 || typeof assetId !== 'string' || !assetId || assetId.length > 200) throw new Error(messages.invalidAsset);
+    const asset = parseQuickPlanInput({ title: 'Edited asset', asset: input }).asset;
+    await session.replacePlanAsset(planId, assetId, asset, publish);
+    return session.state();
+  });
   ipcMain.handle('tray:discard-plan-edit', async (event) => {
     trusted(event);
     await session.discardPlanEdit();

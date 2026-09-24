@@ -11,6 +11,7 @@ export function registerAppEvents(session: TraySession, appUrl?: string): void {
     return;
   }
   app.on('second-instance', () => showLauncher());
+  app.on('browser-window-created', (_event, window) => window.on('hide', () => session.clearRevealed()));
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.safetech.inheriti.tray');
     registerTrayEvents(appUrl);
@@ -21,6 +22,7 @@ export function registerAppEvents(session: TraySession, appUrl?: string): void {
   });
   app.on('window-all-closed', () => {});
   app.on('before-quit', () => {
+    session.clearRevealed();
     prepareToQuit();
     globalShortcut.unregisterAll();
   });

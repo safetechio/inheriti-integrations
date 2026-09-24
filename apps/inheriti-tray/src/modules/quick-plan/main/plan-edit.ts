@@ -18,12 +18,14 @@ const PLAN_EDIT_STATUS: PlanEditStatuses = {
 
 export type PlanEditState = {
   plans: { id: string; name: string }[];
+  assets: { id: string; type: string; name: string; isMedia: boolean }[];
   status: PlanEditStatuses[keyof PlanEditStatuses];
   available: boolean;
   canRecover: boolean;
   actorMismatch: boolean;
   message?: string;
   planId?: string;
+  editId?: string;
 };
 
 type Operations = ReturnType<typeof createPlanEditOperations>;
@@ -33,12 +35,15 @@ export class TrayPlanEdit {
   private operations: Operations | undefined;
   private checkpoint: ProtectedCheckpoint | undefined;
   private plans: PlanEditState['plans'] = [];
+  private assets: PlanEditState['assets'] = [];
   private status: PlanEditState['status'] = PLAN_EDIT_STATUS.idle;
   private message: string | undefined;
   private planId: string | undefined;
   private pending = false;
   private canRecover = false;
   private actorMismatch = false;
+  private revealGeneration = 0;
+  private dismissed = false;
   private attempt: { actor: string; organizationId: string; planId: string; idempotencyKey: string; mode: 'DIRECT' | 'GOVERNED'; totalShares: number; editId?: string; startedAdd?: boolean } | undefined;
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly getAccessToken: () => Promise<string | undefined>) {}
@@ -46,18 +51,27 @@ export class TrayPlanEdit {
   state(): PlanEditState {
     let available = false;
     try { available = !!this.checkpoint && this.checkpoint.isAvailable(); } catch {}
-    return { plans: this.plans, status: this.status, available, canRecover: this.canRecover, actorMismatch: this.actorMismatch, ...(this.message ? { message: this.message } : {}), ...(this.planId ? { planId: this.planId } : {}) };
+    return { plans: this.plans, assets: this.assets, status: this.status, available, canRecover: this.canRecover, actorMismatch: this.actorMismatch, ...(this.message ? { message: this.message } : {}), ...(this.planId ? { planId: this.planId } : {}) };
   }
 
   assertIdle(): void { if (this.pending) throw new Error('edit_in_progress'); }
+
+  clearRevealed(): void {
+    this.revealGeneration += 1;
+    this.dismissed = true;
+    this.operations?.clearRevealed();
+    this.assets = [];
+  }
 
   async selectOrganization(id: string): Promise<void> {
     this.assertIdle();
     if (this.organizationId !== id && this.status === PLAN_EDIT_STATUS.recoveryRequired) throw new Error('edit_recovery_required');
     if (this.organizationId !== id) await this.abort();
+    this.clearRevealed();
     this.organizationId = id;
     this.operations = undefined;
     this.plans = [];
+    this.assets = [];
     this.status = PLAN_EDIT_STATUS.idle;
     this.planId = undefined;
     this.canRecover = false;
@@ -80,6 +94,7 @@ export class TrayPlanEdit {
 
   async discard(): Promise<void> {
     this.assertIdle();
+    this.clearRevealed();
     const saved = this.checkpoint?.getItem<typeof this.attempt>('plan-edit/attempt');
     const attempt = this.attempt ?? saved;
     if (attempt) {
@@ -91,6 +106,7 @@ export class TrayPlanEdit {
       }
     }
     this.attempt = undefined;
+    this.dismissed = false;
     this.status = PLAN_EDIT_STATUS.idle;
     this.message = undefined;
     this.planId = undefined;
@@ -99,16 +115,19 @@ export class TrayPlanEdit {
   }
 
   reset(): void {
+    this.clearRevealed();
     this.organizationId = undefined;
     this.operations = undefined;
     this.checkpoint = undefined;
     this.plans = [];
+    this.assets = [];
     this.status = PLAN_EDIT_STATUS.idle;
     this.message = undefined;
     this.planId = undefined;
     this.canRecover = false;
     this.actorMismatch = false;
     this.attempt = undefined;
+    this.dismissed = false;
   }
 
   async load(onChange: () => void): Promise<void> {
@@ -156,6 +175,10 @@ export class TrayPlanEdit {
     this.message = undefined;
     onChange();
     try {
+      if (this.dismissed) {
+        await this.abort();
+        this.dismissed = false;
+      }
       const actor = await this.actor();
       const saved = this.checkpoint.getItem<typeof this.attempt>('plan-edit/attempt');
       if (saved && (saved.actor !== actor || saved.organizationId !== this.organizationId || saved.planId !== planId)) throw new Error('unresolved_edit_attempt');
@@ -187,6 +210,104 @@ export class TrayPlanEdit {
       this.pending = false;
       onChange();
     }
+  }
+
+  async listAssets(planId: string, onChange: () => void): Promise<void> {
+    this.assertIdle();
+    if (!this.checkpoint?.isAvailable()) throw new Error(messages.checkpointUnavailable);
+    if (!this.plans.some((plan) => plan.id === planId)) throw new Error('plan_unavailable');
+    this.pending = true;
+    this.planId = planId;
+    this.assets = [];
+    this.status = PLAN_EDIT_STATUS.loading;
+    this.message = undefined;
+    const generation = this.revealGeneration;
+    onChange();
+    try {
+      const attempt = await this.prepare(planId);
+      if (generation !== this.revealGeneration) throw new Error('edit_dismissed');
+      this.assets = await this.selectedOperations().listAssets(planId, attempt.editId!);
+      if (generation !== this.revealGeneration) {
+        this.assets = [];
+        throw new Error('edit_dismissed');
+      }
+      this.status = PLAN_EDIT_STATUS.idle;
+    } catch (error) {
+      this.status = PLAN_EDIT_STATUS.error;
+      this.message = this.errorMessage(error);
+    } finally {
+      this.pending = false;
+      onChange();
+    }
+  }
+
+  async getAsset(planId: string, assetId: string): Promise<QuickPlanInput['asset'] & { id: string }> {
+    this.assertIdle();
+    const attempt = this.attempt;
+    if (!attempt?.editId || attempt.planId !== planId || !this.assets.some((asset) => asset.id === assetId)) throw new Error('asset_unavailable');
+    this.pending = true;
+    const generation = this.revealGeneration;
+    try {
+      const asset = await this.selectedOperations().getAsset(planId, attempt.editId, assetId);
+      if (generation !== this.revealGeneration) throw new Error('edit_dismissed');
+      return asset;
+    } finally {
+      this.pending = false;
+    }
+  }
+
+  async replace(planId: string, assetId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
+    this.assertIdle();
+    const attempt = this.attempt;
+    const selected = this.assets.find((item) => item.id === assetId);
+    if (!attempt?.editId || attempt.planId !== planId || !selected || selected.type !== asset.type) throw new Error('asset_unavailable');
+    this.pending = true;
+    this.status = PLAN_EDIT_STATUS.saving;
+    this.message = undefined;
+    onChange();
+    try {
+      attempt.startedAdd = true;
+      this.canRecover = true;
+      this.checkpoint!.setItem('plan-edit/attempt', attempt);
+      const result = await this.selectedOperations().replace(planId, attempt.editId, attempt.totalShares, assetId, asset);
+      this.status = result.status === 'UPDATED' ? PLAN_EDIT_STATUS.updated : PLAN_EDIT_STATUS.recoveryRequired;
+      if (this.status === PLAN_EDIT_STATUS.updated) this.attempt = undefined;
+      if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
+      this.assets = [];
+    } catch (error) {
+      this.status = attempt.startedAdd ? PLAN_EDIT_STATUS.recoveryRequired : PLAN_EDIT_STATUS.error;
+      this.message = attempt.startedAdd ? `${this.errorMessage(error)} ${messages.editNeedsRecovery}` : this.errorMessage(error);
+      this.assets = [];
+    } finally {
+      this.pending = false;
+      onChange();
+    }
+  }
+
+  private async prepare(planId: string) {
+    if (this.dismissed) {
+      await this.abort();
+      this.dismissed = false;
+    }
+    const actor = await this.actor();
+    const saved = this.checkpoint!.getItem<typeof this.attempt>('plan-edit/attempt');
+    if (saved && (saved.actor !== actor || saved.organizationId !== this.organizationId || saved.planId !== planId || saved.startedAdd)) throw new Error('unresolved_edit_attempt');
+    this.attempt = saved ?? { actor, organizationId: this.organizationId!, planId, ...await this.selectedOperations().context(planId) };
+    const attempt = this.attempt;
+    if (!attempt) throw new Error('plan_edit_unavailable');
+    this.checkpoint!.setItem('plan-edit/attempt', attempt);
+    if (!attempt.editId) attempt.editId = (await this.selectedOperations().start(planId, attempt.mode, attempt.idempotencyKey)).id;
+    this.checkpoint!.setItem('plan-edit/attempt', attempt);
+    return attempt;
+  }
+
+  private errorMessage(error: unknown): string {
+    if (error && typeof error === 'object' && 'status' in error) {
+      if (error.status === 403) return messages.editDenied;
+      if (error.status === 409) return messages.editConflict;
+      if (error.status === 410) return messages.editExpired;
+    }
+    return messages.editSaveFailed;
   }
 
   async recover(onChange: () => void): Promise<void> {

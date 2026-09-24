@@ -9,6 +9,7 @@ export function registerWindowEvents(window: BrowserWindow, action: string | und
   window.on('close', (event) => {
     if (isQuitting()) return;
     event.preventDefault();
+    window.webContents.send('tray:hidden');
     window.hide();
   });
 }

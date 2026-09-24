@@ -48,9 +48,9 @@ export function LauncherApp({ messages }) {
     />
     <section aria-label={messages.actions}>
       <button id="save-plan" type="button" disabled={!canCreate || editFlow.busy} onClick={() => { editFlow.close(); flow.openCapture(); }}>{messages.savePlan}</button>
-      <button id="add-asset" type="button" disabled={!signedIn || !state.selectedId || !editState.available || editFlow.busy || flow.busy || flow.preparing || flow.step !== 'actions'} onClick={() => void editFlow.open()}>{messages.addAsset}</button>
+      <button id="add-asset" type="button" disabled={!signedIn || !state.selectedId || !editState.available || editFlow.busy || flow.busy || flow.preparing || flow.step !== 'actions'} onClick={() => void editFlow.open()}>{messages.addOrEditAsset}</button>
     </section>
-    {editFlow.editing && flow.step === 'actions' && <PlanEditPanel messages={messages} state={state} flow={editFlow} />}
+    {signedIn && state.selectedId && editFlow.editing && flow.step === 'actions' && <PlanEditPanel messages={messages} state={state} flow={editFlow} />}
     {flow.step === 'capture' && <QuickPlanForm
       messages={messages} state={state} form={flow.form} setForm={flow.setForm}
       onReview={flow.reviewCapture} onCancel={() => void flow.cancelCapture()}

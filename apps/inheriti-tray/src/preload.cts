@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   abandonCreation: (): Promise<TrayState> => ipcRenderer.invoke('tray:abandon-creation'),
   editablePlans: (): Promise<TrayState> => ipcRenderer.invoke('tray:editable-plans'),
   addPlanAsset: (planId: string, asset: CreateQuickPlanInput['asset']): Promise<TrayState> => ipcRenderer.invoke('tray:add-plan-asset', planId, asset),
+  listPlanAssets: (planId: string): Promise<TrayState> => ipcRenderer.invoke('tray:list-plan-assets', planId),
+  getPlanAsset: (planId: string, assetId: string): Promise<unknown> => ipcRenderer.invoke('tray:get-plan-asset', planId, assetId),
+  replacePlanAsset: (planId: string, assetId: string, asset: CreateQuickPlanInput['asset']): Promise<TrayState> => ipcRenderer.invoke('tray:replace-plan-asset', planId, assetId, asset),
   discardPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:discard-plan-edit'),
   recoverPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:recover-plan-edit'),
   openApp: (): Promise<void> => ipcRenderer.invoke('tray:open-app'),
@@ -24,5 +27,10 @@ contextBridge.exposeInMainWorld('inheritiTray', {
     const listener = (_event: Electron.IpcRendererEvent, state: TrayState) => callback(state);
     ipcRenderer.on('tray:state-changed', listener);
     return () => ipcRenderer.removeListener('tray:state-changed', listener);
+  },
+  onHidden: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('tray:hidden', listener);
+    return () => ipcRenderer.removeListener('tray:hidden', listener);
   },
 });

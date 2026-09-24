@@ -145,8 +145,24 @@ export class TraySession {
     return this.planEdit.add(planId, asset, onChange);
   }
 
+  listPlanAssets(planId: string, onChange: () => void): Promise<void> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.planEdit.listAssets(planId, onChange);
+  }
+
+  getPlanAsset(planId: string, assetId: string) {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.planEdit.getAsset(planId, assetId);
+  }
+
+  replacePlanAsset(planId: string, assetId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.planEdit.replace(planId, assetId, asset, onChange);
+  }
+
   async discardPlanEdit(): Promise<void> { await this.planEdit.discard(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
+  clearRevealed(): void { this.planEdit.clearRevealed(); }
 
   async signOut(): Promise<void> {
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
