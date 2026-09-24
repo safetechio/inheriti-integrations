@@ -5,10 +5,16 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && ../../node_modules/.bin/esbuild src/launcher.jsx --bundle --format=iife --jsx=automatic --minify --define:process.env.NODE_ENV='\"production\"' --outfile=dist/launcher.js && cp src/launcher.html src/launcher.css src/tray.png dist/",
+    "build": "node ../../scripts/build-tray.mjs",
     "test": "vitest run --root . --config ../../vitest.config.ts",
     "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
-    "start": "electron ."
+    "start": "electron .",
+    "package": "corepack pnpm run build && node ../../scripts/package-tray.mjs",
+    "release": "corepack pnpm run package",
+    "package:local": "corepack pnpm run build -- --deployment=local && node ../../scripts/package-tray.mjs --deployment=local",
+    "package:dev": "corepack pnpm run build -- --deployment=dev && node ../../scripts/package-tray.mjs --deployment=dev",
+    "package:stg": "corepack pnpm run build -- --deployment=stg && node ../../scripts/package-tray.mjs --deployment=stg",
+    "package:prod": "corepack pnpm run build -- --deployment=prod && node ../../scripts/package-tray.mjs --deployment=prod"
   },
   "dependencies": {
     "@safetech/inheriti-elements-core": "workspace:*",
@@ -16,6 +22,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "electron": "^38.0.0"
+    "electron": "^38.0.0",
+    "electron-builder": "26.15.3"
   }
 }

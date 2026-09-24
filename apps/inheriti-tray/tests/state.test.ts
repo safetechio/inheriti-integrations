@@ -82,6 +82,59 @@ describe('TraySession', () => {
     expect(mock.operations).toHaveBeenCalledTimes(1);
   });
 
+  it('clears a completed creation on lock while preserving an uncertain retry', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    mock.context.mockResolvedValueOnce({ planId: 'plan-1' }).mockResolvedValueOnce({ planId: 'plan-2' });
+    mock.create.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({ status: 'READY', planId: 'plan-1' });
+    const session = new TraySession('dev');
+    await session.restore();
+    const input = { title: 'Secret', asset: asset('secret') };
+    await session.createQuickPlan(input, () => {});
+    session.clearOnLock();
+    expect(session.state().creation).toMatchObject({ status: 'error', planId: 'plan-1' });
+    await session.createQuickPlan(input, () => {});
+    session.clearOnLock();
+    expect(session.state().creation).toBeUndefined();
+    expect(mock.context).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a creation that becomes ready after lock', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    let release!: (result: { status: string; planId: string }) => void;
+    mock.create.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const pending = session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
+    await vi.waitFor(() => expect(mock.create).toHaveBeenCalledTimes(1));
+    session.clearOnLock();
+    release({ status: 'READY', planId: 'plan-1' });
+    await pending;
+    expect(session.state().creation).toBeUndefined();
+  });
+
+  it('retains an uncertain creation that fails after lock', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    let reject!: (error: Error) => void;
+    mock.create.mockReturnValueOnce(new Promise((_resolve, rejectPromise) => { reject = rejectPromise; }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const input = { title: 'Secret', asset: asset('secret') };
+    const pending = session.createQuickPlan(input, () => {});
+    await vi.waitFor(() => expect(mock.create).toHaveBeenCalledTimes(1));
+    session.clearOnLock();
+    reject(new Error('network'));
+    await pending;
+    expect(session.state().creation).toMatchObject({ status: 'error', planId: 'plan-1' });
+    mock.create.mockResolvedValueOnce({ status: 'READY', planId: 'plan-1' });
+    await session.createQuickPlan(input, () => {});
+    expect(mock.context).toHaveBeenCalledTimes(1);
+  });
+
   it('abandoning a failed creation lets a corrected entry use a new server plan ID', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);

@@ -4,7 +4,7 @@ import type { TraySession } from './state.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { parseQuickPlanInput } from '../../quick-plan/main/quick-plan-input.js';
 
-export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string): void {
+export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
     const window = currentWindow();
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
@@ -22,7 +22,9 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
   ipcMain.handle('tray:create-quick-plan', async (event, input: unknown) => {
     trusted(event);
     await session.createQuickPlan(parseQuickPlanInput(input), publish);
-    return session.state();
+    const state = session.state();
+    if (state.creation?.status === 'ready') notify?.(messages.planProtectedNotification);
+    return state;
   });
   ipcMain.handle('tray:abandon-creation', (event) => {
     trusted(event);
@@ -40,7 +42,9 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (typeof planId !== 'string' || !planId || planId.length > 200) throw new Error('Invalid plan');
     const asset = parseQuickPlanInput({ title: 'Added asset', asset: input }).asset;
     await session.addPlanAsset(planId, asset, publish);
-    return session.state();
+    const state = session.state();
+    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
+    return state;
   });
   ipcMain.handle('tray:list-plan-assets', async (event, planId: unknown) => {
     trusted(event);
@@ -58,7 +62,9 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (typeof planId !== 'string' || !planId || planId.length > 200 || typeof assetId !== 'string' || !assetId || assetId.length > 200) throw new Error(messages.invalidAsset);
     const asset = parseQuickPlanInput({ title: 'Edited asset', asset: input }).asset;
     await session.replacePlanAsset(planId, assetId, asset, publish);
-    return session.state();
+    const state = session.state();
+    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
+    return state;
   });
   ipcMain.handle('tray:discard-plan-edit', async (event) => {
     trusted(event);
@@ -69,7 +75,9 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
   ipcMain.handle('tray:recover-plan-edit', async (event) => {
     trusted(event);
     await session.recoverPlanEdit(publish);
-    return session.state();
+    const state = session.state();
+    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
+    return state;
   });
   ipcMain.handle('tray:open-app', (event) => {
     trusted(event);

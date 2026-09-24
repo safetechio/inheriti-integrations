@@ -100,6 +100,8 @@ export const trayMessages = Object.freeze({
   edit: 'Edit',
   ready: 'Ready',
   protected: 'Your plan is protected.',
+  planProtectedNotification: 'Plan protected',
+  planUpdatedNotification: 'Plan updated',
   saveAnother: 'Save another',
   openApp: 'Open Inheriti',
   signOut: 'Sign out',

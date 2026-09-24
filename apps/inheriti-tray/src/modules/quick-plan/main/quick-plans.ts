@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createQuickPlanOperations } from '@safetech/inheriti-elements-core/node';
 import type { QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { creationErrorMessage } from './creation-error.js';
@@ -13,6 +14,7 @@ export class TrayQuickPlans {
   private context: CreateContext | undefined;
   private inputFingerprint: string | undefined;
   private pending: Promise<void> | undefined;
+  private clearReadyOnCompletion = false;
   private creation: CreationState | undefined;
   private teams: { id: string; name: string }[] = [];
   private message: string | undefined;
@@ -55,7 +57,7 @@ export class TrayQuickPlans {
     if (!this.organizationId) throw new Error('organization_required');
     if (input.teamId && !this.teams.some(({ id }) => id === input.teamId)) throw new Error(messages.teamUnavailable);
     if (this.creation?.status === 'ready') this.clearAttempt();
-    const fingerprint = JSON.stringify(input);
+    const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     if (this.inputFingerprint && this.inputFingerprint !== fingerprint) throw new Error(messages.creationInputChanged);
     this.inputFingerprint = fingerprint;
     const pending = this.runCreate(input, onChange);
@@ -85,6 +87,14 @@ export class TrayQuickPlans {
     this.message = undefined;
   }
 
+  clearResolved(): void {
+    if (this.pending) {
+      this.clearReadyOnCompletion = true;
+      return;
+    }
+    if (this.creation?.status === 'ready') this.clearAttempt();
+  }
+
   private clearAttempt(): void {
     this.creation = undefined;
     this.context = undefined;
@@ -106,6 +116,8 @@ export class TrayQuickPlans {
     } catch (error) {
       this.creation = { status: 'error', ...(this.context ? { planId: this.context.planId } : {}), message: creationErrorMessage(error) };
     }
+    if (this.clearReadyOnCompletion && this.creation.status === 'ready') this.clearAttempt();
+    this.clearReadyOnCompletion = false;
     onChange();
   }
 

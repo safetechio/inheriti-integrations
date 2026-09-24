@@ -6,7 +6,7 @@ import { trayMessages as messages } from '../../../messages.js';
 let tray: Tray | undefined;
 
 export function registerTrayEvents(appUrl?: string): void {
-  const icon = nativeImage.createFromPath(join(import.meta.dirname, '../../../tray.png')).resize({ width: 22, height: 22 });
+  const icon = nativeImage.createFromPath(join(import.meta.dirname, 'tray.png')).resize({ width: 22, height: 22 });
   tray = new Tray(icon);
   tray.setToolTip(messages.appName);
   tray.on('click', () => showLauncher());

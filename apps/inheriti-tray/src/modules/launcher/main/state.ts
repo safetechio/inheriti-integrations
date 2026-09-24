@@ -163,6 +163,7 @@ export class TraySession {
   async discardPlanEdit(): Promise<void> { await this.planEdit.discard(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
   clearRevealed(): void { this.planEdit.clearRevealed(); }
+  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); }
 
   async signOut(): Promise<void> {
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');

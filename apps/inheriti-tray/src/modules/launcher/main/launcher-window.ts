@@ -22,7 +22,7 @@ export function showLauncher(action?: string): void {
       show: false,
       resizable: false,
       webPreferences: {
-        preload: join(import.meta.dirname, '../../../preload.cjs'),
+        preload: join(import.meta.dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -30,7 +30,7 @@ export function showLauncher(action?: string): void {
     });
     window.setMenu(null);
     registerWindowEvents(window, action, () => quitting);
-    void window.loadFile(join(import.meta.dirname, '../../../launcher.html'));
+    void window.loadFile(join(import.meta.dirname, 'launcher.html'));
   }
   window.show();
   window.focus();

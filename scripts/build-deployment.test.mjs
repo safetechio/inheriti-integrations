@@ -9,6 +9,7 @@ test('requires every distributable build to select its deployment', () => {
 
 test('derives an immutable npm version for each deployment', () => {
   assert.equal(packageVersionForDeployment('1.2.3', 'dev'), '1.2.3-dev.0');
+  assert.equal(packageVersionForDeployment('1.2.3', 'local'), '1.2.3-local.0');
   assert.equal(packageVersionForDeployment('1.2.3', 'stg'), '1.2.3-stg.0');
   assert.equal(packageVersionForDeployment('1.2.3', 'prod'), '1.2.3');
   assert.throws(() => packageVersionForDeployment('1.2.3-dev.0', 'dev'), /Invalid base/);
