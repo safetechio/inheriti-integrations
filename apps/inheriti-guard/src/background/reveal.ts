@@ -79,6 +79,7 @@ interface PlanForReveal extends PlanGovernanceView {
 
 export class ChromeRevealController {
   private active: AbortController | undefined;
+  private activeBatchWindowId: number | undefined;
   private state: RevealViewState = { kind: 'IDLE' };
   private intent: RevealRecovery | undefined;
   private shutdownGeneration = 0;
@@ -93,6 +94,7 @@ export class ChromeRevealController {
     private readonly keyOwner: () => 'Application' | 'Organisation' = () => 'Application',
     private readonly proOptions?: (signal: AbortSignal, batch?: AccessBatch) => Promise<ProOptions | undefined>,
     private readonly relayRecovery?: { storage: chrome.storage.StorageArea; owner(): Promise<RelayOwner | undefined> },
+    private readonly overlayOriginAuthorized: (origin: string) => Promise<boolean> = async () => true,
   ) {}
 
   private async ownedRelay(): Promise<RelayRecovery | undefined> {
@@ -365,8 +367,14 @@ export class ChromeRevealController {
     }
     if (pendingRelay) await this.cancelOwnedRelay();
     if (generation !== this.shutdownGeneration || this.cancellationInProgress) return resultsFor(batch, 'canceled');
+    let targetWindowId: number | undefined;
+    try { targetWindowId = (await chrome.tabs.get(batch.identity.tabId)).windowId; }
+    catch { return resultsFor(batch, 'stale-page-context'); }
+    if (targetWindowId === undefined) return resultsFor(batch, 'stale-page-context');
+    if (generation !== this.shutdownGeneration || this.cancellationInProgress) return resultsFor(batch, 'canceled');
     const abort = new AbortController();
     this.active = abort;
+    this.activeBatchWindowId = targetWindowId;
     this.state = { kind: 'RUNNING', message: 'Opening the plan.' };
     this.intent = {
       planId: batch.identity.planId,
@@ -435,7 +443,10 @@ export class ChromeRevealController {
                 outcomes.set(mapping.protectedField.selector, 'canceled');
                 continue;
               }
-              const result = await fillPageTarget(mapping.pageTarget, value, writePageTarget);
+              const result = await fillPageTarget(mapping.pageTarget, value, writePageTarget,
+                async () => this.ownsOperation(generation, abort)
+                  && (initiator !== 'OVERLAY' || await this.overlayOriginAuthorized(batch.identity.origin))
+                  && this.ownsOperation(generation, abort));
               outcomes.set(mapping.protectedField.selector, result);
               contextStale = result === 'stale-page-context';
             } catch {
@@ -521,6 +532,28 @@ export class ChromeRevealController {
     this.active?.abort();
     this.state = { kind: 'RUNNING', message: 'Canceling reveal…' };
     return this.state;
+  }
+
+  public cancelBatchOnTabChange(activeTabId: number, windowId: number): void {
+    if (this.activeBatchWindowId === windowId && this.intent?.intent.kind === 'BATCH'
+      && this.intent.intent.batch.identity.tabId !== activeTabId) this.active?.abort();
+  }
+
+  public ownsBatchInOtherWindow(windowId: number): boolean {
+    return this.active !== undefined && this.intent?.intent.kind === 'BATCH'
+      && this.activeBatchWindowId !== undefined && this.activeBatchWindowId !== windowId;
+  }
+
+  public cancelActiveBatch(): void {
+    if (this.intent?.intent.kind === 'BATCH') this.active?.abort();
+  }
+
+  public cancelBatchForTab(tabId: number): void {
+    if (this.intent?.intent.kind === 'BATCH' && this.intent.intent.batch.identity.tabId === tabId) this.active?.abort();
+  }
+
+  public cancelBatchForOrigin(origin: string): void {
+    if (this.intent?.intent.kind === 'BATCH' && this.intent.intent.batch.identity.origin === origin) this.active?.abort();
   }
 
   /** Stops active and persisted reveal work before a coordinated Secure Logoff clears custody. */

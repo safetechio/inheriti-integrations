@@ -49,7 +49,11 @@ export async function fillPageTarget(input: {
   expectedOrigin: string,
   expectedNavigationId: string,
   value: string,
-) => PageTargetWriteResult): Promise<PageTargetWriteResult> {
+) => PageTargetWriteResult, isAuthorized: () => Promise<boolean> = async () => true): Promise<PageTargetWriteResult> {
+  const tab = await chrome.tabs.get(input.tabId);
+  const [active] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+  if (active?.id !== input.tabId || !tab.url || new URL(tab.url).origin !== input.origin
+    || !await isAuthorized()) return 'stale-page-context';
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId: input.tabId, frameIds: [input.frameId] },
     func: write,

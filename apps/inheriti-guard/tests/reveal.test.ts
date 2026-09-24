@@ -316,6 +316,67 @@ describe('Chrome reveal controller', () => {
     expect(instance.withReveal).not.toHaveBeenCalled();
   });
 
+  it('does not write an overlay batch after its origin authorization is revoked', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    const consumeFields = vi.fn(async (_requests, destination) => destination([
+      { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },
+    ]));
+    const instance = core({ withReveal: vi.fn(async (_planId, _options, work) => work({
+      session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+    })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage,
+      () => 'Organisation', undefined, undefined, async () => false);
+    await expect(controller.fillBatch(batch, 'OVERLAY')).resolves.toEqual(batch.mappings.map((mapping) => ({
+      selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'stale-page-context',
+    })));
+    expect(executeScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not write a batch after the operator switches tabs during approval', async () => {
+    executeScript.mockResolvedValue([{ result: true }]);
+    let approve!: () => void;
+    const approval = new Promise<void>((resolve) => { approve = resolve; });
+    const consumeFields = vi.fn(async (_requests, destination) => destination([
+      { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },
+    ]));
+    const instance = core({ withReveal: vi.fn(async (_planId, _options, work) => {
+      await approval;
+      return work({ session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields });
+    }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const filling = controller.fillBatch(batch);
+    await vi.waitFor(() => expect(instance.withReveal).toHaveBeenCalledOnce());
+    (chrome.tabs.query as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 8, windowId: 17,
+      url: 'https://other.example.test' }]);
+    controller.cancelBatchOnTabChange(8, 17);
+    approve();
+    await filling;
+    expect(executeScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the batch open when the SafeKey PRO popup activates in another window', async () => {
+    executeScript.mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: true }])
+      .mockResolvedValue([{ result: 'filled' }]);
+    let approve!: () => void;
+    const approval = new Promise<void>((resolve) => { approve = resolve; });
+    const consumeFields = vi.fn(async (_requests, destination) => destination([
+      { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },
+    ]));
+    const instance = core({ withReveal: vi.fn(async (_planId, _options, work) => {
+      await approval;
+      return work({ session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields });
+    }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const filling = controller.fillBatch(batch);
+    await vi.waitFor(() => expect(instance.withReveal).toHaveBeenCalledOnce());
+    controller.cancelBatchOnTabChange(18, 19);
+    approve();
+    await expect(filling).resolves.toEqual(batch.mappings.map((mapping) => ({
+      selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'filled',
+    })));
+    expect(executeScript).toHaveBeenCalledTimes(4);
+  });
+
   it('uses the in-page chooser only for an overlay initiated batch', async () => {
     executeScript.mockResolvedValue([{ result: true }]);
     const proOptions = vi.fn(async () => undefined);

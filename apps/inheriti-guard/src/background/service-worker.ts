@@ -42,7 +42,7 @@ const reveal = new ChromeRevealController(core, chrome.storage.session, () => ke
   const organizationId = await selectedOrganization(configuration);
   return session?.principal.issuer && session.principal.subject && organizationId
     ? { issuer: session.principal.issuer, subject: session.principal.subject, organizationId } : undefined;
-} });
+} }, async (origin) => (await overlayPermissions.state(origin)).currentEnabled);
 
 const overlayPermissions = new OverlayPermissionController();
 let lifecycleLocked = false;
@@ -191,17 +191,22 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url !== undefined) pendingContext.invalidateForNavigation(tabId, changeInfo.url);
+  if (changeInfo.url !== undefined) {
+    pendingContext.invalidateForNavigation(tabId, changeInfo.url);
+    reveal.cancelBatchForTab(tabId);
+  }
   if (changeInfo.url !== undefined) void guard.navigation(changeInfo.url).catch(() => undefined);
   if (changeInfo.url !== undefined) void guard.refreshClipboardProtection().catch(() => undefined);
 });
 
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  pendingContext.invalidateForTabChange(tabId);
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  if (!reveal.ownsBatchInOtherWindow(windowId)) pendingContext.invalidateForTabChange(tabId);
+  reveal.cancelBatchOnTabChange(tabId, windowId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   pendingContext.invalidateTab(tabId);
+  reveal.cancelBatchForTab(tabId);
   guard.forgetTab(tabId);
   void guard.refreshClipboardProtection().catch(() => undefined);
 });
@@ -216,7 +221,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.idle?.onStateChanged.addListener((state) => { void guard.idle(state).catch(() => undefined); });
 chrome.downloads?.onCreated.addListener((item) => { void guard.download(item).catch(() => undefined); });
 chrome.webNavigation?.onBeforeNavigate.addListener((details) => {
-  if (details.frameId === 0) pendingContext.invalidateForNavigation(details.tabId, details.url);
+  if (details.frameId === 0) {
+    pendingContext.invalidateForNavigation(details.tabId, details.url);
+    reveal.cancelBatchForTab(details.tabId);
+  }
   void guard.inlineNavigation(details).catch(() => undefined);
 });
 
@@ -229,6 +237,10 @@ if ((chrome as typeof chrome & { permissions?: chrome.permissions.Permissions })
   void overlayPermissions.restore();
   chrome.permissions.onRemoved.addListener((removed) => {
     pendingContext.clearDraft();
+    for (const pattern of removed.origins ?? []) {
+      const origin = secureOrigin(pattern);
+      if (origin) reveal.cancelBatchForOrigin(origin);
+    }
     void overlayPermissions.permissionRemoved(removed.origins ?? []);
   });
 }
@@ -301,6 +313,8 @@ async function respond(request: import('../shared/messages.js').SidePanelRequest
   if (type === 'abort-plan-access') return { ok: true, reveal: await reveal.abortPlanAccess(request.planId) };
   if (type === 'get-overlay-permissions' || type === 'enable-overlay-current-origin'
     || type === 'disable-overlay-origin' || type === 'disable-all-overlays') {
+    if (type === 'disable-overlay-origin') reveal.cancelBatchForOrigin(request.origin);
+    if (type === 'disable-all-overlays') reveal.cancelActiveBatch();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const currentUrl = tab?.url;
     const overlay = type === 'enable-overlay-current-origin' && currentUrl !== undefined

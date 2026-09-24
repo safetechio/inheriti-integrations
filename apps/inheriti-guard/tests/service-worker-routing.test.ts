@@ -42,6 +42,11 @@ vi.mock('../src/background/reveal.js', () => ({
     cancel() { return { kind: 'RUNNING', message: 'Canceling reveal…' }; }
     abortPlanAccess = abortPlanAccess;
     cancelPending = cancelPending;
+    cancelBatchForTab() {}
+    cancelBatchOnTabChange() {}
+    ownsBatchInOtherWindow() { return false; }
+    cancelActiveBatch() {}
+    cancelBatchForOrigin() {}
     reconcile = reconcileReveal;
     async closeAbandoned() {}
     async shutdown() { await shutdownReveal(); }
