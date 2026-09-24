@@ -25,6 +25,7 @@ await build({
 });
 await chmod(resolve(output, 'main.js'), 0o755);
 await cp(resolve(root, 'src', 'assets'), resolve(output, 'assets'), { recursive: true });
+await cp(resolve(root, 'src', 'templates'), resolve(output, 'templates'), { recursive: true });
 const coreSdk = await packageDirectory(root, '@safetech/inheriti-core-sdk');
 const workers = resolve(coreSdk, 'dist', 'workers');
 if (existsSync(workers)) await cp(workers, resolve(output, 'workers'), { recursive: true });

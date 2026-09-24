@@ -1,5 +1,5 @@
 {
-  "name": "@safetech/inheriti-vscode-extension",
+  "name": "@safetech/inheriti-ide",
   "version": "0.0.4",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
@@ -21,6 +21,7 @@
   ],
   "activationEvents": [
     "onView:inheriti.plans",
+    "onCommand:inheriti.showPlans",
     "onCommand:inheriti.selectOrganization"
   ],
   "contributes": {
@@ -54,6 +55,10 @@
         "command": "inheriti.refresh",
         "title": "Inheriti: Refresh Plans",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "inheriti.showPlans",
+        "title": "Inheriti: Show Plans"
       },
       {
         "command": "inheriti.checkUpdate",
@@ -92,7 +97,7 @@
         "title": "Inheriti: Import Configuration"
       },
       {
-        "command": "inheriti.forgetMasterKey",
+        "command": "inheriti.forgetOrgKey",
         "title": "Inheriti: Forget Held Key"
       }
     ],

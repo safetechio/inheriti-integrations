@@ -66,7 +66,7 @@
       "matches": ["<all_urls>"]
     },
     {
-      "resources": ["side-panel/assets/inheriti-business-logo.png", "side-panel/assets/safekey-pro.png", "side-panel/assets/safekey-mobile.png"],
+      "resources": ["side-panel/assets/inheriti-business-logo.png", "side-panel/assets/safekey-pro.png", "side-panel/assets/safekey-mobile.png", "side-panel/font-app.ttf"],
       "matches": ["https://*/*"]
     }
   ],

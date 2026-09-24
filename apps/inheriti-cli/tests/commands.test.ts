@@ -138,7 +138,11 @@ describe('login', () => {
     const signingIn = login(context, terminal);
     // The callback the issuer would send once the operator approves in the browser.
     await new Promise((settle) => { setTimeout(settle, 50); });
-    await fetch(`${redirect}?code=authorization-code&state=opaque`);
+    const callback = await fetch(`${redirect}?code=authorization-code&state=opaque`);
+    const html = await callback.text();
+    expect(html).toContain('font-family: AppFont');
+    expect(html).toContain('--primary: #2962ff');
+    expect(html).toContain('Inheriti® Business');
 
     await expect(signingIn).resolves.toBe(0);
     expect(completed).toContain('code=authorization-code');

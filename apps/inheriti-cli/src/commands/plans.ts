@@ -91,11 +91,16 @@ export async function resolvePlanId(
   context: CliContext,
   terminal: Terminal,
   planId: string | undefined,
+  signal?: AbortSignal,
 ): Promise<string> {
+  if (signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   if (planId) return planId;
   await requireSession(context);
   if (!terminal.interactive) throw new PlanIdRequired();
-  const chosen = await promptSelect('Which plan?', await planCandidates(context));
+  const candidates = await planCandidates(context);
+  if (signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
+  const chosen = await promptSelect('Which plan?', candidates, signal);
+  if (signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   if (!chosen) throw new PlanIdRequired();
   return chosen;
 }

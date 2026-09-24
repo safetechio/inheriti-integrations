@@ -252,13 +252,13 @@ describe('Chrome reveal controller', () => {
     await old;
 
     expect(controller.current()).toEqual({ kind: 'RUNNING', message: 'Opening the plan.' });
-    expect(values.has('inheritiElements.openReveal')).toBe(true);
+    expect(values.has('inheriti.openReveal')).toBe(true);
     finishNewReveal();
     await newer;
   });
 
   it('does not resume work admitted before Secure Logoff finishes its plan lookup', async () => {
-    values.set('inheritiElements.openReveal', {
+    values.set('inheriti.openReveal', {
       planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'FIELD', selector: 'prod-db.username', origin: 'https://db.example.test', tabId: 7 },
     });
@@ -556,7 +556,7 @@ describe('Chrome reveal controller', () => {
 
   it('closes a persisted reveal after service-worker eviction without restoring plaintext', async () => {
     const close = vi.fn(async () => undefined);
-    values.set('inheritiElements.openReveal', { revealId: 'abandoned-1', deadline: '2030-01-01T00:00:00.000Z' });
+    values.set('inheriti.openReveal', { revealId: 'abandoned-1', deadline: '2030-01-01T00:00:00.000Z' });
     const controller = new ChromeRevealController(async () => asCore(core({ reveals: { close } })), storage);
     await controller.closeAbandoned();
     expect(close).toHaveBeenCalledWith('abandoned-1', 'CANCELED');
@@ -565,7 +565,7 @@ describe('Chrome reveal controller', () => {
 
   it('keeps a live reveal a lost worker left behind, and takes it up with the intent that started it', async () => {
     const close = vi.fn(async () => undefined);
-    values.set('inheritiElements.openReveal', {
+    values.set('inheriti.openReveal', {
       planId: 'plan-1',
       deadline: '2030-01-01T00:00:00.000Z',
       revealId: 'open-1',
@@ -587,7 +587,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('reconciles an interrupted key release and permits canceling its pending intent', async () => {
-    values.set('inheritiElements.openReveal', {
+    values.set('inheriti.openReveal', {
       planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch },
     });
@@ -595,13 +595,13 @@ describe('Chrome reveal controller', () => {
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
     expect(instance.getActivePlanReveal).toHaveBeenCalledWith('plan-1');
   });
 
   it('cancels in one click when the pending request reached the server', async () => {
     const revealId = '11111111-1111-4111-8111-111111111111';
-    values.set('inheritiElements.openReveal', {
+    values.set('inheriti.openReveal', {
       planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch },
     });
     const serverAbort = vi.fn(async () => ({ aborted: true }));
@@ -610,12 +610,12 @@ describe('Chrome reveal controller', () => {
     expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'WARNING', planId: 'plan-1', revealId });
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
     expect(serverAbort).toHaveBeenCalledWith('plan-1', undefined);
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
   });
 
   it('cancels a request that becomes server-active after the pending card appeared', async () => {
     const revealId = '11111111-1111-4111-8111-111111111111';
-    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+    values.set('inheriti.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } });
     const active = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: revealId });
     const serverAbort = vi.fn(async () => ({ aborted: true }));
@@ -625,7 +625,7 @@ describe('Chrome reveal controller', () => {
     expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RESUMABLE' });
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
     expect(serverAbort).toHaveBeenCalledWith('plan-1', undefined);
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
   });
 
   it('persists only relay metadata and cancels it after the reveal worker is replaced', async () => {
@@ -684,23 +684,23 @@ describe('Chrome reveal controller', () => {
     const abort = new AbortController();
     Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Release the Organisation key.' },
       intent: { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } } });
-    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+    values.set('inheriti.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } });
     expect(controller.current().kind).toBe('RUNNING');
     expect(await controller.reconcile('plan-1')).toMatchObject({ kind: 'RUNNING' });
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'DONE' });
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
     expect(abort.signal.aborted).toBe(true);
     expect(controller.current()).toMatchObject({ kind: 'DONE', message: 'Pending request canceled. You can start again.' });
   });
 
   it('does not cancel a pending request when server access status cannot be checked', async () => {
-    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+    values.set('inheriti.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } });
     const instance = core({ getActivePlanReveal: vi.fn(async () => { throw new Error('offline'); }) });
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
-    expect(values.has('inheritiElements.openReveal')).toBe(true);
+    expect(values.has('inheriti.openReveal')).toBe(true);
   });
 
   it('keeps a running reveal owned when the cancellation status check fails', async () => {
@@ -715,7 +715,7 @@ describe('Chrome reveal controller', () => {
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RESUMABLE', planId: 'plan-1' });
     release();
     await pending;
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
     await expect(controller.fill({ planId: 'plan-1', selector: 'prod-db.username',
       origin: 'https://db.example.test', tabId: 7 })).resolves.toMatchObject({ kind: 'DONE' });
   });
@@ -737,7 +737,7 @@ describe('Chrome reveal controller', () => {
     const abort = new AbortController();
     const recovery = { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } };
     Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Release the Organisation key.' }, intent: recovery });
-    values.set('inheritiElements.openReveal', recovery);
+    values.set('inheriti.openReveal', recovery);
     await expect(controller.cancelPending('plan-1')).rejects.toThrow('offline');
     expect(abort.signal.aborted).toBe(true);
     expect((controller as unknown as { active?: AbortController }).active).toBeUndefined();
@@ -754,12 +754,12 @@ describe('Chrome reveal controller', () => {
     const recovery = { planId: 'plan-2', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } };
     Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Opening another plan.' }, intent: recovery });
-    values.set('inheritiElements.openReveal', recovery);
+    values.set('inheriti.openReveal', recovery);
     expect(await controller.cancelPending('plan-1')).toMatchObject({ kind: 'RUNNING' });
     expect(await controller.abortPlanAccess('plan-1')).toMatchObject({ kind: 'RUNNING' });
     expect(serverAbort).not.toHaveBeenCalled();
     expect(abort.signal.aborted).toBe(false);
-    expect(values.get('inheritiElements.openReveal')).toBe(recovery);
+    expect(values.get('inheriti.openReveal')).toBe(recovery);
     expect(controller.current()).toMatchObject({ kind: 'RUNNING' });
   });
 
@@ -770,11 +770,11 @@ describe('Chrome reveal controller', () => {
     const controller = new ChromeRevealController(async () => asCore(core({ abortPlanAccess: serverAbort })), storage);
     Object.assign(controller, { active: abort, state: { kind: 'RUNNING', message: 'Opening the plan.' },
       intent: { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z', intent: { kind: 'BATCH', batch } } });
-    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+    values.set('inheriti.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } });
     expect(await controller.abortPlanAccess('plan-1', revealId)).toMatchObject({ kind: 'DONE' });
     expect(serverAbort).toHaveBeenCalledWith('plan-1', revealId);
-    expect(values.has('inheritiElements.openReveal')).toBe(false);
+    expect(values.has('inheriti.openReveal')).toBe(false);
   });
 
   it('blocks a new reveal until server cancellation and local cleanup finish', async () => {
@@ -791,7 +791,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('blocks a new reveal while pending-request cleanup is awaiting storage', async () => {
-    values.set('inheritiElements.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+    values.set('inheriti.openReveal', { planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
       intent: { kind: 'BATCH', batch } });
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -810,7 +810,7 @@ describe('Chrome reveal controller', () => {
 
   it('closes a reveal whose recovery record is past its deadline instead of offering it', async () => {
     const close = vi.fn(async () => undefined);
-    values.set('inheritiElements.openReveal', {
+    values.set('inheriti.openReveal', {
       planId: 'plan-1', deadline: '2000-01-01T00:00:00.000Z', revealId: 'stale-1',
       intent: { kind: 'FIELD', selector: 'prod-db.username', origin: 'https://db.example.test', tabId: 7 },
     });
@@ -875,7 +875,7 @@ describe('Chrome reveal controller', () => {
       message: 'Authentication request sent to SafeKey Mobile. Confirm it to continue.',
     });
     // Recovery and the deadline alarm stay tied to the reveal session, never to the shorter gate.
-    expect(alarmCreate).toHaveBeenCalledWith('inheritiElements.revealDeadline', {
+    expect(alarmCreate).toHaveBeenCalledWith('inheriti.revealDeadline', {
       when: new Date('2030-01-01T00:00:00.000Z').getTime(),
     });
   });
@@ -936,7 +936,7 @@ describe('Chrome reveal controller', () => {
       expect(observed).toMatchObject({
         kind: 'RUNNING', expiresAt: '2030-01-01T01:00:00.000Z', gateExpiresAt: '2030-01-01T00:05:00.000Z',
       });
-      expect(alarmCreate).toHaveBeenCalledWith('inheritiElements.revealDeadline', {
+      expect(alarmCreate).toHaveBeenCalledWith('inheriti.revealDeadline', {
         when: new Date('2030-01-01T01:00:00.000Z').getTime(),
       });
     },

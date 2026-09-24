@@ -77,5 +77,7 @@ export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';
 export { revealModeOf } from './plans.js';
+export { custodianShareCopy } from './custodian-copy.js';
+export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
 export { revealProgressMessage } from './reveal-progress.js';
 export { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';

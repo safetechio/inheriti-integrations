@@ -20,7 +20,7 @@ afterEach(() => {
   globalThis.window = originalWindow;
   globalThis.HTMLInputElement = originalInput;
   globalThis.Event = originalEvent;
-  delete (globalThis as Record<string, unknown>).__inheritiElementsPageTargetsV1__;
+  delete (globalThis as Record<string, unknown>).__inheritiPageTargetsV1__;
   FakeInput.lastSet = undefined;
 });
 
@@ -34,7 +34,7 @@ describe('opaque page targets', () => {
       getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
     } as unknown as Window & typeof globalThis;
     Object.assign(globalThis, {
-      __inheritiElementsPageTargetsV1__: { navigationId: 'nav-1', href: 'https://login.example.test/form', targets: new Map([['opaque-1', input]]) },
+      __inheritiPageTargetsV1__: { navigationId: 'nav-1', href: 'https://login.example.test/form', targets: new Map([['opaque-1', input]]) },
     });
 
     expect(revalidatePageTarget('opaque-1', 'https://login.example.test', 'nav-1')).toBe(true);
@@ -50,7 +50,7 @@ describe('opaque page targets', () => {
       getComputedStyle: vi.fn(),
     } as unknown as Window & typeof globalThis;
     Object.assign(globalThis, {
-      __inheritiElementsPageTargetsV1__: { navigationId: 'nav-new', href: 'https://login.example.test/form', targets: new Map([['opaque-1', input]]) },
+      __inheritiPageTargetsV1__: { navigationId: 'nav-new', href: 'https://login.example.test/form', targets: new Map([['opaque-1', input]]) },
     });
     expect(revalidatePageTarget('opaque-1', 'https://login.example.test', 'nav-old')).toBe(false);
     expect(writePageTarget('opaque-1', 'https://login.example.test', 'nav-old', 'never-written')).toBe('stale-page-context');

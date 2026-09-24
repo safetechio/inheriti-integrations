@@ -16,7 +16,7 @@ export function createRevealPresenter(
   terminal: Terminal,
   moderators: ReadonlyMap<string, string>,
   keyOwner: 'Application' | 'Organisation' = 'Application',
-): { progress(value: RevealProgress): void; complete(message: string): void; close(): void } | undefined {
+): { progress(value: RevealProgress): void; complete(message: string): void; close(clear?: boolean): void } | undefined {
   const region = terminal.createLiveRegion?.();
   if (!region) return undefined;
   let current: RevealProgress = { phase: 'STARTING' };
@@ -32,7 +32,7 @@ export function createRevealPresenter(
   return {
     progress(value) { current = value; completed = undefined; draw(); },
     complete(message) { completed = message; draw(); },
-    close() { clearInterval(timer); region.close(); },
+    close(clear = false) { clearInterval(timer); if (clear) region.update(''); region.close(); },
   };
 }
 
@@ -74,8 +74,8 @@ function title(phase: RevealProgress['phase'], keyOwner: 'Application' | 'Organi
     WAITING_FOR_DMS: 'Waiting for the dead man’s switch',
     WAITING_FOR_AUTHENTICATION: 'Authentication request — waiting for SafeKey Mobile confirmation',
     WAITING_FOR_MODERATION: 'Waiting for moderator approval',
-    WAITING_FOR_CUSTODIAN_CLAIM: 'Claim the custodian share in SafeKey Mobile first, then release it for this access',
-    WAITING_FOR_CUSTODIAN: 'Release the custodian share in SafeKey Mobile',
+    WAITING_FOR_CUSTODIAN_CLAIM: 'First save this plan share on your phone in SafeKey Mobile, then release it for this access',
+    WAITING_FOR_CUSTODIAN: 'Release this plan share from your phone in SafeKey Mobile',
     CONNECTING_SAFEKEY_PRO: 'Connect and touch SafeKey PRO',
     CUSTODIAN_SHARE_DISTRIBUTED: 'Custodian share sent to SafeKey Mobile',
     RELEASING_MATERIAL: 'Collecting encrypted data shares.',

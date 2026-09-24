@@ -8,15 +8,15 @@ import { packageDirectory } from './package-directory.mjs';
  * Packages the extension as a real `.vsix`, the only thing `code --install-extension` accepts.
  *
  * The manifest is staged rather than shipped as-is, for two reasons. A VSIX identifier is
- * `<publisher>.<name>` and neither may be scoped, so the workspace's `@safetech/…-vscode-extension`
+ * `<publisher>.<name>` and neither may be scoped, so the workspace's `@safetech/inheriti-ide`
  * cannot be used verbatim — and the identifier is not cosmetic here: the OAuth callback comes back
- * as `vscode://safetech.inheriti-integrations/oauth/callback`, so the installed extension has to carry
+ * as `vscode://safetech.inheriti-ide/oauth/callback`, so the installed extension has to carry
  * exactly that publisher and name or the sign-in redirect reaches no handler. The second reason is
  * the same as the CLI's: the bundle already contains both SDKs, and their `link:` specifiers must not
  * travel with it.
  */
 const PUBLISHER = 'safetech';
-const NAME = 'inheriti-integrations';
+const NAME = 'inheriti-ide';
 
 const root = process.cwd();
 const deployment = await matchingBuildDeployment(root);

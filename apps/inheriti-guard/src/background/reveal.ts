@@ -6,7 +6,7 @@ import { validateAccessBatch } from '../shared/access-contract.js';
 import { fillPageField, fillPageTarget, preflightPageTarget } from './page-fill.js';
 import { revalidatePageTarget, writePageTarget } from './page-target.js';
 
-const RECOVERY_KEY = 'inheritiElements.openReveal';
+const RECOVERY_KEY = 'inheriti.openReveal';
 const RELAY_KEY = 'inheritiGuard.pendingKeyRelay';
 type RelayOwner = { issuer: string; subject: string; organizationId: string };
 type RelayRecovery = RelayOwner & { planId: string; sessionId: string; expiresAt: string };
@@ -18,7 +18,7 @@ type RelayRecovery = RelayOwner & { planId: string; sessionId: string; expiresAt
  * makes a person go and answer a phone.
  */
 const RECOVERY_WINDOW_MS = 10 * 60_000;
-const DEADLINE_ALARM = 'inheritiElements.revealDeadline';
+const DEADLINE_ALARM = 'inheriti.revealDeadline';
 const ALLOWED_FIELDS = new Set(['username', 'email', 'password']);
 
 /** The shared progress shape, narrowed to the identity and lifetime this host always receives. */

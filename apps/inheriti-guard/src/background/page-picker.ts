@@ -5,8 +5,8 @@ export function pickPageField(): Promise<DiscoveredPageField | null> {
   type Semantic = DiscoveredPageField['semantic'];
   type Registry = { navigationId: string; href: string; targets: Map<string, HTMLInputElement> };
   type PickerState = { cancel: () => void };
-  const registryKey = '__inheritiElementsPageTargetsV1__';
-  const pickerKey = '__inheritiElementsPagePickerV1__';
+  const registryKey = '__inheritiPageTargetsV1__';
+  const pickerKey = '__inheritiPagePickerV1__';
   const page = globalThis as typeof globalThis & {
     [registryKey]?: Registry;
     [pickerKey]?: PickerState;
@@ -88,8 +88,8 @@ export function pickPageField(): Promise<DiscoveredPageField | null> {
 /** Cancels an active picker in the same document/frame. */
 export function cancelPageFieldPicker(): boolean {
   type PickerState = { cancel: () => void };
-  const page = globalThis as typeof globalThis & { __inheritiElementsPagePickerV1__?: PickerState };
-  if (page.__inheritiElementsPagePickerV1__ === undefined) return false;
-  page.__inheritiElementsPagePickerV1__.cancel();
+  const page = globalThis as typeof globalThis & { __inheritiPagePickerV1__?: PickerState };
+  if (page.__inheritiPagePickerV1__ === undefined) return false;
+  page.__inheritiPagePickerV1__.cancel();
   return true;
 }

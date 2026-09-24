@@ -2,6 +2,7 @@ import type { CliContext } from '../session.js';
 
 export interface Candidate {
   readonly value: string;
+  readonly label?: string;
   readonly description?: string;
 }
 

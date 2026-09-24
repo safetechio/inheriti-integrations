@@ -123,9 +123,9 @@ export function resolveConfiguration(
       interactiveClientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       scopes: ['openid'],
       redirectUri: 'http://127.0.0.1:53682/oauth/callback',
+      safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
       ...(processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE ? {
         safeKeyProDevice: processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE,
-        safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
       } : {}),
     };
   }
@@ -172,9 +172,9 @@ export function resolveConfiguration(
     // The device grant never redirects, but the SDK's configuration requires the field.
     redirectUri: environmentVariables.INHERITI_ELEMENTS_REDIRECT_URI ?? 'http://127.0.0.1:53682/oauth/callback',
     ...(masterKeyPassphrase === undefined ? {} : { masterKeyPassphrase, masterKeySalt: masterKeySalt! }),
-    ...(file.business && file.deployment && environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE ? {
-      safeKeyProDevice: environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE,
+    ...(file.business && file.deployment ? {
       safeKeyProRpId: businessUiRpId(file.deployment),
+      ...(environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE ? { safeKeyProDevice: environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE } : {}),
     } : {}),
   };
 }

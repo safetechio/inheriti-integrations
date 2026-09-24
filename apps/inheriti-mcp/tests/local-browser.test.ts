@@ -10,7 +10,7 @@ it('delivers once to loopback after an explicit click and then closes', async ()
   const landing = await fetch(url);
   const prompt = await landing.text();
   expect(prompt).not.toContain(secret);
-  expect(prompt).toContain('Inheriti Business');
+  expect(prompt).toContain('Inheriti® Business');
   expect(prompt).toContain('Reveal protected field');
   const revealed = await fetch(url, { method: 'POST' });
   const html = await revealed.text();
@@ -52,7 +52,7 @@ it('offers binary bytes only after a local click as a one-time attachment', asyn
   expect(landing.headers.get('content-security-policy')).toContain("default-src 'none'");
   const html = await landing.text();
   expect(html).not.toContain('<script>');
-  expect(html).toContain('Inheriti Business');
+  expect(html).toContain('Inheriti® Business');
   expect(html).toContain('Download protected file');
   expect(html).toContain('Download file');
   expect(html).toContain('report___.html');

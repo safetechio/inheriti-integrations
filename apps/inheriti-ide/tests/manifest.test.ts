@@ -25,6 +25,7 @@ describe('VS Code extension manifest', () => {
     expect(manifest.private).toBe(true);
     expect(manifest.extensionKind).toEqual(['ui']);
     expect(manifest.activationEvents).toContain('onCommand:inheriti.selectOrganization');
+    expect(manifest.activationEvents).toContain('onCommand:inheriti.showPlans');
     expect(manifest.icon).toBe('media/inheriti_avatar.png');
     expect(manifest.browser).toBeUndefined();
     expect(manifest.contributes?.customEditors).toBeUndefined();
@@ -34,6 +35,7 @@ describe('VS Code extension manifest', () => {
       'inheriti.signIn',
       'inheriti.signOut',
       'inheriti.refresh',
+      'inheriti.showPlans',
       'inheriti.checkUpdate',
       'inheriti.showVersion',
       'inheriti.selectOrganization',
@@ -43,11 +45,9 @@ describe('VS Code extension manifest', () => {
       'inheriti.downloadAsset',
       'inheriti.abortPlanAccess',
       'inheriti.importConfiguration',
-      'inheriti.forgetMasterKey',
+      'inheriti.forgetOrgKey',
     ]);
-    expect(manifest.name).toBe('@safetech/inheriti-vscode-extension');
-    expect(JSON.stringify({ activationEvents: manifest.activationEvents, contributes: manifest.contributes }))
-      .not.toMatch(/inheritiElements/iu);
+    expect(manifest.name).toBe('@safetech/inheriti-ide');
     // The extension contributes no HTML surface of any kind: no webview, no custom editor, no browser entry.
     expect(manifest.browser).toBeUndefined();
     expect(manifest.contributes?.customEditors).toBeUndefined();

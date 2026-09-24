@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadPlans } from '../src/plan-loader.js';
 import { ExtensionConfigurationInvalid } from '../src/configuration.js';
 
@@ -21,6 +21,16 @@ describe('loadPlans', () => {
     const items = [{ id: 'plan-1', name: 'Vault', status: 'ACTIVE' }];
     await expect(loadPlans(coreWith({ listPlans: async () => ({ items, nextCursor: null }) })))
       .resolves.toEqual({ kind: 'PLANS', plans: items });
+  });
+
+  it('shows plans from every page', async () => {
+    const first = { id: 'plan-1', name: 'First', status: 'ACTIVE' };
+    const second = { id: 'plan-2', name: 'Second', status: 'ACTIVE' };
+    const listPlans = vi.fn()
+      .mockResolvedValueOnce({ items: [first], nextCursor: 'next' })
+      .mockResolvedValueOnce({ items: [second], nextCursor: null });
+    await expect(loadPlans(coreWith({ listPlans }))).resolves.toEqual({ kind: 'PLANS', plans: [first, second] });
+    expect(listPlans).toHaveBeenNthCalledWith(2, { cursor: 'next' });
   });
 
   it('reports a mapped code rather than throwing into the tree', async () => {

@@ -12,8 +12,8 @@ export function revalidatePageTarget(
 ): boolean {
   type Registry = { navigationId: string; href: string; targets: Map<string, HTMLInputElement> };
   const registry = (globalThis as typeof globalThis & {
-    __inheritiElementsPageTargetsV1__?: Registry;
-  }).__inheritiElementsPageTargetsV1__;
+    __inheritiPageTargetsV1__?: Registry;
+  }).__inheritiPageTargetsV1__;
   const input = registry?.targets.get(targetId);
   if (window.location.origin !== expectedOrigin || registry?.navigationId !== expectedNavigationId
     || registry.href !== window.location.href) return false;
@@ -33,8 +33,8 @@ export function writePageTarget(
 ): PageTargetWriteResult {
   type Registry = { navigationId: string; href: string; targets: Map<string, HTMLInputElement> };
   const registry = (globalThis as typeof globalThis & {
-    __inheritiElementsPageTargetsV1__?: Registry;
-  }).__inheritiElementsPageTargetsV1__;
+    __inheritiPageTargetsV1__?: Registry;
+  }).__inheritiPageTargetsV1__;
   if (window.location.origin !== expectedOrigin || registry?.navigationId !== expectedNavigationId
     || registry.href !== window.location.href) {
     return 'stale-page-context';

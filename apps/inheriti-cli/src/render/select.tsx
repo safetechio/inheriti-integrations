@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Text, render, useInput } from 'ink';
 import type { Candidate } from '../completion/candidates.js';
+import { requestCliCancel } from '../cancellation.js';
 
 const VISIBLE = 10;
 
@@ -10,11 +11,12 @@ const VISIBLE = 10;
  * Typing filters rather than jumping, because a plan id is not something anyone types from memory —
  * the filter runs over the description too, so "wallet" finds the plan whose id means nothing.
  */
-function Select({ title, candidates, onChoose, onCancel }: {
+function Select({ title, candidates, onChoose, onCancel, onInterrupt }: {
   title: string;
   candidates: readonly Candidate[];
   onChoose: (value: string) => void;
   onCancel: () => void;
+  onInterrupt: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -22,6 +24,7 @@ function Select({ title, candidates, onChoose, onCancel }: {
   const active = Math.min(cursor, Math.max(matches.length - 1, 0));
 
   useInput((input, key) => {
+    if (key.ctrl && input === 'c') return onInterrupt();
     if (key.escape) return onCancel();
     if (key.return) {
       const chosen = matches[active];
@@ -48,9 +51,9 @@ function Select({ title, candidates, onChoose, onCancel }: {
         const selected = candidate === matches[active];
         return (
           <Text key={candidate.value} {...(selected ? { color: 'cyan' } : {})}>
-            {selected ? '❯ ' : '  '}
-            {candidate.description ? `${candidate.description}  ` : ''}
-            <Text dimColor>{candidate.value}</Text>
+          {selected ? '❯ ' : '  '}
+          {candidate.label ? <><Text bold>{candidate.label}</Text>{candidate.description ? <Text dimColor>{` — ${candidate.description}`}</Text> : null}</>
+            : <>{candidate.description ? `${candidate.description}  ` : ''}<Text dimColor>{candidate.value}</Text></>}
           </Text>
         );
       })}
@@ -62,6 +65,7 @@ function matching(candidate: Candidate, query: string): boolean {
   if (!query) return true;
   const needle = query.toLowerCase();
   return candidate.value.toLowerCase().includes(needle)
+    || (candidate.label ?? '').toLowerCase().includes(needle)
     || (candidate.description ?? '').toLowerCase().includes(needle);
 }
 
@@ -76,10 +80,11 @@ export async function promptSelect(title: string, candidates: readonly Candidate
       candidates={candidates}
       onChoose={(value) => { chosen = value; stop(); }}
       onCancel={() => { stop(); }}
+      onInterrupt={() => { requestCliCancel(); if (!signal?.aborted) stop(); }}
     />,
-    { exitOnCtrlC: true },
+    { exitOnCtrlC: false },
   );
-  stop = () => instance.unmount();
+  stop = () => { instance.clear(); instance.unmount(); };
   signal?.addEventListener('abort', stop, { once: true });
   if (signal?.aborted) stop();
   try { await instance.waitUntilExit(); }
@@ -87,11 +92,12 @@ export async function promptSelect(title: string, candidates: readonly Candidate
   return chosen;
 }
 
-function MultiSelect({ title, candidates, onChoose, onCancel }: {
+function MultiSelect({ title, candidates, onChoose, onCancel, onInterrupt }: {
   title: string;
   candidates: readonly Candidate[];
   onChoose: (values: string[]) => void;
   onCancel: () => void;
+  onInterrupt: () => void;
 }) {
   const all = { value: '__ALL__', description: 'ALL' };
   const [query, setQuery] = useState('');
@@ -102,6 +108,7 @@ function MultiSelect({ title, candidates, onChoose, onCancel }: {
   const active = Math.min(cursor, choices.length - 1);
 
   useInput((input, key) => {
+    if (key.ctrl && input === 'c') return onInterrupt();
     if (key.escape) return onCancel();
     if (key.return) return selected.size ? onChoose(candidates.filter((one) => selected.has(one.value)).map((one) => one.value)) : onCancel();
     if (key.upArrow) return setCursor(Math.max(active - 1, 0));
@@ -151,8 +158,8 @@ function MultiSelect({ title, candidates, onChoose, onCancel }: {
 }
 
 /** Resolves to all toggled values. ALL is a convenience toggle and is never returned as a selector. */
-export async function promptMultiSelect(title: string, candidates: readonly Candidate[]): Promise<string[] | undefined> {
-  if (candidates.length === 0) return undefined;
+export async function promptMultiSelect(title: string, candidates: readonly Candidate[], signal?: AbortSignal): Promise<string[] | undefined> {
+  if (candidates.length === 0 || signal?.aborted) return undefined;
   let chosen: string[] | undefined;
   let stop = () => {};
   const instance = render(
@@ -161,10 +168,14 @@ export async function promptMultiSelect(title: string, candidates: readonly Cand
       candidates={candidates}
       onChoose={(values) => { chosen = values; stop(); }}
       onCancel={() => { stop(); }}
+      onInterrupt={() => { requestCliCancel(); if (!signal?.aborted) stop(); }}
     />,
-    { exitOnCtrlC: true },
+    { exitOnCtrlC: false },
   );
-  stop = () => instance.unmount();
-  await instance.waitUntilExit();
+  stop = () => { instance.clear(); instance.unmount(); };
+  signal?.addEventListener('abort', stop, { once: true });
+  if (signal?.aborted) stop();
+  try { await instance.waitUntilExit(); }
+  finally { signal?.removeEventListener('abort', stop); }
   return chosen;
 }

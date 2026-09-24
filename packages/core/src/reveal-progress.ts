@@ -1,4 +1,5 @@
 import type { RevealPhase, RevealProgress } from '@safetech/inheriti-client-sdk';
+import { custodianShareCopy } from './custodian-copy.js';
 
 /**
  * One sentence per phase, addressed to the person waiting.
@@ -30,10 +31,10 @@ export function revealProgressMessage(
   if (phase === 'WAITING_FOR_AUTHENTICATION') return 'Authentication request sent to SafeKey Mobile. Confirm it to continue.';
   if (phase === 'WAITING_FOR_MODERATION') return moderationMessage(progress, options.moderators ?? []);
   if (phase === 'WAITING_FOR_CUSTODIAN_CLAIM') {
-    return 'Claim the custodian share in SafeKey Mobile first, then release it for this access.';
+    return custodianShareCopy.firstAccess.mobileClaimPending;
   }
   if (phase === 'WAITING_FOR_CUSTODIAN') {
-    return 'Approve the custodian request using SafeKey Mobile. This reveal will continue when the share arrives.';
+    return custodianShareCopy.laterAccess.mobileRelease;
   }
   if (phase === 'CONNECTING_SAFEKEY_PRO') return 'Enter your SafeKey PRO PIN, then touch the device when prompted.';
   if (phase === 'RELEASING_MATERIAL') return 'Collecting encrypted data shares.';

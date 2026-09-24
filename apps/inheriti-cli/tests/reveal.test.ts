@@ -124,17 +124,55 @@ describe('plans reveal', () => {
     expect(output.lines.join('\n')).not.toContain('private-value');
   });
 
-  it('does not redraw a live region over SafeKey PRO prompts', async () => {
+  it('keeps the live reveal card until a SafeKey PRO operation actually starts', async () => {
     const proDevice = { write: vi.fn(), read: vi.fn() };
-    const createLiveRegion = vi.fn(() => ({ update: vi.fn(), close: vi.fn() }));
+    const region = { update: vi.fn(), close: vi.fn() };
+    const createLiveRegion = vi.fn(() => region);
     const withReveal = vi.fn(async (_planId, options, work) => {
+      options.onProgress({ phase: 'WAITING_FOR_MASTER_KEY', session: { stage: 'AUTHORIZED' } });
+      expect(region.update.mock.calls.at(-1)?.[0]).toContain('Waiting for the Application key');
       options.onProgress({ phase: 'CONNECTING_SAFEKEY_PRO', session: { stage: 'AUTHORIZED' } });
+      expect(region.close).toHaveBeenCalledOnce();
       return work(consuming('private-value'));
     });
     const output = { ...terminal(true), createLiveRegion };
     await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: proDevice } as never, output, 'plan-1', { field: 'asset.password' });
-    expect(createLiveRegion).not.toHaveBeenCalled();
+    expect(createLiveRegion).toHaveBeenCalledOnce();
     expect(output.lines.join('\n')).not.toContain('private-value');
+  });
+
+  it('restores the live reveal card after a previously claimed SafeKey PRO share is read', async () => {
+    const regions = [{ update: vi.fn(), close: vi.fn() }, { update: vi.fn(), close: vi.fn() }];
+    const createLiveRegion = vi.fn().mockReturnValueOnce(regions[0]).mockReturnValueOnce(regions[1]);
+    const withReveal = vi.fn(async (_planId, options, work) => {
+      options.onProgress({ phase: 'CONNECTING_SAFEKEY_PRO', session: { stage: 'AUTHORIZED' } });
+      options.onProgress({ phase: 'RECONSTRUCTING', session: { stage: 'AUTHORIZED' } });
+      return work(consuming('private-value'));
+    });
+    const output = { ...terminal(true), createLiveRegion };
+    await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: { write: vi.fn(), read: vi.fn() } } as never,
+      output, 'plan-1', { field: 'asset.password' });
+    expect(createLiveRegion).toHaveBeenCalledTimes(2);
+    expect(regions[0]?.close).toHaveBeenCalled();
+    expect(regions[1]?.update.mock.calls.at(-1)?.[0]).toContain('Reveal complete');
+    expect(output.lines).not.toContain('Reconstructing and decrypting shares.');
+  });
+
+  it('passes Ctrl+C cancellation to the reveal and closes the live card', async () => {
+    const controller = new AbortController();
+    const region = { update: vi.fn(), close: vi.fn() };
+    const withReveal = vi.fn(async (_planId, options) => {
+      options.onProgress({ phase: 'WAITING_FOR_MASTER_KEY' });
+      await new Promise<void>((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(Object.assign(new Error('reveal_canceled'), { name: 'AbortError' })), { once: true });
+        controller.abort();
+      });
+    });
+    const output = { ...terminal(true), createLiveRegion: () => region };
+    await expect(revealPlan(context({ withReveal }), output, 'plan-1', { field: 'asset.password', signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(region.close).toHaveBeenCalledOnce();
+    expect(output.lines.join('\n')).not.toContain('secret');
   });
 
   it.each([false, true])('shows clipboard and first-access notice after delivery (live region: %s)', async (live) => {
@@ -337,7 +375,7 @@ describe('plans reveal', () => {
       'Opening the plan.',
       'Authentication request sent to SafeKey Mobile. Confirm it to continue.',
       'Collecting encrypted data shares.',
-      'Approve the custodian request using SafeKey Mobile. This reveal will continue when the share arrives.',
+      'This plan share is stored on your phone. Open SafeKey Mobile and approve its release for this access.',
       'Copied prod-db.password to the clipboard.',
     ]);
     expect(output.lines.join('\n')).not.toContain('WAITING_FOR_PARTICIPANTS');

@@ -1,7 +1,6 @@
 const SETTING_KEYS = ['deployment', 'apiUrl', 'applicationId', 'issuer', 'clientId', 'environment', 'masterKeySalt'] as const;
 const PASSPHRASE_KEY = 'masterKeyPassphrase';
 const PREFIX = 'inheriti.';
-const LEGACY_PREFIX = 'inheritiElements.';
 
 export interface ImportedConfiguration {
   settings: Record<string, string>;
@@ -11,23 +10,16 @@ export interface ImportedConfiguration {
 /**
  * Reads a configuration file into the settings the extension needs, and the one secret it needs.
  *
- * An installed extension has no harness writing its `settings.json` for it, and the Master Key
- * passphrase has no home in settings at all — SecretStorage is the only place it may go, and until
- * now nothing ever put it there, so a reveal could never find it. Both halves come from one file so
- * a manual session is one command rather than six fields typed by hand.
+ * The Master Key passphrase goes to SecretStorage, never to VS Code settings.
  *
- * Accepts current dotted keys, legacy dotted keys, or bare keys.
+ * Accepts dotted or bare keys.
  */
 export function parseImportedConfiguration(text: string): ImportedConfiguration {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('Expected a JSON object.');
   const source = parsed as Record<string, unknown>;
   const read = (key: string): string | undefined => {
-    const legacyKey = key === 'masterKeySalt' ? 'organisationKeySalt'
-      : key === 'masterKeyPassphrase' ? 'organisationKeyPassphrase' : key;
-    const value = source[`${PREFIX}${key}`] ?? source[`${PREFIX}${legacyKey}`]
-      ?? source[`${LEGACY_PREFIX}${key}`] ?? source[`${LEGACY_PREFIX}${legacyKey}`]
-      ?? source[key] ?? source[legacyKey];
+    const value = source[`${PREFIX}${key}`] ?? source[key];
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
 

@@ -14,7 +14,7 @@ function input(overrides: Record<string, unknown> = {}) {
 afterEach(() => {
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
-  delete (globalThis as Record<string, unknown>).__inheritiElementsPageTargetsV1__;
+  delete (globalThis as Record<string, unknown>).__inheritiPageTargetsV1__;
 });
 
 describe('page field discovery', () => {

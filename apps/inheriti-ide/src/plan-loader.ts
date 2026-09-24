@@ -1,4 +1,5 @@
 import type { NodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import type { PlanSummary } from '@safetech/inheriti-elements-core';
 import type { PlanViewState } from './plan-view-model.js';
 import { ExtensionConfigurationInvalid } from './configuration.js';
 
@@ -17,11 +18,25 @@ export async function loadPlans(core: () => NodeIntegrationCore): Promise<PlanVi
   }
   if (!(await client.getAccessToken())) return { kind: 'SIGNED_OUT' };
   try {
-    const page = await client.listPlans();
-    return page.items.length === 0 ? { kind: 'EMPTY' } : { kind: 'PLANS', plans: page.items };
+    const plans = await listPlanSummaries(client);
+    return plans.length === 0 ? { kind: 'EMPTY' } : { kind: 'PLANS', plans };
   } catch (error) {
     return { kind: 'ERROR', code: codeOf(error) };
   }
+}
+
+export async function listPlanSummaries(client: NodeIntegrationCore): Promise<PlanSummary[]> {
+  const plans: PlanSummary[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const page = await client.listPlans(cursor ? { cursor } : undefined);
+    plans.push(...page.items);
+    cursor = page.nextCursor;
+    if (cursor && seen.has(cursor)) throw Object.assign(new Error('Repeated plan cursor'), { code: 'plan_request_failed' });
+    if (cursor) seen.add(cursor);
+  } while (cursor);
+  return plans;
 }
 
 /**

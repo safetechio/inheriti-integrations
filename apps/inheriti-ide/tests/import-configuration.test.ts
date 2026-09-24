@@ -24,14 +24,6 @@ describe('imported configuration', () => {
     expect(passphrase).toBe('secret');
   });
 
-  it('keeps legacy dotted settings import-compatible', () => {
-    expect(parseImportedConfiguration(JSON.stringify({
-      'inheritiElements.apiUrl': 'http://api',
-      'inheritiElements.clientId': 'client-1',
-      'inheritiElements.masterKeySalt': '00'.repeat(16),
-    })).settings).toEqual({ apiUrl: 'http://api', clientId: 'client-1', masterKeySalt: '00'.repeat(16) });
-  });
-
   it('accepts bare keys too', () => {
     const { settings } = parseImportedConfiguration(JSON.stringify({ apiUrl: 'http://api', clientId: 'client-1' }));
 

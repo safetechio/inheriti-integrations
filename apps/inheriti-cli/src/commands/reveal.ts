@@ -1,4 +1,4 @@
-import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
+import { custodianShareCopy, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
 import type { RevealProgress } from '@safetech/inheriti-elements-core';
 import clipboard from 'clipboardy';
 import type { CliContext } from '../session.js';
@@ -54,7 +54,9 @@ export async function revealPlan(
   planId: string,
   options: RevealCommandOptions,
 ): Promise<number> {
+  if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   const plan = await loadRevealPlan(context, planId);
+  if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
 
   const selectors = plan.assets.flatMap((asset) => (asset.fieldNames ?? []).map((field) => ({
     value: `${asset.code ?? asset.id}.${field}`,
@@ -72,7 +74,8 @@ export async function revealPlan(
       terminal.write(`Available fields:\n${selectors.map((one) => `  ${one.value}`).join('\n')}`);
       return 0;
     }
-    fields = await promptMultiSelect('Which fields?', selectors);
+    fields = await promptMultiSelect('Which fields?', selectors, options.signal);
+    if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
     if (!fields?.length) {
       terminal.write('Reveal canceled.');
       return 0;
@@ -127,34 +130,46 @@ export async function consumePlanFields(
     .filter((participant): participant is typeof participant & { id: string } => participant.id !== undefined)
     .map((participant) => [participant.id, participant.displayName]));
   const keyOwner = context.keyOwner ?? 'Application';
-  const presenter = options.quiet || custodianOptions.proDevice ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
+  let presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
+  const pausePresenter = () => { presenter?.close(true); presenter = undefined; };
   if (!presenter && !options.quiet) terminal.write('Opening the plan.');
   try {
     await context.core.withReveal(planId, {
       mode: revealModeOf(plan),
       ...custodianOptions,
       ...(custodianOptions.selectCustodianDevice ? { selectCustodianDevice: async () => {
+        pausePresenter();
         const selected = await custodianOptions.selectCustodianDevice();
         selectedPro = selected === 'SK_PRO';
+        if (!selectedPro && !options.quiet) {
+          presenter = createRevealPresenter(terminal, moderatorNamesById, keyOwner);
+          if (lastProgress) presenter?.progress(lastProgress);
+        }
         return selected;
       } } : {}),
       ...(signal === undefined ? {} : { signal }),
       onProgress: (progress) => {
-        if (progress.phase === 'CONNECTING_SAFEKEY_PRO') selectedPro = true;
+        if (progress.phase === 'CONNECTING_SAFEKEY_PRO') { selectedPro = true; pausePresenter(); }
         // The SDK reports this only after its distribution call succeeds. Present it after delivery.
         if ((progress.phase as string) === 'CUSTODIAN_SHARE_DISTRIBUTED') {
           custodianShareDistributed = true;
           return;
         }
         lastProgress = progress;
+        if (selectedPro && !presenter && !options.quiet
+          && (progress.phase === 'RECONSTRUCTING' || progress.phase === 'OPEN')) {
+          presenter = createRevealPresenter(terminal, moderatorNamesById, keyOwner);
+        }
         presenter?.progress(progress);
         // The command's own error path words a DMS stop, so printing it here would say it twice.
         if (progress.phase === 'STOPPED_BY_DMS') return;
         if (options.quiet) return;
+        if (selectedPro && (progress.phase === 'CONNECTING_SAFEKEY_PRO'
+          || progress.phase === 'WAITING_FOR_CUSTODIAN_CLAIM' || progress.phase === 'WAITING_FOR_CUSTODIAN')) return;
         const line = selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN_CLAIM'
-          ? 'Store the custodian share on your connected SafeKey PRO to continue.'
+          ? custodianShareCopy.firstAccess.proStore
           : selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN'
-            ? 'Read the custodian share from your connected SafeKey PRO to continue.'
+            ? custodianShareCopy.laterAccess.proRead
             : revealProgressMessage(progress, { moderators: moderatorNames, moderatorNamesById, keyOwner });
         if (line === lastLine) return;
         lastLine = line;

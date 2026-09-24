@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import type { Socket } from 'node:net';
-import { brandPage } from './local-page.js';
+import { brandPage, renderTemplate } from './local-page.js';
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 const display = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value);
@@ -25,20 +25,20 @@ export async function deliverInBrowser(selector: string, value: unknown, options
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
+    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
     if (request.headers.host !== `127.0.0.1:${port}` || request.url !== path) {
       response.writeHead(404).end(); return;
     }
     if (request.method === 'GET') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end(brandPage('Reveal protected field', `<p>Reveal this field on your device?</p><div class="details"><dl><dt>Field</dt><dd>${escapeHtml(selector)}</dd></dl></div><form method="post"><button class="primary" type="submit">Reveal once</button></form>`, { eyebrow: 'Protected plan data', footer: 'The field is shown only after you approve it here. This link works once.' }));
+      response.end(brandPage('Reveal protected field', renderTemplate('reveal-confirm', { selector: escapeHtml(selector) }), { eyebrow: 'Protected plan data', footer: 'The field is shown only after you approve it here. This link works once.' }));
       return;
     }
     if (request.method === 'POST' && !complete) { response.writeHead(410).end(); return; }
     if (request.method === 'POST' && complete) {
       const done = complete; complete = undefined;
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end(brandPage('Protected field revealed', `<p>${escapeHtml(selector)}</p><pre class="secret">${escapeHtml(display(value))}</pre>`, { eyebrow: 'Protected plan data', footer: 'This value was delivered once. Close this page when you are done.' }));
+      response.end(brandPage('Protected field revealed', renderTemplate('reveal-result', { selector: escapeHtml(selector), value: escapeHtml(display(value)) }), { eyebrow: 'Protected plan data', footer: 'This value was delivered once. Close this page when you are done.' }));
       done(); return;
     }
     response.writeHead(405).end();
@@ -69,7 +69,6 @@ export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array,
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+/, '').slice(0, 120) || 'asset.bin';
   const extension = safeName.includes('.') ? safeName.split('.').at(-1)!.toUpperCase().slice(0, 5) : options.mimeType?.split('/')[1]?.toUpperCase().slice(0, 5) ?? 'FILE';
   const size = bytes.byteLength < 1024 ? '<1 KB' : bytes.byteLength < 1024 * 1024 ? `${(bytes.byteLength / 1024).toFixed(1)} KB` : `${(bytes.byteLength / (1024 * 1024)).toFixed(1)} MB`;
-  const fileCard = `<div class="file-card"><span class="file-icon" aria-hidden="true">${escapeHtml(extension)}</span><span><strong>${escapeHtml(safeName)}</strong><small>${escapeHtml(extension)} file · ${escapeHtml(size)}</small></span></div>`;
   const sockets = new Set<Socket>();
   let port = 0;
   let delivered = false;
@@ -82,11 +81,11 @@ export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array,
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
+    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
     if (request.headers.host !== `127.0.0.1:${port}` || request.url !== path) { response.writeHead(404).end(); return; }
     if (request.method === 'GET') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end(brandPage('Download protected file', `<p>Review the file details before downloading.</p>${fileCard}<form method="post"><button class="primary" type="submit">Download file</button></form>`, { eyebrow: 'Protected plan data', footer: 'This file is delivered once to your device. The download link will then close.' }));
+      response.end(brandPage('Download protected file', renderTemplate('download-confirm', { extension: escapeHtml(extension), name: escapeHtml(safeName), size: escapeHtml(size) }), { eyebrow: 'Protected plan data', footer: 'This file is delivered once to your device. The download link will then close.' }));
       return;
     }
     if (request.method === 'POST' && !complete) { response.writeHead(410).end(); return; }
