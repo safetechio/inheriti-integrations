@@ -21,10 +21,11 @@ export class ProtectedCheckpoint {
     this.assertProtection();
     if (!existsSync(this.file)) return {};
     const encoded = readFileSync(this.file, 'utf8');
-    if (!encoded || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    const encrypted = Buffer.from(encoded, 'base64');
+    if (!encoded || encrypted.toString('base64') !== encoded) {
       throw new Error('Protected checkpoint is corrupt');
     }
-    const parsed: unknown = JSON.parse(safeStorage.decryptString(Buffer.from(encoded, 'base64')));
+    const parsed: unknown = JSON.parse(safeStorage.decryptString(encrypted));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Protected checkpoint is corrupt');
     return parsed as Record<string, unknown>;
   }

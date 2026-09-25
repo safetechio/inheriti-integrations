@@ -32,6 +32,11 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     publish();
     return session.state();
   });
+  ipcMain.handle('tray:cancel-key-request', (event) => {
+    trusted(event);
+    session.cancelKeyRequest();
+    return session.state();
+  });
   ipcMain.handle('tray:editable-plans', async (event) => {
     trusted(event);
     await session.loadEditablePlans(publish);
@@ -72,6 +77,12 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     publish();
     return session.state();
   });
+  ipcMain.handle('tray:cancel-plan-edit', async (event) => {
+    trusted(event);
+    await session.cancelPlanEdit();
+    publish();
+    return session.state();
+  });
   ipcMain.handle('tray:recover-plan-edit', async (event) => {
     trusted(event);
     await session.recoverPlanEdit(publish);
@@ -79,9 +90,14 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
     return state;
   });
-  ipcMain.handle('tray:open-app', (event) => {
+  ipcMain.handle('tray:open-app', (event, planId?: unknown) => {
     trusted(event);
     if (!appUrl) throw new Error(messages.appUrlNotConfigured);
-    return shell.openExternal(appUrl);
+    if (planId === undefined) return shell.openExternal(appUrl);
+    const state = session.state();
+    const created = state.creation?.status === 'ready' && state.creation.planId === planId;
+    const edited = state.edit?.status === 'updated' && state.edit.planId === planId;
+    if (typeof planId !== 'string' || (!created && !edited)) throw new Error(messages.invalidPlan);
+    return shell.openExternal(new URL(`/organization/plans/backup/${encodeURIComponent(planId)}`, appUrl).toString());
   });
 }

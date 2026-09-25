@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { shell } from 'electron';
 
 const mock = vi.hoisted(() => ({ handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(), notify: vi.fn() }));
 
@@ -39,4 +40,26 @@ it('notifies only after confirmed protection or update using generic text', asyn
   expect(mock.notify.mock.calls).toEqual([
     ['Plan protected'], ['Plan updated'], ['Plan updated'], ['Plan updated'],
   ]);
+});
+
+it('opens the completed backup plan in Business', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const session = { state: () => ({ creation: { status: 'ready', planId: 'plan-1' } }) };
+  registerTrayIpc(session as never, () => ({ webContents }) as never, vi.fn(), 'https://business.example/');
+  const open = mock.handlers.get('tray:open-app')!;
+  await open(event, 'plan-1');
+  expect(shell.openExternal).toHaveBeenCalledWith('https://business.example/organization/plans/backup/plan-1');
+  expect(() => open(event, 'another-plan')).toThrow('Plan is no longer available.');
+});
+
+it('opens an updated backup plan in Business', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const session = { state: () => ({ edit: { status: 'updated', planId: 'edited-plan' } }) };
+  registerTrayIpc(session as never, () => ({ webContents }) as never, vi.fn(), 'https://business.example/');
+  await mock.handlers.get('tray:open-app')!(event, 'edited-plan');
+  expect(shell.openExternal).toHaveBeenCalledWith('https://business.example/organization/plans/backup/edited-plan');
 });

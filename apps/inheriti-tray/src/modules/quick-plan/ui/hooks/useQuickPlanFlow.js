@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildAsset } from '../asset-input.js';
+import { assetFormError } from '../asset-form-rules.js';
 
-const blankForm = () => ({
+const blankForm = (teams = []) => ({
   title: '',
-  audience: 'private',
-  teamId: '',
+  audience: teams.length ? 'team' : 'private',
+  teamId: teams[0]?.id || '',
   assetType: '',
   assetName: '',
   fields: {},
   file: null,
 });
 
-export function useQuickPlanFlow({ state, setState, messages }) {
+export function useQuickPlanFlow({ state, setState, messages, canHandleAction, onEditAction }) {
   const [step, setStep] = useState('actions');
-  const [form, setForm] = useState(blankForm);
+  const [form, setForm] = useState(() => blankForm(state?.teams));
   const [draft, setDraft] = useState(null);
+  const [readySummary, setReadySummary] = useState(null);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState('');
@@ -25,30 +27,39 @@ export function useQuickPlanFlow({ state, setState, messages }) {
   }, [state?.status]);
 
   useEffect(() => window.inheritiTray.onAction((action) => {
-    if (!state?.selectedId || state.status !== 'signed-in' || busy || preparing) return;
+    if (!canHandleAction || step !== 'actions' || !state?.selectedId || state.status !== 'signed-in' || busy || preparing) return;
+    if (action === messages.addOrEditAsset) {
+      onEditAction();
+      return;
+    }
     if (action === messages.shareWithTeam) {
       openCapture('team');
       return;
     }
-    if (action === messages.savePlan || action === messages.savePrivately) {
+    if (action === messages.savePrivately) {
+      openCapture('private');
+      return;
+    }
+    if (action === messages.savePlan) {
       openCapture();
       return;
     }
     setError(messages.comingLater(action));
-  }), [state?.selectedId, state?.status, busy, preparing, messages]);
+  }), [state?.selectedId, state?.status, busy, preparing, step, canHandleAction, onEditAction, messages]);
 
   function clearDraft() {
     generation.current += 1;
-    setForm(blankForm());
+    setForm(blankForm(state?.teams));
     setDraft(null);
+    setReadySummary(null);
     setStep('actions');
     setBusy(false);
     setPreparing(false);
     setError('');
   }
 
-  function openCapture(audience = 'private') {
-    setForm((current) => ({ ...current, audience }));
+  function openCapture(audience = state?.teams?.length ? 'team' : 'private') {
+    setForm((current) => ({ ...current, audience, teamId: current.teamId || state?.teams?.[0]?.id || '' }));
     setStep('capture');
     setError('');
   }
@@ -85,7 +96,7 @@ export function useQuickPlanFlow({ state, setState, messages }) {
       setStep('review');
     } catch (cause) {
       if (generation.current === currentGeneration) {
-        setError(cause instanceof Error && cause.message === 'file_too_large' ? messages.fileLimit : messages.fileReadError);
+        setError(assetFormError(cause, messages) || messages.fileReadError);
       }
     } finally {
       if (generation.current === currentGeneration) setPreparing(false);
@@ -95,7 +106,7 @@ export function useQuickPlanFlow({ state, setState, messages }) {
   async function startOver(keepForm) {
     generation.current += 1;
     if (!(await abandon())) return;
-    if (!keepForm) setForm(blankForm());
+    if (!keepForm) setForm(blankForm(state?.teams));
     setDraft(null);
     setError('');
     setStep('capture');
@@ -111,8 +122,9 @@ export function useQuickPlanFlow({ state, setState, messages }) {
       if (generation.current !== currentGeneration) return;
       setState(next);
       if (next.creation?.status === 'ready') {
+        setReadySummary({ title: form.title, assetName: form.assetName, assetType: form.assetType, audience: form.audience, teamId: form.teamId });
         setDraft(null);
-        setForm(blankForm());
+        setForm(blankForm(state?.teams));
         setStep('ready');
       }
     } catch (cause) {
@@ -121,6 +133,14 @@ export function useQuickPlanFlow({ state, setState, messages }) {
       }
     } finally {
       if (generation.current === currentGeneration) setBusy(false);
+    }
+  }
+
+  async function cancelKeyRequest() {
+    try {
+      await window.inheritiTray.cancelKeyRequest();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : messages.retryError);
     }
   }
 
@@ -148,8 +168,8 @@ export function useQuickPlanFlow({ state, setState, messages }) {
   }
 
   return {
-    step, form, setForm, busy, preparing, error,
+    step, form, setForm, readySummary, busy, preparing, error,
     openCapture, clearDraft, cancelCapture, reviewCapture,
-    startOver, submitCapture, signOut, selectOrganization, setStep,
+    startOver, submitCapture, cancelKeyRequest, signOut, selectOrganization, setStep,
   };
 }

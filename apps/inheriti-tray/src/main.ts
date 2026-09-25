@@ -21,4 +21,7 @@ const appUrl = process.env.INHERITI_APP_URL ?? process.env.INHERITI_BUSINESS_URL
 if (appUrl && !/^https:\/\//u.test(appUrl) && !/^http:\/\/localhost(?::\d+)?$/u.test(appUrl)) {
   throw new Error(messages.invalidAppUrl);
 }
-registerAppEvents(new TraySession(deployment as Deployment), appUrl, deployment);
+registerAppEvents(new TraySession(deployment as Deployment, {
+  apiUrl: process.env.INHERITI_API_URL,
+  issuer: process.env.INHERITI_OIDC_ISSUER,
+}), appUrl, deployment);

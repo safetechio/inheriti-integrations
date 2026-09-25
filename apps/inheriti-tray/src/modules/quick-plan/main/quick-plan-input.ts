@@ -20,13 +20,18 @@ function parseAsset(value: unknown): QuickPlanInput['asset'] {
   const definition = quickPlanAssetCatalog.find(({ id }) => id === input.type);
   if (!definition) throw invalidInput();
 
-  const fields = definition.fields.concat(definition.category === 'MEDIA-FILES' ? ['fileName'] : []);
+  const fields = definition.fields.concat(definition.category === 'MEDIA-FILES' ? ['fileName', 'fileSize'] : []);
   if (Object.keys(secret).some((field) => !fields.includes(field))) throw invalidInput();
 
-  const parsedSecret: Record<string, string | string[]> = {};
+  const parsedSecret: Record<string, string | string[] | number> = {};
   for (const field of fields) {
     if (!(field in secret)) continue;
     const value = secret[field];
+    if (field === 'fileSize') {
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw invalidInput();
+      parsedSecret[field] = value;
+      continue;
+    }
     if (typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'))) {
       parsedSecret[field] = value;
       continue;
@@ -44,6 +49,14 @@ function parseAsset(value: unknown): QuickPlanInput['asset'] {
 function parseMeta(input: Record<string, unknown>): QuickPlanInput['asset']['meta'] {
   const meta: QuickPlanInput['asset']['meta'] = { name: requiredText(input.name) };
   if (typeof input.notes === 'string') meta.notes = input.notes;
+  if (input.code !== undefined) {
+    if (typeof input.code !== 'string') throw invalidInput();
+    meta.code = input.code;
+  }
+  if (input.matchOrigins !== undefined) {
+    if (!Array.isArray(input.matchOrigins) || !input.matchOrigins.every((origin) => typeof origin === 'string')) throw invalidInput();
+    meta.matchOrigins = input.matchOrigins;
+  }
   if (typeof input.mimeType === 'string') meta.mimeType = input.mimeType;
   if (typeof input.fileName === 'string') meta.fileName = input.fileName;
   if (input.isMedia === true) meta.isMedia = true;

@@ -20,9 +20,9 @@ export function useTraySession(messages) {
     }
   }
 
-  async function openApp() {
+  async function openApp(planId) {
     try {
-      await window.inheritiTray.openApp();
+      await window.inheritiTray.openApp(planId);
     } catch {
       setError(messages.appUrlError);
     }

@@ -17,7 +17,9 @@
     "package:prod": "corepack pnpm run build -- --deployment=prod && node ../../scripts/package-tray.mjs --deployment=prod"
   },
   "dependencies": {
+    "@safetech/inheriti-elements-brand": "workspace:*",
     "@safetech/inheriti-elements-core": "workspace:*",
+    "card-validator": "^9.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

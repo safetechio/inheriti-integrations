@@ -72,8 +72,10 @@ export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-cl
 export { latestIntegrationBuild } from './node-update.js';
 export { createQuickPlanOperations, quickPlanAssetCatalog } from './quick-plan.js';
 export { createPlanEditOperations } from './plan-edit.js';
+export { createOrganizationKeys } from './organization-keys.js';
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node';
 export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
+export type { QuickPlanEditPhase } from '@safetech/inheriti-client-sdk/node';
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';
 export { revealModeOf } from './plans.js';

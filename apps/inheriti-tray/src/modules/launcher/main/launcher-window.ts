@@ -18,7 +18,7 @@ export function showLauncher(action?: string): void {
   if (!window || window.isDestroyed()) {
     window = new BrowserWindow({
       width: 380,
-      height: 520,
+      height: 608,
       show: false,
       resizable: false,
       webPreferences: {

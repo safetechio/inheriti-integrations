@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), operations: vi.fn() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -10,11 +10,13 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
 } }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
-  BUSINESS_DEPLOYMENTS: { dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' } },
+  BUSINESS_DEPLOYMENTS: { dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' }, local: { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://default-issuer.test/', environment: 'TEST' } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
-  createNodeIntegrationCore: () => ({ auth: { beginAuthorizationCode: mock.begin, clear: mock.clear, completeAuthorizationCode: mock.complete, getAccessToken: mock.token }, listOrganizations: mock.organizations }),
+  createNodeIntegrationCore: mock.core,
+  createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: vi.fn() }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
+  createPlanEditOperations: mock.editOperations,
 }));
 
 import { TraySession } from '../src/modules/launcher/main/state.js';
@@ -25,9 +27,27 @@ const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'N
 describe('TraySession', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mock.core.mockImplementation(() => ({ auth: { beginAuthorizationCode: mock.begin, clear: mock.clear, completeAuthorizationCode: mock.complete, getAccessToken: mock.token }, listOrganizations: mock.organizations }));
     mock.organizations.mockResolvedValue([]);
     mock.teams.mockResolvedValue({ teams: [] });
-    mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon });
+    mock.acquireKey.mockResolvedValue('a'.repeat(64));
+    mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
+    mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+
+  it('uses local API and issuer overrides across core, creation, and edit', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    const apiUrl = 'http://localhost:3000/integrations/';
+    const issuer = 'https://keycloak.example.test/realms/test';
+    const session = new TraySession('local', { apiUrl, issuer });
+    await session.restore();
+    await session.loadEditablePlans(() => {});
+    expect(mock.core).toHaveBeenCalledWith(expect.objectContaining({ apiUrl, configuration: expect.objectContaining({ issuer }) }));
+    expect(mock.operations).toHaveBeenCalledWith(expect.objectContaining({ apiUrl }));
+    expect(mock.editOperations).toHaveBeenCalledWith(expect.objectContaining({ apiUrl }));
+    new TraySession('dev', { apiUrl, issuer });
+    expect(mock.core).toHaveBeenLastCalledWith(expect.objectContaining({ apiUrl: 'https://example.test/', configuration: expect.objectContaining({ issuer: 'https://issuer.test/' }) }));
   });
 
   it('waits for a canceled sign-in before clearing shared credentials', async () => {
@@ -80,6 +100,29 @@ describe('TraySession', () => {
     expect(mock.context).toHaveBeenCalledTimes(2);
     expect(mock.create.mock.calls.map(([input]) => input.context.planId)).toEqual(['plan-1', 'plan-1', 'plan-2']);
     expect(mock.operations).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the Organisation Key before creating a plan and can cancel the wait', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    mock.create.mockResolvedValue({ status: 'READY', planId: 'plan-1' });
+    mock.acquireKey.mockImplementationOnce((signal: AbortSignal, onRelaySession: () => void) => {
+      onRelaySession();
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }));
+    });
+    const session = new TraySession('dev');
+    await session.restore();
+    const input = { title: 'First', asset: asset('secret') };
+    const pending = session.createQuickPlan(input, () => {});
+    await vi.waitFor(() => expect(session.state().creation?.status).toBe('awaiting-key'));
+    expect(mock.context).not.toHaveBeenCalled();
+    expect(mock.create).not.toHaveBeenCalled();
+    session.cancelKeyRequest();
+    await pending;
+    expect(session.state().creation).toBeUndefined();
+    await session.createQuickPlan(input, () => {});
+    expect(session.state().creation).toMatchObject({ status: 'ready', planId: 'plan-1' });
   });
 
   it('clears a completed creation on lock while preserving an uncertain retry', async () => {
@@ -178,7 +221,7 @@ describe('TraySession', () => {
     expect(session.state().teams).toEqual([{ id: 'team-1', name: 'One team' }]);
     await expect(session.createQuickPlan({ title: 'Shared', teamId: 'unknown', asset: asset('secret') }, () => {})).rejects.toThrow('selected team');
     await session.createQuickPlan({ title: 'Shared', teamId: 'team-1', asset: asset('secret') }, () => {});
-    expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-1', context: { planId: 'plan-1' } }));
+    expect(mock.create).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-1', context: { planId: 'plan-1' } }), expect.any(Function));
     expect(session.state().creation).toMatchObject({ status: 'ready', teamId: 'team-1' });
   });
 

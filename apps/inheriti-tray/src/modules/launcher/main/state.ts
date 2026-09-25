@@ -1,5 +1,6 @@
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
-import type { BusinessOrganization, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import type { BusinessOrganization, NodeIntegrationCore, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
 import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
@@ -15,6 +16,7 @@ export type TrayState = {
   teams: { id: string; name: string }[];
   assetCatalog: typeof quickPlanAssetCatalog;
   selectedId?: string;
+  accountName?: string;
   creation?: CreationState;
   edit: PlanEditState;
 };
@@ -23,6 +25,7 @@ export class TraySession {
   private readonly core: NodeIntegrationCore;
   private organizations: BusinessOrganization[] = [];
   private selectedId: string | undefined;
+  private accountName: string | undefined;
   private status: TrayState['status'] = 'signed-out';
   private message: string | undefined;
   private authorization: AbortController | undefined;
@@ -30,26 +33,30 @@ export class TraySession {
   private pendingSelections = 0;
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
+  private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
 
-  constructor(deployment: Deployment) {
+  constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
+    const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
+    const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
     this.core = createNodeIntegrationCore({
-      apiUrl: config.apiUrl,
+      apiUrl,
       business: true,
       environment: config.environment,
       liveConfirmation: config.environment,
       masterKey: {},
       configuration: {
-        issuer: config.issuer,
+        issuer,
         clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
         audience: 'inheriti-integrations-api',
         environment: config.environment,
         redirectUri: 'http://127.0.0.1:53682/oauth/callback',
-        scopes: ['openid', 'plan:create', 'plan:configure', 'plan:edit'],
+        scopes: ['openid', 'profile', 'plan:create', 'plan:configure', 'plan:edit'],
       },
     });
-    this.quickPlans = new TrayQuickPlans(config.apiUrl, config.environment, () => this.core.auth.getAccessToken());
-    this.planEdit = new TrayPlanEdit(config.apiUrl, config.environment, () => this.core.auth.getAccessToken());
+    this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
+    this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
+    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
   }
 
   state(): TrayState {
@@ -62,6 +69,7 @@ export class TraySession {
       teams: this.pendingSelections ? [] : quickPlans.teams,
       assetCatalog: quickPlanAssetCatalog,
       ...(this.selectedId && !this.pendingSelections ? { selectedId: this.selectedId } : {}),
+      ...(this.status === 'signed-in' && this.accountName ? { accountName: this.accountName } : {}),
       ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
       edit: this.planEdit.state(),
     };
@@ -84,8 +92,9 @@ export class TraySession {
     onChange();
     try {
       const started = await untilCanceled(this.core.auth.beginAuthorizationCode(), authorization.signal);
-      await this.core.auth.completeAuthorizationCode(await waitForCallback(started.authorizationUrl, openBrowser, authorization.signal));
+      const session = await this.core.auth.completeAuthorizationCode(await waitForCallback(started.authorizationUrl, openBrowser, authorization.signal)) as OperatorSession;
       if (authorization.signal.aborted) return;
+      this.accountName = accountNameFromIdToken(session?.idToken);
       await this.discover(authorization.signal);
     } catch (error) {
       if (authorization.signal.aborted) return;
@@ -104,9 +113,11 @@ export class TraySession {
       }
     } catch {}
     this.organizations = [];
+    await this.organizationKeys.clear();
     this.quickPlans.clear();
     this.planEdit.reset();
     this.selectedId = undefined;
+    this.accountName = undefined;
     this.status = 'signed-out';
     this.message = undefined;
   }
@@ -135,6 +146,10 @@ export class TraySession {
     this.quickPlans.abandon();
   }
 
+  cancelKeyRequest(): void {
+    this.quickPlans.cancelKeyRequest();
+  }
+
   loadEditablePlans(onChange: () => void): Promise<void> {
     if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
     return this.planEdit.load(onChange);
@@ -161,6 +176,7 @@ export class TraySession {
   }
 
   async discardPlanEdit(): Promise<void> { await this.planEdit.discard(); }
+  async cancelPlanEdit(): Promise<void> { await this.planEdit.cancelAccess(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
   clearRevealed(): void { this.planEdit.clearRevealed(); }
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); }
@@ -174,9 +190,11 @@ export class TraySession {
     this.authorization = undefined;
     await this.planEdit.clear();
     await this.core.auth.clear();
+    await this.organizationKeys.clear();
     this.organizations = [];
     this.quickPlans.clear();
     this.selectedId = undefined;
+    this.accountName = undefined;
     this.status = 'signed-out';
     this.message = undefined;
   }

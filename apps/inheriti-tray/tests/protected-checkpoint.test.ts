@@ -1,4 +1,4 @@
-import { existsSync, fsyncSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, fsyncSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -53,6 +53,28 @@ describe('ProtectedCheckpoint', () => {
     const third = new ProtectedCheckpoint();
     expect(third.getItem('plan-edit/attempt')).toBeNull();
     expect(await third.load('plan-1')).toBeNull();
+  });
+
+  it('reads a large encrypted media checkpoint without overflowing the stack or losing it', () => {
+    crypto.path = mkdtempSync(join(tmpdir(), 'tray-checkpoint-'));
+    const storage = new ProtectedCheckpoint();
+    const payload = `private-media-${'A'.repeat(1_000_000)}`;
+    storage.setItem('payload/plan-1', { data: payload });
+    const file = join(crypto.path, 'protected-checkpoint');
+    expect(readFileSync(file, 'utf8')).not.toContain('private-media-');
+    expect(new ProtectedCheckpoint().getItem<{ data: string }>('payload/plan-1')?.data).toBe(payload);
+    expect(existsSync(file)).toBe(true);
+  });
+
+  it('rejects noncanonical base64 without deleting the checkpoint', () => {
+    crypto.path = mkdtempSync(join(tmpdir(), 'tray-checkpoint-'));
+    const storage = new ProtectedCheckpoint();
+    storage.setItem('secret', 'value');
+    const file = join(crypto.path, 'protected-checkpoint');
+    const encoded = readFileSync(file, 'utf8');
+    writeFileSync(file, `${encoded}\n`);
+    expect(() => storage.getItem('secret')).toThrow('corrupt');
+    expect(readFileSync(file, 'utf8')).toBe(`${encoded}\n`);
   });
 
   it('denies insecure Linux fallback and unavailable encryption', () => {

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildAsset } from '../asset-input.js';
+import { assetFormError } from '../asset-form-rules.js';
+import { usePlanEditForm } from './usePlanEditForm.js';
 
 export function usePlanEditFlow({ state, setState, messages }) {
   const [editing, setEditing] = useState(false);
@@ -7,29 +9,39 @@ export function usePlanEditFlow({ state, setState, messages }) {
   const [action, setAction] = useState('');
   const [assetId, setAssetId] = useState('');
   const [query, setQuery] = useState('');
-  const [form, setForm] = useState({ assetType: '', assetName: '', fields: {}, file: null });
+  const { form, setForm, resetForm, loadAsset } = usePlanEditForm();
   const [busy, setBusy] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
+  const loadedPlanId = useRef('');
   const activeOrganization = useRef(null);
   const session = useRef(null);
   session.current = { status: state?.status, organizationId: state?.selectedId };
 
   function close() {
     generation.current += 1;
+    loadedPlanId.current = '';
     activeOrganization.current = null;
     setEditing(false);
     setAssetId('');
     setAction('');
-    setForm({ assetType: '', assetName: '', fields: {}, file: null });
+    setPlanId('');
+    setQuery('');
+    setError('');
+    setBusy(false);
+    resetForm();
   }
 
   useEffect(() => window.inheritiTray.onHidden(() => {
     generation.current += 1;
+    loadedPlanId.current = '';
     setEditing(false);
     setAssetId('');
+    setQuery('');
     setAction('');
-    setForm({ assetType: '', assetName: '', fields: {}, file: null });
+    setBusy(false);
+    resetForm();
   }), []);
 
   useEffect(() => {
@@ -38,12 +50,13 @@ export function usePlanEditFlow({ state, setState, messages }) {
 
   async function open() {
     const currentGeneration = ++generation.current;
+    loadedPlanId.current = '';
     activeOrganization.current = state?.selectedId;
     setEditing(true);
     setPlanId('');
     setAction('');
     setAssetId('');
-    setForm({ assetType: '', assetName: '', fields: {}, file: null });
+    resetForm();
     setBusy(true);
     setError('');
     try {
@@ -64,25 +77,39 @@ export function usePlanEditFlow({ state, setState, messages }) {
       setState(await (action === 'replace'
         ? window.inheritiTray.replacePlanAsset(planId, assetId, asset)
         : window.inheritiTray.addPlanAsset(planId, asset)));
-      setForm({ assetType: '', assetName: '', fields: {}, file: null });
+      resetForm();
       setAssetId('');
-    } catch { setError(messages.editFailed); }
+    } catch (cause) { setError(assetFormError(cause, messages) || messages.editFailed); }
     finally { setBusy(false); }
   }
 
-  async function chooseAction(next) {
+  async function chooseAction(next, selectedPlanId = planId) {
+    if (busy) return;
     const currentGeneration = ++generation.current;
     setAction(next);
     setAssetId('');
-    setForm({ assetType: '', assetName: '', fields: {}, file: null });
+    resetForm();
     setError('');
-    if (next !== 'replace' || !planId) return;
+    if (!selectedPlanId) return;
+    const changingPlan = state.edit?.planId && state.edit.planId !== selectedPlanId;
+    const needsAssets = next === 'replace' && (changingPlan || loadedPlanId.current !== selectedPlanId);
+    if (!changingPlan && !needsAssets) return;
     setBusy(true);
     try {
-      const nextState = await window.inheritiTray.listPlanAssets(planId);
-      if (currentGeneration === generation.current) setState(nextState);
+      if (changingPlan) {
+        loadedPlanId.current = '';
+        const cleared = await window.inheritiTray.discardPlanEdit();
+        if (currentGeneration !== generation.current) return;
+        setState(cleared);
+      }
+      if (!needsAssets) return;
+      const nextState = await window.inheritiTray.listPlanAssets(selectedPlanId);
+      if (currentGeneration === generation.current) {
+        if (nextState.edit?.status === 'idle' && nextState.edit.planId === selectedPlanId) loadedPlanId.current = selectedPlanId;
+        setState(nextState);
+      }
     } catch { if (currentGeneration === generation.current) setError(messages.editUnavailable); }
-    finally { setBusy(false); }
+    finally { if (currentGeneration === generation.current) setBusy(false); }
   }
 
   async function chooseAsset(id) {
@@ -93,12 +120,7 @@ export function usePlanEditFlow({ state, setState, messages }) {
     try {
       const asset = await window.inheritiTray.getPlanAsset(planId, id);
       if (currentGeneration !== generation.current || session.current.status !== 'signed-in' || session.current.organizationId !== activeOrganization.current) return;
-      const fields = {};
-      for (const [field, value] of Object.entries(asset.secret || {})) {
-        if (field === 'data' || field === 'mimeType' || field === 'fileName') continue;
-        fields[field] = Array.isArray(value) ? value.join(' ') : String(value);
-      }
-      setForm({ assetType: asset.type, assetName: asset.meta.name, fields, file: null });
+      loadAsset(asset);
     } catch { if (currentGeneration === generation.current) { setAssetId(''); setError(messages.editUnavailable); } }
     finally { setBusy(false); }
   }
@@ -114,9 +136,31 @@ export function usePlanEditFlow({ state, setState, messages }) {
     if (!window.confirm(messages.discardEditWarning)) return;
     setBusy(true);
     try { setState(await window.inheritiTray.discardPlanEdit()); setError(''); close(); }
-    catch { setError(messages.editRecoveryRequired); }
+    catch { setError(messages.editDiscardFailed); }
     finally { setBusy(false); }
   }
 
-  return { editing, close, planId, setPlanId: (id) => { generation.current += 1; setPlanId(id); setAction(''); setAssetId(''); setForm({ assetType: '', assetName: '', fields: {}, file: null }); }, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, recover, discard };
+  async function cancel() {
+    if (canceling) return;
+    if (!busy || state.edit?.status !== 'loading') {
+      const hasSelectedPlan = Boolean(planId || state.edit?.planId);
+      close();
+      if (hasSelectedPlan) void window.inheritiTray.cancelPlanEdit().catch(() => {});
+      return;
+    }
+    if ((planId || state.edit?.planId) && !window.confirm(messages.cancelEditWarning)) return;
+    generation.current += 1;
+    setCanceling(true);
+    setError('');
+    try {
+      setState(await window.inheritiTray.cancelPlanEdit());
+      close();
+    } catch {
+      setError(messages.cancelEditFailed);
+    } finally {
+      setCanceling(false);
+    }
+  }
+
+  return { editing, close, cancel, canceling, planId, setPlanId: (id) => { generation.current += 1; setPlanId(id); setAction(''); setAssetId(''); resetForm(); if (id) void chooseAction('replace', id); }, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, recover, discard };
 }

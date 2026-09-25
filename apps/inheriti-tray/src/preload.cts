@@ -10,14 +10,16 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
   createQuickPlan: (input: CreateQuickPlanInput): Promise<TrayState> => ipcRenderer.invoke('tray:create-quick-plan', input),
   abandonCreation: (): Promise<TrayState> => ipcRenderer.invoke('tray:abandon-creation'),
+  cancelKeyRequest: (): Promise<TrayState> => ipcRenderer.invoke('tray:cancel-key-request'),
   editablePlans: (): Promise<TrayState> => ipcRenderer.invoke('tray:editable-plans'),
   addPlanAsset: (planId: string, asset: CreateQuickPlanInput['asset']): Promise<TrayState> => ipcRenderer.invoke('tray:add-plan-asset', planId, asset),
   listPlanAssets: (planId: string): Promise<TrayState> => ipcRenderer.invoke('tray:list-plan-assets', planId),
   getPlanAsset: (planId: string, assetId: string): Promise<unknown> => ipcRenderer.invoke('tray:get-plan-asset', planId, assetId),
   replacePlanAsset: (planId: string, assetId: string, asset: CreateQuickPlanInput['asset']): Promise<TrayState> => ipcRenderer.invoke('tray:replace-plan-asset', planId, assetId, asset),
   discardPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:discard-plan-edit'),
+  cancelPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:cancel-plan-edit'),
   recoverPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:recover-plan-edit'),
-  openApp: (): Promise<void> => ipcRenderer.invoke('tray:open-app'),
+  openApp: (planId?: string): Promise<void> => ipcRenderer.invoke('tray:open-app', planId),
   onAction: (callback: (action: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
     ipcRenderer.on('tray:action', listener);

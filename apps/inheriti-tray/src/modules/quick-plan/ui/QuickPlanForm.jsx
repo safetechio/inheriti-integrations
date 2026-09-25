@@ -1,7 +1,10 @@
-import { TextField, SelectField } from '../../_shared/ui/components/Form/Fields.jsx';
-import { isMedia } from './asset-input.js';
-
-const omittedFields = new Set(['blockchain', 'customBlockchain', 'wallet', 'customWallet']);
+import { Box } from '../../_shared/ui/components/Box.jsx';
+import { Text } from '../../_shared/ui/components/Text.jsx';
+import { TextField } from '../../_shared/ui/components/Form/TextField.jsx';
+import { SelectField } from '../../_shared/ui/components/Form/SelectField.jsx';
+import { AssetFields } from './components/AssetFields.jsx';
+import { ScreenHeader } from '../../_shared/ui/components/ScreenHeader.jsx';
+import { ScreenFooter } from '../../_shared/ui/components/ScreenFooter.jsx';
 
 export function QuickPlanForm({ messages, state, form, setForm, onReview, onCancel, error, preparing, editMode = false, replaceMode = false }) {
   const definition = state.assetCatalog.find(({ id }) => id === form.assetType);
@@ -19,21 +22,20 @@ export function QuickPlanForm({ messages, state, form, setForm, onReview, onCanc
     ...state.teams.map(({ id, name }) => ({ value: id, label: name })),
   ];
 
-  return <form id="capture" onSubmit={onReview}>
-    <h2>{replaceMode ? messages.editAsset : editMode ? messages.addAsset : messages.savePlan}</h2>
+  const organizationName = state.organizations.find(({ id }) => id === state.selectedId)?.name || '';
+  const fields = <>
     {!editMode && <TextField
       id="title" label={messages.planTitle} value={form.title}
       onChange={(title) => update({ title })} maxLength={200} required disabled={preparing}
     />}
-    {!editMode && <SelectField
-      id="audience" label={messages.audience} value={form.audience}
-      onChange={(audience) => update({ audience })}
-      options={[
-        { value: 'private', label: messages.privateAudience },
-        { value: 'team', label: messages.teamAudience },
-      ]}
-      required disabled={preparing}
-    />}
+    {!editMode && <fieldset className="plan-audience"><legend>{messages.audience}</legend>
+      <input id="audience" type="hidden" value={form.audience} disabled={preparing} readOnly />
+      <div className="plan-audience-options">
+        <label data-selected={form.audience === 'team'}><input type="radio" name="audience" value="team" checked={form.audience === 'team'} onChange={() => update({ audience: 'team' })} disabled={preparing} />{messages.teamAudience}</label>
+        <label data-selected={form.audience === 'private'}><input type="radio" name="audience" value="private" checked={form.audience === 'private'} onChange={() => update({ audience: 'private' })} disabled={preparing} />{messages.privateAudience}</label>
+      </div>
+      {form.audience === 'private' && <small>{messages.privateDescription}</small>}
+    </fieldset>}
     {!editMode && form.audience === 'team' && <SelectField
       id="team" label={messages.team} value={form.teamId}
       onChange={(teamId) => update({ teamId })}
@@ -48,26 +50,27 @@ export function QuickPlanForm({ messages, state, form, setForm, onReview, onCanc
       id="asset-name" label={messages.assetName} value={form.assetName}
       onChange={(assetName) => update({ assetName })} maxLength={200} required disabled={preparing}
     />
-    {definition && (isMedia(definition)
-      ? <div className="field">
-          <label htmlFor="asset-file">{messages.assetFile}</label>
-          <input
-            id="asset-file" name="asset-file" type="file" required disabled={preparing}
-            accept={definition.id === 'IMAGE' ? 'image/*' : definition.id === 'VIDEO' ? 'video/*' : 'application/pdf,.pdf,.doc,.docx,.txt'}
-            onChange={(event) => update({ file: event.target.files?.[0] || null })}
-          />
-        </div>
-      : definition.fields.filter((field) => !omittedFields.has(field)).map((field) =>
-          <TextField
-            key={field} id={`asset-${field}`} label={messages.assetFields[field] || field}
-            value={form.fields[field] || ''} onChange={(value) => updateField(field, value)}
-            type={/password|privateKey|apiKey|pinCode|code/i.test(field) ? 'password' : field === 'email' ? 'email' : 'text'}
-            multiline={field === 'text' || field === 'words'} disabled={preparing}
-          />))}
-    {error && <p className="error" role="alert">{error}</p>}
-    <div className="buttons">
-      <button id="cancel-capture" type="button" onClick={onCancel} disabled={preparing}>{messages.cancel}</button>
+    {definition && <AssetFields definition={definition} form={form} messages={messages}
+      update={update} updateField={updateField} disabled={preparing} />}
+    {error && <Text as="p" variant="bodySmall" className="error" role="alert">{error}</Text>}
+  </>;
+  const actions = <Box className="buttons plan-form-actions">
+    <button className="button-secondary" id="cancel-capture" type="button" onClick={onCancel} disabled={preparing}>{messages.cancel}</button>
+    <button type="submit" disabled={preparing}>{replaceMode ? messages.saveAssetChanges : editMode ? messages.addAsset : messages.review}</button>
+  </Box>;
+
+  if (!editMode && !replaceMode) return <form id="capture" className="tray-screen plan-form" onSubmit={onReview}>
+    <ScreenHeader title={messages.savePlan} organizationName={organizationName} onBack={onCancel} step={1} />
+    <div className="tray-scroll plan-form-fields">{fields}</div>
+    <ScreenFooter>{actions}</ScreenFooter>
+  </form>;
+
+  return <form id="capture" onSubmit={onReview}>
+    <Text as="h2" variant="heading3">{replaceMode ? messages.editAsset : messages.addAsset}</Text>
+    {fields}
+    <Box className="buttons">
+      <button className="button-secondary" id="cancel-capture" type="button" onClick={onCancel} disabled={preparing}>{messages.cancel}</button>
       <button type="submit" disabled={preparing}>{replaceMode ? messages.saveAssetChanges : editMode ? messages.addAsset : messages.review}</button>
-    </div>
+    </Box>
   </form>;
 }

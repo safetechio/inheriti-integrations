@@ -43,9 +43,10 @@ await build({
   minify: true,
   define: { 'process.env.NODE_ENV': '"production"' },
 });
-for (const file of ['launcher.html', 'launcher.css', 'tray.png']) {
+for (const file of ['launcher.html', 'launcher.css', 'plan-screens.css', 'font-app.ttf', 'tray.png']) {
   await cp(resolve(root, 'src', file), resolve(output, file));
 }
+await cp(resolve(root, 'src/modules/quick-plan/ui/edit-screen.css'), resolve(output, 'edit-screen.css'));
 const integrationCore = await packageDirectory(root, '@safetech/inheriti-elements-core');
 const clientSdk = await packageDirectory(integrationCore, '@safetech/inheriti-client-sdk');
 const coreSdk = await packageDirectory(clientSdk, '@safetech/inheriti-core-sdk');

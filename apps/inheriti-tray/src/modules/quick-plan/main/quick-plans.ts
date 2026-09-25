@@ -4,8 +4,9 @@ import type { QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { creationErrorMessage } from './creation-error.js';
 import { trayMessages as messages } from '../../../messages.js';
 
-export type CreationState = { status: 'securing' | 'ready' | 'error'; message?: string; planId?: string; teamId?: string };
 type Operations = ReturnType<typeof createQuickPlanOperations>;
+type CreationPhase = 'creating_plan' | 'encrypting' | 'generating_shares' | 'preflighting' | 'distributing' | 'configuring' | 'verifying';
+export type CreationState = { status: 'preparing-key' | 'awaiting-key' | 'securing' | 'ready' | 'error'; phase?: CreationPhase; message?: string; planId?: string; teamId?: string };
 type CreateContext = Awaited<ReturnType<Operations['createContext']>>;
 
 export class TrayQuickPlans {
@@ -16,6 +17,9 @@ export class TrayQuickPlans {
   private pending: Promise<void> | undefined;
   private clearReadyOnCompletion = false;
   private creation: CreationState | undefined;
+  private keyRequest: AbortController | undefined;
+  private masterKeySource: { resolve: () => Promise<string> } | undefined;
+  private phase: CreationPhase | undefined;
   private teams: { id: string; name: string }[] = [];
   private message: string | undefined;
   private selectionVersion = 0;
@@ -24,6 +28,7 @@ export class TrayQuickPlans {
     private readonly apiUrl: string,
     private readonly environment: 'TEST' | 'LIVE',
     private readonly getAccessToken: () => Promise<string | undefined>,
+    private readonly acquireKey?: (organizationId: string, signal: AbortSignal, onRelaySession: () => void) => Promise<string>,
   ) {}
 
   state(): { teams: { id: string; name: string }[]; creation?: CreationState; message?: string } {
@@ -75,12 +80,15 @@ export class TrayQuickPlans {
     this.clearAttempt();
   }
 
+  cancelKeyRequest(): void {
+    if (!this.keyRequest) throw new Error('key_request_not_cancelable');
+    this.keyRequest.abort();
+  }
+
   clear(): void {
     this.assertIdle();
     this.selectionVersion += 1;
-    this.creation = undefined;
-    this.context = undefined;
-    this.inputFingerprint = undefined;
+    this.clearAttempt();
     this.operations = undefined;
     this.organizationId = undefined;
     this.teams = [];
@@ -99,24 +107,50 @@ export class TrayQuickPlans {
     this.creation = undefined;
     this.context = undefined;
     this.inputFingerprint = undefined;
+    this.masterKeySource = undefined;
+    this.phase = undefined;
   }
 
   private async runCreate(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
     const operations = this.selectedOperations();
-    this.creation = { status: 'securing', ...(this.context ? { planId: this.context.planId } : {}) };
+    this.creation = { status: 'preparing-key', ...(this.context ? { planId: this.context.planId } : {}) };
     onChange();
     try {
-      this.context ??= await operations.createContext();
-      this.creation = { status: 'securing', planId: this.context.planId };
+      if (!this.masterKeySource) {
+        const request = new AbortController();
+        this.keyRequest = request;
+        const key = await operations.acquireKey(request.signal, () => {
+          this.creation = { status: 'awaiting-key' };
+          onChange();
+        });
+        if (request.signal.aborted) throw new DOMException('The operation was aborted', 'AbortError');
+        if (!key) throw new Error('master_key_not_claimed');
+        this.masterKeySource = { resolve: async () => key };
+        this.keyRequest = undefined;
+      }
+      this.creation = { status: 'securing', ...(this.context ? { planId: this.context.planId } : {}), ...(this.phase ? { phase: this.phase } : {}) };
       onChange();
-      const result = await operations.create({ context: this.context, title: input.title, asset: input.asset, ...(input.teamId ? { teamId: input.teamId } : {}) });
+      this.context ??= await operations.createContext();
+      this.creation = { status: 'securing', planId: this.context.planId, ...(this.phase ? { phase: this.phase } : {}) };
+      onChange();
+      const result = await operations.create({ context: this.context, title: input.title, asset: input.asset, masterKeySource: this.masterKeySource, ...(input.teamId ? { teamId: input.teamId } : {}) }, (phase: CreationPhase) => {
+        this.phase = phase;
+        this.creation = { status: 'securing', planId: this.context!.planId, phase };
+        onChange();
+      });
       this.creation = result.status === 'READY'
         ? { status: 'ready', planId: result.planId, ...(input.teamId ? { teamId: input.teamId } : {}) }
         : { status: 'error', planId: result.planId, message: messages.protectionPending };
     } catch (error) {
-      this.creation = { status: 'error', ...(this.context ? { planId: this.context.planId } : {}), message: creationErrorMessage(error) };
+      if (error instanceof Error && error.name === 'AbortError' && !this.context) {
+        this.clearAttempt();
+      } else {
+        this.creation = { status: 'error', ...(this.context ? { planId: this.context.planId } : {}), ...(this.phase ? { phase: this.phase } : {}), message: creationErrorMessage(error) };
+        if (!this.context) this.inputFingerprint = undefined;
+      }
     }
-    if (this.clearReadyOnCompletion && this.creation.status === 'ready') this.clearAttempt();
+    this.keyRequest = undefined;
+    if (this.clearReadyOnCompletion && this.creation?.status === 'ready') this.clearAttempt();
     this.clearReadyOnCompletion = false;
     onChange();
   }
@@ -126,6 +160,7 @@ export class TrayQuickPlans {
     this.operations ??= createQuickPlanOperations({
       apiUrl: this.apiUrl, environment: this.environment, organizationId: this.organizationId,
       getBearerToken: this.getAccessToken,
+      ...(this.acquireKey ? { acquireKey: (signal: AbortSignal, onRelaySession: () => void) => this.acquireKey!(this.organizationId!, signal, onRelaySession) } : {}),
     });
     return this.operations;
   }

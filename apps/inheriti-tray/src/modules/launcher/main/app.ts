@@ -13,7 +13,10 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     return;
   }
   app.on('second-instance', () => showLauncher());
-  app.on('browser-window-created', (_event, window) => window.on('hide', () => session.clearRevealed()));
+  app.on('browser-window-created', (_event, window) => window.on('hide', () => {
+    session.clearRevealed();
+    void session.cancelPlanEdit().catch(() => {});
+  }));
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.tray.${deployment}`);
     registerTrayEvents(appUrl);

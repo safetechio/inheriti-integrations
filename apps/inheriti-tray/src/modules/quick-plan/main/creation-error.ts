@@ -16,7 +16,7 @@ export function creationErrorMessage(error: unknown): string {
     case message === 'operator_reauthentication_required' || status === 401:
       return messages.sessionExpired;
     case message.startsWith('master_key_') || message === 'invalid_master_key_context':
-      return messages.keyUnavailable;
+      return message === 'master_key_not_claimed' ? messages.keyNotClaimed : messages.keyUnavailable;
     case code === 'team_access_denied' || code === 'team_not_found' || code === 'Selected team is not available for plan creation':
       return messages.teamUnavailable;
     case status === 402 || code === 'SUBSCRIPTION_CAPACITY_EXCEEDED':
