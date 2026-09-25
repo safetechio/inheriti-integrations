@@ -37,6 +37,26 @@ it('masks a PIN, confirms Enter, and restores terminal mode', async () => {
   }
 });
 
+it('renders the masked PIN through the live card without writing outside it', async () => {
+  const input = Object.assign(new EventEmitter(), {
+    isTTY: true, isRaw: false,
+    setRawMode(value: boolean) { this.isRaw = value; },
+    resume: vi.fn(), pause: vi.fn(), ref: vi.fn(), unref: vi.fn(),
+  });
+  const output = vi.fn();
+  const show = vi.fn();
+  vi.stubGlobal('process', { stdin: input, stderr: { isTTY: true, write: output } });
+  try {
+    const pending = readHiddenPin(undefined, show);
+    input.emit('data', '1234\r');
+    expect(await pending).toEqual(Uint8Array.from([49, 50, 51, 52]));
+    expect(show).toHaveBeenCalledWith('SafeKey PRO PIN (press Enter): ****');
+    expect(output).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it('treats Ctrl+C at the hidden PIN prompt as cancellation of the whole reveal', async () => {
   const input = Object.assign(new EventEmitter(), {
     isTTY: true, isRaw: false,

@@ -7,9 +7,11 @@ import { requestCliCancel } from './cancellation.js';
 
 export function createCliSafeKeyPro(configuration: CliConfiguration) {
   if (!configuration.safeKeyProRpId) return undefined;
-  const pinSession = createSafeKeyProPinSession(readHiddenPin);
+  let statusRenderer: ((message: string) => void) | undefined;
+  const show = (message: string) => statusRenderer ? statusRenderer(message) : deviceStatus(message);
+  const pinSession = createSafeKeyProPinSession((signal) => readHiddenPin(signal, show));
   const connect = async (signal?: AbortSignal) => {
-    deviceStatus(custodianShareCopy.choice.proConnect);
+    show(custodianShareCopy.choice.proConnect);
     const device = await waitForSafeKeyProDevice(configuration.safeKeyProDevice, signal);
     let shown = false;
     return createNodeSafeKeyProDevice({
@@ -18,21 +20,22 @@ export function createCliSafeKeyPro(configuration: CliConfiguration) {
       getPin: pinSession.getPin,
       onTouch: (operation, attempt, limit) => {
         const message = `SafeKey PRO ${operation} ${attempt}/${limit}: ${custodianShareCopy.choice.proTouch}`;
-        if (process.stderr.isTTY) deviceStatus(message);
+        if (statusRenderer || process.stderr.isTTY) show(message);
         else if (!shown) process.stderr.write(`${message}\n`);
         shown = true;
       },
     });
   };
   return {
+    setStatusRenderer: (renderer?: (message: string) => void) => { statusRenderer = renderer; },
     clearPin: pinSession.clearPin,
     write: async (share: Parameters<ReturnType<typeof createNodeSafeKeyProDevice>['write']>[0], signal?: AbortSignal) => {
       try { return await (await connect(signal)).write(share, signal); }
-      finally { if (process.stderr.isTTY) process.stderr.write('\r\x1b[2K'); }
+      finally { if (!statusRenderer && process.stderr.isTTY) process.stderr.write('\r\x1b[2K'); }
     },
     read: async (request: Parameters<ReturnType<typeof createNodeSafeKeyProDevice>['read']>[0], signal?: AbortSignal) => {
       try { return await (await connect(signal)).read(request, signal); }
-      finally { if (process.stderr.isTTY) process.stderr.write('\r\x1b[2K'); }
+      finally { if (!statusRenderer && process.stderr.isTTY) process.stderr.write('\r\x1b[2K'); }
     },
   };
 }
@@ -58,7 +61,7 @@ function deviceStatus(message: string): void {
   process.stderr.write(process.stderr.isTTY ? `\r\x1b[2K${message}` : `${message}\n`);
 }
 
-export async function readHiddenPin(signal?: AbortSignal): Promise<Uint8Array> {
+export async function readHiddenPin(signal?: AbortSignal, show?: (message: string) => void): Promise<Uint8Array> {
   const input = process.stdin;
   if (!input.isTTY || !input.setRawMode) throw Object.assign(new Error('SAFEKEY_INTERACTIVE_REQUIRED'), { code: 'SAFEKEY_INTERACTIVE_REQUIRED' });
   if (signal?.aborted) throw Object.assign(new Error('SAFEKEY_ABORTED'), { code: 'SAFEKEY_ABORTED' });
@@ -72,7 +75,8 @@ export async function readHiddenPin(signal?: AbortSignal): Promise<Uint8Array> {
       const cleanup = () => { input.off('data', onData); signal?.removeEventListener('abort', onAbort); };
       const onAbort = () => {
         cleanup();
-        if (process.stderr.isTTY) process.stderr.write('\r\x1b[2K');
+        if (show) show('Canceling reveal...');
+        else if (process.stderr.isTTY) process.stderr.write('\r\x1b[2K');
         reject(Object.assign(new Error('SAFEKEY_ABORTED'), { code: 'SAFEKEY_ABORTED' }));
       };
       const onData = (chunk: Buffer | string) => {
@@ -81,20 +85,20 @@ export async function readHiddenPin(signal?: AbortSignal): Promise<Uint8Array> {
           if (byte === 3 || byte === 27) { requestCliCancel(); if (!signal?.aborted) onAbort(); return; }
           if (byte === 13 || byte === 10) {
             cleanup();
-            deviceStatus('PIN entered. Waiting for SafeKey PRO...');
-            if (process.stderr.isTTY) process.stderr.write('\n');
+            (show ?? deviceStatus)('PIN entered. Waiting for SafeKey PRO...');
+            if (!show && process.stderr.isTTY) process.stderr.write('\n');
             resolve(Uint8Array.from(bytes));
             return;
           }
           if (byte === 127 || byte === 8) bytes.pop();
           else if (byte >= 32 && byte <= 126 && bytes.length < 128) bytes.push(byte);
           else continue;
-          if (process.stderr.isTTY) deviceStatus(`SafeKey PRO PIN (press Enter): ${'*'.repeat(bytes.length)}`);
+          if (show || process.stderr.isTTY) (show ?? deviceStatus)(`SafeKey PRO PIN (press Enter): ${'*'.repeat(bytes.length)}`);
         }
       };
       input.on('data', onData);
       signal?.addEventListener('abort', onAbort, { once: true });
-      deviceStatus('SafeKey PRO PIN (press Enter): ');
+      (show ?? deviceStatus)('SafeKey PRO PIN (press Enter): ');
     });
   } finally {
     bytes.fill(0);

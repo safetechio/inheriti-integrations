@@ -124,26 +124,33 @@ describe('plans reveal', () => {
     expect(output.lines.join('\n')).not.toContain('private-value');
   });
 
-  it('keeps the live reveal card until a SafeKey PRO operation actually starts', async () => {
-    const proDevice = { write: vi.fn(), read: vi.fn() };
+  it('keeps the live reveal card and PIN status inside it through a SafeKey PRO operation', async () => {
+    const proDevice = { write: vi.fn(), read: vi.fn(), setStatusRenderer: vi.fn() };
     const region = { update: vi.fn(), close: vi.fn() };
     const createLiveRegion = vi.fn(() => region);
     const withReveal = vi.fn(async (_planId, options, work) => {
       options.onProgress({ phase: 'WAITING_FOR_MASTER_KEY', session: { stage: 'AUTHORIZED' } });
       expect(region.update.mock.calls.at(-1)?.[0]).toContain('Waiting for the Application key');
       options.onProgress({ phase: 'CONNECTING_SAFEKEY_PRO', session: { stage: 'AUTHORIZED' } });
-      expect(region.close).toHaveBeenCalledOnce();
+      expect(region.close).not.toHaveBeenCalled();
+      const show = proDevice.setStatusRenderer.mock.calls.at(-1)?.[0];
+      show('SafeKey PRO PIN (press Enter): ****');
+      const frame = region.update.mock.calls.at(-1)?.[0];
+      expect(frame).toContain('Revealing your plan');
+      expect(frame).toContain('SafeKey PRO PIN (press Enter): ****');
+      expect(frame).toContain('╭');
       return work(consuming('private-value'));
     });
     const output = { ...terminal(true), createLiveRegion };
     await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: proDevice } as never, output, 'plan-1', { field: 'asset.password' });
     expect(createLiveRegion).toHaveBeenCalledOnce();
+    expect(region.close).toHaveBeenCalledOnce();
     expect(output.lines.join('\n')).not.toContain('private-value');
   });
 
-  it('restores the live reveal card after a previously claimed SafeKey PRO share is read', async () => {
-    const regions = [{ update: vi.fn(), close: vi.fn() }, { update: vi.fn(), close: vi.fn() }];
-    const createLiveRegion = vi.fn().mockReturnValueOnce(regions[0]).mockReturnValueOnce(regions[1]);
+  it('keeps the same reveal card after a previously claimed SafeKey PRO share is read', async () => {
+    const region = { update: vi.fn(), close: vi.fn() };
+    const createLiveRegion = vi.fn(() => region);
     const withReveal = vi.fn(async (_planId, options, work) => {
       options.onProgress({ phase: 'CONNECTING_SAFEKEY_PRO', session: { stage: 'AUTHORIZED' } });
       options.onProgress({ phase: 'RECONSTRUCTING', session: { stage: 'AUTHORIZED' } });
@@ -152,9 +159,9 @@ describe('plans reveal', () => {
     const output = { ...terminal(true), createLiveRegion };
     await revealPlan({ ...(context({ withReveal }) as object), safeKeyPro: { write: vi.fn(), read: vi.fn() } } as never,
       output, 'plan-1', { field: 'asset.password' });
-    expect(createLiveRegion).toHaveBeenCalledTimes(2);
-    expect(regions[0]?.close).toHaveBeenCalled();
-    expect(regions[1]?.update.mock.calls.at(-1)?.[0]).toContain('Reveal complete');
+    expect(createLiveRegion).toHaveBeenCalledOnce();
+    expect(region.close).toHaveBeenCalledOnce();
+    expect(region.update.mock.calls.at(-1)?.[0]).toContain('Reveal complete');
     expect(output.lines).not.toContain('Reconstructing and decrypting shares.');
   });
 

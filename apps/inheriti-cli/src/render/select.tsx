@@ -44,7 +44,7 @@ function Select({ title, candidates, onChoose, onCancel, onInterrupt }: {
 
   const window = matches.slice(Math.max(0, active - VISIBLE + 1), Math.max(0, active - VISIBLE + 1) + VISIBLE);
   return (
-    <Box flexDirection="column">
+    <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width={72}>
       <Text bold color="cyan">{title}</Text>
       <Text dimColor>{`filter: ${query || '(type to narrow)'} · ↑↓ to move · enter to choose · esc to cancel`}</Text>
       {matches.length === 0 ? <Text dimColor>Nothing matches.</Text> : window.map((candidate) => {
@@ -137,7 +137,7 @@ function MultiSelect({ title, candidates, onChoose, onCancel, onInterrupt }: {
   const start = Math.max(0, active - VISIBLE + 1);
   const window = choices.slice(start, start + VISIBLE);
   return (
-    <Box flexDirection="column">
+    <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width={72}>
       <Text bold color="cyan">{title}</Text>
       <Text dimColor>{`filter: ${query || '(type to narrow)'} · ↑↓ to move · space to toggle · enter to reveal · esc to cancel`}</Text>
       {window.map((candidate, index) => {

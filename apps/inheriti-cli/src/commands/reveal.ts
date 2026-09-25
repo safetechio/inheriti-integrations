@@ -131,7 +131,7 @@ export async function consumePlanFields(
     .map((participant) => [participant.id, participant.displayName]));
   const keyOwner = context.keyOwner ?? 'Application';
   let presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
-  const pausePresenter = () => { presenter?.close(true); presenter = undefined; };
+  const pausePresenter = () => { context.safeKeyPro?.setStatusRenderer?.(); presenter?.close(true); presenter = undefined; };
   if (!presenter && !options.quiet) terminal.write('Opening the plan.');
   try {
     await context.core.withReveal(planId, {
@@ -141,15 +141,19 @@ export async function consumePlanFields(
         pausePresenter();
         const selected = await custodianOptions.selectCustodianDevice();
         selectedPro = selected === 'SK_PRO';
-        if (!selectedPro && !options.quiet) {
+        if (!options.quiet) {
           presenter = createRevealPresenter(terminal, moderatorNamesById, keyOwner);
           if (lastProgress) presenter?.progress(lastProgress);
+          if (selectedPro) context.safeKeyPro?.setStatusRenderer?.((message) => presenter?.deviceStatus(message));
         }
         return selected;
       } } : {}),
       ...(signal === undefined ? {} : { signal }),
       onProgress: (progress) => {
-        if (progress.phase === 'CONNECTING_SAFEKEY_PRO') { selectedPro = true; pausePresenter(); }
+        if (progress.phase === 'CONNECTING_SAFEKEY_PRO') {
+          selectedPro = true;
+          if (presenter) context.safeKeyPro?.setStatusRenderer?.((message) => presenter?.deviceStatus(message));
+        }
         // The SDK reports this only after its distribution call succeeds. Present it after delivery.
         if ((progress.phase as string) === 'CUSTODIAN_SHARE_DISTRIBUTED') {
           custodianShareDistributed = true;
@@ -203,6 +207,7 @@ export async function consumePlanFields(
     }
     throw error;
   } finally {
+    context.safeKeyPro?.setStatusRenderer?.();
     presenter?.close();
   }
 }
