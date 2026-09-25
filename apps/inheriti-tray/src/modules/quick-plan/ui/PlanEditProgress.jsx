@@ -6,7 +6,7 @@ const accessGroups = {
   acquiring_key: 'key', pending_dms: 'dms', pending_approvals: 'approval',
   pending_auth: 'auth', pending_moderation: 'moderation', revealing: 'validators',
   collecting_validators: 'validators', collecting_shares: 'shares',
-  distributing_custodian_share: 'custodian', claiming_custodian_share: 'custodian', releasing_custodian_share: 'custodian',
+  distributing_custodian_share: 'custodian', claiming_custodian_share: 'custodian', releasing_custodian_share: 'custodian', connecting_safekey_pro: 'custodian',
   reconstructing: 'decrypt', opening_window: 'view', preparing_view: 'view',
 };
 const accessPreparation = new Set(['key', 'dms', 'approval', 'auth', 'moderation']);

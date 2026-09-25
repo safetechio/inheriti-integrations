@@ -60,7 +60,7 @@ export class TrayPlanEdit {
   private accessAbort: AbortController | undefined;
   private accessPromise: Promise<void> | undefined;
 
-  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly getAccessToken: () => Promise<string | undefined>, private readonly acquireKey?: (organizationId: string, signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>) {}
+  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly getAccessToken: () => Promise<string | undefined>, private readonly acquireKey?: (organizationId: string, signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly custodian?: Pick<Parameters<typeof createPlanEditOperations>[0], 'selectCustodianDevice' | 'proDevice'>) {}
 
   state(): PlanEditState {
     let available = false;
@@ -253,8 +253,7 @@ export class TrayPlanEdit {
       if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
     } catch (error) {
       this.status = this.attempt?.startedAdd ? PLAN_EDIT_STATUS.recoveryRequired : PLAN_EDIT_STATUS.error;
-      this.message = error && typeof error === 'object' && 'status' in error && error.status === 403
-        ? messages.editDenied : messages.editSaveFailed;
+      this.message = this.errorMessage(error);
     } finally {
       this.pending = false;
       this.keyStatus = undefined;
@@ -384,6 +383,10 @@ export class TrayPlanEdit {
   }
 
   private errorMessage(error: unknown): string {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'SAFEKEY_DEVICE_NOT_CONNECTED' || code === 'safekey_pro_local_device_required') return messages.safeKeyProNotConnected;
+    if (code === 'SAFEKEY_INVALID_PIN') return messages.safeKeyProInvalidPin;
+    if (code === 'SAFEKEY_NOT_FOUND' || code === 'custodian_share_unavailable') return messages.safeKeyProShareUnavailable;
     if (error && typeof error === 'object' && 'status' in error) {
       if (error.status === 403) return messages.editDenied;
       if (error.status === 409) return messages.editConflict;
@@ -425,6 +428,8 @@ export class TrayPlanEdit {
     this.operations ??= createPlanEditOperations({
       apiUrl: this.apiUrl, environment: this.environment, organizationId: this.organizationId,
       getBearerToken: this.getAccessToken,
+      selectCustodianDevice: this.custodian?.selectCustodianDevice,
+      proDevice: this.custodian?.proDevice,
       ...(this.acquireKey ? { acquireKey: (signal?: AbortSignal, onRelaySession?: () => void) => this.acquireKey!(this.organizationId!, signal, onRelaySession) } : {}),
       secureSessionStorage: this.checkpoint, payloadStorage: this.checkpoint, editRecoveryStore: this.checkpoint,
     });

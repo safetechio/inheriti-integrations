@@ -12,6 +12,7 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
   BUSINESS_DEPLOYMENTS: { dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' }, local: { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://default-issuer.test/', environment: 'TEST' } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
+  businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: vi.fn() }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],

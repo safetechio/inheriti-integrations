@@ -53,3 +53,12 @@
 .plan-ready-actions .plan-home-action { min-height: 30px; padding: 4px; border: 0; background: transparent; color: #475467; }
 .plan-ready-actions .plan-home-action:hover { background: transparent; color: #2962ff; text-decoration: underline; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.custodian-content { display: flex; flex-direction: column; gap: 18px; padding: 20px; }
+.custodian-options { display: flex; flex-direction: column; gap: 10px; border: 0; padding: 0; margin: 0; }
+.custodian-options legend { margin-bottom: 12px; font-weight: 600; }
+.custodian-options button { display: flex; align-items: center; gap: 12px; text-align: left; color: #101828; background: #fff; border-color: var(--gray-border); }
+.custodian-options button:hover { color: #101828; background: #edf2ff; border-color: var(--primary); }
+.custodian-options button img { width: 48px; height: 56px; object-fit: contain; }
+.custodian-options button span { display: flex; flex-direction: column; gap: 4px; }
+.custodian-options button small { color: var(--gray-text); font-size: 12px; font-weight: 400; }
+#custodian-pin-form { display: flex; flex-direction: column; gap: 12px; }

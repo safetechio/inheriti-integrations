@@ -5,6 +5,8 @@ import type { CreateQuickPlanInput } from './modules/quick-plan/main/quick-plan-
 
 contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
+  selectCustodianDevice: (value: 'SK_MOBILE' | 'SK_PRO'): Promise<TrayState> => ipcRenderer.invoke('tray:select-custodian-device', value),
+  submitSafeKeyProPin: (value: string): Promise<TrayState> => ipcRenderer.invoke('tray:submit-safekey-pro-pin', value),
   signIn: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-in'),
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),

@@ -2,6 +2,7 @@ import { SignedOut } from './components/SignedOut.jsx';
 import { Home } from './components/Home.jsx';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
 import { PlanEditPanel } from '../../quick-plan/ui/PlanEditPanel.jsx';
+import { CustodianPrompt } from '../../quick-plan/ui/CustodianPrompt.jsx';
 import { usePlanEditFlow } from '../../quick-plan/ui/hooks/usePlanEditFlow.js';
 import { ReviewPlan } from '../../quick-plan/ui/ReviewPlan.jsx';
 import { ReadyPlan } from '../../quick-plan/ui/ReadyPlan.jsx';
@@ -32,6 +33,8 @@ export function LauncherApp({ messages }) {
   })[state.status];
 
   if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} onSignIn={() => void session.signIn()} onCancelSignIn={() => void flow.signOut()} onOpenApp={() => void session.openApp()} />;
+
+  if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}

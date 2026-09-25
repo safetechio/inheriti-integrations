@@ -4,6 +4,9 @@ import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
 import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
+import { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
+import type { CustodianPromptState } from '../../quick-plan/main/custodian-prompt.js';
+import { createTraySafeKeyPro } from '../../quick-plan/main/safekey-pro.js';
 import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import { trayMessages as messages } from '../../../messages.js';
@@ -19,6 +22,7 @@ export type TrayState = {
   accountName?: string;
   creation?: CreationState;
   edit: PlanEditState;
+  custodianPrompt?: CustodianPromptState;
 };
 
 export class TraySession {
@@ -34,6 +38,8 @@ export class TraySession {
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
   private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
+  private readonly custodianPrompt = new CustodianPrompt();
+  private readonly proDevice: ReturnType<typeof createTraySafeKeyPro>;
 
   constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -55,13 +61,22 @@ export class TraySession {
       },
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
+    this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
     this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
-    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
+    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
+      selectCustodianDevice: () => this.custodianPrompt.choose(!!this.proDevice),
+      proDevice: this.proDevice,
+    });
   }
+
+  setPublisher(publish: () => void): void { this.custodianPrompt.setPublisher(publish); }
+  selectCustodianDevice(value: unknown): void { this.custodianPrompt.select(value); }
+  submitSafeKeyProPin(value: unknown): void { this.custodianPrompt.submitPin(value); }
 
   state(): TrayState {
     const quickPlans = this.quickPlans.state();
     const message = quickPlans.message ?? this.message;
+    const custodianPrompt = this.custodianPrompt.state();
     return {
       status: this.status,
       ...(message ? { message } : {}),
@@ -72,6 +87,7 @@ export class TraySession {
       ...(this.status === 'signed-in' && this.accountName ? { accountName: this.accountName } : {}),
       ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
       edit: this.planEdit.state(),
+      ...(custodianPrompt ? { custodianPrompt } : {}),
     };
   }
 
@@ -106,6 +122,8 @@ export class TraySession {
   }
 
   async restore(): Promise<void> {
+    this.custodianPrompt.cancel();
+    this.proDevice?.clearPin();
     try {
       if (await this.core.auth.getAccessToken()) {
         await this.discover();
@@ -175,13 +193,15 @@ export class TraySession {
     return this.planEdit.replace(planId, assetId, asset, onChange);
   }
 
-  async discardPlanEdit(): Promise<void> { await this.planEdit.discard(); }
-  async cancelPlanEdit(): Promise<void> { await this.planEdit.cancelAccess(); }
+  async discardPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.discard(); }
+  async cancelPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.cancelAccess(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
-  clearRevealed(): void { this.planEdit.clearRevealed(); }
+  clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); }
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); }
 
   async signOut(): Promise<void> {
+    this.custodianPrompt.cancel();
+    this.proDevice?.clearPin();
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
     this.planEdit.assertIdle();

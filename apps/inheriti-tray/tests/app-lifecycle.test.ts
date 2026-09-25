@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 it('hides and reloads the launcher on lock and suspend while clearing session data', async () => {
-  const session = { clearOnLock: mock.clearOnLock, clearRevealed: mock.clearRevealed, restore: vi.fn() };
+  const session = { clearOnLock: mock.clearOnLock, clearRevealed: mock.clearRevealed, setPublisher: vi.fn(), restore: vi.fn() };
   mock.watchLinuxLock.mockReturnValue(mock.stopLinuxLock);
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(mock.powerEvents.size).toBe(2));

@@ -10,6 +10,16 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
+  ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
+    trusted(event);
+    session.selectCustodianDevice(value);
+    return session.state();
+  });
+  ipcMain.handle('tray:submit-safekey-pro-pin', (event, value: unknown) => {
+    trusted(event);
+    session.submitSafeKeyProPin(value);
+    return session.state();
+  });
   ipcMain.handle('tray:sign-in', (event) => { trusted(event); void session.signIn(publish, (url) => shell.openExternal(url)); return session.state(); });
   ipcMain.handle('tray:select', async (event, id: unknown) => {
     trusted(event);

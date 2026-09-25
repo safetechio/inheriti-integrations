@@ -19,6 +19,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   }));
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.tray.${deployment}`);
+    session.setPublisher(() => publish(session));
     registerTrayEvents(appUrl);
     registerTrayIpc(session, currentWindow, () => publish(session), appUrl, notify);
     powerMonitor.on('lock-screen', () => hideForLock(session));

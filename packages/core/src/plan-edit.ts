@@ -1,5 +1,5 @@
 import { createNodeQuickPlanEditor, HttpPlanEditPort } from '@safetech/inheriti-client-sdk/node';
-import type { DataAsset, PlanEditCandidatePage, PlanEditContext } from '@safetech/inheriti-client-sdk/node';
+import type { DataAsset, PlanEditAssetReference, PlanEditCandidatePage, PlanEditContext } from '@safetech/inheriti-client-sdk/node';
 
 export function createPlanEditOperations(options: {
   apiUrl: string;
@@ -10,6 +10,8 @@ export function createPlanEditOperations(options: {
   payloadStorage: NonNullable<Parameters<typeof createNodeQuickPlanEditor>[0]['payloadStorage']>;
   editRecoveryStore: NonNullable<Parameters<typeof createNodeQuickPlanEditor>[0]['editRecoveryStore']>;
   acquireKey?: (signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>;
+  selectCustodianDevice?: PlanEditAssetReference['selectCustodianDevice'];
+  proDevice?: PlanEditAssetReference['proDevice'];
   fetchImpl?: typeof fetch;
 }) {
   const transport = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -49,12 +51,12 @@ export function createPlanEditOperations(options: {
     start: (planId: string, mode: 'DIRECT' | 'GOVERNED', idempotencyKey: string): Promise<{ id: string }> => port.start(options.organizationId, planId, mode, idempotencyKey),
     add: async (planId: string, editId: string, totalShares: number, asset: Omit<DataAsset, 'id'>, onProgress?: Parameters<ReturnType<typeof createNodeQuickPlanEditor>['addAsset']>[1], onRelaySession?: () => void): Promise<{ status: 'UPDATED' | 'RECOVERY_REQUIRED' }> => {
       const acquireMasterKey = options.acquireKey ? () => options.acquireKey!(undefined, onRelaySession) : undefined;
-      const result = await editor(planId, editId).addAsset({ organizationId: options.organizationId, planId, editId, totalShares, asset, acquireMasterKey }, onProgress);
+      const result = await editor(planId, editId).addAsset({ organizationId: options.organizationId, planId, editId, totalShares, asset, acquireMasterKey, selectCustodianDevice: options.selectCustodianDevice, proDevice: options.proDevice }, onProgress);
       if (result.status === 'UPDATED') clearRevealed();
       return result;
     },
-    listAssets: async (planId: string, editId: string, onRelaySession?: () => void, onProgress?: Parameters<ReturnType<typeof createNodeQuickPlanEditor>['listAssets']>[1], signal?: AbortSignal) => editor(planId, editId).listAssets({ organizationId: options.organizationId, planId, editId, acquireMasterKey: options.acquireKey ? () => options.acquireKey!(signal, onRelaySession) : undefined }, onProgress),
-    getAsset: async (planId: string, editId: string, assetId: string) => editor(planId, editId).getAsset({ organizationId: options.organizationId, planId, editId, acquireMasterKey: options.acquireKey ? () => options.acquireKey!() : undefined }, assetId),
+    listAssets: async (planId: string, editId: string, onRelaySession?: () => void, onProgress?: Parameters<ReturnType<typeof createNodeQuickPlanEditor>['listAssets']>[1], signal?: AbortSignal) => editor(planId, editId).listAssets({ organizationId: options.organizationId, planId, editId, acquireMasterKey: options.acquireKey ? () => options.acquireKey!(signal, onRelaySession) : undefined, signal, selectCustodianDevice: options.selectCustodianDevice, proDevice: options.proDevice }, onProgress),
+    getAsset: async (planId: string, editId: string, assetId: string) => editor(planId, editId).getAsset({ organizationId: options.organizationId, planId, editId, acquireMasterKey: options.acquireKey ? () => options.acquireKey!() : undefined, selectCustodianDevice: options.selectCustodianDevice, proDevice: options.proDevice }, assetId),
     recover: async (planId: string, editId: string): Promise<{ status: 'UPDATED' | 'RECOVERY_REQUIRED' }> => {
       const result = await editor(planId, editId).recover({ organizationId: options.organizationId, planId, editId });
       if (result.status === 'UPDATED') clearRevealed();
@@ -62,7 +64,7 @@ export function createPlanEditOperations(options: {
     },
     replace: async (planId: string, editId: string, totalShares: number, assetId: string, asset: Omit<DataAsset, 'id'>, onProgress?: Parameters<ReturnType<typeof createNodeQuickPlanEditor>['replaceAsset']>[1], onRelaySession?: () => void) => {
       const acquireMasterKey = options.acquireKey ? () => options.acquireKey!(undefined, onRelaySession) : undefined;
-      const result = await editor(planId, editId).replaceAsset({ organizationId: options.organizationId, planId, editId, totalShares, assetId, asset, acquireMasterKey }, onProgress);
+      const result = await editor(planId, editId).replaceAsset({ organizationId: options.organizationId, planId, editId, totalShares, assetId, asset, acquireMasterKey, selectCustodianDevice: options.selectCustodianDevice, proDevice: options.proDevice }, onProgress);
       if (result.status === 'UPDATED') clearRevealed();
       return result;
     },

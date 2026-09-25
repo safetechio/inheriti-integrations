@@ -81,5 +81,6 @@ export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDeta
 export { revealModeOf } from './plans.js';
 export { custodianShareCopy } from './custodian-copy.js';
 export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
+export { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 export { revealProgressMessage } from './reveal-progress.js';
 export { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
