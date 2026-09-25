@@ -54,7 +54,7 @@ function askPin(onSubmit?: () => void): Promise<string> {
   intro.textContent = currentOperation === 'write'
     ? custodianShareCopy.firstAccess.proPin
     : custodianShareCopy.laterAccess.proPin;
-  status.textContent = 'Your PIN stays in this InheritiGuard window.';
+  status.textContent = '';
   pinInput.focus();
   return new Promise((resolve, reject) => {
     pending = { reject };

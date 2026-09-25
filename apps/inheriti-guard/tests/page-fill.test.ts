@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fillPageTarget, preflightPageTarget } from '../src/background/page-fill.js';
+import { revalidatePageTarget, writePageTarget } from '../src/background/page-target.js';
 
 const executeScript = vi.fn();
 const tabGet = vi.fn(async () => ({ id: 7, windowId: 17, url: 'https://example.test/login' }));
@@ -14,34 +15,32 @@ const target = { tabId: 7, frameId: 3, targetId: 'opaque-1', origin: 'https://ex
 
 describe('page target execution', () => {
   it('preflights the exact frame and opaque document target', async () => {
-    const revalidate = vi.fn(() => true);
-    executeScript.mockResolvedValue([{ result: true }]);
-    await expect(preflightPageTarget(target, revalidate)).resolves.toBe(true);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
+    await expect(preflightPageTarget(target, revalidatePageTarget)).resolves.toBe('ready');
     expect(executeScript).toHaveBeenCalledWith({
-      target: { tabId: 7, frameIds: [3] }, func: revalidate,
+      target: { tabId: 7, frameIds: [3] }, func: revalidatePageTarget,
       args: ['opaque-1', 'https://example.test', 'nav-1'],
     });
   });
 
   it('delivers write-only and returns only the stable result code', async () => {
-    const write = vi.fn(() => 'filled' as const);
     executeScript.mockResolvedValue([{ result: 'filled' }]);
-    await expect(fillPageTarget(target, 'private-value', write)).resolves.toBe('filled');
+    await expect(fillPageTarget(target, 'private-value', writePageTarget)).resolves.toBe('filled');
     expect(executeScript).toHaveBeenCalledWith({
-      target: { tabId: 7, frameIds: [3] }, func: write,
+      target: { tabId: 7, frameIds: [3] }, func: writePageTarget,
       args: ['opaque-1', 'https://example.test', 'nav-1', 'private-value'],
     });
   });
 
   it('does not deliver to a tab that is no longer active', async () => {
     tabQuery.mockResolvedValueOnce([{ id: 8, windowId: 17, url: 'https://other.test' }]);
-    await expect(fillPageTarget(target, 'private-value', vi.fn())).resolves.toBe('stale-page-context');
+    await expect(fillPageTarget(target, 'private-value', writePageTarget)).resolves.toBe('tab-inactive');
     expect(executeScript).not.toHaveBeenCalled();
   });
 
   it('does not deliver after exact-origin authorization is revoked', async () => {
-    await expect(fillPageTarget(target, 'private-value', vi.fn(), async () => false))
-      .resolves.toBe('stale-page-context');
+    await expect(fillPageTarget(target, 'private-value', writePageTarget, async () => false))
+      .resolves.toBe('authorization-denied');
     expect(executeScript).not.toHaveBeenCalled();
   });
 });

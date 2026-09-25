@@ -350,11 +350,16 @@ export class ChromeRevealController {
       return resultsFor(batch, 'field-unavailable');
     }
     for (const mapping of batch.mappings) {
-      let current = false;
+      let current: Awaited<ReturnType<typeof preflightPageTarget>> = 'form-changed';
       try { current = await preflightPageTarget(mapping.pageTarget, revalidatePageTarget); } catch { /* stale frame */ }
       if (generation !== this.shutdownGeneration || this.cancellationInProgress) return resultsFor(batch, 'canceled');
-      if (!current) {
-        return resultsFor(batch, 'stale-page-context');
+      if (current !== 'ready') {
+        this.state = { kind: 'ERROR', message: current === 'page-address-changed'
+          ? 'The page address changed after you selected the fields. Open the fields again on the current page.'
+          : current === 'form-changed' ? 'The login form was replaced after you selected the fields. Open the fields again.'
+            : 'A selected input is no longer available. Open the fields again.' };
+        return batch.mappings.map((one) => resultFor(one,
+          one === mapping ? current : 'not-attempted'));
       }
     }
 
@@ -430,7 +435,7 @@ export class ChromeRevealController {
               continue;
             }
             if (contextStale) {
-              outcomes.set(mapping.protectedField.selector, 'stale-page-context');
+              outcomes.set(mapping.protectedField.selector, 'not-attempted');
               continue;
             }
             const value = valuesBySelector.get(mapping.protectedField.selector);
@@ -448,7 +453,7 @@ export class ChromeRevealController {
                   && (initiator !== 'OVERLAY' || await this.overlayOriginAuthorized(batch.identity.origin))
                   && this.ownsOperation(generation, abort));
               outcomes.set(mapping.protectedField.selector, result);
-              contextStale = result === 'stale-page-context';
+              contextStale = result === 'page-address-changed' || result === 'form-changed' || result === 'tab-inactive';
             } catch {
               outcomes.set(mapping.protectedField.selector, 'destination-failed');
             }
@@ -472,7 +477,10 @@ export class ChromeRevealController {
         let activeRevealId: string | undefined;
         try { activeRevealId = (await (await this.getCore()).getActivePlanReveal(batch.identity.planId))?.id; }
         catch { /* Keep the original reveal error if active access cannot be checked. */ }
-        const detail = messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators);
+        const deliveryCode = [...outcomes.values()].find((one) => one !== 'filled' && one !== 'not-attempted');
+        const detail = errorCode(error) === 'access-request-failed' && deliveryCode !== undefined
+          ? deliveryFailureMessage(deliveryCode)
+          : messageFor(error, abort.signal.aborted, lastProgress, this.keyOwner(), moderators);
         this.state = typeof activeRevealId === 'string'
           && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeRevealId)
           ? { kind: 'WARNING', code: errorCode(error) === 'reveal_restart_required' ? 'reveal_restart_required' : 'active_access_open',
@@ -767,6 +775,15 @@ function batchErrorCode(error: unknown, canceled: boolean): AccessFieldResultCod
   if (code === 'asset_not_found' || code === 'asset_field_not_found') return 'field-unavailable';
   if (code === 'asset_value_invalid') return 'invalid-value';
   return 'not-attempted';
+}
+
+function deliveryFailureMessage(code: AccessFieldResultCode): string {
+  if (code === 'page-address-changed') return 'The page address changed before autofill. Open the fields again on the current page.';
+  if (code === 'form-changed') return 'The login form was replaced before autofill. Open the fields again.';
+  if (code === 'tab-inactive') return 'Another tab became active in this window. Return to this page and try again.';
+  if (code === 'authorization-denied') return 'InheritiGuard no longer has permission to autofill on this site.';
+  if (code === 'field-unavailable') return 'A selected input is no longer editable. Open the fields again.';
+  return 'Autofill could not write a selected field. No form was submitted.';
 }
 
 function stableError(code: 'invalid-access-batch' | 'access-request-failed'): Error & { code: string } {

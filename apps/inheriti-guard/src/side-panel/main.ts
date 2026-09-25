@@ -808,7 +808,7 @@ function errorText(error: string): string {
   return 'The access request could not be completed.';
 }
 function resultLabel(code: AccessFieldResult['code']): string {
-  return ({ filled: 'Autofilled', 'authorization-denied': 'Not allowed on this site', 'field-unavailable': 'Protected field unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
+  return ({ filled: 'Autofilled', 'authorization-denied': 'Not allowed on this site', 'field-unavailable': 'Input unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'page-address-changed': 'Address changed', 'form-changed': 'Form replaced', 'tab-inactive': 'Tab changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
 }
 function suggestionReason(reason: AccessFieldSuggestion['reason']): string {
   return ({ 'exact-origin': 'exact origin match', autocomplete: 'autocomplete match', 'input-type': 'input type match', 'accessible-label': 'accessible label match', name: 'field name match', id: 'field id match', 'inferred-semantic': 'inferred field type' })[reason];

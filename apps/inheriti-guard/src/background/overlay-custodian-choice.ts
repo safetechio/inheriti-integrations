@@ -10,7 +10,7 @@ async function stillOnPage(batch: AccessBatch): Promise<boolean> {
     const [active] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
     if (active?.id !== batch.identity.tabId) return false;
     for (const { pageTarget } of batch.mappings) {
-      if (!await preflightPageTarget(pageTarget, revalidatePageTarget)) return false;
+      if (await preflightPageTarget(pageTarget, revalidatePageTarget) !== 'ready') return false;
     }
     return true;
   } catch { return false; }

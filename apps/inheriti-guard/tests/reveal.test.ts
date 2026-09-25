@@ -116,14 +116,14 @@ function hostDerivedMasterKey(): Promise<string> {
 
 describe('Chrome reveal controller', () => {
   it('does not start a reveal when cancellation lands during target preflight', async () => {
-    let finishPreflight!: (value: Array<{ result: boolean }>) => void;
+    let finishPreflight!: (value: Array<{ result: string }>) => void;
     executeScript.mockImplementationOnce(() => new Promise((resolve) => { finishPreflight = resolve; }));
     const instance = core({ abortPlanAccess: vi.fn(async () => ({ aborted: false })) });
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     const filling = controller.fillBatch(batch);
     await vi.waitFor(() => expect(executeScript).toHaveBeenCalledOnce());
     await controller.abortPlanAccess('plan-1');
-    finishPreflight([{ result: true }]);
+    finishPreflight([{ result: 'ready' }]);
     await expect(filling).resolves.toEqual(batch.mappings.map((mapping) => ({
       selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'canceled',
     })));
@@ -173,7 +173,7 @@ describe('Chrome reveal controller', () => {
     expect(finishes[1]).toHaveBeenCalledOnce();
   });
   it('does not start a reveal when Secure Logoff lands during target preflight', async () => {
-    let finishPreflight!: (value: Array<{ result: boolean }>) => void;
+    let finishPreflight!: (value: Array<{ result: string }>) => void;
     executeScript.mockImplementationOnce(() => new Promise((resolve) => { finishPreflight = resolve; }));
     const instance = core();
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
@@ -181,7 +181,7 @@ describe('Chrome reveal controller', () => {
     const filling = controller.fillBatch(batch);
     await vi.waitFor(() => expect(executeScript).toHaveBeenCalledOnce());
     await controller.shutdown();
-    finishPreflight([{ result: true }]);
+    finishPreflight([{ result: 'ready' }]);
 
     await expect(filling).resolves.toEqual([
       { selector: 'prod-db.username', targetId: 'target-user', code: 'canceled' },
@@ -278,8 +278,8 @@ describe('Chrome reveal controller', () => {
 
   it('preflights all targets, then consumes N fields through one reveal and one destination', async () => {
     executeScript
-      .mockResolvedValueOnce([{ result: true }])
-      .mockResolvedValueOnce([{ result: true }])
+      .mockResolvedValueOnce([{ result: 'ready' }])
+      .mockResolvedValueOnce([{ result: 'ready' }])
       .mockResolvedValueOnce([{ result: 'filled' }])
       .mockResolvedValueOnce([{ result: 'filled' }]);
     const consumeFields = vi.fn(async (_requests, destination) => destination([
@@ -306,18 +306,18 @@ describe('Chrome reveal controller', () => {
   });
 
   it('does not open a reveal when any target fails preflight', async () => {
-    executeScript.mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: false }]);
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'form-changed' }]);
     const instance = core();
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     await expect(controller.fillBatch(batch)).resolves.toEqual([
-      { selector: 'prod-db.username', targetId: 'target-user', code: 'stale-page-context' },
-      { selector: 'prod-db.password', targetId: 'target-password', code: 'stale-page-context' },
+      { selector: 'prod-db.username', targetId: 'target-user', code: 'not-attempted' },
+      { selector: 'prod-db.password', targetId: 'target-password', code: 'form-changed' },
     ]);
     expect(instance.withReveal).not.toHaveBeenCalled();
   });
 
   it('does not write an overlay batch after its origin authorization is revoked', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const consumeFields = vi.fn(async (_requests, destination) => destination([
       { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },
     ]));
@@ -327,13 +327,13 @@ describe('Chrome reveal controller', () => {
     const controller = new ChromeRevealController(async () => asCore(instance), storage,
       () => 'Organisation', undefined, undefined, async () => false);
     await expect(controller.fillBatch(batch, 'OVERLAY')).resolves.toEqual(batch.mappings.map((mapping) => ({
-      selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'stale-page-context',
+      selector: mapping.protectedField.selector, targetId: mapping.pageTarget.targetId, code: 'authorization-denied',
     })));
     expect(executeScript).toHaveBeenCalledTimes(2);
   });
 
   it('does not write a batch after the operator switches tabs during approval', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     let approve!: () => void;
     const approval = new Promise<void>((resolve) => { approve = resolve; });
     const consumeFields = vi.fn(async (_requests, destination) => destination([
@@ -355,7 +355,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('keeps the batch open when the SafeKey PRO popup activates in another window', async () => {
-    executeScript.mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: true }])
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'ready' }])
       .mockResolvedValue([{ result: 'filled' }]);
     let approve!: () => void;
     const approval = new Promise<void>((resolve) => { approve = resolve; });
@@ -378,7 +378,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('uses the in-page chooser only for an overlay initiated batch', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const proOptions = vi.fn(async () => undefined);
     const controller = new ChromeRevealController(async () => asCore(core()), storage, undefined, proOptions);
     await controller.fillBatch(batch);
@@ -388,7 +388,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('explains an active access owned by another integration', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const instance = core({ withReveal: vi.fn(async () => { throw new Error('merge_process_already_active'); }) });
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     await controller.fillBatch(batch, 'OVERLAY');
@@ -397,7 +397,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('keeps a released access available for an explicit restart', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const close = vi.fn();
     const revealId = 'b02121ed-cf51-4b91-8062-9072f2e3a2d5';
     const instance = core({ reveals: { close }, getActivePlanReveal: vi.fn(async () => ({ id: revealId })),
@@ -412,7 +412,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it.each(['STARTING', 'MATERIAL_RELEASED'])('offers conditional cancellation after a generic failure with active %s access', async (stage) => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const revealId = 'b02121ed-cf51-4b91-8062-9072f2e3a2d5';
     const instance = core({ getActivePlanReveal: vi.fn(async () => ({ id: revealId, stage })),
       withReveal: vi.fn(async () => { throw new Error('network_failed SECRET_SHOULD_NOT_LEAK'); }) });
@@ -425,7 +425,7 @@ describe('Chrome reveal controller', () => {
   });
 
   it('keeps a genuine failure as an error when no access remains active', async () => {
-    executeScript.mockResolvedValue([{ result: true }]);
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
     const instance = core({ withReveal: vi.fn(async () => { throw new Error('network_failed'); }) });
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     await controller.fillBatch(batch, 'OVERLAY');
@@ -444,8 +444,8 @@ describe('Chrome reveal controller', () => {
 
   it('stops remaining writes after navigation becomes stale during delivery', async () => {
     executeScript
-      .mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: true }])
-      .mockResolvedValueOnce([{ result: 'stale-page-context' }]);
+      .mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'ready' }])
+      .mockResolvedValueOnce([{ result: 'page-address-changed' }]);
     const consumeFields = vi.fn(async (_requests, destination) => destination([
       { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },
     ]));
@@ -454,8 +454,8 @@ describe('Chrome reveal controller', () => {
     })) });
     const controller = new ChromeRevealController(async () => asCore(instance), storage);
     await expect(controller.fillBatch(batch)).resolves.toEqual([
-      { selector: 'prod-db.username', targetId: 'target-user', code: 'stale-page-context' },
-      { selector: 'prod-db.password', targetId: 'target-password', code: 'stale-page-context' },
+      { selector: 'prod-db.username', targetId: 'target-user', code: 'page-address-changed' },
+      { selector: 'prod-db.password', targetId: 'target-password', code: 'not-attempted' },
     ]);
     expect(executeScript).toHaveBeenCalledTimes(3);
     expect(alarmClear).toHaveBeenCalled();
@@ -464,7 +464,7 @@ describe('Chrome reveal controller', () => {
 
   it('preserves per-field outcomes on partial destination failure and closes recovery state', async () => {
     executeScript
-      .mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: true }])
+      .mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'ready' }])
       .mockResolvedValueOnce([{ result: 'filled' }]).mockRejectedValueOnce(new Error('injection failed'));
     const consumeFields = vi.fn(async (_requests, destination) => destination([
       { selector: 'prod-db.username', value: 'alice' }, { selector: 'prod-db.password', value: 'secret' },

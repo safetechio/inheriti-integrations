@@ -21,20 +21,20 @@ const STYLES = `
 @media(prefers-reduced-motion:reduce){.button{animation:none}}
 .popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:7px;width:292px;max-width:min(292px,calc(100vw - 24px));padding:10px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#101828;font:12px/1.4 AppFont,system-ui;box-shadow:0 12px 32px #10182833;overflow:hidden}
 .popover.shown{opacity:1;transform:none}
-.popover.device-choice{box-sizing:border-box;width:360px;max-width:calc(100vw - 24px);gap:0;padding:18px;border-color:#d0d5dd;border-radius:16px;box-shadow:0 20px 48px #1018283d}
-.device-logo{display:block;width:142px;max-width:100%;height:auto;margin:0 0 16px}
+.popover.device-choice{box-sizing:border-box;width:292px;gap:0;padding:12px;overflow-y:auto}
+.device-logo{display:block;width:110px;max-width:100%;height:auto;margin:0 0 8px}
 .device-eyebrow{margin:0 0 4px;color:#2962ff;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.device-title{margin:0;color:#101828;font-size:20px;font-weight:800;line-height:1.2;letter-spacing:-.03em}
-.device-intro{margin:8px 0 16px;color:#667085;font-size:14px;line-height:1.5}
-.device-options{display:grid;gap:10px}
-.device-option{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#101828;text-align:left;font:inherit;cursor:pointer}
+.device-title{margin:0;color:#101828;font-size:14px;font-weight:800;line-height:1.3}
+.device-intro{margin:6px 0 10px;color:#667085;font-size:12px;line-height:1.4}
+.device-options{display:grid;gap:6px}
+.device-option{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#101828;text-align:left;font:inherit;cursor:pointer}
 .device-option:hover{border-color:#2962ff;background:#f0f6ff}
 .device-option:focus-visible,.device-cancel:focus-visible{outline:3px solid #75a9ff;outline-offset:2px}
-.device-option img{width:50px;height:50px;flex:none;object-fit:contain}
+.device-option img{width:36px;height:36px;flex:none;object-fit:contain}
 .device-option strong,.device-option small{display:block}
-.device-option strong{font-size:14px}
-.device-option small{margin-top:3px;color:#667085;font-size:12px;line-height:1.4}
-.device-cancel{align-self:flex-start;margin:14px 0 0;padding:6px 0;border:0;background:transparent;color:#475467;font:inherit;font-weight:700;cursor:pointer}
+.device-option strong{font-size:12px}
+.device-option small{margin-top:2px;color:#667085;font-size:11px;line-height:1.35}
+.device-cancel{align-self:flex-start;margin:10px 0 0;padding:8px 4px;border:0;background:transparent;color:#475467;font:inherit;font-weight:700;cursor:pointer}
 @media(prefers-reduced-motion:reduce){.popover{transition:none}}
 .title{flex:none;margin:0;font-weight:800;letter-spacing:.01em}
 .filter{flex:none;box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#101828;font:inherit}
@@ -419,7 +419,9 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   spinner.textContent = succeeded ? '✓' : warning ? '!' : '✕';
   const failure = finalState?.ok === true && finalState.reveal?.kind === 'ERROR' ? finalState.reveal.message : undefined;
   title.textContent = succeeded ? 'Reveal complete' : interrupted ? 'Access interrupted' : warning ? 'Access still open'
-    : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
+    : results.some((one) => one.code === 'page-address-changed' || one.code === 'form-changed'
+      || one.code === 'tab-inactive' || one.code === 'field-unavailable')
+      ? 'Autofill stopped' : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
   dots.textContent = '';
   phaseText.textContent = succeeded ? 'Every field was written to the page' : warning
     ? finalState?.reveal?.message ?? 'This plan has an open access request.'
@@ -536,8 +538,12 @@ function resultLabel(code: string): string {
   if (code === 'filled') return 'Filled';
   if (code === 'canceled') return 'Canceled';
   if (code === 'stale-page-context') return 'Page changed';
+  if (code === 'page-address-changed') return 'Address changed';
+  if (code === 'form-changed') return 'Form replaced';
+  if (code === 'tab-inactive') return 'Tab changed';
   if (code === 'authorization-denied') return 'Not allowed on this site';
-  if (code === 'field-unavailable') return 'Unavailable';
+  if (code === 'field-unavailable') return 'Input unavailable';
+  if (code === 'not-attempted') return 'Not attempted';
   return 'Not filled';
 }
 
