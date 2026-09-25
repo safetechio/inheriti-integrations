@@ -46,21 +46,35 @@ it('finishes the key step before showing edit session startup', () => {
   expect(markup.indexOf('Release the Organisation Key')).toBeLessThan(markup.indexOf('Open edit session'));
 });
 
-it('shows only the failure and discard action when an edit fails', () => {
+it('shows the access failure and retry in the failed step', () => {
   globalThis.React = React;
   const markup = renderToStaticMarkup(createElement(PlanEditPanel, {
     messages: trayMessages,
-    state: { edit: { status: 'error', canDiscard: true, plans: [{ id: 'plan-1', name: 'Plan' }], assets: [], message: 'Could not add the asset.' } },
+    state: { edit: { status: 'error', canDiscard: true, plans: [{ id: 'plan-1', name: 'Plan' }], assets: [], phase: 'reconstructing', phaseHistory: ['configuring_custodian_share', 'collecting_shares', 'reconstructing'], message: 'Could not open the protected plan. Retry this step.' } },
     flow: { planId: 'plan-1', action: 'replace', assetId: '', query: '', form: { assetType: 'DOCUMENT' }, busy: false, canceling: false, error: trayMessages.editDiscardFailed,
-      setPlanId() {}, setQuery() {}, chooseAction() {}, chooseAsset() {}, cancel() {}, discard() {}, close() {} },
+      setPlanId() {}, setQuery() {}, chooseAction() {}, chooseAsset() {}, retryAccess() {}, cancel() {}, discard() {}, close() {} },
     onOpenApp() {},
   }));
-  expect(markup).toContain('Could not add the asset.');
+  expect(markup).toContain('Could not open the protected plan. Retry this step.');
+  expect(markup).toContain('Configuring custodian share');
+  expect(markup).not.toContain('Collecting custodian share');
+  expect(markup).toContain('Retry this step</button>');
   expect(markup).toContain('Discard edit');
   expect(markup).toContain(trayMessages.editDiscardFailed);
   expect(markup).not.toContain('edit-mode');
   expect(markup).not.toContain('edit-search');
   expect(markup).not.toContain('tray-footer');
+});
+
+it('offers the SafeKey Desktop Tool download when the device is full', () => {
+  const markup = renderToStaticMarkup(createElement(PlanEditProgress, {
+    messages: trayMessages,
+    edit: { status: 'error', canDiscard: true, phase: 'connecting_safekey_pro', phaseHistory: ['configuring_custodian_share', 'connecting_safekey_pro'], message: trayMessages.safeKeyProNoSpace },
+    busy: false, onRetry() {},
+  }));
+  expect(markup).toContain(trayMessages.safeKeyProNoSpace);
+  expect(markup).toContain('Download SafeKey Desktop Tool</button>');
+  expect(markup).toContain('Retry this step</button>');
 });
 
 it('offers retry for a plan-list failure without an edit checkpoint', () => {

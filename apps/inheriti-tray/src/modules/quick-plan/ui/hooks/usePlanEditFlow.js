@@ -132,6 +132,18 @@ export function usePlanEditFlow({ state, setState, messages }) {
     finally { setBusy(false); }
   }
 
+  async function retryAccess() {
+    if (!planId || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await window.inheritiTray.listPlanAssets(planId);
+      if (next.edit?.status === 'idle' && next.edit.planId === planId) loadedPlanId.current = planId;
+      setState(next);
+    } catch { setError(messages.editUnavailable); }
+    finally { setBusy(false); }
+  }
+
   async function discard() {
     if (!window.confirm(messages.discardEditWarning)) return;
     setBusy(true);
@@ -162,5 +174,5 @@ export function usePlanEditFlow({ state, setState, messages }) {
     }
   }
 
-  return { editing, close, cancel, canceling, planId, setPlanId: (id) => { generation.current += 1; setPlanId(id); setAction(''); setAssetId(''); resetForm(); if (id) void chooseAction('replace', id); }, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, recover, discard };
+  return { editing, close, cancel, canceling, planId, setPlanId: (id) => { generation.current += 1; setPlanId(id); setAction(''); setAssetId(''); resetForm(); if (id) void chooseAction('replace', id); }, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, retryAccess, recover, discard };
 }

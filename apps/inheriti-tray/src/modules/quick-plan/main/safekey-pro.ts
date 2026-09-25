@@ -4,18 +4,21 @@ import { CustodianPrompt } from './custodian-prompt.js';
 
 export function createTraySafeKeyPro(deployment: Deployment, prompt: CustodianPrompt) {
   if (process.platform !== 'linux') return undefined;
-  const rpId = businessUiRpId(deployment);
+  const rpId = deployment === 'local'
+    ? process.env.INHERITI_SAFEKEY_PRO_RP_ID || (process.env.INHERITI_APP_URL ? new URL(process.env.INHERITI_APP_URL).hostname : businessUiRpId(deployment))
+    : businessUiRpId(deployment);
   if (!rpId) return undefined;
   let firstAccess = false;
+  let invalidPin = false;
   const active = new Set<AbortController>();
-  const pin = createSafeKeyProPinSession((signal) => prompt.readPin(firstAccess, signal));
+  const pin = createSafeKeyProPinSession((signal) => prompt.readPin(firstAccess, signal, invalidPin));
   const connect = async (signal?: AbortSignal) => {
     prompt.connect(firstAccess);
     return createNodeSafeKeyProDevice({
       device: await waitForSafeKeyProDevice(process.env.INHERITI_SAFEKEY_PRO_DEVICE, signal),
       rpId,
       getPin: pin.getPin,
-      onTouch: (operation, attempt, limit) => prompt.touch(firstAccess, operation, attempt, limit),
+      onTouch: (operation: 'login' | 'read' | 'write', attempt: number, limit: number) => prompt.touch(firstAccess, operation, attempt, limit),
     });
   };
   const run = async <T>(signal: AbortSignal | undefined, work: (device: ReturnType<typeof createNodeSafeKeyProDevice>, activeSignal: AbortSignal) => Promise<T>): Promise<T> => {
@@ -24,7 +27,22 @@ export function createTraySafeKeyPro(deployment: Deployment, prompt: CustodianPr
     if (signal?.aborted) abort();
     signal?.addEventListener('abort', abort, { once: true });
     active.add(controller);
-    try { return await work(await connect(controller.signal), controller.signal); }
+    try {
+      invalidPin = false;
+      const device = await connect(controller.signal);
+      for (;;) {
+        try {
+          const result = await work(device, controller.signal);
+          if (controller.signal.aborted) throw new Error('SAFEKEY_ABORTED');
+          prompt.working(firstAccess);
+          return result;
+        } catch (error) {
+          if (controller.signal.aborted || (error as Error).message !== 'SAFEKEY_INVALID_PIN') throw error;
+          pin.clearPin();
+          invalidPin = true;
+        }
+      }
+    }
     finally { active.delete(controller); signal?.removeEventListener('abort', abort); }
   };
   return {
@@ -34,6 +52,6 @@ export function createTraySafeKeyPro(deployment: Deployment, prompt: CustodianPr
     },
     read: async (request: Parameters<ReturnType<typeof createNodeSafeKeyProDevice>['read']>[0], signal?: AbortSignal) =>
       run(signal, (device, activeSignal) => device.read(request, activeSignal)),
-    clearPin: () => { for (const controller of active) controller.abort(); pin.clearPin(); firstAccess = false; prompt.clear(); },
+    clearPin: () => { for (const controller of active) controller.abort(); pin.clearPin(); firstAccess = false; invalidPin = false; prompt.clear(); },
   };
 }

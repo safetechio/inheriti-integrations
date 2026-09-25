@@ -6,22 +6,22 @@ const accessGroups = {
   acquiring_key: 'key', pending_dms: 'dms', pending_approvals: 'approval',
   pending_auth: 'auth', pending_moderation: 'moderation', revealing: 'validators',
   collecting_validators: 'validators', collecting_shares: 'shares',
-  distributing_custodian_share: 'custodian', claiming_custodian_share: 'custodian', releasing_custodian_share: 'custodian', connecting_safekey_pro: 'custodian',
+  distributing_custodian_share: 'custodian', configuring_custodian_share: 'custodian', claiming_custodian_share: 'custodian', releasing_custodian_share: 'custodian', connecting_safekey_pro: 'custodian',
   reconstructing: 'decrypt', opening_window: 'view', preparing_view: 'view',
 };
 const accessPreparation = new Set(['key', 'dms', 'approval', 'auth', 'moderation']);
 const revealGroups = new Set(['validators', 'shares', 'custodian', 'decrypt', 'view']);
 
-function ProgressSteps({ steps, label }) {
+function ProgressSteps({ steps, label, retry, retryLabel, noSpaceMessage, downloadLabel }) {
   return <ol className="edit-progress-steps" aria-label={label}>
     {steps.map(({ id, title, description, status }, index) => <li key={id} data-state={status} aria-current={status === 'current' ? 'step' : undefined}>
       <span className="edit-progress-number" aria-hidden="true">{status === 'done' ? '✓' : index + 1}</span>
-      <div><strong>{title}</strong>{description && <span>{description}</span>}</div>
+      <div><strong>{title}</strong>{description && <span>{description}</span>}{status === 'failed' && noSpaceMessage && description === noSpaceMessage && <button type="button" onClick={() => void window.inheritiTray.openSafeKeyDesktopTool()}>{downloadLabel}</button>}{status === 'failed' && retry && <button type="button" onClick={retry}>{retryLabel}</button>}</div>
     </li>)}
   </ol>;
 }
 
-export function PlanEditProgress({ messages, edit, busy }) {
+export function PlanEditProgress({ messages, edit, busy, onRetry }) {
   const active = busy || edit.status === 'loading' || edit.status === 'saving';
   const updateIndex = updateSteps.indexOf(edit.phase);
   if (updateIndex >= 0 && (active || edit.status === 'error' || edit.status === 'recovery-required')) {
@@ -50,15 +50,18 @@ export function PlanEditProgress({ messages, edit, busy }) {
   }
   const reported = edit.keyStatus ? 'key' : accessGroups[edit.phase] || (visible.includes('opening') ? 'opening' : undefined);
   const current = visible.includes(reported) ? reported : visible.at(-1);
+  const configuringCustodian = (edit.phaseHistory || []).some((phase) => phase === 'configuring_custodian_share' || phase === 'claiming_custodian_share');
   return <ProgressSteps label={messages.editAccessProgress} steps={visible.map((group, index) => {
     const status = index < visible.indexOf(current) ? 'done' : group === current ? active ? 'current' : 'failed' : 'waiting';
-    const copy = group === 'opening' ? { title: messages.editSteps[edit.phase], description: '', complete: '' } : messages.editAccessSteps[group];
+    const copy = group === 'opening' ? { title: messages.editSteps[edit.phase], description: '', complete: '' }
+      : group === 'custodian' && configuringCustodian ? messages.editCustodianConfigurationStep : messages.editAccessSteps[group];
     return {
       id: group, title: copy.title, status,
-      description: status === 'done' ? copy.complete
+      description: status === 'failed' && edit.message ? edit.message
+        : status === 'done' ? copy.complete
         : group === 'key' && edit.keyStatus === 'accessing' ? messages.editPreparingKey
         : group === 'custodian' && messages.editCustodianSteps[edit.phase] ? messages.editCustodianSteps[edit.phase]
         : copy.description,
     };
-  })} />;
+  })} retry={edit.status === 'error' && edit.canDiscard ? onRetry : undefined} retryLabel={messages.retryEditAccess} noSpaceMessage={messages.safeKeyProNoSpace} downloadLabel={messages.downloadSafeKeyDesktopTool} />;
 }

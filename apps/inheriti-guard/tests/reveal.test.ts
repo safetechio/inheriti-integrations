@@ -433,6 +433,14 @@ describe('Chrome reveal controller', () => {
     expect(instance.getActivePlanReveal).toHaveBeenCalledWith('plan-1');
   });
 
+  it('explains how to free space when SafeKey PRO is full', async () => {
+    executeScript.mockResolvedValue([{ result: 'ready' }]);
+    const instance = core({ withReveal: vi.fn(async () => { throw new Error('SAFEKEY_NO_SPACE'); }) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await controller.fillBatch(batch, 'OVERLAY');
+    expect(controller.current()).toEqual({ kind: 'ERROR', message: 'SafeKey PRO has no free space. Use SafeKey Desktop Tool to free space, then start a new reveal.' });
+  });
+
   it('reports a stale conditional restart without closing the newer access', async () => {
     const abortPlanAccess = vi.fn(async () => ({ aborted: false }));
     const revealId = '11111111-1111-4111-8111-111111111111';

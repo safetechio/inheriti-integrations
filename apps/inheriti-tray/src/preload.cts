@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   cancelPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:cancel-plan-edit'),
   recoverPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:recover-plan-edit'),
   openApp: (planId?: string): Promise<void> => ipcRenderer.invoke('tray:open-app', planId),
+  openSafeKeyDesktopTool: (): Promise<void> => ipcRenderer.invoke('tray:open-safekey-desktop-tool'),
   onAction: (callback: (action: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
     ipcRenderer.on('tray:action', listener);

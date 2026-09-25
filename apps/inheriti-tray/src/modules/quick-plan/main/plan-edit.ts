@@ -122,8 +122,13 @@ export class TrayPlanEdit {
     if (attempt) {
       const operations = this.selectedOperations();
       if (attempt.actor === await this.actor() && attempt.organizationId === this.organizationId && attempt.editId) {
-        if (cancel) await operations.cancel(attempt.planId, attempt.editId);
-        else await operations.discard(attempt.planId, attempt.editId);
+        try {
+          if (cancel) await operations.cancel(attempt.planId, attempt.editId);
+          else await operations.discard(attempt.planId, attempt.editId);
+        } catch (error) {
+          if ((error as Error).message !== 'edit_checkpoint_session_mismatch') throw error;
+          await operations.discardLocal(attempt.planId, attempt.editId);
+        }
       } else {
         await operations.discardLocal(attempt.planId, attempt.editId);
       }
@@ -320,8 +325,16 @@ export class TrayPlanEdit {
       this.status = PLAN_EDIT_STATUS.idle;
       this.phase = undefined;
     } catch (error) {
+      if (process.env.INHERITI_DEPLOYMENT === 'local' && error instanceof Error) {
+        const code = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(error.message) ? error.message : 'unclassified';
+        console.error('Plan edit access failed:', error.name, code);
+      }
       this.status = request.signal.aborted ? PLAN_EDIT_STATUS.idle : PLAN_EDIT_STATUS.error;
-      this.message = request.signal.aborted ? undefined : this.errorMessage(error);
+      const message = this.errorMessage(error);
+      this.message = request.signal.aborted ? undefined : message === messages.editSaveFailed
+        ? (this.phase === 'configuring_custodian_share' || (this.phase === 'connecting_safekey_pro' && this.phaseHistory.includes('configuring_custodian_share')))
+          ? messages.editCustodianConfigurationFailed : messages.editAccessFailed
+        : message;
     } finally {
       this.pending = false;
       if (this.accessAbort === request) this.accessAbort = undefined;
@@ -384,7 +397,10 @@ export class TrayPlanEdit {
 
   private errorMessage(error: unknown): string {
     const code = error instanceof Error ? error.message : '';
+    if (code === 'SAFEKEY_NO_SPACE') return messages.safeKeyProNoSpace;
+    if (this.phaseHistory.includes('configuring_custodian_share') && /^SAFEKEY_COMMAND_FAILED_3_[0-9A-F]{2}$/.test(code)) return messages.safeKeyProWriteRejected(code.slice(-2));
     if (code === 'SAFEKEY_DEVICE_NOT_CONNECTED' || code === 'safekey_pro_local_device_required') return messages.safeKeyProNotConnected;
+    if (code === 'SAFEKEY_DEVICE_INFO_MISSING' || (code === 'SAFEKEY_NOT_FOUND' && this.phaseHistory.includes('configuring_custodian_share'))) return messages.safeKeyProDeviceInfoMissing;
     if (code === 'SAFEKEY_INVALID_PIN') return messages.safeKeyProInvalidPin;
     if (code === 'SAFEKEY_NOT_FOUND' || code === 'custodian_share_unavailable') return messages.safeKeyProShareUnavailable;
     if (error && typeof error === 'object' && 'status' in error) {

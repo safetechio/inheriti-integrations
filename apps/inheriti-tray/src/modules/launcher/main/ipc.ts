@@ -110,4 +110,8 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (typeof planId !== 'string' || (!created && !edited)) throw new Error(messages.invalidPlan);
     return shell.openExternal(new URL(`/organization/plans/backup/${encodeURIComponent(planId)}`, appUrl).toString());
   });
+  ipcMain.handle('tray:open-safekey-desktop-tool', (event) => {
+    trusted(event);
+    return shell.openExternal('https://safekey.be/tools/safekey-desktop/');
+  });
 }

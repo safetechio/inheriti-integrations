@@ -37,8 +37,10 @@ export function CustodianPrompt({ prompt, onCancel }) {
         </fieldset>
       </>}
       {prompt.kind === 'connect' && <p role="status">{choice.proConnect}</p>}
+      {prompt.kind === 'working' && <p role="status">{prompt.firstAccess ? 'Saving the custodian share to your SafeKey PRO…' : 'Reading the custodian share from your SafeKey PRO…'}</p>}
       {prompt.kind === 'pin' && <form id="custodian-pin-form" onSubmit={(event) => void submit(event)}>
         <p>{prompt.firstAccess ? first.proPin : later.proPin}</p>
+        {prompt.invalidPin && <p className="error" role="alert">SafeKey PRO rejected the PIN. Check it and try again.</p>}
         <label htmlFor="custodian-pin">SafeKey PRO PIN</label>
         <input id="custodian-pin" name="pin" type="password" autoComplete="off" maxLength={128} required autoFocus />
         <button type="submit">Continue</button>

@@ -719,6 +719,8 @@ function messageFor(
     return 'The SafeKey PRO window closed. Start a new reveal. If the share was not saved, you can choose SafeKey Mobile or PRO again.';
   if (canceled) return 'Reveal canceled.';
   if (code === 'SAFEKEY_ABORTED') return 'SafeKey PRO operation canceled.';
+  if (code === 'SAFEKEY_NO_SPACE') return 'SafeKey PRO has no free space. Use SafeKey Desktop Tool to free space, then start a new reveal.';
+  if (code === 'SAFEKEY_DEVICE_INFO_MISSING') return 'Could not set up SafeKey PRO. Retry the reveal.';
   if (code === 'reveal_restart_required')
     return 'A previous access cannot continue after the browser closed. Restart it to open this plan again; approvals will be requested again.';
   if (code === 'merge_process_already_active')

@@ -37,9 +37,9 @@ export function PlanEditPanel({ messages, state, flow, onOpenApp, onSignIn }) {
     <ScreenHeader title={messages.addOrEditAsset} onBack={edit.status === 'recovery-required' || edit.status === 'updated' || edit.actorMismatch ? flow.close : () => void flow.cancel()} backDisabled={cancelDisabled} />
     <div className="tray-scroll edit-scroll">
       {!progressOnly && edit.plans.length > 0 && <PlanPicker plans={edit.plans} value={flow.planId} onChange={(id) => { setSelectedAssetId(''); flow.setPlanId(id); }} disabled={blocked || flow.canceling} label={messages.plan || 'Plan'} placeholder={messages.choosePlan} />}
-      <PlanEditProgress messages={messages} edit={edit} busy={flow.busy} />
+      <PlanEditProgress messages={messages} edit={edit} busy={flow.busy} onRetry={() => void flow.retryAccess()} />
       {edit.status === 'idle' && edit.plans.length === 0 && <p role="status">{messages.noEditablePlans}</p>}
-      {edit.message && <p role="status">{edit.message}</p>}
+      {edit.message && !(edit.status === 'error' && edit.phase) && <p role="status">{edit.message}</p>}
       {edit.status === 'recovery-required' && edit.canRecover && <button type="button" disabled={flow.busy} onClick={() => void flow.recover()}>{messages.recoverEdit}</button>}
       {edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={onSignIn}>{messages.signIn}</button>}
       {!edit.needsSignIn && (edit.status === 'error' || edit.status === 'recovery-required') && edit.canDiscard && <button className="button-danger" type="button" disabled={flow.busy} onClick={() => void flow.discard()}>{messages.discardEdit}</button>}

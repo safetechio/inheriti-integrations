@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 const { createNodeSafeKeyProDevice } = vi.hoisted(() => ({ createNodeSafeKeyProDevice: vi.fn((options: unknown) => ({ options, write: async () => undefined, read: async () => undefined })) }));
-vi.mock('@safetech/inheriti-core-sdk/node', () => ({ createNodeSafeKeyProDevice }));
+vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-core-sdk/node')>(), createNodeSafeKeyProDevice }));
 vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-elements-core/node')>(), waitForSafeKeyProDevice: async () => '/dev/hidraw4' }));
 import { openSafeKeyProPrompt } from '../src/safekey-pro.js';
 

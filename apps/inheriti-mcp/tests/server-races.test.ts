@@ -86,3 +86,14 @@ it('reports an interrupted reveal without leaking the underlying error or openin
   expect(JSON.stringify(status)).not.toContain('secret diagnostic');
   expect(withReveal).toHaveBeenCalledTimes(1);
 });
+
+it('points a full SafeKey PRO to the Desktop Tool', async () => {
+  const tools = new MetadataTools() as any;
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }),
+    withReveal: async () => { throw new Error('SAFEKEY_NO_SPACE'); },
+  } });
+  const { jobId } = await tools.reveal('plan-1', 'account.password');
+  await vi.waitFor(async () => expect((await tools.revealStatus(jobId)).status).toBe('FAILED'));
+  expect((await tools.revealStatus(jobId)).message).toContain('https://safekey.be/tools/safekey-desktop/');
+});

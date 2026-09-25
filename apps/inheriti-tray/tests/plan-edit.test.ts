@@ -66,6 +66,78 @@ describe('TrayPlanEdit', () => {
     expect(seen).toEqual(['loading_context', 'opening_edit', 'checking_edit', 'collecting_shares']);
     expect(edit.state().phase).toBeUndefined();
   });
+  it('keeps a failed access step and retries the saved edit session', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('reconstructing');
+      throw new Error('reconstruction_failed');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', phase: 'reconstructing', message: 'Could not open the protected plan. Retry this step.' });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'idle', assets: [{ id: 'asset-1' }] });
+    expect(mock.start).toHaveBeenCalledTimes(1);
+  });
+  it('names custodian setup when a SafeKey PRO write fails', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('configuring_custodian_share');
+      progress('connecting_safekey_pro');
+      throw new Error('SAFEKEY_RECORD_CONFLICT');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', phase: 'connecting_safekey_pro', message: 'Could not configure the custodian share. Retry this step.' });
+  });
+  it('does not blame configuration for a later reconstruction failure', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('configuring_custodian_share');
+      progress('reconstructing');
+      throw new Error('duplicate_key_shard');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', phase: 'reconstructing', message: 'Could not open the protected plan. Retry this step.' });
+  });
+  it('shows the device status when SafeKey PRO rejects a write', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('configuring_custodian_share');
+      progress('connecting_safekey_pro');
+      throw new Error('SAFEKEY_COMMAND_FAILED_3_FD');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state().message).toBe('SafeKey PRO rejected the custodian share write (device code FD). Retry this step.');
+  });
+  it('explains a full SafeKey PRO without discarding the edit', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('configuring_custodian_share');
+      throw new Error('SAFEKEY_NO_SPACE');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', canDiscard: true, message: 'SafeKey PRO has no free space. Use SafeKey Desktop Tool to free space, then retry this step.' });
+  });
+  it('does not describe a missing device identity as a missing plan share during configuration', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
+      progress('configuring_custodian_share');
+      throw new Error('SAFEKEY_NOT_FOUND');
+    });
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state().message).toBe('Could not set up SafeKey PRO. Retry this step.');
+  });
   it('keeps the matching opening message visible while context and start are pending', async () => {
     let finishContext!: () => void;
     let finishStart!: () => void;
@@ -450,6 +522,20 @@ describe('TrayPlanEdit', () => {
     await edit.discard();
     expect(mock.discardLocal).toHaveBeenCalledWith('plan-1', 'edit-1');
     expect(mock.discard).not.toHaveBeenCalled();
+    expect(mock.values.has('plan-edit/attempt')).toBe(false);
+  });
+
+  it('clears a mismatched local merge checkpoint after an explicit discard', async () => {
+    mock.values.set('plan-edit/attempt', { actor: 'actor-1', organizationId: 'org-1', planId: 'plan-1', idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, editId: 'edit-1' });
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.discard.mockRejectedValueOnce(new Error('edit_checkpoint_session_mismatch'));
+    mock.discardLocal.mockImplementationOnce(async () => { mock.values.delete('plan-edit/attempt'); });
+    await edit.discard();
+    expect(mock.discard).toHaveBeenCalledWith('plan-1', 'edit-1');
+    expect(mock.discardLocal).toHaveBeenCalledWith('plan-1', 'edit-1');
+    expect(edit.state().status).toBe('idle');
     expect(mock.values.has('plan-edit/attempt')).toBe(false);
   });
 

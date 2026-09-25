@@ -213,6 +213,8 @@ export class MetadataTools {
     })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(error => {
       job.status = controller.signal.aborted ? 'CANCELED' : 'FAILED';
       if (job.status === 'CANCELED') job.message = 'Reveal canceled.';
+      else if ((error as Error).message === 'SAFEKEY_NO_SPACE') job.message = 'SafeKey PRO has no free space. Download SafeKey Desktop Tool at https://safekey.be/tools/safekey-desktop/ to free space, then start a new reveal.';
+      else if ((error as Error).message === 'SAFEKEY_DEVICE_INFO_MISSING') job.message = 'Could not set up SafeKey PRO. Retry the reveal.';
       else if ((error as { code?: unknown })?.code === 'reveal_restart_required') {
         job.code = 'reveal_restart_required';
         job.message = 'This plan has an interrupted open request. Finish or cancel it in Inheriti® Business, then start a new reveal.';

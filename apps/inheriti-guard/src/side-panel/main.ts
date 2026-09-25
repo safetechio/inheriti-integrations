@@ -682,6 +682,19 @@ async function revealAndAutofill(batch: AccessBatch): Promise<void> {
     const filled = response.results.filter((result) => result.code === 'filled').length;
     accessStatus.textContent = `${filled} of ${response.results.length} fields autofilled. Chrome did not submit the form.`;
   } else accessStatus.textContent = response.ok ? 'Autofill did not return field results.' : errorText(response.error);
+  const revealState = await send({ type: 'get-reveal-state' });
+  const deviceError = revealState.ok && 'reveal' in revealState
+    ? revealState.reveal.kind === 'WARNING' ? revealState.reveal.detail
+      : revealState.reveal.kind === 'ERROR' ? revealState.reveal.message : ''
+    : '';
+  if (deviceError.startsWith('SafeKey PRO has no free space.')) {
+    const download = document.createElement('a');
+    download.href = 'https://safekey.be/tools/safekey-desktop/';
+    download.target = '_blank';
+    download.rel = 'noopener noreferrer';
+    download.textContent = 'Download SafeKey Desktop Tool';
+    accessStatus.replaceChildren(document.createTextNode(deviceError), document.createElement('br'), download);
+  }
   void requestState('load-plans');
   // A reveal that ended because this worker was evicted leaves a resumable one behind, not nothing.
   void refreshResumable();
