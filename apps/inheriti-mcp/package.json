@@ -11,7 +11,7 @@
     "test": "vitest run --root . --config ../../vitest.config.ts"
   },
   "dependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.31",
+    "@safetech/inheriti-core-sdk": "4.0.33",
     "@safetech/inheriti-elements-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^4.4.3"

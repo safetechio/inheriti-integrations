@@ -5,7 +5,8 @@ vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({
   ...await original<typeof import('@safetech/inheriti-elements-core/node')>(),
   waitForSafeKeyProDevice,
 }));
-vi.mock('@safetech/inheriti-core-sdk/node', () => ({
+vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({
+  ...await original<typeof import('@safetech/inheriti-core-sdk/node')>(),
   createNodeSafeKeyProDevice: (options: { onTouch: (operation: 'write', attempt: number, limit: number) => void }) => ({
     write: async () => { options.onTouch('write', 1, 3); options.onTouch('write', 2, 3); options.onTouch('write', 3, 3); },
   }),
