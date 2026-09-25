@@ -8,8 +8,8 @@ export function requestCliCancel(): void {
 
 export function registerCliCancel(controller: AbortController): () => void {
   const cancel = () => controller.abort();
-  process.once('SIGINT', cancel);
-  process.once('SIGTERM', cancel);
+  process.on('SIGINT', cancel);
+  process.on('SIGTERM', cancel);
   keyboard.on('cancel', cancel);
   return () => {
     process.off('SIGINT', cancel);

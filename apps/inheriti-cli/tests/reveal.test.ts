@@ -40,6 +40,10 @@ describe('plans reveal', () => {
     );
   });
 
+  it('does not claim cancellation succeeded when the relay cleanup failed', () => {
+    expect(messageFor({ code: 'master_key_relay_cancellation_failed' })).toContain('may still be pending');
+  });
+
   it('guides a direct runner away from a claimed SafeKey PRO share', () => {
     expect(messageFor({ code: 'safekey_pro_local_device_required' })).toContain('Open it locally');
   });

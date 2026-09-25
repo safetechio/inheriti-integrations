@@ -513,6 +513,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
+  master_key_relay_cancellation_failed: 'Could not confirm cancellation in SafeKey Mobile. The release request may still be pending; wait for it to expire before trying again.',
   master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
   MasterKeyRelayTimedOut: 'Nobody released the organisation key in SafeKey Mobile in time.',
   master_key_relay_timed_out: 'Nobody released the organisation key in SafeKey Mobile in time.',

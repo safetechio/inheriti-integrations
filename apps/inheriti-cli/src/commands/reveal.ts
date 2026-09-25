@@ -131,6 +131,10 @@ export async function consumePlanFields(
     .map((participant) => [participant.id, participant.displayName]));
   const keyOwner = context.keyOwner ?? 'Application';
   let presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
+  const onAbort = () => {
+    if (lastProgress?.phase === 'WAITING_FOR_MASTER_KEY') presenter?.deviceStatus('Canceling the SafeKey Mobile request...');
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
   const pausePresenter = () => { context.safeKeyPro?.setStatusRenderer?.(); presenter?.close(true); presenter = undefined; };
   if (!presenter && !options.quiet) terminal.write('Opening the plan.');
   try {
@@ -207,6 +211,7 @@ export async function consumePlanFields(
     }
     throw error;
   } finally {
+    signal?.removeEventListener('abort', onAbort);
     context.safeKeyPro?.setStatusRenderer?.();
     presenter?.close();
   }

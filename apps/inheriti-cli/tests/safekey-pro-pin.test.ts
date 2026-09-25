@@ -80,3 +80,21 @@ it('treats Ctrl+C at the hidden PIN prompt as cancellation of the whole reveal',
     vi.unstubAllGlobals();
   }
 });
+
+it('keeps handling repeated Ctrl+C while remote cancellation completes', () => {
+  const processEvents = new EventEmitter();
+  vi.stubGlobal('process', processEvents);
+  const controller = new AbortController();
+  const unregister = registerCliCancel(controller);
+  try {
+    processEvents.emit('SIGINT');
+    expect(controller.signal.aborted).toBe(true);
+    expect(processEvents.listenerCount('SIGINT')).toBe(1);
+    processEvents.emit('SIGINT');
+    expect(processEvents.listenerCount('SIGINT')).toBe(1);
+  } finally {
+    unregister();
+    vi.unstubAllGlobals();
+  }
+  expect(processEvents.listenerCount('SIGINT')).toBe(0);
+});
