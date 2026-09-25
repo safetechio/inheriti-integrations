@@ -215,7 +215,7 @@ export class MetadataTools {
       if (job.status === 'CANCELED') job.message = 'Reveal canceled.';
       else if ((error as { code?: unknown })?.code === 'reveal_restart_required') {
         job.code = 'reveal_restart_required';
-        job.message = 'This plan has an interrupted open request. Finish or cancel it in Inheriti Business, then start a new reveal.';
+        job.message = 'This plan has an interrupted open request. Finish or cancel it in Inheriti® Business, then start a new reveal.';
       }
       else if (job.phase !== 'DENIED' && job.phase !== 'STOPPED_BY_DMS') job.message = 'Reveal could not continue.';
     });
@@ -245,7 +245,7 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
 
 export function registerRevealTools(server: McpServer, tools: MetadataTools) {
   server.registerTool('reveal_plan_secret', { description: 'Deliver one authorized plan field to a one-time local browser page. Never returns its value.', inputSchema: z.object({ planId: z.string().min(1), selector: z.string().min(3) }) }, safeResult(({ planId, selector }: { planId: string; selector: string }) => tools.reveal(planId, selector)));
-  server.registerTool('download_plan_asset', { description: 'Offer one authorized binary asset as an attachment in a one-time local browser page. Never returns its bytes or URL.', inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1) }) }, safeResult(({ planId, asset }: { planId: string; asset: string }) => tools.reveal(planId, asset, 'ASSET')));
+  server.registerTool('download_plan_asset', { description: 'Offer one authorized media asset as an attachment in a one-time local browser page. Never returns its bytes or URL.', inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1) }) }, safeResult(({ planId, asset }: { planId: string; asset: string }) => tools.reveal(planId, asset, 'ASSET')));
   server.registerTool('check_reveal_status', { description: 'Check or cancel a pending local delivery.', inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.revealStatus(jobId, cancel)));
 }
 

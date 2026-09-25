@@ -25,7 +25,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   live_environment_unavailable_in_development_build: 'This build supports TEST only',
   action_not_allowed: 'This VS Code registration is not allowed to insert that field',
   reveal_insert_unavailable: 'This plan has no text fields available to insert',
-  download_asset_unavailable: 'This plan has no binary assets available to download',
+  download_asset_unavailable: 'This plan has no media assets available to download',
   download_local_file_required: 'Choose a local file for this download',
   EEXIST: 'That file already exists. Choose a new name; downloads never overwrite files',
   ENOENT: 'The chosen download folder does not exist',

@@ -15,7 +15,7 @@ const ROOT = candidates(
 );
 const PLANS = candidates(
   ['list', 'List plans'], ['show', 'Show plan details'], ['logs', 'Show plan activity'],
-  ['reveal', 'Copy selected fields'], ['download', 'Download a binary asset'],
+  ['reveal', 'Copy selected fields'], ['download', 'Download a media asset'],
   ['use', 'Run a command with secrets'], ['abort', 'Abandon current access'],
 );
 const SECRETS = candidates(['exec', 'Run a command with secrets'], ['resolve', 'Resolve one field']);

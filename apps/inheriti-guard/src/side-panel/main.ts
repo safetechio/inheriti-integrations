@@ -157,8 +157,8 @@ async function enableOverlayForCurrentSite(): Promise<void> {
   // message to the worker does not preserve that activation.
   const granted = await chrome.permissions.request({ origins: [`${enabledOrigin}/*`] });
   if (!granted) {
-    overlayStatus.textContent = 'Side panel only'; overlayStatus.className = 'status neutral';
-    overlayMessage.textContent = 'Site permission was not granted. All side-panel features remain available.';
+    overlayStatus.textContent = 'Disabled'; overlayStatus.className = 'status neutral';
+    overlayMessage.textContent = 'Site permission was not granted. Enable it to show autofill controls.';
     return;
   }
   await changeOverlayPermission('enable-overlay-current-origin');
@@ -193,13 +193,13 @@ function renderOverlayPermissions(state: { currentOrigin?: string; currentEnable
   currentOverlayOrigin = state.currentOrigin;
   const supported = state.currentOrigin !== undefined;
   if (state.currentOrigin !== undefined && origin.textContent?.startsWith('Checking')) origin.textContent = state.currentOrigin;
-  overlayStatus.textContent = state.currentEnabled ? 'Enabled' : 'Side panel only';
+  overlayStatus.textContent = state.currentEnabled ? 'Enabled' : 'Disabled';
   overlayStatus.className = `status ${state.currentEnabled ? 'success' : 'neutral'}`;
   overlayMessage.textContent = !supported
-    ? 'Field controls are available only on secure HTTPS sites. Continue with the side panel.'
+    ? 'Autofill controls require a secure HTTPS site.'
     : state.currentEnabled
       ? 'Inheriti controls are enabled beside compatible fields on this origin.'
-      : 'Enable exact-origin access to add field controls. The side panel remains fully functional.';
+      : 'Enable site access to show autofill controls beside compatible fields.';
   enableOverlay.hidden = !supported || state.currentEnabled;
   disableOverlay.hidden = !state.currentEnabled;
   authorizedSites.hidden = state.enabledOrigins.length === 0;
@@ -335,7 +335,9 @@ async function selectPageFirstCandidate(candidate: PageFirstFieldCandidate): Pro
 function renderPanel(state: PanelState): void {
   const organizations = state.organizations;
   const keyOwner = organizations === undefined ? 'Application' : 'Organisation';
-  forgetKey.title = `Drop the ${keyOwner} key held in memory. The next reveal asks for it again.`;
+  forgetKey.textContent = state.keyInMemory ? `Remove ${keyOwner.toLowerCase()} key` : `${keyOwner} key locked`;
+  forgetKey.title = state.keyInMemory ? `You'll need to unlock the ${keyOwner.toLowerCase()} key again before the next reveal.` : '';
+  forgetKey.disabled = !state.keyInMemory;
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION';
   organizationChoice.hidden = organizations === undefined;
   planAccessPanel.dataset.organization = needsOrganization ? 'required' : 'selected';
@@ -386,11 +388,9 @@ function renderPanel(state: PanelState): void {
     if (row.planId !== undefined) {
       item.dataset.planId = row.planId;
       const actions = el('div', 'plan-actions');
-      const access = actionButton('Access', 'primary');
-      access.addEventListener('click', () => { void loadWorkspace(row.planId as string, row.label); });
       const assets = actionButton('View assets', 'secondary');
       assets.addEventListener('click', () => { void viewAssets(row.planId as string); });
-      actions.append(access, assets);
+      actions.append(assets);
       item.append(actions);
     }
     return item;
@@ -415,7 +415,7 @@ function renderPanel(state: PanelState): void {
   openOptions.hidden = !needsConfiguration;
   signIn.hidden = signedIn || needsConfiguration;
   planTools.hidden = !signedIn || needsOrganization;
-  forgetKey.hidden = !signedIn;
+  forgetKey.hidden = !signedIn || needsOrganization;
 }
 
 const guardEnabled = required<HTMLInputElement>('guard-enabled');
@@ -571,37 +571,6 @@ discardRevealButton.addEventListener('click', () => {
   if (planId !== undefined) void send({ type: 'abort-plan-access', planId }).then(() => refreshResumable());
 });
 
-async function loadWorkspace(planId: string, planName: string): Promise<void> {
-  await discardWorkspace();
-  workspace = { planId, planName, protectedFields: [], suggestions: [] };
-  accessPlan.textContent = planName;
-  accessStatus.textContent = 'Discovering compatible fields on this page…';
-  mappingWorkspace.replaceChildren();
-  revealProgress.replaceChildren();
-  revealProgress.hidden = true;
-  fieldResults.replaceChildren();
-  fieldResults.hidden = true;
-  confirmReveal.hidden = false;
-  confirmReveal.disabled = true;
-  cancelReveal.hidden = true;
-  abortAccess.hidden = true;
-  closeAccess.disabled = false;
-  if (!accessDialog.open) accessDialog.showModal();
-  const response = await send({ type: 'load-access-workspace', planId });
-  if (!response.ok || !('protectedFields' in response)) {
-    accessStatus.textContent = response.ok ? 'The access workspace could not be loaded.' : errorText(response.error);
-    return;
-  }
-  workspace = { planId, planName, protectedFields: response.protectedFields, suggestions: response.suggestions,
-    ...(response.batch === undefined ? {} : { batch: response.batch }) };
-  accessStatus.textContent = response.protectedFields.length === 0
-    ? 'This plan has no fields that Chrome can autofill.'
-    : response.batch === undefined
-      ? 'Review each suggestion. You can accept, replace, or remove mappings before revealing.'
-      : 'Mappings started on the page are ready here. Review them before revealing.';
-  renderMappings();
-}
-
 function renderMappings(): void {
   if (workspace === undefined) return;
   const mappings = workspace.batch?.mappings ?? [];
@@ -713,6 +682,7 @@ async function revealAndAutofill(batch: AccessBatch): Promise<void> {
     const filled = response.results.filter((result) => result.code === 'filled').length;
     accessStatus.textContent = `${filled} of ${response.results.length} fields autofilled. Chrome did not submit the form.`;
   } else accessStatus.textContent = response.ok ? 'Autofill did not return field results.' : errorText(response.error);
+  void requestState('load-plans');
   // A reveal that ended because this worker was evicted leaves a resumable one behind, not nothing.
   void refreshResumable();
 }
@@ -808,7 +778,7 @@ function errorText(error: string): string {
   return 'The access request could not be completed.';
 }
 function resultLabel(code: AccessFieldResult['code']): string {
-  return ({ filled: 'Autofilled', 'authorization-denied': 'Not allowed on this site', 'field-unavailable': 'Protected field unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
+  return ({ filled: 'Autofilled', 'authorization-denied': 'Not allowed on this site', 'field-unavailable': 'Input unavailable', 'invalid-value': 'Value not compatible', 'stale-page-context': 'Page changed', 'page-address-changed': 'Address changed', 'form-changed': 'Form replaced', 'tab-inactive': 'Tab changed', 'destination-failed': 'Could not autofill', canceled: 'Canceled', 'not-attempted': 'Not attempted' })[code];
 }
 function suggestionReason(reason: AccessFieldSuggestion['reason']): string {
   return ({ 'exact-origin': 'exact origin match', autocomplete: 'autocomplete match', 'input-type': 'input type match', 'accessible-label': 'accessible label match', name: 'field name match', id: 'field id match', 'inferred-semantic': 'inferred field type' })[reason];

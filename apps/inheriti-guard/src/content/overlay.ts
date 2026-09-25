@@ -1,3 +1,4 @@
+import { custodianShareCopy } from '@safetech/inheriti-elements-core/browser';
 type Semantic = 'username' | 'email' | 'password';
 interface FieldMetadata { targetId: string; origin: string; navigationId: string; semantic: Semantic; label: string }
 interface ProtectedField { assetName: string; fieldName: Semantic; matchesOrigin: boolean; planId: string; selector: string }
@@ -9,43 +10,44 @@ interface FieldResult { selector: string; targetId: string; code: string }
 interface Batch { identity: { planId: string }; mappings: readonly Mapping[] }
 
 const STYLES = `
+@font-face{font-family:AppFont;src:url(${chrome.runtime.getURL('side-panel/font-app.ttf')}) format('truetype');font-display:swap}
 :host{all:initial}
-@keyframes inheritiGlow{0%,100%{box-shadow:0 2px 8px #10182833,0 0 0 0 #0066ff55}50%{box-shadow:0 2px 8px #10182833,0 0 0 4px #0066ff22,0 0 15px #0066ff66}}
+@keyframes inheritiGlow{0%,100%{box-shadow:0 2px 8px #10182833,0 0 0 0 #2962ff55}50%{box-shadow:0 2px 8px #10182833,0 0 0 4px #2962ff22,0 0 15px #2962ff66}}
 @keyframes inheritiShimmer{0%{background-position:-160px 0}100%{background-position:160px 0}}
-.button{position:absolute;right:0;top:-12px;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:7px;background:#0066ff;color:#fff;cursor:pointer;box-shadow:0 2px 8px #10182833;animation:inheritiGlow 2.4s ease-in-out infinite}
-.button:hover{box-shadow:0 2px 8px #10182833,0 0 16px #0066ff99}
+.button{position:absolute;right:0;top:-12px;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:7px;background:#2962ff;color:#fff;cursor:pointer;box-shadow:0 2px 8px #10182833;animation:inheritiGlow 2.4s ease-in-out infinite}
+.button:hover{box-shadow:0 2px 8px #10182833,0 0 16px #2962ff99}
 .button svg{width:14px;height:17px;fill:currentColor}
 .button:focus-visible{outline:3px solid #75a9ff}
 @media(prefers-reduced-motion:reduce){.button{animation:none}}
-.popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:7px;width:292px;max-width:min(292px,calc(100vw - 24px));padding:10px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#101828;font:12px/1.4 system-ui;box-shadow:0 12px 32px #10182833;overflow:hidden}
+.popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:7px;width:292px;max-width:min(292px,calc(100vw - 24px));padding:10px;border:1px solid #d0d5dd;border-radius:12px;background:#fff;color:#101828;font:12px/1.4 AppFont,system-ui;box-shadow:0 12px 32px #10182833;overflow:hidden}
 .popover.shown{opacity:1;transform:none}
-.popover.device-choice{box-sizing:border-box;width:360px;max-width:calc(100vw - 24px);gap:0;padding:18px;border-color:#d0d5dd;border-radius:16px;box-shadow:0 20px 48px #1018283d}
-.device-logo{display:block;width:142px;max-width:100%;height:auto;margin:0 0 16px}
-.device-eyebrow{margin:0 0 4px;color:#0066ff;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.device-title{margin:0;color:#101828;font-size:20px;font-weight:800;line-height:1.2;letter-spacing:-.03em}
-.device-intro{margin:8px 0 16px;color:#667085;font-size:14px;line-height:1.5}
-.device-options{display:grid;gap:10px}
-.device-option{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#101828;text-align:left;font:inherit;cursor:pointer}
-.device-option:hover{border-color:#0066ff;background:#f0f6ff}
+.popover.device-choice{box-sizing:border-box;width:292px;gap:0;padding:12px;overflow-y:auto}
+.device-logo{display:block;width:110px;max-width:100%;height:auto;margin:0 0 8px}
+.device-eyebrow{margin:0 0 4px;color:#2962ff;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.device-title{margin:0;color:#101828;font-size:14px;font-weight:800;line-height:1.3}
+.device-intro{margin:6px 0 10px;color:#667085;font-size:12px;line-height:1.4}
+.device-options{display:grid;gap:6px}
+.device-option{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#101828;text-align:left;font:inherit;cursor:pointer}
+.device-option:hover{border-color:#2962ff;background:#f0f6ff}
 .device-option:focus-visible,.device-cancel:focus-visible{outline:3px solid #75a9ff;outline-offset:2px}
-.device-option img{width:50px;height:50px;flex:none;object-fit:contain}
+.device-option img{width:36px;height:36px;flex:none;object-fit:contain}
 .device-option strong,.device-option small{display:block}
-.device-option strong{font-size:14px}
-.device-option small{margin-top:3px;color:#667085;font-size:12px;line-height:1.4}
-.device-cancel{align-self:flex-start;margin:14px 0 0;padding:6px 0;border:0;background:transparent;color:#475467;font:inherit;font-weight:700;cursor:pointer}
+.device-option strong{font-size:12px}
+.device-option small{margin-top:2px;color:#667085;font-size:11px;line-height:1.35}
+.device-cancel{align-self:flex-start;margin:10px 0 0;padding:8px 4px;border:0;background:transparent;color:#475467;font:inherit;font-weight:700;cursor:pointer}
 @media(prefers-reduced-motion:reduce){.popover{transition:none}}
 .title{flex:none;margin:0;font-weight:800;letter-spacing:.01em}
 .filter{flex:none;box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:#101828;font:inherit}
-.filter:focus-visible{outline:2px solid #0066ff;border-color:#0066ff}
+.filter:focus-visible{outline:2px solid #2962ff;border-color:#2962ff}
 .list{display:flex;flex:1 1 auto;flex-direction:column;gap:4px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
 .item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:1px solid #eaecf0;border-radius:8px;background:#f9fafb;color:#101828;text-align:left;font:inherit;cursor:pointer}
 .item:hover{border-color:#b6c6dd;background:#f4f7fb}
-.item.selected{border-color:#0066ff;background:#eef4ff}
+.item.selected{border-color:#2962ff;background:#eef4ff}
 .item.pending{opacity:.72}
 .item-body{display:flex;min-width:0;flex:1;flex-direction:column}
 .item-body strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-body span{margin-top:2px;color:#667085;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tick{flex:none;width:12px;color:#0066ff;font-weight:800;text-align:center}
+.tick{flex:none;width:12px;color:#2962ff;font-weight:800;text-align:center}
 .item.skeleton{cursor:default;pointer-events:none}
 .bone{display:block;height:9px;border-radius:5px;background:linear-gradient(90deg,#eaecf0 0,#f4f6f9 40%,#eaecf0 80%);background-size:160px 100%;animation:inheritiShimmer 1.1s linear infinite;width:52%}
 .bone.wide{width:78%;height:11px;margin-bottom:5px}
@@ -59,15 +61,15 @@ const STYLES = `
 .actions .primary{flex:1 1 100%}
 .status{margin:0;color:#667085;font-size:10px}
 .action{flex:none;padding:7px 10px;border-radius:8px;font:inherit;font-weight:700;cursor:pointer}
-.action.primary{border:0;background:#0066ff;color:#fff;box-shadow:0 1px 2px #10182814}
+.action.primary{border:0;background:#2962ff;color:#fff;box-shadow:0 1px 2px #10182814}
 .action.primary:hover{background:#0059e0}
 .action.ghost{border:1px solid #eaecf0;background:#fff;color:#475467;font-weight:600}
 .action.ghost:hover{border-color:#d0d5dd;background:#f9fafb}
 .action:focus-visible{outline:2px solid #75a9ff;outline-offset:1px}
-.tip{position:absolute;right:0;bottom:36px;width:max-content;max-width:220px;padding:5px 8px;border-radius:7px;background:#101828;color:#fff;font:11px/1.35 system-ui;white-space:nowrap;opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
+.tip{position:absolute;right:0;bottom:36px;width:max-content;max-width:220px;padding:5px 8px;border-radius:7px;background:#101828;color:#fff;font:11px/1.35 AppFont,system-ui;white-space:nowrap;opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
 .button:hover+.tip,.button:focus-visible+.tip{opacity:1;transform:translateY(0)}
 @media(prefers-reduced-motion:reduce){.tip{transition:none}}
-.reveal-head{flex:none;display:flex;align-items:center;gap:7px;color:#0066ff;font-size:12px}
+.reveal-head{flex:none;display:flex;align-items:center;gap:7px;color:#2962ff;font-size:12px}
 .reveal-head.success{color:#079455}
 .reveal-head.failed{color:#d92d20}
 .reveal-head.warning{color:#101828;font-size:20px;line-height:1.2}
@@ -91,7 +93,7 @@ const STYLES = `
 `;
 
 const ROOT_ATTRIBUTE = 'data-inheriti-elements-overlay';
-const INSTANCE_KEY = '__inheritiElementsOverlayV1__';
+const INSTANCE_KEY = '__inheritiOverlayV1__';
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const controls = new Map<HTMLInputElement, HTMLElement>();
 let observer: MutationObserver | undefined;
@@ -417,7 +419,9 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
   spinner.textContent = succeeded ? '✓' : warning ? '!' : '✕';
   const failure = finalState?.ok === true && finalState.reveal?.kind === 'ERROR' ? finalState.reveal.message : undefined;
   title.textContent = succeeded ? 'Reveal complete' : interrupted ? 'Access interrupted' : warning ? 'Access still open'
-    : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
+    : results.some((one) => one.code === 'page-address-changed' || one.code === 'form-changed'
+      || one.code === 'tab-inactive' || one.code === 'field-unavailable')
+      ? 'Autofill stopped' : failure?.includes('Access was denied') ? 'Access denied' : 'Reveal did not finish';
   dots.textContent = '';
   phaseText.textContent = succeeded ? 'Every field was written to the page' : warning
     ? finalState?.reveal?.message ?? 'This plan has an open access request.'
@@ -534,8 +538,12 @@ function resultLabel(code: string): string {
   if (code === 'filled') return 'Filled';
   if (code === 'canceled') return 'Canceled';
   if (code === 'stale-page-context') return 'Page changed';
+  if (code === 'page-address-changed') return 'Address changed';
+  if (code === 'form-changed') return 'Form replaced';
+  if (code === 'tab-inactive') return 'Tab changed';
   if (code === 'authorization-denied') return 'Not allowed on this site';
-  if (code === 'field-unavailable') return 'Unavailable';
+  if (code === 'field-unavailable') return 'Input unavailable';
+  if (code === 'not-attempted') return 'Not attempted';
   return 'Not filled';
 }
 
@@ -576,9 +584,9 @@ function positionControl(input: HTMLInputElement, host: HTMLElement): void {
 
 function register(input: HTMLInputElement): FieldMetadata {
   type Registry = { navigationId: string; href: string; targets: Map<string, HTMLInputElement> };
-  const page = globalThis as typeof globalThis & { __inheritiElementsPageTargetsV1__?: Registry };
-  let registry = page.__inheritiElementsPageTargetsV1__;
-  if (registry === undefined || registry.href !== location.href) registry = page.__inheritiElementsPageTargetsV1__ = {
+  const page = globalThis as typeof globalThis & { __inheritiPageTargetsV1__?: Registry };
+  let registry = page.__inheritiPageTargetsV1__;
+  if (registry === undefined || registry.href !== location.href) registry = page.__inheritiPageTargetsV1__ = {
     navigationId: crypto.randomUUID(), href: location.href, targets: new Map(),
   };
   let targetId = [...registry.targets].find(([, value]) => value === input)?.[0];
@@ -673,12 +681,12 @@ function onOverlayMessage(message: unknown, _sender: chrome.runtime.MessageSende
     };
     cancelCustodianChoice = () => answer();
     const logo = document.createElement('img');
-    logo.className = 'device-logo'; logo.alt = 'Inheriti Business';
+    logo.className = 'device-logo'; logo.alt = 'Inheriti® Business';
     logo.src = chrome.runtime.getURL('side-panel/assets/inheriti-business-logo.png');
     const options = element('div', 'device-options');
     for (const [choice, title, detail, image] of [
-      ['SK_PRO', 'SafeKey PRO', 'Use your connected hardware device.', 'safekey-pro.png'],
-      ['SK_MOBILE', 'SafeKey Mobile', 'Approve the share claim in your mobile app.', 'safekey-mobile.png'],
+      ['SK_PRO', custodianShareCopy.choice.proOption, custodianShareCopy.choice.proDescription, 'safekey-pro.png'],
+      ['SK_MOBILE', custodianShareCopy.choice.mobileOption, custodianShareCopy.choice.mobileDescription, 'safekey-mobile.png'],
     ] as const) {
       const button = element('button', 'device-option'); button.type = 'button';
       const picture = document.createElement('img'); picture.alt = '';
@@ -692,8 +700,8 @@ function onOverlayMessage(message: unknown, _sender: chrome.runtime.MessageSende
     cancel.type = 'button'; cancel.addEventListener('click', () => answer());
     popover.classList.add('device-choice');
     popover.replaceChildren(logo, element('p', 'device-eyebrow', 'InheritiGuard · Plan access'),
-      element('h2', 'device-title', 'Choose a custodian device'),
-      element('p', 'device-intro', 'This is your first time opening this plan. Choose a custodian device to save your share. Next time, InheritiGuard will read the share from that device.'), options, cancel);
+      element('h2', 'device-title', custodianShareCopy.choice.title),
+      element('p', 'device-intro', custodianShareCopy.choice.intro), options, cancel);
     reposition();
     return true;
   }

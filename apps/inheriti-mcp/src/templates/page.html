@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{title}} · Inheriti® Business</title>
+    {{refresh}}
+    <style>
+      @font-face {
+        font-family: AppFont;
+        src: url({{font}}) format("truetype");
+        font-display: swap;
+      }
+      :root {
+        font-family: AppFont, ui-sans-serif, system-ui, sans-serif;
+        color: #101828;
+        background: #f9fafb;
+        font-synthesis: none;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      main {
+        width: min(100%, 640px);
+        background: #fff;
+        border: 1px solid #eaecf0;
+        border-radius: 16px;
+        box-shadow: 0 16px 48px #0a1c4d12;
+        overflow: hidden;
+      }
+      header {
+        padding: 24px 32px;
+        border-bottom: 1px solid #eaecf0;
+      }
+      header img {
+        display: block;
+        width: 180px;
+        height: auto;
+      }
+      .content {
+        padding: 32px;
+      }
+      .eyebrow {
+        color: #1642ba;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      h1 {
+        font-size: 26px;
+        line-height: 1.25;
+        margin: 10px 0 8px;
+      }
+      p {
+        line-height: 1.5;
+        color: #475467;
+        margin: 0 0 20px;
+      }
+      .details {
+        background: #fafcff;
+        border: 1px solid #e3f2fd;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 24px 0;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 110px minmax(0, 1fr);
+        gap: 8px 12px;
+        margin: 0;
+        font-size: 13px;
+      }
+      dt {
+        color: #475467;
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+        font-weight: 600;
+      }
+      .choices {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 3px solid #75a9ff;
+        outline-offset: 2px;
+      }
+      .choice {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 16px;
+        text-align: left;
+        background: #fff;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        color: #101828;
+      }
+      .choice:hover {
+        border-color: #2962ff;
+        background: #fafcff;
+      }
+      .choice img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        flex: none;
+      }
+      .choice strong,
+      .choice small {
+        display: block;
+      }
+      .choice small {
+        color: #475467;
+        font-size: 12px;
+        line-height: 1.4;
+        margin-top: 4px;
+      }
+      label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
+      input {
+        width: 100%;
+        height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #d0d5dd;
+        border-radius: 8px;
+        font: inherit;
+      }
+      .primary {
+        background: #2962ff;
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 20px;
+        font-weight: 600;
+        margin-top: 20px;
+      }
+      .primary:hover {
+        background: #1642ba;
+      }
+      .status {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        background: #fafcff;
+        border: 1px solid #e3f2fd;
+        border-radius: 8px;
+        padding: 16px;
+        color: #101828;
+      }
+      .status small {
+        display: block;
+        color: #475467;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        flex: none;
+        border-radius: 50%;
+        background: #2962ff;
+        box-shadow: 0 0 0 5px #e3f2fd;
+        margin-top: 4px;
+      }
+      .device-panel {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        background: #fafcff;
+        border: 1px solid #e3f2fd;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 20px 0;
+        color: #475467;
+        font-size: 14px;
+      }
+      .device-panel img {
+        width: 92px;
+        height: 92px;
+        object-fit: contain;
+        flex: none;
+      }
+      .device-panel .status {
+        flex: 1;
+        background: #fff;
+      }
+      .secret {
+        margin: 20px 0;
+        padding: 20px;
+        background: #fafcff;
+        border: 1px solid #e3f2fd;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: 16px/1.5 ui-monospace, SFMono-Regular, monospace;
+        color: #101828;
+      }
+      .file-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 20px;
+        border: 1px solid #e3f2fd;
+        border-radius: 8px;
+        background: #fafcff;
+        margin: 20px 0;
+      }
+      .file-icon {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 56px;
+        flex: none;
+        background: #e3f2fd;
+        color: #1642ba;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .file-card strong,
+      .file-card small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .file-card small {
+        color: #475467;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      footer {
+        padding: 16px 32px;
+        border-top: 1px solid #eaecf0;
+        color: #475467;
+        font-size: 12px;
+      }
+      @media (max-width: 520px) {
+        body {
+          padding: 12px;
+        }
+        header,
+        .content {
+          padding: 20px;
+        }
+        footer {
+          padding: 16px 20px;
+        }
+        dl {
+          grid-template-columns: 1fr;
+        }
+        dd {
+          margin-bottom: 6px;
+        }
+        .device-panel {
+          gap: 8px;
+        }
+        .device-panel img {
+          width: 64px;
+          height: 64px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header><img src="{{logo}}" alt="Inheriti® Business" /></header>
+      <div class="content">
+        <span class="eyebrow">{{eyebrow}}</span>
+        <h1>{{title}}</h1>
+        {{content}}
+      </div>
+      <footer>{{footer}}</footer>
+    </main>
+  </body>
+</html>

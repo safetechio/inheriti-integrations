@@ -1,5 +1,5 @@
 import { open, unlink } from 'node:fs/promises';
-import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
+import { custodianShareCopy, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
 import type { CliContext } from '../session.js';
 import { cliCustodianOptions } from '../session.js';
 import type { Terminal } from '../output.js';
@@ -32,10 +32,12 @@ export async function downloadPlanAsset(
       onProgress: (progress) => {
         if (progress.phase === 'CONNECTING_SAFEKEY_PRO') selectedPro = true;
         if (progress.phase === 'STOPPED_BY_DMS') { stoppedByDms = true; return; }
+        if (selectedPro && (progress.phase === 'CONNECTING_SAFEKEY_PRO'
+          || progress.phase === 'WAITING_FOR_CUSTODIAN_CLAIM' || progress.phase === 'WAITING_FOR_CUSTODIAN')) return;
         const line = selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN_CLAIM'
-          ? 'Store the custodian share on your connected SafeKey PRO to continue.'
+          ? custodianShareCopy.firstAccess.proStore
           : selectedPro && progress.phase === 'WAITING_FOR_CUSTODIAN'
-            ? 'Read the custodian share from your connected SafeKey PRO to continue.'
+            ? custodianShareCopy.laterAccess.proRead
             : revealProgressMessage(progress, { keyOwner: context.keyOwner ?? 'Application',
               moderators: moderators.map(participant => participant.displayName), moderatorNamesById });
         if (progress.phase === 'DENIED') deniedMessage = line;

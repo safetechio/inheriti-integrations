@@ -1,4 +1,5 @@
-import { createMasterKeyResolver, createNodeQuickPlanCreator, HttpElementsApiPort, HttpQuickPlanPort, DataAssetDefinitionService } from '@safetech/inheriti-client-sdk/node';
+import { createMasterKeyResolver, createNodeQuickPlanCreator, HttpElementsApiPort, HttpQuickPlanPort } from '@safetech/inheriti-client-sdk/node';
+import { DataAssetDefinitionService } from '@safetech/inheriti-core-sdk/node';
 import type { QuickPlanCreateContext, QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
 export const quickPlanAssetCatalog = (new DataAssetDefinitionService().getCoreDefinitions() as { id: string; category: string; fields: string[] }[])

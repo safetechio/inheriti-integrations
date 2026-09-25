@@ -58,8 +58,11 @@ describe('browser integration core composition', () => {
   it('performs a real scoped reveal: start, wait, release, reconstruct, field access, close', async () => {
     const api = await FakeElementsApi.create({ applicationId: APPLICATION_ID, masterKeyHex: MASTER_KEY });
     const stages: string[] = [];
+    const core = browserCore(api, resolverFor(MASTER_KEY));
+    const ref = { system: 'INHERITI_ELEMENTS' as const, contextId: APPLICATION_ID };
+    expect(await core.hasMasterKey(ref)).toBe(false);
 
-    const value = await browserCore(api, resolverFor(MASTER_KEY)).withReveal(
+    const value = await core.withReveal(
       'plan-1',
       { mode: 'DIRECT', onSession: (session) => { stages.push(session.stage); } },
       async (reveal) => {
@@ -69,6 +72,9 @@ describe('browser integration core composition', () => {
     );
 
     expect(value).toBe('alice');
+    expect(await core.hasMasterKey(ref)).toBe(true);
+    await core.forgetMasterKey();
+    expect(await core.hasMasterKey(ref)).toBe(false);
     expect(stages).toEqual(['AUTHORIZED']);
     expect(api.reconstructionReported).toBe('SUCCEEDED');
     expect(api.calls).toContainEqual({ method: 'POST', path: 'v1/reveals/reveal-1/custodian-share/distribute' });

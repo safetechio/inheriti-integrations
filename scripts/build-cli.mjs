@@ -47,6 +47,8 @@ await build({
   },
 });
 await chmod(entry, 0o755);
+await cp(resolve(root, 'src/assets'), resolve(output, 'assets'), { recursive: true });
+await cp(resolve(root, 'src/templates'), resolve(output, 'templates'), { recursive: true });
 
 // Core resolves its SSDP worker as `new URL('./workers/…', import.meta.url)`, which now points at the
 // bundle's own directory — so the worker has to sit beside it.

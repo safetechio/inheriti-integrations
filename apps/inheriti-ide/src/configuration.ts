@@ -29,7 +29,7 @@ export const IS_DEVELOPMENT_BUILD = typeof __INHERITI_PRODUCTION_BUILD__ !== 'bo
 export const BUILD_DEPLOYMENT = typeof __INHERITI_DEPLOYMENT__ === 'string'
   ? businessDeployment(__INHERITI_DEPLOYMENT__) : undefined;
 
-export const REDIRECT_URI = 'vscode://safetech.inheriti-integrations/oauth/callback';
+export const REDIRECT_URI = 'vscode://safetech.inheriti-ide/oauth/callback';
 const SCOPES = ['openid', 'plan:list', 'plan:read', 'plan:reveal', 'asset:insert'] as const;
 
 export type SettingsReader = (key: string) => string | undefined;
@@ -42,8 +42,9 @@ export function resolveConfiguration(read: SettingsReader): ExtensionConfigurati
       clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       redirectUri: REDIRECT_URI,
       scopes: ['openid'],
+      safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
       ...(read('safeKeyProDevice')?.trim() ? {
-        safeKeyProDevice: read('safeKeyProDevice')!.trim(), safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
+        safeKeyProDevice: read('safeKeyProDevice')!.trim(),
       } : {}),
     };
   }
@@ -71,9 +72,8 @@ export function resolveConfiguration(read: SettingsReader): ExtensionConfigurati
     redirectUri: REDIRECT_URI,
     scopes: read('applicationId')?.trim() ? SCOPES : ['openid'],
     ...(read('masterKeySalt')?.trim() ? { masterKeySalt: read('masterKeySalt')!.trim() } : {}),
-    ...(deployment && read('safeKeyProDevice')?.trim() ? {
-      safeKeyProDevice: read('safeKeyProDevice')!.trim(), safeKeyProRpId: businessUiRpId(deployment),
-    } : {}),
+    ...(deployment ? { safeKeyProRpId: businessUiRpId(deployment) } : {}),
+    ...(read('safeKeyProDevice')?.trim() ? { safeKeyProDevice: read('safeKeyProDevice')!.trim() } : {}),
   };
 }
 

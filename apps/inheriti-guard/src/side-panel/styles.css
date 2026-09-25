@@ -9,7 +9,7 @@
   background: #f8fbff;
   font: 14px/1.55 AppFont, ui-sans-serif, system-ui, sans-serif;
   color-scheme: light;
-  --primary: #0066ff;
+  --primary: #2962ff;
   --primary-dark: #1642ba;
   --primary-soft: #e3f2fd;
   --primary-wash: #f8fbff;
@@ -148,7 +148,9 @@ h2 { margin: 0; font-size: 15px; line-height: 21px; font-weight: 700; letter-spa
 .plan-access[data-authenticated="false"] > :not(.signed-out-view):not(dialog) { display: none; }
 .plan-access[data-authenticated="true"] > .signed-out-view { display: none; }
 .plan-access[data-organization="required"] > :not(.account-area):not(dialog) { display: none; }
-.account-area { min-width: 0; display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.account-area { min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.account-area #forget-master-key { order: 3; width: 100%; text-align: left; }
+.account-area #forget-master-key:disabled { color: var(--muted); background: transparent; cursor: default; }
 .organization-choice { min-width: 0; flex: 1; }
 .organization-choice details { position: relative; min-width: 0; }
 .organization-choice summary { overflow: hidden; padding: 6px 22px 6px 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--ink); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; list-style: none; }

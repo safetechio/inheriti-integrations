@@ -73,7 +73,7 @@ describe('Chrome MV3 manifest', () => {
     expect(manifest.content_security_policy?.extension_pages).toBe("script-src 'self' 'wasm-unsafe-eval'; object-src 'none'");
     expect(manifest.web_accessible_resources?.[1]).toEqual({
       resources: ['side-panel/assets/inheriti-business-logo.png', 'side-panel/assets/safekey-pro.png',
-        'side-panel/assets/safekey-mobile.png'],
+        'side-panel/assets/safekey-mobile.png', 'side-panel/font-app.ttf'],
       matches: ['https://*/*'],
     });
     const worker = await readFile(new URL('../src/background/service-worker.ts', import.meta.url), 'utf8');

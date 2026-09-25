@@ -1,6 +1,6 @@
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
 
-const SESSION_KEY = 'inheritiElements.operatorSession';
+const SESSION_KEY = 'inheriti.operatorSession';
 
 /**
  * `chrome.storage.session` and nothing else.

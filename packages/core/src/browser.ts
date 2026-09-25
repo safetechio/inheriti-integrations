@@ -66,7 +66,9 @@ export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOpti
     auth,
     elements: new SdkPlanFacade(elements),
     scopedReveals: elements,
-    masterKeys: elements,
+    masterKeys: { forgetMasterKey: (ref) => elements.forgetMasterKey(ref),
+      hasMasterKey: async (ref) => (await elements.keyVault.load(ref)) !== undefined,
+      cancelMasterKeyRelaySession: (sessionId) => elements.cancelMasterKeyRelaySession(sessionId) },
     ...(options.business ? { organizations: { listOrganizations: () => new HttpElementsApiPort(options.apiUrl,
       options.environment, bearer, bearerTransport,
       options.organizationId !== undefined ? { organizationId: options.organizationId } : {}).listBusinessOrganizations() } } : {}),
@@ -79,6 +81,6 @@ export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/browser
 
 // Browser hosts read the same reveal progress shape as Node hosts; re-exported here so a bundled
 // service worker never has to reach past its own entry to name a DMS gate.
-export { hasRevealEnded, hasRevealFailed, revealGateCountdown, revealGateDeadline, revealModeOf, revealProgressMessage, stoppedByDeadManSwitch } from './index.js';
+export { custodianShareCopy, hasRevealEnded, hasRevealFailed, revealGateCountdown, revealGateDeadline, revealModeOf, revealProgressMessage, stoppedByDeadManSwitch } from './index.js';
 export type { ListPlanLogsInput, PlanGovernanceView, PlanLog, PlanLogPage, RevealPhase, RevealProgress, ScopedRevealHandle, ScopedRevealOptions, ScopedRevealProgress } from './index.js';
 export { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';

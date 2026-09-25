@@ -82,7 +82,7 @@ it('reports an interrupted reveal without leaking the underlying error or openin
   const { jobId } = await tools.reveal('plan-1', 'account.password');
   await vi.waitFor(async () => expect((await tools.revealStatus(jobId)).status).toBe('FAILED'));
   const status = await tools.revealStatus(jobId);
-  expect(status).toMatchObject({ code: 'reveal_restart_required', message: expect.stringContaining('Inheriti Business') });
+  expect(status).toMatchObject({ code: 'reveal_restart_required', message: expect.stringContaining('Inheriti® Business') });
   expect(JSON.stringify(status)).not.toContain('secret diagnostic');
   expect(withReveal).toHaveBeenCalledTimes(1);
 });

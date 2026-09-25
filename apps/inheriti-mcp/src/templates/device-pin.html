@@ -1,0 +1,18 @@
+<p>{{message}}</p>
+<div class="device-panel">
+  <img src="{{pro}}" alt="SafeKey PRO device" /><span
+    >Keep your device connected during this request.</span
+  >
+</div>
+<form method="post">
+  <label for="pin">Device PIN</label
+  ><input
+    id="pin"
+    type="password"
+    name="pin"
+    autocomplete="off"
+    required
+    maxlength="128"
+    autofocus
+  /><button class="primary" type="submit">{{action}}</button>
+</form>

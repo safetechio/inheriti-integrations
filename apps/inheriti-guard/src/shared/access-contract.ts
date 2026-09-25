@@ -113,6 +113,9 @@ export type AccessFieldResultCode =
   | 'field-unavailable'
   | 'invalid-value'
   | 'stale-page-context'
+  | 'page-address-changed'
+  | 'form-changed'
+  | 'tab-inactive'
   | 'destination-failed'
   | 'canceled'
   | 'not-attempted';

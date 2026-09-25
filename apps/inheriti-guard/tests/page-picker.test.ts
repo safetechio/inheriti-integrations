@@ -24,17 +24,17 @@ afterEach(() => {
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
   globalThis.HTMLInputElement = originalInput;
-  delete (globalThis as Record<string, unknown>).__inheritiElementsPagePickerV1__;
-  delete (globalThis as Record<string, unknown>).__inheritiElementsPageTargetsV1__;
+  delete (globalThis as Record<string, unknown>).__inheritiPagePickerV1__;
+  delete (globalThis as Record<string, unknown>).__inheritiPageTargetsV1__;
 });
 
 describe('page picker cancellation', () => {
   it('delegates cancellation to the document-scoped picker and clears through its cleanup', () => {
     let canceled = false;
-    Object.assign(globalThis, { __inheritiElementsPagePickerV1__: { cancel: () => { canceled = true; } } });
+    Object.assign(globalThis, { __inheritiPagePickerV1__: { cancel: () => { canceled = true; } } });
     expect(cancelPageFieldPicker()).toBe(true);
     expect(canceled).toBe(true);
-    delete (globalThis as Record<string, unknown>).__inheritiElementsPagePickerV1__;
+    delete (globalThis as Record<string, unknown>).__inheritiPagePickerV1__;
     expect(cancelPageFieldPicker()).toBe(false);
   });
 

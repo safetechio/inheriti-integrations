@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import type { DeviceTransaction } from '@safetech/inheriti-elements-core';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
@@ -93,39 +94,16 @@ function waitForCallback(authorizationUrl: string, terminal: Terminal): Promise<
  */
 function callbackPage(failure: string | null): string {
   const signedIn = failure === null;
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Inheriti</title>
-<style>
-  :root {
-    color-scheme: light dark;
-    --primary: #0066FF; --ground: #F9FAFB; --card: #FFFFFF; --ink: #101828;
-    --muted: #535862; --line: #EAECF0; --danger: #DC3545;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --primary: #75A9FF; --ground: #0C111D; --card: #1D2939; --ink: #F9FAFB; --muted: #A3B3BF; --line: #22303F; }
-  }
-  body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--ground);
-    color: var(--ink); font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  .card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    padding: 36px 40px; text-align: center; max-width: 34rem;
-    box-shadow: 0 1px 3px rgba(16, 24, 40, .10);
-  }
-  .wordmark { font-size: 11px; letter-spacing: .22em; font-weight: 600; color: var(--primary); }
-  h1 { margin: 12px 0 6px; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
-  h1.failed { color: var(--danger); }
-  p { margin: 0; color: var(--muted); }
-</style></head>
-<body><div class="card">
-  <div class="wordmark">INHERITI</div>
-  <h1${signedIn ? '' : ' class="failed"'}>${signedIn ? 'Signed in' : 'Sign-in failed'}</h1>
-  <p>${signedIn ? 'You can close this tab and go back to your terminal.' : escapeHtml(failure)}</p>
-</div></body></html>`;
+  const resources = new URL(import.meta.url.endsWith('/main.js') ? './' : '../', import.meta.url);
+  const font = readFileSync(new URL('assets/font-app.ttf', resources)).toString('base64');
+  const logo = readFileSync(new URL('assets/inheriti-business-logo.png', resources)).toString('base64');
+  return readFileSync(new URL('templates/login-callback.html', resources), 'utf8')
+    .replace('{{font}}', font)
+    .replace('{{logo}}', logo)
+    .replaceAll('{{heading}}', signedIn ? 'Signed in' : 'Sign-in failed')
+    .replace('{{statusLabel}}', signedIn ? 'Sign-in complete' : 'Sign-in error')
+    .replace('{{statusClass}}', signedIn ? '' : 'failed')
+    .replace('{{message}}', signedIn ? 'You can close this tab and go back to your terminal.' : escapeHtml(failure));
 }
 
 function escapeHtml(value: string): string {

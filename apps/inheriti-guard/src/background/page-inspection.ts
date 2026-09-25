@@ -53,7 +53,7 @@ export function discoverPageFields(): DiscoveredPageSnapshot {
     href: string;
     targets: Map<string, HTMLInputElement>;
   };
-  const registryKey = '__inheritiElementsPageTargetsV1__';
+  const registryKey = '__inheritiPageTargetsV1__';
   const page = globalThis as typeof globalThis & { [registryKey]?: Registry };
   let registry = page[registryKey];
   if (registry === undefined || registry.href !== window.location.href) {

@@ -49,7 +49,7 @@ describe('extension configuration', () => {
     const configuration = resolveConfiguration((key) => settings[key]);
     expect(configuration.environment).toBe('TEST');
     expect(configuration.applicationId).toBe('application-1');
-    expect(configuration.redirectUri).toBe('vscode://safetech.inheriti-integrations/oauth/callback');
+    expect(configuration.redirectUri).toBe('vscode://safetech.inheriti-ide/oauth/callback');
     expect(configuration.scopes).toEqual(['openid', 'plan:list', 'plan:read', 'plan:reveal', 'asset:insert']);
   });
 

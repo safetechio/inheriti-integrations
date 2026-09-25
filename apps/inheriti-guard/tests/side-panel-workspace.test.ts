@@ -5,13 +5,20 @@ const main = readFileSync(new URL('../src/side-panel/main.ts', import.meta.url),
 const html = readFileSync(new URL('../src/side-panel/index.html', import.meta.url), 'utf8');
 
 describe('side-panel access workspace', () => {
-  it('keeps metadata viewing and access separate', () => {
-    expect(main).toContain("actionButton('Access'");
+  it('keeps plan rows for metadata viewing without an Access button', () => {
+    expect(main).not.toContain("actionButton('Access'");
     expect(main).toContain("actionButton('View assets'");
-    expect(main).toContain("type: 'load-access-workspace'");
     expect(main).toContain("type: 'load-plan-assets'");
-    expect(main).toContain('response.suggestions');
+    expect(main).toContain("type: 'start-page-first-picker'");
     expect(html).toContain('Only plans with username, email, or password fields available for autofill.');
+  });
+
+  it('keeps key removal beside the organization with a clear locked state', () => {
+    expect(html.indexOf('id="forget-master-key"')).toBeLessThan(html.indexOf('id="plans-panel"'));
+    expect(main).toContain('state.keyInMemory ? `Remove ${keyOwner.toLowerCase()} key`');
+    expect(main).toContain('`${keyOwner} key locked`');
+    expect(main).not.toContain('key not in memory');
+    expect(main).toContain('forgetKey.disabled = !state.keyInMemory');
   });
 
   it('uses the frozen mapping and batch messages', () => {
@@ -65,8 +72,8 @@ describe('side-panel access workspace', () => {
     for (const type of ['get-overlay-permissions', 'enable-overlay-current-origin', 'disable-overlay-origin', 'disable-all-overlays']) {
       expect(main).toContain(`'${type}'`);
     }
-    expect(main).toContain('All side-panel features remain available');
-    expect(main).toContain('The side panel remains fully functional');
+    expect(main).not.toContain('Side panel only');
+    expect(main).toContain('Enable site access to show autofill controls');
     expect(main).toContain('chrome.permissions.request');
     expect(main).toContain('`${enabledOrigin}/*`');
   });

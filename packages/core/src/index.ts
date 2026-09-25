@@ -151,6 +151,7 @@ export function stoppedByDeadManSwitch(session: ScopedRevealProgress | undefined
  */
 export interface MasterKeyFacade {
   forgetMasterKey(ref?: MasterKeyRef): Promise<void>;
+  hasMasterKey?(ref: MasterKeyRef): Promise<boolean>;
   cancelMasterKeyRelaySession?(sessionId: string): Promise<void>;
 }
 
@@ -218,6 +219,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   }
   /** Drops the held master key so the next reveal acquires it again. Nothing to do if none is held. */
   async forgetMasterKey(ref?: MasterKeyRef): Promise<void> { await this.masterKeys?.forgetMasterKey(ref); }
+  async hasMasterKey(ref: MasterKeyRef): Promise<boolean> { return await this.masterKeys?.hasMasterKey?.(ref) ?? false; }
   async cancelMasterKeyRelaySession(sessionId: string): Promise<void> {
     if (!this.masterKeys?.cancelMasterKeyRelaySession) throw new Error('master_key_relay_unavailable');
     await this.masterKeys.cancelMasterKeyRelaySession(sessionId);
@@ -272,6 +274,7 @@ function stableErrorCode(error: unknown): string {
 export { JwksOperatorTokenValidator, MemoryOAuthTransactionStore, MemoryOperatorSessionStore, OperatorTokenInvalid } from './operator-auth.js';
 export { PlanRequestFailed, SdkPlanFacade, asPlanRequestFailed, revealModeOf } from './plans.js';
 export { composeRevealWorkflows } from './workflows.js';
+export { custodianShareCopy } from './custodian-copy.js';
 export { hasRevealEnded, hasRevealFailed, moderatorDisplayName, revealGateCountdown, revealGateDeadline, revealProgressMessage } from './reveal-progress.js';
 export type { SdkRevealWorkflow } from './workflows.js';
 export type { ElementsPlanFacade, PlanGovernanceView, SdkPlanReader } from './plans.js';

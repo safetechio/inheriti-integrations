@@ -36,7 +36,7 @@ export async function downloadAsset(
     selector: asset.code ?? asset.id,
     ...(asset.fileName === undefined ? {} : { fileName: asset.fileName }),
   }));
-  if (!assets.length) throw Object.assign(new Error('No binary assets in this plan.'), { code: 'download_asset_unavailable' });
+  if (!assets.length) throw Object.assign(new Error('No media assets in this plan.'), { code: 'download_asset_unavailable' });
   const controller = active.create();
   try {
     return await ui.withProgress(async (progress, token) => {

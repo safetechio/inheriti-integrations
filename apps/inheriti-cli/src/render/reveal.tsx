@@ -16,31 +16,34 @@ export function createRevealPresenter(
   terminal: Terminal,
   moderators: ReadonlyMap<string, string>,
   keyOwner: 'Application' | 'Organisation' = 'Application',
-): { progress(value: RevealProgress): void; complete(message: string): void; close(): void } | undefined {
+): { progress(value: RevealProgress): void; deviceStatus(message: string): void; complete(message: string): void; close(clear?: boolean): void } | undefined {
   const region = terminal.createLiveRegion?.();
   if (!region) return undefined;
   let current: RevealProgress = { phase: 'STARTING' };
   let tick = 0;
   let completed: string | undefined;
+  let deviceMessage: string | undefined;
   const draw = () => region.update(renderFrame(
-    <RevealCard progress={current} moderatorNames={moderators} spinner={SPINNER[tick % SPINNER.length]!} keyOwner={keyOwner} {...(completed === undefined ? {} : { completed })} />,
+    <RevealCard progress={current} moderatorNames={moderators} spinner={SPINNER[tick % SPINNER.length]!} keyOwner={keyOwner} {...(deviceMessage === undefined ? {} : { deviceMessage })} {...(completed === undefined ? {} : { completed })} />,
     terminal.columns,
   ));
   const timer = setInterval(() => { tick += 1; draw(); }, 90);
   timer.unref();
   draw();
   return {
-    progress(value) { current = value; completed = undefined; draw(); },
-    complete(message) { completed = message; draw(); },
-    close() { clearInterval(timer); region.close(); },
+    progress(value) { current = value; deviceMessage = undefined; completed = undefined; draw(); },
+    deviceStatus(message) { deviceMessage = message; draw(); },
+    complete(message) { deviceMessage = undefined; completed = message; draw(); },
+    close(clear = false) { clearInterval(timer); if (clear) region.update(''); region.close(); },
   };
 }
 
-function RevealCard({ progress, moderatorNames, spinner, keyOwner, completed }: {
+function RevealCard({ progress, moderatorNames, spinner, keyOwner, deviceMessage, completed }: {
   progress: RevealProgress;
   moderatorNames: ReadonlyMap<string, string>;
   spinner: string;
   keyOwner: 'Application' | 'Organisation';
+  deviceMessage?: string;
   completed?: string;
 }) {
   const session = progress.session;
@@ -55,7 +58,7 @@ function RevealCard({ progress, moderatorNames, spinner, keyOwner, completed }: 
   const countdown = revealGateCountdown(progress);
   return <Box borderStyle="round" borderColor={completed ? 'green' : 'cyan'} paddingX={1} flexDirection="column" width={Math.min(72, Math.max(36, 120))}>
     <Text bold color={completed ? 'green' : 'cyan'}>{completed ? '✓ Reveal complete' : `${spinner} Revealing your plan`}</Text>
-    <Text>{completed ?? title(progress.phase, keyOwner)}</Text>
+    <Text>{completed ?? deviceMessage ?? title(progress.phase, keyOwner)}</Text>
     {!completed && countdown && <Text color="yellow">{`Time remaining  ${countdown}`}</Text>}
     {progress.phase === 'WAITING_FOR_MODERATION' && <Box marginTop={1} flexDirection="column">
       <Text bold>{`${approved}/${required ?? moderatorStates.length} approved`}</Text>
@@ -74,8 +77,8 @@ function title(phase: RevealProgress['phase'], keyOwner: 'Application' | 'Organi
     WAITING_FOR_DMS: 'Waiting for the dead man’s switch',
     WAITING_FOR_AUTHENTICATION: 'Authentication request — waiting for SafeKey Mobile confirmation',
     WAITING_FOR_MODERATION: 'Waiting for moderator approval',
-    WAITING_FOR_CUSTODIAN_CLAIM: 'Claim the custodian share in SafeKey Mobile first, then release it for this access',
-    WAITING_FOR_CUSTODIAN: 'Release the custodian share in SafeKey Mobile',
+    WAITING_FOR_CUSTODIAN_CLAIM: 'First save this plan share on your phone in SafeKey Mobile, then release it for this access',
+    WAITING_FOR_CUSTODIAN: 'Release this plan share from your phone in SafeKey Mobile',
     CONNECTING_SAFEKEY_PRO: 'Connect and touch SafeKey PRO',
     CUSTODIAN_SHARE_DISTRIBUTED: 'Custodian share sent to SafeKey Mobile',
     RELEASING_MATERIAL: 'Collecting encrypted data shares.',

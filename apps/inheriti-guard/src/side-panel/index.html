@@ -52,6 +52,7 @@
           </details>
           <p id="organization-status" role="status"></p>
         </div>
+        <button class="header-sign-out" id="forget-master-key" type="button" hidden></button>
         <button class="header-sign-out" id="sign-out" type="button" hidden>Sign out</button>
       </section>
       <div class="panel-tabs plan-tabs" role="tablist" aria-label="Plan Access views">
@@ -71,11 +72,11 @@
             <span class="section-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" /></svg>
             </span>
-            <div><h2 id="site-access-title">Autofill on this site</h2><p>Optional controls beside compatible fields.</p></div>
+            <div><h2 id="site-access-title">Autofill on this site</h2><p>Show autofill controls beside compatible fields.</p></div>
           </div>
           <span class="status neutral" id="overlay-status">Checking</span>
         </div>
-        <p class="site-access-message" id="overlay-message">The side panel always remains available.</p>
+        <p class="site-access-message" id="overlay-message">Checking site access…</p>
         <button class="button secondary" id="enable-overlay" type="button" hidden>Enable autofill on this site</button>
         <button class="button ghost" id="disable-overlay" type="button" hidden>Disable on this site</button>
         <div class="authorized-sites" id="authorized-sites" hidden>
@@ -85,7 +86,8 @@
         </div>
       </section>
 
-      <section class="card page-card" id="fields-panel" aria-labelledby="inspection-title">
+      <!-- Temporarily hide page inspection; autofill remains available above. -->
+      <section class="card page-card" id="fields-panel" aria-labelledby="inspection-title" hidden>
         <div class="section-heading">
           <div class="section-title">
             <span class="section-icon" aria-hidden="true">
@@ -135,10 +137,6 @@
           </div>
         </div>
         <ul id="plans" aria-live="polite"></ul>
-        <div class="button-row">
-          <button class="button ghost" id="forget-master-key" type="button" hidden
-                  title="Drop the key held in memory. The next reveal asks for it again.">Lock key</button>
-        </div>
       </section>
 
       <dialog class="asset-dialog access-dialog" id="access-dialog" aria-labelledby="access-title">

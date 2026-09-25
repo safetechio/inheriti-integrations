@@ -30,14 +30,14 @@ describe('SessionStorageOperatorSessionStore', () => {
     const store = new SessionStorageOperatorSessionStore(area);
     await store.save(session);
     expect(await store.load()).toEqual(session);
-    expect([...values.keys()]).toEqual(['inheritiElements.operatorSession']);
+    expect([...values.keys()]).toEqual(['inheriti.operatorSession']);
   });
 
   it('discards an unreadable value rather than trusting half a credential', async () => {
     const { area, values } = sessionArea();
     const store = new SessionStorageOperatorSessionStore(area);
     await store.save(session);
-    values.set('inheritiElements.operatorSession', '{ not json');
+    values.set('inheriti.operatorSession', '{ not json');
     await expect(store.load()).resolves.toBeUndefined();
     expect(values.size).toBe(0);
   });

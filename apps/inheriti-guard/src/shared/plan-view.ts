@@ -6,7 +6,7 @@ export type PanelState = (
   | { kind: 'ERROR'; code: string }
   | { kind: 'PLANS'; plans: readonly { id: string; name: string; status: string }[] }
   | { kind: 'SELECT_ORGANIZATION'; organizations: readonly { id: string; name: string }[]; reason?: string }
-) & { readonly organizations?: readonly { id: string; name: string }[]; readonly organizationId?: string };
+) & { readonly organizations?: readonly { id: string; name: string }[]; readonly organizationId?: string; readonly keyInMemory?: boolean };
 
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_reauthentication_required: 'Session expired — sign in again',

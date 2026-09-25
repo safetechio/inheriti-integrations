@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{heading}} · Inheriti® Business</title>
+    <style>
+      @font-face {
+        font-family: AppFont;
+        src: url(data:font/ttf;base64,{{font}}) format("truetype");
+        font-display: swap;
+      }
+      :root {
+        color-scheme: light;
+        --primary: #2962ff;
+        --ground: #f9fafb;
+        --card: #ffffff;
+        --ink: #101828;
+        --muted: #475467;
+        --line: #eaecf0;
+        --danger: #c21e2e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--ground);
+        color: var(--ink);
+        font: 16px/1.5 AppFont, ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        width: min(100%, 440px);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(10, 28, 77, 0.06);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        padding: 24px 32px;
+        border-bottom: 1px solid var(--line);
+      }
+      .brand img {
+        display: block;
+        width: 180px;
+        height: auto;
+      }
+      .content {
+        padding: 32px;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #1642ba;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.3;
+        font-weight: 700;
+      }
+      h1.failed {
+        color: var(--danger);
+      }
+      .message {
+        margin: 0;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      @media (max-width: 420px) {
+        .brand {
+          padding: 20px 24px;
+        }
+        .content {
+          padding: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <header class="brand">
+        <img src="data:image/png;base64,{{logo}}" alt="Inheriti® Business" />
+      </header>
+      <div class="content">
+        <p class="eyebrow">{{statusLabel}}</p>
+        <h1 class="{{statusClass}}">{{heading}}</h1>
+        <p class="message">{{message}}</p>
+      </div>
+    </main>
+  </body>
+</html>

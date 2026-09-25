@@ -20,7 +20,7 @@ export const CUSTODY_KEYS = ['masterKeyCustody', 'masterKeySalt'] as const;
  * it once per browser session is the cost, and it is the right one.
  */
 export const SESSION_ONLY_KEYS = ['masterKeySecret'] as const;
-const ORGANIZATION_PREFERENCES = 'inheritiElements.businessOrganizations';
+const ORGANIZATION_PREFERENCES = 'inheriti.businessOrganizations';
 
 export type StoredConfiguration = Record<(typeof CONFIGURATION_KEYS)[number], string>
   & Partial<Record<(typeof CUSTODY_KEYS)[number] | typeof APPLICATION_KEY | 'deployment', string>>;

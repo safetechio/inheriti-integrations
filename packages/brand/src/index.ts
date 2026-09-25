@@ -20,7 +20,7 @@ export const inheritiGuardBrand = Object.freeze({
     muted: '#535862',
     surface: '#FFFFFF',
     canvas: '#F8FBFF',
-    primary: '#0066FF',
+    primary: '#2962FF',
     primaryDark: '#1642BA',
     primarySoft: '#E3F2FD',
     success: '#15803D',

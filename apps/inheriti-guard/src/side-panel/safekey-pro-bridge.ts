@@ -1,4 +1,5 @@
 import { createBrowserSafeKeyProDevice } from '@safetech/inheriti-core-sdk/safekey-pro/browser';
+import { custodianShareCopy } from '@safetech/inheriti-elements-core/browser';
 
 type Request = { id: number; operation: 'choose' | 'prepare' | 'write' | 'read' | 'finish' | 'cancel'; rpId?: string; share?: unknown; request?: unknown };
 
@@ -8,9 +9,14 @@ const status = document.querySelector<HTMLElement>('#safekey-status')!;
 const choice = document.querySelector<HTMLElement>('#safekey-choice')!;
 const mobile = document.querySelector<HTMLButtonElement>('#safekey-mobile')!;
 const pro = document.querySelector<HTMLButtonElement>('#safekey-pro')!;
+pro.querySelector('strong')!.textContent = custodianShareCopy.choice.proOption;
+pro.querySelector('small')!.textContent = custodianShareCopy.choice.proDescription;
+mobile.querySelector('strong')!.textContent = custodianShareCopy.choice.mobileOption;
+mobile.querySelector('small')!.textContent = custodianShareCopy.choice.mobileDescription;
 const pinForm = document.querySelector<HTMLFormElement>('#safekey-pin-form')!;
 const pinInput = document.querySelector<HTMLInputElement>('#safekey-pin')!;
 const touch = document.querySelector<HTMLElement>('#safekey-touch')!;
+touch.querySelector('span')!.textContent = custodianShareCopy.choice.proTouch;
 const cancel = document.querySelector<HTMLButtonElement>('#safekey-cancel')!;
 
 let cachedPin: string | undefined;
@@ -31,24 +37,24 @@ function clear(): void {
 
 function askChoice(): Promise<'SK_MOBILE' | 'SK_PRO'> {
   choice.hidden = false; pinForm.hidden = true; touch.hidden = true;
-  title.textContent = 'Choose a custodian device';
-  intro.textContent = 'Save the plan share to a device for this and future access.';
+  title.textContent = custodianShareCopy.choice.title;
+  intro.textContent = custodianShareCopy.choice.intro;
   status.textContent = '';
   return new Promise((resolve, reject) => {
     pending = { reject };
-    mobile.onclick = () => { pending = undefined; choice.hidden = true; status.textContent = 'Continue in SafeKey Mobile.'; resolve('SK_MOBILE'); };
-    pro.onclick = () => { pending = undefined; choice.hidden = true; status.textContent = 'Waiting for SafeKey Pro…'; resolve('SK_PRO'); };
+    mobile.onclick = () => { pending = undefined; choice.hidden = true; status.textContent = custodianShareCopy.firstAccess.mobileClaim; resolve('SK_MOBILE'); };
+    pro.onclick = () => { pending = undefined; choice.hidden = true; status.textContent = custodianShareCopy.choice.proConnect; resolve('SK_PRO'); };
   });
 }
 
 function askPin(onSubmit?: () => void): Promise<string> {
   if (cachedPin) return Promise.resolve(cachedPin);
   choice.hidden = true; pinForm.hidden = false; touch.hidden = true;
-  title.textContent = currentOperation === 'write' ? 'Save to SafeKey Pro' : 'Collect from SafeKey Pro';
+  title.textContent = currentOperation === 'write' ? 'Save to SafeKey PRO' : 'Collect from SafeKey PRO';
   intro.textContent = currentOperation === 'write'
-    ? 'Enter your PIN to save the custodian share to your device.'
-    : 'Enter your PIN to read the custodian share from your device.';
-  status.textContent = 'Your PIN stays in this InheritiGuard window.';
+    ? custodianShareCopy.firstAccess.proPin
+    : custodianShareCopy.laterAccess.proPin;
+  status.textContent = '';
   pinInput.focus();
   return new Promise((resolve, reject) => {
     pending = { reject };
@@ -115,7 +121,7 @@ export function connectSafeKeyProPanel(): void {
           getPin: () => askPin(),
           onTouch: () => {
             pinForm.hidden = true; touch.hidden = false;
-            title.textContent = 'Confirm on SafeKey Pro';
+            title.textContent = 'Confirm on SafeKey PRO';
             intro.textContent = 'Keep your device connected while InheritiGuard opens the plan.';
             status.textContent = 'Press and release when Chrome asks. Several touches may be needed.';
           },

@@ -13,7 +13,7 @@ beforeEach(() => {
   sendMessage.mockReset();
   get.mockReset().mockResolvedValue({ id: 7, windowId: 12, url: 'https://example.test/login' });
   query.mockReset().mockResolvedValue([{ id: 7 }]);
-  executeScript.mockReset().mockResolvedValue([{ result: true }]);
+  executeScript.mockReset().mockResolvedValue([{ result: 'ready' }]);
   vi.stubGlobal('chrome', { tabs: { sendMessage, get, query }, scripting: { executeScript } });
 });
 
@@ -59,7 +59,7 @@ it('rejects a PRO choice when the mapped target navigates to a new document', as
     navigationId: identity.navigationId, semantic: 'username' as const, label: 'Username',
   } }] } satisfies AccessBatch;
   sendMessage.mockResolvedValue('SK_PRO');
-  executeScript.mockResolvedValueOnce([{ result: true }]).mockResolvedValueOnce([{ result: false }]);
+  executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'form-changed' }]);
   await expect(chooseCustodianInOverlay(mapped, new AbortController().signal)).rejects.toThrow('SAFEKEY_ABORTED');
   expect(executeScript).toHaveBeenCalledTimes(2);
   expect(sendMessage).toHaveBeenCalledOnce();

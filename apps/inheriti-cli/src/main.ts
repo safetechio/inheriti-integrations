@@ -17,6 +17,7 @@ import { organizationCommand, selectedOrganization, OrganizationChoiceRequired }
 import { notifyCliUpdate, updateCli } from './commands/update.js';
 import type { Terminal } from './output.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
+import { registerCliCancel } from './cancellation.js';
 
 function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const configuration = BUILD_DEPLOYMENT
@@ -43,7 +44,7 @@ inheriti <command>
                      Copy one or more selected fields without printing their values.
                      Whether approval is needed is read from the plan.
   plans download [id] --asset code-or-id --output path
-                     Save one authorized binary asset to a new restricted file.
+                     Save one authorized media asset to a new restricted file.
   plans use [id] [--stdin asset.field] [--env NAME=asset.field ...] [--fd N=asset.field ...] [--temp-file NAME=asset.field ...] [--socket NAME=asset.field ...] [--ttl 30s] -- command [args]
                      Run an exact executable with destination-bound secrets. No shell.
   secrets exec [id] [--env NAME=asset.field ...] [--output inherit] -- command [args]
@@ -68,12 +69,12 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     login: `Usage: inheriti login [--device]\n\nSign in using the system browser. --device uses a device code for headless environments and can continue through the plan's approval process.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organizations or select one for this account.`,
-    plans: `Usage: inheriti plans <list|show|logs|reveal|download|abort>\n\nInspect plan metadata and activity, securely copy selected fields, download a binary asset, or abandon an unfinished access request.\nRun inheriti help plans <command> for details.`,
+    plans: `Usage: inheriti plans <list|show|logs|reveal|download|abort>\n\nInspect plan metadata and activity, securely copy selected fields, download a media asset, or abandon an unfinished access request.\nRun inheriti help plans <command> for details.`,
     'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table]\n\nList non-sensitive plan metadata. --json never includes reconstructed secret values.`,
     'plans show': `Usage: inheriti plans show [PLAN_ID] [--json|--table]\n\nShow one plan's non-sensitive assets, fields, participants, governance, and reveal policy. An interactive terminal can prompt for PLAN_ID.`,
     'plans logs': `Usage: inheriti plans logs [PLAN_ID] [--limit N] [--offset N] [--json|--table]\n\nShow authorized plan activity. The table summarizes events; --json includes all safe log fields and total count. An interactive terminal can prompt for PLAN_ID.`,
     'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. Values are never printed. In a terminal, omit --field to select fields with Space or choose ALL. Each field copy is authorized and audited independently.`,
-    'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one binary asset to a new file with owner-only permissions. Existing files are never overwritten.`,
+    'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.`,
     'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed when the child exits. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. Approve the exact command before an agent runs it.`,
     secrets: `Usage: inheriti secrets <exec|resolve>\n\nMachine-oriented secret delivery built on the same reveal and use flows as plans commands.`,
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's normal logs visible.`,
@@ -186,22 +187,18 @@ async function secrets(
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
     const resolved = await resolvePlanId(context, terminal, planId);
     const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once('SIGINT', cancel);
-    process.once('SIGTERM', cancel);
+    const unregister = registerCliCancel(controller);
     try { return await usePlan(context, terminal, resolved, { ...parsed, signal: controller.signal }); }
-    finally { process.off('SIGINT', cancel); process.off('SIGTERM', cancel); }
+    finally { unregister(); }
   }
   if (subcommand === 'resolve') {
     const parsed = parseResolveOptions(hasPlanId ? rest.slice(1) : rest);
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
     const resolved = await resolvePlanId(context, terminal, planId);
     const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once('SIGINT', cancel);
-    process.once('SIGTERM', cancel);
+    const unregister = registerCliCancel(controller);
     try { return await resolvePlanField(context, terminal, resolved, parsed.field, controller.signal); }
-    finally { process.off('SIGINT', cancel); process.off('SIGTERM', cancel); }
+    finally { unregister(); }
   }
   terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets resolve <id> --field asset.field');
   return 1;
@@ -249,17 +246,12 @@ async function plans(
       terminal.writeError(parsed.error);
       return 1;
     }
-    const resolved = await resolvePlanId(context, terminal, planId);
     const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once('SIGINT', cancel);
-    process.once('SIGTERM', cancel);
+    const unregister = registerCliCancel(controller);
     try {
+      const resolved = await resolvePlanId(context, terminal, planId, controller.signal);
       return await revealPlan(context, terminal, resolved, { ...parsed, signal: controller.signal });
-    } finally {
-      process.off('SIGINT', cancel);
-      process.off('SIGTERM', cancel);
-    }
+    } finally { unregister(); }
   }
   if (subcommand === 'download') {
     const hasPlanId = planId !== undefined && !planId.startsWith('--');
@@ -267,11 +259,9 @@ async function plans(
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
     const resolved = await resolvePlanId(context, terminal, hasPlanId ? planId : undefined);
     const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once('SIGINT', cancel);
-    process.once('SIGTERM', cancel);
+    const unregister = registerCliCancel(controller);
     try { return await downloadPlanAsset(context, terminal, resolved, parsed.asset, parsed.output, controller.signal); }
-    finally { process.off('SIGINT', cancel); process.off('SIGTERM', cancel); }
+    finally { unregister(); }
   }
   if (subcommand === 'use') {
     const hasPlanId = rest[0] !== undefined && rest[0] !== '--' && !rest[0].startsWith('--');
@@ -283,15 +273,10 @@ async function plans(
     }
     const resolved = await resolvePlanId(context, terminal, candidate);
     const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once('SIGINT', cancel);
-    process.once('SIGTERM', cancel);
+    const unregister = registerCliCancel(controller);
     try {
       return await usePlan(context, terminal, resolved, { ...parsed, signal: controller.signal });
-    } finally {
-      process.off('SIGINT', cancel);
-      process.off('SIGTERM', cancel);
-    }
+    } finally { unregister(); }
   }
   terminal.writeError('Usage: plans list | plans show <id> | plans logs <id> | plans reveal <id> [--field asset.field ...] | plans download <id> --asset code --output path | plans use <id> [delivery] -- command | plans abort <id>');
   return 1;
@@ -528,6 +513,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
+  master_key_relay_cancellation_failed: 'Could not confirm cancellation in SafeKey Mobile. The release request may still be pending; wait for it to expire before trying again.',
   master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
   MasterKeyRelayTimedOut: 'Nobody released the organisation key in SafeKey Mobile in time.',
   master_key_relay_timed_out: 'Nobody released the organisation key in SafeKey Mobile in time.',

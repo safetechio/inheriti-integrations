@@ -125,6 +125,12 @@ describe('CLI configuration', () => {
       .toMatchObject({ safeKeyProDevice: '/dev/hidraw5', safeKeyProRpId: 'business.localhost' });
   });
 
+  it('offers SafeKey PRO for Business even before the device is connected', () => {
+    const configured = withConfigurationFile(JSON.stringify({ business: true, deployment: 'local' }));
+    expect(resolveConfiguration(configured)).toMatchObject({ safeKeyProRpId: 'business.localhost' });
+    expect(resolveConfiguration(configured).safeKeyProDevice).toBeUndefined();
+  });
+
   it('lets an exported variable win over the file rather than the other way round', () => {
     const configured = withConfigurationFile(JSON.stringify({
       apiUrl: 'http://127.0.0.1:3201',
