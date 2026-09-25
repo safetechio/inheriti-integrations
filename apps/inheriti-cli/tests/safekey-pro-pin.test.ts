@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
+vi.mock('@safetech/inheriti-core-sdk/node', () => ({}));
+vi.mock('@safetech/inheriti-elements-core/node', () => ({}));
 import { readHiddenPin } from '../src/safekey-pro.js';
 import { registerCliCancel } from '../src/cancellation.js';
 
-it('reads a PIN without echo and restores terminal mode', async () => {
+it('masks a PIN, confirms Enter, and restores terminal mode', async () => {
   const input = Object.assign(new EventEmitter(), {
     isTTY: true,
     isRaw: false,
@@ -17,9 +19,14 @@ it('reads a PIN without echo and restores terminal mode', async () => {
   vi.stubGlobal('process', { stdin: input, stderr: { isTTY: true, write: output } });
   try {
     const pending = readHiddenPin();
-    input.emit('data', '1234\r');
+    input.emit('data', '12345');
+    input.emit('data', '\x7f');
+    input.emit('data', '\r');
     expect(await pending).toEqual(Uint8Array.from([49, 50, 51, 52]));
-    expect(output.mock.calls.map(([value]) => value).join('')).toBe('\r\x1b[2KSafeKey PRO PIN: ');
+    const shown = output.mock.calls.map(([value]) => value).join('');
+    expect(shown).toContain('SafeKey PRO PIN (press Enter): ****');
+    expect(shown).toContain('PIN entered. Waiting for SafeKey PRO...');
+    expect(shown).not.toContain('1234');
     expect(input.isRaw).toBe(false);
     expect(input.listenerCount('data')).toBe(0);
     expect(input.pause).toHaveBeenCalledOnce();

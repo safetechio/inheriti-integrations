@@ -79,14 +79,22 @@ export async function readHiddenPin(signal?: AbortSignal): Promise<Uint8Array> {
         const data = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
         for (const byte of data) {
           if (byte === 3 || byte === 27) { requestCliCancel(); if (!signal?.aborted) onAbort(); return; }
-          if (byte === 13 || byte === 10) { cleanup(); resolve(Uint8Array.from(bytes)); return; }
-          if (byte === 127 || byte === 8) { bytes.pop(); continue; }
-          if (byte >= 32 && byte <= 126 && bytes.length < 128) bytes.push(byte);
+          if (byte === 13 || byte === 10) {
+            cleanup();
+            deviceStatus('PIN entered. Waiting for SafeKey PRO...');
+            if (process.stderr.isTTY) process.stderr.write('\n');
+            resolve(Uint8Array.from(bytes));
+            return;
+          }
+          if (byte === 127 || byte === 8) bytes.pop();
+          else if (byte >= 32 && byte <= 126 && bytes.length < 128) bytes.push(byte);
+          else continue;
+          if (process.stderr.isTTY) deviceStatus(`SafeKey PRO PIN (press Enter): ${'*'.repeat(bytes.length)}`);
         }
       };
       input.on('data', onData);
       signal?.addEventListener('abort', onAbort, { once: true });
-      deviceStatus('SafeKey PRO PIN: ');
+      deviceStatus('SafeKey PRO PIN (press Enter): ');
     });
   } finally {
     bytes.fill(0);
