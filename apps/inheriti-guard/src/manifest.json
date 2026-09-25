@@ -3,7 +3,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqUN/k1waVw4T2+aHVsRK8AeXua0o0J7YELgJ0k3aubZ3kJWItJBoXl7w6V8OlMs92ypmtmPjAGwphxlNCGlYew//rU139+JNHmsW7xPPZgiODumveOhq5udNNWKgIX6tEBzqGS53f+BrCXavdybTboLtMgE2b4Xmz0JeL2ehITD01pe4ABuZz6VSt0r0v5PO9UCe4/gMoDgKVHQ8cqG6hPo4JTe9aX4USAoUmzfT6/Z9zkzDEOm9C5pDYB8oxqLEf2PjHUxtDZX5gni5uWZvhgmPMSNc8g3obu1fRRrWK/79Ss4eLEBmeyyjBhRx+PahVk78var2cLxaY5SmCu5cuwIDAQAB",
   "name": "InheritiGuard",
   "short_name": "InheritiGuard",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "InheritiGuard Browser Protection and Protection Plan Access.",
   "minimum_chrome_version": "116",
   "icons": {

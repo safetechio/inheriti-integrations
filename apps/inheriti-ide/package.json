@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-ide",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "description": "NON-PUBLISHABLE Inheriti® IDE for VS Code development build",
   "type": "module",
