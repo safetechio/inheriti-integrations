@@ -1,4 +1,5 @@
-import { createNodeQuickPlanCreator, HttpQuickPlanPort, DataAssetDefinitionService } from '@safetech/inheriti-client-sdk/node';
+import { createNodeQuickPlanCreator, HttpQuickPlanPort } from '@safetech/inheriti-client-sdk/node';
+import { DataAssetDefinitionService } from '@safetech/inheriti-core-sdk/node';
 import type { QuickPlanCreateContext, QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
 export const quickPlanAssetCatalog = new DataAssetDefinitionService().getCoreDefinitions()
