@@ -179,9 +179,13 @@ async function selectedPlans(client: BrowserIntegrationCore): Promise<PanelState
   const selection = await businessSelection();
   if (selection && 'kind' in selection) return selection;
   if (selection && 'organizationId' in selection) {
-    return { ...await loadPlans(await core(selection.organizationId)), ...selection };
+    const selectedCore = await core(selection.organizationId);
+    return { ...await loadPlans(selectedCore), ...selection,
+      keyInMemory: await selectedCore.hasMasterKey({ system: 'INHERITI_BUSINESS', contextId: selection.organizationId }) };
   }
-  return loadPlans(client);
+  const configuration = resolveConfiguration(await readStoredConfiguration(chrome.storage.local, chrome.storage.session));
+  return { ...await loadPlans(client), keyInMemory: configuration.applicationId !== undefined
+    && await client.hasMasterKey({ system: 'INHERITI_ELEMENTS', contextId: configuration.applicationId }) };
 }
 
 chrome.action.onClicked.addListener(async (tab) => {

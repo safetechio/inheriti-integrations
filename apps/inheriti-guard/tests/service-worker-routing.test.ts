@@ -69,6 +69,7 @@ vi.mock('../src/background/plans.js', () => ({
     return {
     auth: {},
     forgetMasterKey: vi.fn(async () => undefined),
+    hasMasterKey: vi.fn(async () => false),
     getAccessToken: async () => 'operator-token',
     listOrganizations: async () => businessOrganizations,
     listPlans: async (input?: unknown) => {
