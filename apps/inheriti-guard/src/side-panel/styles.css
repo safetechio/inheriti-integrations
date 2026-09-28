@@ -150,6 +150,16 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .authorized-sites ul { margin: 8px 0; padding: 0; display: grid; gap: 6px; list-style: none; }
 .authorized-sites li { display: flex; align-items: center; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
 
+.plan-access[data-authenticated="pending"] > :not(.session-skeleton) { display: none; }
+.session-skeleton { min-height: 360px; }
+.skeleton-line { display: block; height: 14px; border-radius: 4px; background: var(--border); }
+.skeleton-line.short { width: 55%; }
+.skeleton-account, .skeleton-card { display: grid; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.skeleton-tabs { display: flex; gap: 24px; padding: 24px 0 16px; border-bottom: 1px solid var(--border); }
+.skeleton-tabs .skeleton-line { width: 64px; }
+.skeleton-heading { display: grid; gap: 12px; padding: 24px 0; }
+.skeleton-heading .skeleton-line:first-child { width: 45%; height: 24px; }
+.skeleton-card { min-height: 160px; align-content: start; }
 .plan-access[data-authenticated="false"] > :not(.signed-out-view):not(dialog) { display: none; }
 .plan-access[data-authenticated="true"] > .signed-out-view { display: none; }
 .plan-access[data-organization="required"] > :not(.account-area):not(dialog) { display: none; }

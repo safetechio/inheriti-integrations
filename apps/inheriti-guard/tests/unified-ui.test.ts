@@ -18,7 +18,7 @@ describe('unified InheritiGuard UI', () => {
   });
 
   it('keeps Browser Protection usable outside Plan Access authentication', () => {
-    expect(panel).toMatch(/<section id="plan-access-panel"[^>]+data-authenticated="false"/u);
+    expect(panel).toMatch(/<section id="plan-access-panel"[^>]+data-authenticated="pending"/u);
     expect(panel).toMatch(/<section id="browser-protection-panel"/u);
     expect(panelMain).toContain("type: 'guard:get-state'");
     for (const type of ['guard:set-protection', 'guard:set-sensitive-api', 'guard:set-clipboard', 'guard:set-idle-lock', 'guard:set-idle-minutes', 'guard:set-download-trap']) expect(panelMain).toContain(`type: '${type}'`);

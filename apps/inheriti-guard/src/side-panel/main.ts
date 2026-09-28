@@ -347,6 +347,8 @@ async function refreshKeyStatus(): Promise<void> {
 }
 
 function renderPanel(state: PanelState): void {
+  required('session-skeleton').hidden = true;
+  planAccessPanel.setAttribute('aria-busy', 'false');
   const organizations = state.organizations;
   renderKeyStatus(organizations === undefined ? 'Application' : 'Organization', Boolean(state.keyInMemory));
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION';

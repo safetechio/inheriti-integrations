@@ -19,10 +19,10 @@
         <div class="product-statuses" aria-label="Product status">
           <span id="guard-header-status" class="header-status">Protection: checking</span>
         </div>
-        <span class="sr-only" id="auth-status" aria-live="polite">Signed out</span>
+        <span class="sr-only" id="auth-status" aria-live="polite">Checking session</span>
       </div>
     </header>
-    <main id="app-main" data-authenticated="false">
+    <main id="app-main" data-authenticated="pending">
       <aside class="migration-notice" id="migration-notice" role="status" hidden>
         <strong>InheritiGuard now includes Plan Access.</strong>
         <span>Your Browser Protection settings were preserved.</span>
@@ -33,7 +33,16 @@
         <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button">Browser Protection</button>
         <button id="activity-tab" role="tab" aria-selected="false" aria-controls="activity-panel" tabindex="-1" type="button">Activity</button>
       </div>
-      <section id="plan-access-panel" class="product-panel plan-access" role="tabpanel" aria-labelledby="plan-access-tab" data-authenticated="false">
+      <section id="plan-access-panel" class="product-panel plan-access" role="tabpanel" aria-labelledby="plan-access-tab" data-authenticated="pending" aria-busy="true">
+      <div class="session-skeleton" id="session-skeleton" role="status">
+        <span class="sr-only">Loading Plan Access…</span>
+        <div aria-hidden="true">
+          <div class="skeleton-account"><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          <div class="skeleton-tabs"><span class="skeleton-line short"></span><span class="skeleton-line short"></span></div>
+          <div class="skeleton-heading"><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          <div class="skeleton-card"><span class="skeleton-line"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+        </div>
+      </div>
       <section class="signed-out-view" id="signed-out-view" aria-labelledby="signed-out-title">
         <div class="signed-out-mark" aria-hidden="true"><svg viewBox="0 0 26 32"><path /></svg></div>
         <p class="eyebrow">Protection Plan Access</p>

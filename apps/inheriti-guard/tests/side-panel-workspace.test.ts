@@ -79,7 +79,7 @@ describe('side-panel access workspace', () => {
   });
 
   it('limits Plan Access while signed out without hiding Browser Protection', () => {
-    expect(html).toContain('id="app-main" data-authenticated="false"');
+    expect(html).toContain('id="app-main" data-authenticated="pending"');
     expect(html).toContain('id="signed-out-view"');
     expect(html).toContain('Connect your account before viewing plans, inspecting fields, or enabling site autofill.');
     expect(main).toContain('appMain.dataset.authenticated = String(signedIn)');
