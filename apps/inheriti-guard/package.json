@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheritiguard-chrome-extension",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "type": "module",
   "description": "InheritiGuard Chrome MV3 extension with Browser Protection and Plan Access",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@safetech/inheriti-elements-brand": "workspace:*",
-    "@safetech/inheriti-core-sdk": "4.0.31",
+    "@safetech/inheriti-core-sdk": "4.0.33",
     "@safetech/inheriti-elements-core": "workspace:*"
   }
 }
