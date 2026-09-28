@@ -296,6 +296,6 @@ export type { ElementsPlanFacade, PlanGovernanceView, SdkPlanReader } from './pl
 export type {
   DeviceAuthorization, DeviceTransaction, ListPlansInput, OperatorAuthConfiguration, OperatorSession,
   RevealPhase, RevealProgress,
-  DeclaredMasterKeySource, MasterKeyRef, MasterKeyResolver, MasterKeySource, OperatorSessionStore, OperatorSessionSummary, OperatorTokenValidator,
+  DeclaredMasterKeySource, KeyVault, MasterKeyRef, MasterKeyResolver, MasterKeySource, OperatorSessionStore, OperatorSessionSummary, OperatorTokenValidator,
   BusinessOrganization, ListPlanLogsInput, PlanDetail, PlanLog, PlanLogPage, PlanPage, PlanSummary, RevealActionOutcome, RevealActionType, ValidatedOperatorToken,
 } from '@safetech/inheriti-client-sdk';

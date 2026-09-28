@@ -51,6 +51,7 @@ type ExistingSidePanelRequest =
   | { readonly type: 'sign-in' }
   | { readonly type: 'sign-out' }
   | { readonly type: 'load-plans' }
+  | { readonly type: 'get-master-key-status' }
   | { readonly type: 'select-organization'; readonly organizationId: string }
   | { readonly type: 'load-plan-assets'; readonly planId: string }
   | { readonly type: 'load-reveal-fields'; readonly planId: string }
@@ -142,6 +143,7 @@ export type AccessWorkspaceResponse =
 export type PanelStateResponse = { readonly ok: true; readonly state: import('./plan-view.js').PanelState };
 
 export type SidePanelResponse =
+  | { readonly ok: true; readonly keyStatus: { readonly owner: 'Application' | 'Organization'; readonly loaded: boolean } }
   | { readonly ok: true; readonly context?: { readonly origin: string } }
   | { readonly ok: true; readonly summary: ActivePageSummary }
   | { readonly ok: true; readonly assets: readonly PlanAssetMetadata[] }
@@ -188,7 +190,7 @@ export function isGuardContentRequest(value: unknown): value is GuardContentRequ
 
 export function isSidePanelRequest(value: unknown): value is SidePanelRequest {
   if (typeof value !== 'object' || value === null || !('type' in value)) return false;
-  return ['get-active-context', 'inspect-active-page', 'sign-in', 'sign-out', 'load-plans', 'select-organization', 'load-plan-assets', 'load-reveal-fields', 'fill-field', 'get-reveal-state', 'cancel-reveal', 'resume-reveal', 'abort-plan-access', 'forget-master-key', 'load-access-workspace', 'load-page-first-candidates', 'start-page-first-picker', 'select-page-first-candidate', 'discard-access-workspace', 'start-page-field-picker', 'cancel-page-field-picker', 'set-access-mapping', 'remove-access-mapping', 'reveal-and-autofill', 'get-overlay-permissions', 'enable-overlay-current-origin', 'disable-overlay-origin', 'disable-all-overlays']
+  return ['get-active-context', 'inspect-active-page', 'sign-in', 'sign-out', 'load-plans', 'get-master-key-status', 'select-organization', 'load-plan-assets', 'load-reveal-fields', 'fill-field', 'get-reveal-state', 'cancel-reveal', 'resume-reveal', 'abort-plan-access', 'forget-master-key', 'load-access-workspace', 'load-page-first-candidates', 'start-page-first-picker', 'select-page-first-candidate', 'discard-access-workspace', 'start-page-field-picker', 'cancel-page-field-picker', 'set-access-mapping', 'remove-access-mapping', 'reveal-and-autofill', 'get-overlay-permissions', 'enable-overlay-current-origin', 'disable-overlay-origin', 'disable-all-overlays']
     .includes((value as { type: unknown }).type as string);
 }
 

@@ -1,6 +1,7 @@
-body { min-width: 0; }
-main { padding: 20px; }
-.modal-panel { padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-card); }
-.safekey-dialog h1 { font-size: 20px; line-height: 1.25; }
+body { min-width: 0; background: var(--surface-muted); }
+main { max-width: 520px; margin: 0 auto; padding: 20px; }
+.modal-panel { padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); }
+.safekey-dialog h1 { font-size: 20px; line-height: 1.3; font-weight: 500; }
 .safekey-dialog .button { width: 100%; }
-.popup-version { margin: 14px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
+.popup-version { margin: 16px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
+@media (max-width: 375px) { main, .modal-panel { padding: 16px; } }

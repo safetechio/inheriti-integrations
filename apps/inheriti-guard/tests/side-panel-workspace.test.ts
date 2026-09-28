@@ -13,12 +13,12 @@ describe('side-panel access workspace', () => {
     expect(html).toContain('Only plans with username, email, or password fields available for autofill.');
   });
 
-  it('keeps key removal beside the organization with a clear locked state', () => {
+  it('keeps key removal beside the organization with an explicit loaded state', () => {
     expect(html.indexOf('id="forget-master-key"')).toBeLessThan(html.indexOf('id="plans-panel"'));
-    expect(main).toContain('state.keyInMemory ? `Remove ${keyOwner.toLowerCase()} key`');
-    expect(main).toContain('`${keyOwner} key locked`');
+    expect(main).toContain('loaded ? `${keyOwner} key loaded · Clear`');
+    expect(main).toContain('`${keyOwner} key not loaded`');
     expect(main).not.toContain('key not in memory');
-    expect(main).toContain('forgetKey.disabled = !state.keyInMemory');
+    expect(main).toContain('forgetKey.disabled = !loaded');
   });
 
   it('uses the frozen mapping and batch messages', () => {

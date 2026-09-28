@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MASTER_KEY_CACHE_PREFIX } from '../src/shared/stored-configuration.js';
 import { SessionStorageOperatorSessionStore } from '../src/background/session-store.js';
 
 const session = {
@@ -11,11 +12,12 @@ const session = {
 };
 
 function sessionArea() {
-  const values = new Map<string, string>();
+  const values = new Map<string, unknown>();
   const area = {
-    get: async (key: string) => (values.has(key) ? { [key]: values.get(key) } : {}),
-    set: async (entries: Record<string, string>) => { for (const [k, v] of Object.entries(entries)) values.set(k, v); },
-    remove: async (key: string) => { values.delete(key); },
+    get: async (keys: string | string[] | null) => keys === null ? Object.fromEntries(values)
+      : Object.fromEntries((typeof keys === 'string' ? [keys] : keys).filter((key) => values.has(key)).map((key) => [key, values.get(key)])),
+    set: async (entries: Record<string, unknown>) => { for (const [k, v] of Object.entries(entries)) values.set(k, v); },
+    remove: async (keys: string | string[]) => { for (const key of typeof keys === 'string' ? [keys] : keys) values.delete(key); },
   } as unknown as chrome.storage.StorageArea;
   return { area, values };
 }
@@ -30,7 +32,7 @@ describe('SessionStorageOperatorSessionStore', () => {
     const store = new SessionStorageOperatorSessionStore(area);
     await store.save(session);
     expect(await store.load()).toEqual(session);
-    expect([...values.keys()]).toEqual(['inheriti.operatorSession']);
+    expect([...values.keys()]).toEqual(['inheriti.operatorSessionGeneration', 'inheriti.operatorSession']);
   });
 
   it('discards an unreadable value rather than trusting half a credential', async () => {
@@ -39,14 +41,38 @@ describe('SessionStorageOperatorSessionStore', () => {
     await store.save(session);
     values.set('inheriti.operatorSession', '{ not json');
     await expect(store.load()).resolves.toBeUndefined();
-    expect(values.size).toBe(0);
+    expect([...values.keys()]).toEqual(['inheriti.operatorSessionGeneration']);
+  });
+
+  it('retains cached keys on refresh but clears them for a different login', async () => {
+    const { area, values } = sessionArea();
+    const store = new SessionStorageOperatorSessionStore(area);
+    await store.save(session);
+    values.set(MASTER_KEY_CACHE_PREFIX + 'org-a', 'a'.repeat(64));
+    values.set(MASTER_KEY_CACHE_PREFIX + 'org-b', 'b'.repeat(64));
+    const generation = (await store.snapshot()).generation;
+    const refreshed = JSON.parse(JSON.stringify(session));
+    refreshed.accessToken = 'new-access';
+    refreshed.principal.tokenId = 'new-token';
+    await store.save(refreshed);
+    expect((await store.snapshot()).generation).toBe(generation);
+    expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-a')).toBe(true);
+    expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-b')).toBe(true);
+    refreshed.principal.sessionId = 'different-login';
+    await store.save(refreshed);
+    expect((await store.snapshot()).generation).toBeGreaterThan(generation);
+    expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-a')).toBe(false);
+    expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-b')).toBe(false);
+    expect(await store.load()).toEqual(refreshed);
   });
 
   it('leaves nothing behind on sign-out', async () => {
     const { area, values } = sessionArea();
     const store = new SessionStorageOperatorSessionStore(area);
     await store.save(session);
+    values.set(MASTER_KEY_CACHE_PREFIX + 'org-a', 'a'.repeat(64));
+    values.set(MASTER_KEY_CACHE_PREFIX + 'org-b', 'b'.repeat(64));
     await store.clear();
-    expect(values.size).toBe(0);
+    expect([...values.keys()]).toEqual(['inheriti.operatorSessionGeneration']);
   });
 });

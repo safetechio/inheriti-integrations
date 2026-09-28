@@ -11,10 +11,12 @@ describe('Chrome Business composition', () => {
     Object.assign(globalThis, { chrome: { identity: { getRedirectURL: vi.fn(() => 'https://extension.test/oauth') } } });
     const configuration = resolveConfiguration({ apiUrl: 'https://business.test/integrations/',
       issuer: 'https://safeid.test/realms/test', clientId: 'chrome-business', environment: 'TEST' });
+    const vault = { load: async () => undefined, store: async () => undefined, remove: async () => undefined };
     const core = createCore({ ...configuration, environment: 'LIVE' }, { load: async () => undefined, save: async () => undefined,
-      clear: async () => undefined }, undefined, 'org-a') as unknown as Record<string, unknown>;
+      clear: async () => undefined }, undefined, 'org-a', vault) as unknown as Record<string, unknown>;
 
     expect(core).toMatchObject({ business: true, organizationId: 'org-a', liveConfirmation: 'LIVE' });
+    expect(core.keyVault).toBe(vault);
     expect(core.configuration).toMatchObject({ audience: 'inheriti-integrations-api', scopes: ['openid'] });
     expect(chrome.identity.getRedirectURL).toHaveBeenCalledWith('integrations-oauth');
     expect(core).not.toHaveProperty('applicationId');

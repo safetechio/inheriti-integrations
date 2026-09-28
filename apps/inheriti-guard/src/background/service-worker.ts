@@ -3,6 +3,7 @@ import { cancelPageFieldPicker, pickPageField } from './page-picker.js';
 import { PendingTabContextStore } from './pending-tab-context.js';
 import { isGuardContentRequest, isGuardRequest, isOverlayRequest, isSidePanelRequest, type OverlayRequest, type SidePanelResponse } from '../shared/messages.js';
 import { SessionStorageOperatorSessionStore } from './session-store.js';
+import { operatorSessionIdentity, SessionStorageKeyVault } from './session-key-vault.js';
 import { signIn } from './auth.js';
 import { createCore, loadPlanAssets, loadPlans } from './plans.js';
 import { BUSINESS_DEPLOYMENTS, businessUiRpId, type BrowserIntegrationCore, type BusinessOrganization } from '@safetech/inheriti-elements-core/browser';
@@ -63,15 +64,7 @@ const guard = new GuardController({
   unlock() { lifecycleLocked = false; },
 }, chrome.storage.local, chrome.storage.session);
 
-/**
- * Configuration from the options page, or from the harness when it wrote it into the session area.
- *
- * Held for the life of this worker rather than rebuilt per message. The client is where the acquired
- * Application key lives, so a fresh one for every message meant a relayed key was asked of the
- * owner's phone again on each reveal, and `forgetMasterKey` dropped a key nothing else could see. A
- * configuration change — or a sign-out, which must not leave the previous operator's key behind —
- * replaces it.
- */
+/** Reuse the client while configuration and login are unchanged; keys survive worker suspension in session storage. */
 let heldCore: { readonly key: string; readonly value: BrowserIntegrationCore } | undefined;
 let organizationRevision = 0;
 let organizationSwitching = false;
@@ -83,9 +76,15 @@ async function core(organizationId?: string) {
   const selected = configuration.applicationId === undefined
     ? organizationId ?? await selectedOrganization(configuration)
     : undefined;
-  const principal = (await sessions.load())?.principal;
-  const key = JSON.stringify([configuration, selected, principal?.issuer, principal?.subject]);
-  if (heldCore?.key !== key) heldCore = { key, value: createCore(configuration, sessions, undefined, selected) };
+  const snapshot = await sessions.snapshot();
+  const session = snapshot.session;
+  const principal = session?.principal;
+  const key = JSON.stringify([configuration, selected, principal?.issuer, principal?.environment, principal?.authorizedParty, principal?.subject, principal?.sessionId, snapshot.generation]);
+  if (heldCore?.key !== key) {
+    const vault = operatorSessionIdentity(session)
+      ? new SessionStorageKeyVault(chrome.storage.session, sessions, configuration, snapshot) : undefined;
+    heldCore = { key, value: createCore(configuration, sessions, undefined, selected, vault) };
+  }
   return heldCore.value;
 }
 
@@ -161,9 +160,7 @@ async function panelState(action: 'sign-in' | 'sign-out' | 'load-plans' | 'forge
       }
     }
     const client = await core();
-    // The Application key is acquired once and held for the life of this worker, so a second reveal
-    // never asks the owner's phone again. This gives that up, and is the only way to make the next
-    // reveal acquire it from scratch. The session is untouched: this locks the key, not the operator.
+    // Remove only the selected key; the operator session and other organizations remain available.
     if (action === 'forget-master-key') {
       await client.forgetMasterKey();
       return await selectedPlans(client);
@@ -291,6 +288,15 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
 async function respond(request: import('../shared/messages.js').SidePanelRequest): Promise<SidePanelResponse> {
   const type = request.type;
+  if (type === 'get-master-key-status') {
+    const configuration = resolveConfiguration(await readStoredConfiguration(chrome.storage.local, chrome.storage.session));
+    const organizationId = configuration.applicationId === undefined ? await selectedOrganization(configuration) : undefined;
+    const contextId = configuration.applicationId ?? organizationId;
+    const loaded = contextId !== undefined && await (await core(organizationId)).hasMasterKey({
+      system: configuration.applicationId === undefined ? 'INHERITI_BUSINESS' : 'INHERITI_ELEMENTS', contextId,
+    });
+    return { ok: true, keyStatus: { owner: configuration.applicationId === undefined ? 'Organization' : 'Application', loaded } };
+  }
   if (type === 'select-organization') {
     if (typeof request.organizationId !== 'string' || !request.organizationId || request.organizationId.length > 255)
       return { ok: false, error: 'plan-request-failed' };

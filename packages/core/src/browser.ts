@@ -1,6 +1,6 @@
 import { createBrowserElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/browser';
 import type { BrowserElementsClientOptions } from '@safetech/inheriti-client-sdk/browser';
-import type { DeclaredMasterKeySource, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
+import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
 import { ElementsIntegrationCore } from './index.js';
 import type { ElementsEnvironment, OperatorAuthFacade } from './index.js';
 import { SdkPlanFacade } from './plans.js';
@@ -17,6 +17,7 @@ export type BrowserIntegrationCoreOptions = OperatorAuthOptions & {
    * naming the reference, not as a missing capability.
    */
   masterKeys?: MasterKeyResolver;
+  keyVault?: KeyVault;
   /**
    * What custody this host holds locally: a passphrase-derived key, key material it already has, or
    * nothing. The Client SDK composes acquisition around it — a host that can derive never asks
@@ -56,6 +57,7 @@ export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOpti
     ...(options.business ? { business: true as const, ...(options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) }
       : { applicationId: options.applicationId }),
     ...(options.masterKeys ? { masterKeys: options.masterKeys } : {}),
+    ...(options.keyVault === undefined ? {} : { keyVault: options.keyVault }),
     ...(options.masterKey ? { masterKey: options.masterKey } : {}),
     transport: bearerTransport,
     ...(options.reconstruction === undefined ? {} : { reconstruction: options.reconstruction }),

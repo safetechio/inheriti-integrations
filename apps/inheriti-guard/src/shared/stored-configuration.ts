@@ -2,6 +2,7 @@ import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeploymen
 
 export const CONFIGURATION_KEYS = ['apiUrl', 'issuer', 'clientId', 'environment'] as const;
 export const APPLICATION_KEY = 'applicationId';
+export const MASTER_KEY_CACHE_PREFIX = 'inheriti.masterKeyCache.';
 
 /**
  * Non-secret, and optional: how the Application's master key is held, and the Argon2 salt that
@@ -34,8 +35,8 @@ export interface ConfigurationStorageArea {
 /**
  * Where an installed extension keeps the values it was configured with.
  *
- * The operator's tokens live in `chrome.storage.session` and must stay there — a service worker that
- * ends takes them with it, which is the point. Configuration is different: an API origin, an issuer,
+ * Operator tokens stay in `chrome.storage.session` across worker suspension until the browser session
+ * ends. Configuration is different: an API origin, an issuer,
  * a public client id and an environment name are not secrets, and a page that has to be reconfigured
  * every time the browser restarts is not installed in any useful sense. So configuration is read
  * from the local area, with the session area kept as a fallback for the harness, which writes it

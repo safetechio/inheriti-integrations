@@ -1,17 +1,22 @@
-@font-face { font-family: AppFont; src: url('../side-panel/font-app.ttf') format('truetype'); font-display: swap; }
-:root { color: #101828; background: #f8fbff; font: 16px/1.55 AppFont, ui-sans-serif, system-ui, sans-serif; --brand-primary: #2962ff; color-scheme: light; }
+@font-face { font-family: AppFont; src: url('../side-panel/font-app.ttf?v=3add53e6') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+:root { color: #101828; background: #f8fbff; font: 14px/1.55 AppFont, ui-sans-serif, system-ui, sans-serif; --brand-primary: #2962ff; color-scheme: light; }
 * { box-sizing: border-box; }
-body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #e3f2fd, #f8fbff 44%); }
-main { width: min(100%, 520px); padding: 48px; border: 1px solid #dbe7f7; border-radius: 24px; background: #fff; box-shadow: 0 20px 55px rgba(16, 24, 40, .12); text-align: center; }
-.shield { width: 64px; height: 64px; margin: 0 auto 18px; display: grid; place-items: center; border-radius: 20px; color: var(--brand-primary); background: #e3f2fd; }
-.shield svg { width: 30px; height: 38px; fill: currentColor; }
-.brand { margin: 0; color: var(--brand-primary); font-size: 13px; font-weight: 800; letter-spacing: .06em; }
-h1 { margin: 7px 0 10px; font-size: clamp(28px, 6vw, 38px); line-height: 1.15; }
-.explanation, .footnote { color: #535862; }
-.location { padding: 10px 12px; border-radius: 9px; color: #344054; background: #f2f4f7; font: 13px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; }
-.actions { margin-top: 24px; display: flex; justify-content: center; gap: 10px; }
-button { min-height: 42px; padding: 9px 18px; border: 1px solid var(--brand-primary); border-radius: 9px; color: #fff; background: var(--brand-primary); font: inherit; font-weight: 700; cursor: pointer; }
+[hidden] { display: none !important; }
+body { min-height: 100dvh; margin: 0; display: grid; place-items: center; padding: 24px; }
+main { width: min(100%, 520px); display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid #eaecf0; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(10, 13, 18, .06); text-align: center; overflow: hidden; }
+main::before { content: ''; grid-column: 1; grid-row: 1 / 5; background: var(--brand-primary); }
+main > * { position: relative; grid-column: 1; min-width: 0; }
+.shield { grid-row: 1; width: 68px; height: 68px; margin: 40px auto 18px; display: grid; place-items: center; border-radius: 16px; color: var(--brand-primary); background: #fff; }
+.shield svg { width: 34px; height: 42px; fill: currentColor; }
+.brand { grid-row: 2; margin: 0; color: #fff; font-size: 11px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; }
+h1 { grid-row: 3; margin: 8px 44px 10px; color: #fff; font-size: clamp(26px, 6vw, 32px); font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
+.explanation { grid-row: 4; margin: 0; padding: 0 44px 28px; color: #fff; font-size: 14px; }
+.location { margin: 24px 44px 0; padding: 10px 12px; border: 1px solid #eaecf0; border-radius: 6px; color: #344054; background: #f9fafb; font: 13px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; }
+.actions { margin: 24px 44px 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+button { min-height: 42px; padding: 9px 20px; border: 1px solid var(--brand-primary); border-radius: 6px; color: #fff; background: var(--brand-primary); font: inherit; font-weight: 400; cursor: pointer; }
+button:hover { background: #1642ba; }
 button.secondary { color: var(--brand-primary); background: #fff; }
-button:focus-visible { outline: 3px solid #b8d5ff; outline-offset: 2px; }
-.footnote { margin: 22px 0 0; font-size: 12px; }
-@media (max-width: 480px) { main { padding: 32px 22px; } .actions { display: grid; } }
+button.secondary:hover { background: #f8fbff; }
+button:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 3px; }
+.footnote { margin: 20px 44px 32px; color: #535862; font-size: 13px; }
+@media (max-width: 480px) { body { padding: 16px; } h1 { margin-inline: 22px; } .explanation { padding-inline: 22px; } .location, .actions, .footnote { margin-inline: 22px; } .actions { display: grid; } }

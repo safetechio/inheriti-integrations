@@ -4,8 +4,9 @@ import type { GuardRequest, GuardResponse, SidePanelRequest, SidePanelResponse }
 import { messageFor, rowsFor, type PanelState } from '../shared/plan-view.js';
 import { inheritiGuardBrand, inheritiGuardShield, planAvatarSvg } from '@safetech/inheriti-elements-brand';
 import type { GuardActivityEntry, GuardSettings } from '../shared/guard-contract.js';
+import { MASTER_KEY_CACHE_PREFIX } from '../shared/stored-configuration.js';
 const origin = required('origin');
-required('guard-version').textContent = `Unified protection · v${chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}`;
+required('guard-version').textContent = `v${chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}`;
 const appMain = required<HTMLElement>('app-main');
 const planAccessPanel = required<HTMLElement>('plan-access-panel');
 const panelTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.plan-tabs [role="tab"]'));
@@ -332,12 +333,22 @@ async function selectPageFirstCandidate(candidate: PageFirstFieldCandidate): Pro
 }
 
 /** API values are assigned through textContent and are never interpreted as markup. */
+function renderKeyStatus(keyOwner: 'Application' | 'Organization', loaded: boolean): void {
+  forgetKey.textContent = loaded ? `${keyOwner} key loaded · Clear` : `${keyOwner} key not loaded`;
+  forgetKey.title = loaded ? `Clear the ${keyOwner.toLowerCase()} key from memory. You'll need to load it again before the next reveal.` : '';
+  forgetKey.disabled = !loaded;
+}
+
+async function refreshKeyStatus(): Promise<void> {
+  try {
+    const response = await send({ type: 'get-master-key-status' });
+    if (response.ok && 'keyStatus' in response) renderKeyStatus(response.keyStatus.owner, response.keyStatus.loaded);
+  } catch { /* Retain the last status while the worker is unavailable. */ }
+}
+
 function renderPanel(state: PanelState): void {
   const organizations = state.organizations;
-  const keyOwner = organizations === undefined ? 'Application' : 'Organisation';
-  forgetKey.textContent = state.keyInMemory ? `Remove ${keyOwner.toLowerCase()} key` : `${keyOwner} key locked`;
-  forgetKey.title = state.keyInMemory ? `You'll need to unlock the ${keyOwner.toLowerCase()} key again before the next reveal.` : '';
-  forgetKey.disabled = !state.keyInMemory;
+  renderKeyStatus(organizations === undefined ? 'Application' : 'Organization', Boolean(state.keyInMemory));
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION';
   organizationChoice.hidden = organizations === undefined;
   planAccessPanel.dataset.organization = needsOrganization ? 'required' : 'selected';
@@ -416,6 +427,7 @@ function renderPanel(state: PanelState): void {
   signIn.hidden = signedIn || needsConfiguration;
   planTools.hidden = !signedIn || needsOrganization;
   forgetKey.hidden = !signedIn || needsOrganization;
+  if (signedIn && !needsOrganization) void refreshKeyStatus();
 }
 
 const guardEnabled = required<HTMLInputElement>('guard-enabled');
@@ -527,6 +539,10 @@ signIn.addEventListener('click', () => { renderPanel({ kind: 'SIGNING_IN' }); vo
 openOptions.addEventListener('click', () => { void chrome.runtime.openOptionsPage(); });
 signOut.addEventListener('click', () => { void discardWorkspace(); void requestState('sign-out'); });
 forgetKey.addEventListener('click', () => { void requestState('forget-master-key'); });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'session') return;
+  if (Object.keys(changes).some((key) => key.startsWith(MASTER_KEY_CACHE_PREFIX))) void refreshKeyStatus();
+});
 reloadPlans.addEventListener('click', () => { renderPanel({ kind: 'LOADING' }); void requestState('load-plans'); });
 organizationMenu.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') { organizationMenu.open = false; organizationSummary.focus(); }
@@ -673,6 +689,7 @@ async function revealAndAutofill(batch: AccessBatch): Promise<void> {
   const pending = send({ type: 'reveal-and-autofill', batch });
   const poll = window.setInterval(() => { void refreshProgress(); }, 500);
   const response = await pending;
+  void refreshKeyStatus();
   window.clearInterval(poll);
   revealRunning = false;
   closeAccess.disabled = false;

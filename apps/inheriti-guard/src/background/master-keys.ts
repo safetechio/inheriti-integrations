@@ -12,8 +12,8 @@ import type { ChromeConfiguration } from '../shared/configuration.js';
  * holds the key, and this host never chooses between the two paths or speaks the relay protocol.
  *
  * The secret is read from `chrome.storage.session`, the same memory-backed, restart-cleared area the
- * operator's tokens live in and which no content script can reach. The derived key is never written
- * anywhere: it stays inside the SDK's key vault for the life of the service worker.
+ * operator's tokens live in and which no content script can reach. Acquired keys are cached in that
+ * same session area and cleared on sign-out.
  */
 export function createChromeMasterKeySource(configuration: ChromeConfiguration): DeclaredMasterKeySource {
   const source = sourceFor(configuration);

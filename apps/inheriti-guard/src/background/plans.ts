@@ -1,6 +1,6 @@
 import { createBrowserIntegrationCore } from '@safetech/inheriti-elements-core/browser';
 import type { BrowserIntegrationCore } from '@safetech/inheriti-elements-core/browser';
-import type { OperatorSessionStore } from '@safetech/inheriti-elements-core';
+import type { KeyVault, OperatorSessionStore } from '@safetech/inheriti-elements-core';
 import type { ChromeConfiguration } from '../shared/configuration.js';
 import { createChromeMasterKeySource } from './master-keys.js';
 import { codeOf, type PanelState } from '../shared/plan-view.js';
@@ -18,6 +18,7 @@ export function createCore(
   sessions: OperatorSessionStore,
   transport?: typeof fetch,
   organizationId?: string,
+  keyVault?: KeyVault,
 ): BrowserIntegrationCore {
   return createBrowserIntegrationCore({
     ...(transport === undefined ? {} : { fetchImpl: transport }),
@@ -33,6 +34,7 @@ export function createCore(
     // No `reconstruction.workerUrl`: an MV3 service worker has no `Worker` constructor, so one
     // could never be used. Reconstruction has no off-thread size ceiling — only splitting does,
     // and this host never splits.
+    ...(keyVault === undefined ? {} : { keyVault }),
     sessions,
     configuration: {
       issuer: configuration.issuer,

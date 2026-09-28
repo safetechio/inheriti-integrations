@@ -11,6 +11,8 @@ const reconcileReveal = vi.fn(async (_planId: string) => ({ kind: 'WARNING', mes
   detail: '', code: 'active_access_open', planId: _planId, revealId: '22222222-2222-4222-8222-222222222222' }));
 let revealState: Record<string, unknown> = { kind: 'IDLE' };
 let businessMode = false;
+const hasMasterKey = vi.fn(async (_ref: unknown) => false);
+const loadPlansMock = vi.fn(async () => ({ kind: 'EMPTY' }));
 let businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }];
 const selectedOrganizations: Record<string, string> = {};
 const coreOrganizations: Array<string | undefined> = [];
@@ -61,6 +63,7 @@ vi.mock('../src/background/session-store.js', () => ({
   SessionStorageOperatorSessionStore: class {
     clear = clearSession;
     async load() { return { principal: { issuer: 'https://safeid.test', subject: 'user-a', environment: 'TEST' } }; }
+    async snapshot() { return { session: await this.load(), generation: 0 }; }
   },
 }));
 vi.mock('../src/background/plans.js', () => ({
@@ -69,7 +72,7 @@ vi.mock('../src/background/plans.js', () => ({
     return {
     auth: {},
     forgetMasterKey: vi.fn(async () => undefined),
-    hasMasterKey: vi.fn(async () => false),
+    hasMasterKey,
     getAccessToken: async () => 'operator-token',
     listOrganizations: async () => businessOrganizations,
     listPlans: async (input?: unknown) => {
@@ -80,7 +83,7 @@ vi.mock('../src/background/plans.js', () => ({
     getPlan: async (planId: string) => ({ assets: [{ id: `asset-${planId}`, code: 'login', name: 'Login', type: 'USER-PSWD',
       isBinary: false, fieldNames: planFieldNames, matchOrigins: planId === 'plan-1' ? ['https://example.test'] : [] }] }),
   }; },
-  loadPlans: async () => ({ kind: 'EMPTY' }),
+  loadPlans: loadPlansMock,
   loadPlanAssets: async () => [],
 }));
 vi.mock('../src/shared/stored-configuration.js', () => ({
@@ -147,6 +150,8 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  hasMasterKey.mockReset().mockResolvedValue(false);
+  loadPlansMock.mockClear();
   fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
   revealState = { kind: 'IDLE' };
   businessMode = false; workspaceFields = discovered; overlayFields = discovered; planFieldNames = ['username']; planListInputs.length = 0;
@@ -163,6 +168,26 @@ function overlayRequest(message: unknown, sender: Record<string, unknown> = {
 }
 
 describe('service worker access routing', () => {
+  it('reads cached key status without reloading plans and reflects acquisition and clearing', async () => {
+    expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Application', loaded: false } });
+    expect(hasMasterKey).toHaveBeenLastCalledWith({ system: 'INHERITI_ELEMENTS', contextId: 'standalone-test' });
+    hasMasterKey.mockResolvedValue(true);
+    expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Application', loaded: true } });
+    hasMasterKey.mockResolvedValue(false);
+    expect((await request({ type: 'get-master-key-status' })).keyStatus.loaded).toBe(false);
+    expect(loadPlansMock).not.toHaveBeenCalled();
+  });
+
+  it('checks the selected organization key without fetching the plan list', async () => {
+    businessMode = true;
+    await request({ type: 'select-organization', organizationId: 'org-b' });
+    loadPlansMock.mockClear();
+    hasMasterKey.mockResolvedValue(true);
+    expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Organization', loaded: true } });
+    expect(hasMasterKey).toHaveBeenLastCalledWith({ system: 'INHERITI_BUSINESS', contextId: 'org-b' });
+    expect(loadPlansMock).not.toHaveBeenCalled();
+    for (const key of Object.keys(selectedOrganizations)) delete selectedOrganizations[key];
+  });
   it('reconciles a valid plan UUID before returning overlay reveal state', async () => {
     const planId = '04912bb5-4d0c-410a-bde8-b341eaf13883';
     const result = await overlayRequest({ type: 'overlay-reveal-state', planId });

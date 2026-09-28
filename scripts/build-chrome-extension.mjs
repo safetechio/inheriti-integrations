@@ -1,16 +1,19 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { dirname, relative, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { optionalToastPlugin } from './optional-toast-plugin.mjs';
 import { packageDirectory } from './package-directory.mjs';
-import { buildDefines, packageVersionForDeployment, requiredBuildDeployment, writeBuildDeployment } from './build-deployment.mjs';
+import { packageVersionForDeployment, requiredBuildDeployment, writeBuildDeployment } from './build-deployment.mjs';
+import { chromeBuildOptions } from './chrome-build-options.mjs';
 import { manifestKeyForBuild } from './chrome-extension-id.mjs';
 
 const root = process.cwd();
 const source = resolve(root, 'src');
 const output = resolve(root, 'dist');
 const deployment = requiredBuildDeployment();
+const buildOptions = chromeBuildOptions();
 
 const packageManifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const sourceManifest = JSON.parse(await readFile(resolve(source, 'manifest.json'), 'utf8'));
@@ -27,7 +30,8 @@ if (sourceManifest.version !== packageManifest.version) {
 await rm(output, { recursive: true, force: true });
 
 // Types are checked against the real project; the bundles are what the browser loads.
-const typecheck = spawnSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--noEmit'], { cwd: root, stdio: 'inherit' });
+const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+const typecheck = spawnSync(process.execPath, [compiler, '-p', 'tsconfig.build.json', '--noEmit'], { cwd: root, stdio: 'inherit' });
 if (typecheck.status !== 0) process.exit(typecheck.status ?? 1);
 
 // MV3 resolves no bare specifiers, so the service worker and panel must arrive bundled. ESM, because
@@ -51,7 +55,7 @@ await build({
   sourcemap: true,
   logLevel: 'info',
   plugins: [optionalToastPlugin],
-  define: buildDefines(),
+  define: buildOptions.defines,
 });
 
 // Dynamically registered content scripts are classic isolated-world scripts, not extension-page
@@ -131,4 +135,8 @@ await writeFile(
   resolve(output, 'manifest.json'),
   `${JSON.stringify(manifest, null, 2)}\n`,
 );
-await writeBuildDeployment(output);
+if (buildOptions.harness) {
+  await writeFile(resolve(output, 'build-deployment.json'), `${JSON.stringify({ deployment: null, harness: true })}\n`);
+} else {
+  await writeBuildDeployment(output);
+}
