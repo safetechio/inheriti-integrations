@@ -6,13 +6,17 @@
 .edit-progress-steps li[data-state="done"] { background: #f9fafb; }
 .edit-progress-steps li[data-state="waiting"] { color: #98a2b3; }
 .edit-progress-steps li[data-state="failed"] { border-color: #fecdca; background: #fff5f4; }
-.edit-progress-number { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; color: #667085; font-size: 12px; font-weight: 600; }
+.edit-progress-number { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; color: #667085; font-size: 12px; font-weight: 600; line-height: 1; }
+.edit-progress-number svg { display: block; width: 14px; height: 14px; }
 .edit-progress-steps [data-state="current"] .edit-progress-number { color: #fff; border-color: #2962ff; background: #2962ff; }
 .edit-progress-steps [data-state="done"] .edit-progress-number { color: #fff; border-color: #12b76a; background: #12b76a; }
 .edit-progress-steps [data-state="failed"] .edit-progress-number { color: #b42318; border-color: #fda29b; }
 .edit-progress-steps li > div { display: grid; gap: 2px; min-width: 0; line-height: 1.4; }
 .edit-progress-steps strong { font-size: 13px; font-weight: 600; }
 .edit-progress-steps li > div > span { color: #475467; font-size: 12px; }
+.edit-progress-steps button, .edit-scroll > .button-danger { min-height: 32px; padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+.edit-progress-steps button { justify-self: start; margin-top: 8px; }
+.edit-scroll > .button-danger { align-self: flex-start; }
 .edit-plan-field { position: relative; display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
 .edit-plan-trigger, .edit-plan-option { width: 100%; display: flex; align-items: center; gap: 10px; color: #101828; background: #fff; text-align: left; font-size: 14px; font-weight: 400; }
 .edit-plan-trigger { height: 40px; padding: 6px 10px; border: 1px solid #d0d5dd; border-radius: 8px; }

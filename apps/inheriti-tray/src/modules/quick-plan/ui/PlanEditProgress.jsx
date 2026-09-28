@@ -16,7 +16,9 @@ const revealGroups = new Set(['validators', 'shares', 'custodian', 'decrypt', 'v
 function ProgressSteps({ steps, label, retry, retryLabel, noSpaceMessage, downloadLabel, approvals, messages, moderationExpired }) {
   return <ol className="edit-progress-steps" aria-label={label}>
     {steps.map(({ id, title, description, status }, index) => <li key={id} data-state={status} aria-current={status === 'current' ? 'step' : undefined}>
-      <span className="edit-progress-number" aria-hidden="true">{status === 'done' ? '✓' : status === 'failed' ? '×' : index + 1}</span>
+      <span className="edit-progress-number" aria-hidden="true">{status === 'done' || status === 'failed'
+        ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={status === 'done' ? 'm4 8 3 3 5-6' : 'm5 5 6 6m0-6-6 6'} /></svg>
+        : index + 1}</span>
       <div><strong>{title}</strong>{description && <span>{description}</span>}{id === 'moderation' && approvals && <div className="edit-moderator-progress" aria-live="polite"><p>{messages.editModeratorCount(approvals.approvedModerators, approvals.requiredApprovals)}</p><div role="list" aria-label={messages.editModerators}>{approvals.moderators.map((moderator) => {
         const participantStatus = moderationExpired && moderator.status === 'CANCELED' ? 'EXPIRED' : moderator.status;
         return <div role="listitem" className="edit-moderator" key={moderator.id}><span>{moderatorDisplayName(moderator.displayName, moderator.id)}</span><span className="edit-moderator-status" data-status={participantStatus}>{messages.editModeratorStatuses[participantStatus] || messages.editModeratorStatuses.IDLE}</span></div>;

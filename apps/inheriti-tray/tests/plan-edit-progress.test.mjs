@@ -115,7 +115,7 @@ it.each(Object.values(trayMessages.editAccessFailures))('shows terminal approval
   expect(markup).toContain(failure.title);
   expect(markup).toContain(failure.message);
   expect(markup).toContain('data-state="failed"');
-  expect(markup).toContain('×');
+  expect(markup).toContain('aria-hidden="true"><svg');
   expect(markup).not.toContain('aria-current="step"');
   expect(markup).toContain('Request access again</button>');
 });
