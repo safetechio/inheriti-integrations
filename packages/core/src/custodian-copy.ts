@@ -2,7 +2,7 @@ export const custodianShareCopy = {
   choice: {
     title: 'Choose a custodian device',
     question: 'Where should this plan share be stored?',
-    intro: 'This is your first access to this plan. Save its custodian share to a device now. Future access will require the same device to provide it.',
+    intro: 'Save the current custodian share on a device to use for plan access. After editing the plan, claim the new share again.',
     mobileOption: 'SafeKey Mobile',
     mobileDescription: 'A request to claim this plan share will be sent to your SafeKey Mobile.',
     proOption: 'SafeKey PRO',
@@ -11,8 +11,8 @@ export const custodianShareCopy = {
     proTouch: 'Press and release the SafeKey PRO touch button when prompted.',
   },
   firstAccess: {
-    mobileClaim: 'Open SafeKey Mobile to claim this plan share on your phone. Future access will require that phone to release it.',
-    mobileClaimPending: 'This plan share has not been saved to your phone yet. Open SafeKey Mobile to claim it, then release it for this access. Future access will require this phone.',
+    mobileClaim: 'Open SafeKey Mobile to claim the current plan share on your phone for plan access. After editing the plan, claim the new share again.',
+    mobileClaimPending: 'Open SafeKey Mobile to claim the current plan share, then release it for this access. After editing the plan, claim the new share again.',
     proStore: 'Store the custodian share on your connected SafeKey PRO to continue.',
     proPin: 'Enter your PIN to save the custodian share to your device.',
   },

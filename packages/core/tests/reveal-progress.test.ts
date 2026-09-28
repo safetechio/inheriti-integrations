@@ -39,8 +39,8 @@ describe('reveal progress wording', () => {
   });
 
   it('distinguishes a pending first claim from a later release approval', () => {
-    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('claim it, then release it');
-    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('Future access will require this phone');
+    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('claim the current plan share, then release it');
+    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('After editing the plan, claim the new share again.');
     expect(revealProgressMessage(progress('CONNECTING_SAFEKEY_PRO'))).toContain('SafeKey PRO PIN');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).not.toContain('Approve');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN'))).toContain('approve its release');
