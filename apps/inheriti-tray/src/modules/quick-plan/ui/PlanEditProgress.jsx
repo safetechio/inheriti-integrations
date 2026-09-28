@@ -17,7 +17,7 @@ function ProgressSteps({ steps, label, retry, retryLabel, noSpaceMessage, downlo
   return <ol className="edit-progress-steps" aria-label={label}>
     {steps.map(({ id, title, description, status }, index) => <li key={id} data-state={status} aria-current={status === 'current' ? 'step' : undefined}>
       <span className="edit-progress-number" aria-hidden="true">{status === 'done' || status === 'failed'
-        ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={status === 'done' ? 'm4 8 3 3 5-6' : 'm5 5 6 6m0-6-6 6'} /></svg>
+        ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={status === 'failed' ? '1.5' : '2'} strokeLinecap="round" strokeLinejoin="round"><path d={status === 'done' ? 'm4 8 3 3 5-6' : 'M4 4 L12 12 M12 4 L4 12'} /></svg>
         : index + 1}</span>
       <div><strong>{title}</strong>{description && <span>{description}</span>}{id === 'moderation' && approvals && <div className="edit-moderator-progress" aria-live="polite"><p>{messages.editModeratorCount(approvals.approvedModerators, approvals.requiredApprovals)}</p><div role="list" aria-label={messages.editModerators}>{approvals.moderators.map((moderator) => {
         const participantStatus = moderationExpired && moderator.status === 'CANCELED' ? 'EXPIRED' : moderator.status;
