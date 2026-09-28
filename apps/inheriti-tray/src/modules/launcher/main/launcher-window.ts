@@ -21,6 +21,8 @@ export function showLauncher(action?: string): void {
       height: 608,
       show: false,
       resizable: false,
+      title: app.getName(),
+      icon: join(import.meta.dirname, 'tray.png'),
       webPreferences: {
         preload: join(import.meta.dirname, 'preload.cjs'),
         contextIsolation: true,

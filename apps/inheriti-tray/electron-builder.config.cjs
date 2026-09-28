@@ -5,15 +5,18 @@ if (!['local', 'dev', 'stg', 'prod'].includes(deployment)) {
   throw new Error('INHERITI_BUILD_DEPLOYMENT must be local, dev, stg, or prod.');
 }
 
+const productName = deployment === 'prod' ? 'Inheriti® Tray' : `Inheriti® Tray ${deployment.toUpperCase()}`;
+
 module.exports = {
   appId: `com.safetech.inheriti.tray.${deployment}`,
-  productName: deployment === 'prod' ? 'Inheriti Tray' : `Inheriti Tray ${deployment.toUpperCase()}`,
-  executableName: 'inheriti-tray',
+  productName,
+  extraMetadata: { productName },
+  icon: resolve(__dirname, 'build/icon.svg'),
   artifactName: `Inheriti-Tray-${deployment}-\${version}-\${os}-\${arch}.\${ext}`,
   directories: { output: process.env.INHERITI_ARTIFACTS_DIR ?? `artifacts/${deployment}` },
   files: ['dist/**/*', 'package.json'],
   asar: false,
-  linux: { category: 'Utility', target: ['AppImage'], icon: resolve(__dirname, 'src/tray.png'), syncDesktopName: true },
+  linux: { category: 'Utility', target: ['AppImage'], icon: resolve(__dirname, 'src/tray.png'), executableName: 'inheriti-tray', syncDesktopName: true },
   mac: {
     category: 'public.app-category.utilities',
     target: ['dmg'],
