@@ -23,7 +23,7 @@ it('keeps local choice off the model channel and closes after a mobile choice', 
   expect(html).toContain('SafeKey PRO');
   expect(html).toContain('Choose a custodian device');
   expect(html).toContain('A request to claim this plan share will be sent to your SafeKey Mobile.');
-  expect(html).toContain('Future access will require the same device');
+  expect(html).toContain('After editing the plan, claim the new share again.');
   expect(html).toContain('Inheriti® Business');
   expect(html).toMatch(/font-family:\s*AppFont/);
   expect(html).toContain('data:image/png;base64,');

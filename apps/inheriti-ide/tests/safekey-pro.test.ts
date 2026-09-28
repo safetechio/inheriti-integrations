@@ -3,7 +3,7 @@ import { resolveConfiguration } from '../src/configuration.js';
 import { createIdeSafeKeyPro, selectIdeCustodianDevice } from '../src/safekey-pro.js';
 
 vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-elements-core/node')>(), waitForSafeKeyProDevice: async () => '/dev/hidraw4' }));
-vi.mock('@safetech/inheriti-core-sdk/node', () => ({ createNodeSafeKeyProDevice: (options: { getPin: (signal?: AbortSignal) => Promise<Uint8Array> }) => ({
+vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-core-sdk/node')>(), createNodeSafeKeyProDevice: (options: { getPin: (signal?: AbortSignal) => Promise<Uint8Array> }) => ({
   write: (_share: unknown, signal?: AbortSignal) => options.getPin(signal),
   read: (_request: unknown, signal?: AbortSignal) => options.getPin(signal),
 }) }));
