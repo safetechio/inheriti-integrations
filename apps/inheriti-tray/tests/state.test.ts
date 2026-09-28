@@ -10,7 +10,12 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
 } }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
-  BUSINESS_DEPLOYMENTS: { dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' }, local: { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://default-issuer.test/', environment: 'TEST' } },
+  BUSINESS_DEPLOYMENTS: {
+    local: { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://default-issuer.test/', environment: 'TEST' },
+    dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' },
+    stg: { apiUrl: 'https://stg.example.test/', issuer: 'https://stg.issuer.test/', environment: 'TEST' },
+    prod: { apiUrl: 'https://prod.example.test/', issuer: 'https://prod.issuer.test/', environment: 'LIVE' },
+  },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
@@ -34,6 +39,14 @@ describe('TraySession', () => {
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
     mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+
+  it.each(['local', 'dev', 'stg', 'prod'] as const)('requests only identity scopes for %s Business sign-in', (deployment) => {
+    new TraySession(deployment);
+    expect(mock.core).toHaveBeenCalledWith(expect.objectContaining({
+      business: true,
+      configuration: expect.objectContaining({ scopes: ['openid', 'profile'] }),
+    }));
   });
 
   it('uses local API and issuer overrides across core, creation, and edit', async () => {

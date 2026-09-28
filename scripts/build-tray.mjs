@@ -43,7 +43,7 @@ await build({
   minify: true,
   define: { 'process.env.NODE_ENV': '"production"' },
 });
-for (const file of ['launcher.html', 'launcher.css', 'plan-screens.css', 'font-app.ttf', 'tray.png']) {
+for (const file of ['login-callback.html', 'launcher.html', 'launcher.css', 'plan-screens.css', 'font-app.ttf', 'tray.png']) {
   await cp(resolve(root, 'src', file), resolve(output, file));
 }
 for (const file of ['safekey-mobile.png', 'safekey-pro.png']) {

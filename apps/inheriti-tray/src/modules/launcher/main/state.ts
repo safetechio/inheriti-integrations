@@ -57,7 +57,7 @@ export class TraySession {
         audience: 'inheriti-integrations-api',
         environment: config.environment,
         redirectUri: 'http://127.0.0.1:53682/oauth/callback',
-        scopes: ['openid', 'profile', 'plan:create', 'plan:configure', 'plan:edit'],
+        scopes: ['openid', 'profile'],
       },
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
