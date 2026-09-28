@@ -47,3 +47,12 @@
 .edit-screen .tray-footer > button:last-child { flex: 1.4; }
 .edit-screen #capture { grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 0; border: 0; }
 .edit-screen #capture .buttons { position: sticky; bottom: -16px; z-index: 1; margin: 0 -16px -16px; padding: 12px 16px; border-top: 1px solid #eaecf0; background: #fff; }
+.edit-moderator-progress { margin-top: 8px; min-width: 0; }
+.edit-moderator-progress p { margin: 0 0 6px; color: #475467; font-size: 12px; }
+.edit-moderator-progress [role="list"] { display: grid; gap: 6px; }
+.edit-moderator { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid #eaecf0; border-radius: 6px; background: #fff; font-size: 12px; }
+.edit-moderator > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.edit-moderator-status { flex: none; padding: 2px 6px; border-radius: 4px; color: #475467; background: #f2f4f7; }
+.edit-moderator-status[data-status="APPROVED"] { color: #027a48; background: #ecfdf3; }
+.edit-moderator-status[data-status="PENDING"] { color: #93370d; background: #fffaeb; }
+.edit-moderator-status[data-status="DENIED"], .edit-moderator-status[data-status="EXPIRED"] { color: #b42318; background: #fef3f2; }

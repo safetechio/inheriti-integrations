@@ -1,5 +1,5 @@
 import { createPlanEditOperations } from '@safetech/inheriti-elements-core/node';
-import type { QuickPlanEditPhase, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import type { QuickPlanEditPhase, QuickPlanEditApprovalProgress, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { ProtectedCheckpoint } from '../../launcher/main/protected-checkpoint.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { PlanEditSessionCoordinator } from './plan-edit-session.js';
@@ -24,6 +24,7 @@ export type PlanEditState = {
   status: PlanEditStatuses[keyof PlanEditStatuses];
   phase?: EditPhase;
   phaseHistory: EditPhase[];
+  approvals?: QuickPlanEditApprovalProgress;
   keyStatus?: 'accessing' | 'awaiting';
   available: boolean;
   canRecover: boolean;
@@ -47,6 +48,7 @@ export class TrayPlanEdit {
   private status: PlanEditState['status'] = PLAN_EDIT_STATUS.idle;
   private phase: EditPhase | undefined;
   private phaseHistory: EditPhase[] = [];
+  private approvals: QuickPlanEditApprovalProgress | undefined;
   private keyStatus: PlanEditState['keyStatus'];
   private message: string | undefined;
   private planId: string | undefined;
@@ -65,7 +67,7 @@ export class TrayPlanEdit {
   state(): PlanEditState {
     let available = false;
     try { available = !!this.checkpoint && this.checkpoint.isAvailable(); } catch {}
-    return { plans: this.plans, assets: this.assets, status: this.status, available, canRecover: this.canRecover, canDiscard: !!this.attempt, needsSignIn: this.needsSignIn, actorMismatch: this.actorMismatch, phaseHistory: this.phaseHistory, ...(this.phase ? { phase: this.phase } : {}), ...(this.keyStatus ? { keyStatus: this.keyStatus } : {}), ...(this.message ? { message: this.message } : {}), ...(this.planId ? { planId: this.planId } : {}) };
+    return { plans: this.plans, assets: this.assets, status: this.status, available, canRecover: this.canRecover, canDiscard: !!this.attempt, needsSignIn: this.needsSignIn, actorMismatch: this.actorMismatch, phaseHistory: this.phaseHistory, ...(this.approvals ? { approvals: this.approvals } : {}), ...(this.phase ? { phase: this.phase } : {}), ...(this.keyStatus ? { keyStatus: this.keyStatus } : {}), ...(this.message ? { message: this.message } : {}), ...(this.planId ? { planId: this.planId } : {}) };
   }
 
   assertIdle(): void { if (this.pending) throw new Error('edit_in_progress'); }
@@ -75,6 +77,7 @@ export class TrayPlanEdit {
     this.dismissed = true;
     this.operations?.clearRevealed();
     this.assets = [];
+    this.approvals = undefined;
   }
 
   async selectOrganization(id: string): Promise<void> {
@@ -95,6 +98,7 @@ export class TrayPlanEdit {
     this.checkpoint = new ProtectedCheckpoint();
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     this.keyStatus = undefined;
   }
 
@@ -143,6 +147,7 @@ export class TrayPlanEdit {
     this.actorMismatch = false;
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     this.keyStatus = undefined;
   }
 
@@ -178,6 +183,7 @@ export class TrayPlanEdit {
     this.dismissed = false;
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     this.keyStatus = undefined;
   }
 
@@ -187,6 +193,7 @@ export class TrayPlanEdit {
     this.plans = [];
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     this.message = undefined;
     this.needsSignIn = false;
     onChange();
@@ -228,19 +235,21 @@ export class TrayPlanEdit {
     if (!this.checkpoint?.isAvailable()) throw new Error(messages.checkpointUnavailable);
     if (!this.plans.some((plan) => plan.id === planId)) throw new Error('plan_unavailable');
     const operations = this.selectedOperations();
+    const generation = this.revealGeneration;
     this.pending = true;
     this.planId = planId;
     this.status = PLAN_EDIT_STATUS.saving;
     this.message = undefined;
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     onChange();
     try {
       if (this.dismissed) {
         await this.abort();
         this.dismissed = false;
       }
-      this.attempt = await this.session().open(planId, true, (phase) => this.reportPhase(phase, onChange), (attempt) => { this.attempt = attempt; }, undefined, () => { this.keyStatus = 'awaiting'; onChange(); });
+      this.attempt = await this.session().open(planId, true, (phase) => this.reportPhase(phase, onChange), (attempt) => { this.attempt = attempt; }, undefined, () => { if (generation !== this.revealGeneration) return; this.keyStatus = 'awaiting'; onChange(); });
       const attempt = this.attempt;
       if (attempt.startedAdd) {
         const recovered = await operations.recover(planId, attempt.editId!);
@@ -252,7 +261,7 @@ export class TrayPlanEdit {
       this.canRecover = true;
       this.checkpoint.setItem('plan-edit/attempt', attempt);
       this.phase = undefined;
-      const result = await operations.add(planId, attempt.editId!, attempt.totalShares, asset, (phase: EditPhase) => this.reportPhase(phase, onChange), () => { this.keyStatus = 'awaiting'; onChange(); });
+      const result = await operations.add(planId, attempt.editId!, attempt.totalShares, asset, (phase: EditPhase, approvals?: QuickPlanEditApprovalProgress) => { if (generation === this.revealGeneration) this.reportPhase(phase, onChange, approvals); }, () => { if (generation !== this.revealGeneration) return; this.keyStatus = 'awaiting'; onChange(); });
       this.status = result.status === 'UPDATED' ? PLAN_EDIT_STATUS.updated : PLAN_EDIT_STATUS.recoveryRequired;
       if (this.status === PLAN_EDIT_STATUS.updated) { this.attempt = undefined; }
       if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
@@ -285,11 +294,12 @@ export class TrayPlanEdit {
     this.message = undefined;
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     const generation = this.revealGeneration;
     const request = new AbortController();
     this.accessAbort = request;
-    const report = (phase: EditPhase) => {
-      if (!request.signal.aborted && generation === this.revealGeneration) this.reportPhase(phase, onChange);
+    const report = (phase: EditPhase, approvals?: QuickPlanEditApprovalProgress) => {
+      if (!request.signal.aborted && generation === this.revealGeneration) this.reportPhase(phase, onChange, approvals);
     };
     const awaitingKey = () => {
       if (request.signal.aborted || generation !== this.revealGeneration) return;
@@ -369,17 +379,19 @@ export class TrayPlanEdit {
     const attempt = this.attempt;
     const selected = this.assets.find((item) => item.id === assetId);
     if (!attempt?.editId || attempt.planId !== planId || !selected || selected.type !== asset.type) throw new Error('asset_unavailable');
+    const generation = this.revealGeneration;
     this.pending = true;
     this.status = PLAN_EDIT_STATUS.saving;
     this.message = undefined;
     this.phase = undefined;
     this.phaseHistory = [];
+    this.approvals = undefined;
     onChange();
     try {
       attempt.startedAdd = true;
       this.canRecover = true;
       this.checkpoint!.setItem('plan-edit/attempt', attempt);
-      const result = await this.selectedOperations().replace(planId, attempt.editId, attempt.totalShares, assetId, asset, (phase: EditPhase) => this.reportPhase(phase, onChange), () => { this.keyStatus = 'awaiting'; onChange(); });
+      const result = await this.selectedOperations().replace(planId, attempt.editId, attempt.totalShares, assetId, asset, (phase: EditPhase, approvals?: QuickPlanEditApprovalProgress) => { if (generation === this.revealGeneration) this.reportPhase(phase, onChange, approvals); }, () => { if (generation !== this.revealGeneration) return; this.keyStatus = 'awaiting'; onChange(); });
       this.status = result.status === 'UPDATED' ? PLAN_EDIT_STATUS.updated : PLAN_EDIT_STATUS.recoveryRequired;
       if (this.status === PLAN_EDIT_STATUS.updated) this.attempt = undefined;
       if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
@@ -397,6 +409,20 @@ export class TrayPlanEdit {
 
   private errorMessage(error: unknown): string {
     const code = error instanceof Error ? error.message : '';
+    const failure = Object.entries(messages.editAccessFailures).find(([failureCode]) => failureCode === code)?.[1];
+    if (failure || code === 'edit_session_expired') {
+      this.selectedOperations().clearRevealed();
+      this.assets = [];
+      if (failure) {
+        this.phase = failure.phase;
+        if (!this.phaseHistory.includes(failure.phase)) this.phaseHistory = this.phaseHistory.concat(failure.phase);
+      }
+      if (this.attempt && !this.attempt.startedAdd) {
+        this.attempt.terminalAccessFailure = true;
+        this.session().save(this.attempt);
+      }
+      return failure?.message ?? messages.editExpired;
+    }
     if (code === 'SAFEKEY_NO_SPACE') return messages.safeKeyProNoSpace;
     if (this.phaseHistory.includes('configuring_custodian_share') && /^SAFEKEY_COMMAND_FAILED_3_[0-9A-F]{2}$/.test(code)) return messages.safeKeyProWriteRejected(code.slice(-2));
     if (code === 'SAFEKEY_DEVICE_NOT_CONNECTED' || code === 'safekey_pro_local_device_required') return messages.safeKeyProNotConnected;
@@ -411,7 +437,8 @@ export class TrayPlanEdit {
     return messages.editSaveFailed;
   }
 
-  private reportPhase(phase: EditPhase, onChange: () => void): void {
+  private reportPhase(phase: EditPhase, onChange: () => void, approvals?: QuickPlanEditApprovalProgress): void {
+    if (approvals) this.approvals = approvals;
     this.phase = phase;
     if (!this.phaseHistory.includes(phase)) this.phaseHistory = this.phaseHistory.concat(phase);
     this.keyStatus = phase === 'acquiring_key' ? 'accessing' : undefined;

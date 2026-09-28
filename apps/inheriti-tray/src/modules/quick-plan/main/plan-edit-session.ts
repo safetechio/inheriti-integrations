@@ -1,7 +1,7 @@
 import type { createPlanEditOperations } from '@safetech/inheriti-elements-core/node';
 import type { ProtectedCheckpoint } from '../../launcher/main/protected-checkpoint.js';
 
-export type EditAttempt = { actor: string; organizationId: string; planId: string; idempotencyKey: string; mode: 'DIRECT' | 'GOVERNED'; totalShares: number; masterKeyEncrypted?: boolean; editId?: string; startedAdd?: boolean };
+export type EditAttempt = { actor: string; organizationId: string; planId: string; idempotencyKey: string; mode: 'DIRECT' | 'GOVERNED'; totalShares: number; masterKeyEncrypted?: boolean; editId?: string; startedAdd?: boolean; terminalAccessFailure?: boolean };
 type Operations = ReturnType<typeof createPlanEditOperations>;
 
 /** Owns the persisted opening of a Business plan edit session. */
@@ -21,6 +21,12 @@ export class PlanEditSessionCoordinator {
     const saved = this.saved();
     if (saved && (saved.actor !== actor || saved.organizationId !== this.organizationId || saved.planId !== planId || (!allowStartedAdd && saved.startedAdd))) throw new Error('unresolved_edit_attempt');
     let attempt = saved;
+    if (attempt?.terminalAccessFailure && !attempt.startedAdd) {
+      if (attempt.editId) await this.operations.discard(attempt.planId, attempt.editId);
+      if (!attempt.editId) await this.operations.discardLocal(attempt.planId);
+      this.checkpoint.removeItem('plan-edit/attempt');
+      attempt = undefined;
+    }
     if (!attempt) {
       onPhase('loading_context');
       const context = await this.operations.context(planId);

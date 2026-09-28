@@ -30,6 +30,18 @@ export const trayMessages = Object.freeze({
   editUpdateProgress: 'Plan update steps',
   inProgress: 'In progress',
   stopped: 'Stopped',
+  editModeratorStatuses: { IDLE: 'Waiting', PENDING: 'Pending', APPROVED: 'Approved', DENIED: 'Denied', CANCELED: 'Canceled', EXPIRED: 'Expired' },
+  editModeratorCount: (approved: number, required: number) => `${approved} of ${required} required approvals received`,
+  editModerators: 'Moderator approvals',
+  requestEditAccessAgain: 'Request access again',
+  editAccessFailures: {
+    edit_authentication_denied: { phase: 'pending_auth', title: 'Authentication denied', message: 'Your authentication request was denied. Start a new request to try again.' },
+    edit_authentication_expired: { phase: 'pending_auth', title: 'Authentication expired', message: 'The authentication request expired. Start a new request to try again.' },
+    edit_authentication_canceled: { phase: 'pending_auth', title: 'Authentication cancelled', message: 'The access request was cancelled. Start a new request to try again.' },
+    edit_moderation_denied: { phase: 'pending_moderation', title: 'Moderator approval denied', message: 'Your moderation request was denied. Start a new request to try again.' },
+    edit_moderation_expired: { phase: 'pending_moderation', title: 'Moderator approval expired', message: 'The moderation request expired. Start a new request to try again.' },
+    edit_moderation_canceled: { phase: 'pending_moderation', title: 'Moderator approval cancelled', message: 'The access request was cancelled. Start a new request to try again.' },
+  },
   editAccessSteps: {
     key: { title: 'Release the Organisation Key', description: 'Approve the request in SafeKey Mobile to continue.', complete: 'Organisation Key received.' },
     dms: { title: 'Dead Man Switch', description: 'Access continues when its countdown reaches zero.', complete: 'Countdown completed.' },

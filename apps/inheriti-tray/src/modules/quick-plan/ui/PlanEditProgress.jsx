@@ -1,4 +1,5 @@
 import React from 'react';
+import { moderatorDisplayName } from '@safetech/inheriti-elements-core';
 
 const updateSteps = ['preparing', 'preflighting', 'distributing_validators', 'distributing_data', 'finalizing', 'verifying'];
 
@@ -12,16 +13,21 @@ const accessGroups = {
 const accessPreparation = new Set(['key', 'dms', 'approval', 'auth', 'moderation']);
 const revealGroups = new Set(['validators', 'shares', 'custodian', 'decrypt', 'view']);
 
-function ProgressSteps({ steps, label, retry, retryLabel, noSpaceMessage, downloadLabel }) {
+function ProgressSteps({ steps, label, retry, retryLabel, noSpaceMessage, downloadLabel, approvals, messages, moderationExpired }) {
   return <ol className="edit-progress-steps" aria-label={label}>
     {steps.map(({ id, title, description, status }, index) => <li key={id} data-state={status} aria-current={status === 'current' ? 'step' : undefined}>
-      <span className="edit-progress-number" aria-hidden="true">{status === 'done' ? '✓' : index + 1}</span>
-      <div><strong>{title}</strong>{description && <span>{description}</span>}{status === 'failed' && noSpaceMessage && description === noSpaceMessage && <button type="button" onClick={() => void window.inheritiTray.openSafeKeyDesktopTool()}>{downloadLabel}</button>}{status === 'failed' && retry && <button type="button" onClick={retry}>{retryLabel}</button>}</div>
+      <span className="edit-progress-number" aria-hidden="true">{status === 'done' ? '✓' : status === 'failed' ? '×' : index + 1}</span>
+      <div><strong>{title}</strong>{description && <span>{description}</span>}{id === 'moderation' && approvals && <div className="edit-moderator-progress" aria-live="polite"><p>{messages.editModeratorCount(approvals.approvedModerators, approvals.requiredApprovals)}</p><div role="list" aria-label={messages.editModerators}>{approvals.moderators.map((moderator) => {
+        const participantStatus = moderationExpired && moderator.status === 'CANCELED' ? 'EXPIRED' : moderator.status;
+        return <div role="listitem" className="edit-moderator" key={moderator.id}><span>{moderatorDisplayName(moderator.displayName, moderator.id)}</span><span className="edit-moderator-status" data-status={participantStatus}>{messages.editModeratorStatuses[participantStatus] || messages.editModeratorStatuses.IDLE}</span></div>;
+      })}</div></div>}{status === 'failed' && noSpaceMessage && description === noSpaceMessage && <button type="button" onClick={() => void window.inheritiTray.openSafeKeyDesktopTool()}>{downloadLabel}</button>}{status === 'failed' && retry && <button type="button" onClick={retry}>{retryLabel}</button>}</div>
     </li>)}
   </ol>;
 }
 
 export function PlanEditProgress({ messages, edit, busy, onRetry }) {
+  const terminalFailure = Object.values(messages.editAccessFailures).some((failure) => failure.message === edit.message) || edit.message === messages.editExpired;
+  const retryLabel = terminalFailure ? messages.requestEditAccessAgain : messages.retryEditAccess;
   const active = busy || edit.status === 'loading' || edit.status === 'saving';
   const updateIndex = updateSteps.indexOf(edit.phase);
   if (updateIndex >= 0 && (active || edit.status === 'error' || edit.status === 'recovery-required')) {
@@ -46,22 +52,22 @@ export function PlanEditProgress({ messages, edit, busy, onRetry }) {
   if (!revealing && ['loading_context', 'opening_edit', 'checking_edit', 'opening_plan'].includes(edit.phase)) visible.push('opening');
   if (visible.length === 0) {
     const title = messages.editSteps[edit.phase] || messages.loadingPlans;
-    return <ProgressSteps label={messages.editAccessProgress} steps={[{ id: 'opening', title, status: active ? 'current' : 'failed' }]} />;
+    return <ProgressSteps label={messages.editAccessProgress} steps={[{ id: 'opening', title, description: active ? '' : edit.message, status: active ? 'current' : 'failed' }]} retry={edit.status === 'error' && edit.canDiscard ? onRetry : undefined} retryLabel={retryLabel} />;
   }
   const reported = edit.keyStatus ? 'key' : accessGroups[edit.phase] || (visible.includes('opening') ? 'opening' : undefined);
   const current = visible.includes(reported) ? reported : visible.at(-1);
   const configuringCustodian = (edit.phaseHistory || []).some((phase) => phase === 'configuring_custodian_share' || phase === 'claiming_custodian_share');
   return <ProgressSteps label={messages.editAccessProgress} steps={visible.map((group, index) => {
     const status = index < visible.indexOf(current) ? 'done' : group === current ? active ? 'current' : 'failed' : 'waiting';
-    const copy = group === 'opening' ? { title: messages.editSteps[edit.phase], description: '', complete: '' }
+    const copy = group === 'opening' ? { title: messages.editSteps[edit.phase] || messages.loadingPlans, description: '', complete: '' }
       : group === 'custodian' && configuringCustodian ? messages.editCustodianConfigurationStep : messages.editAccessSteps[group];
     return {
-      id: group, title: copy.title, status,
+      id: group, title: status === 'failed' ? Object.values(messages.editAccessFailures).find((failure) => failure.phase === edit.phase && failure.message === edit.message)?.title || copy.title : copy.title, status,
       description: status === 'failed' && edit.message ? edit.message
         : status === 'done' ? copy.complete
         : group === 'key' && edit.keyStatus === 'accessing' ? messages.editPreparingKey
         : group === 'custodian' && messages.editCustodianSteps[edit.phase] ? messages.editCustodianSteps[edit.phase]
         : copy.description,
     };
-  })} retry={edit.status === 'error' && edit.canDiscard ? onRetry : undefined} retryLabel={messages.retryEditAccess} noSpaceMessage={messages.safeKeyProNoSpace} downloadLabel={messages.downloadSafeKeyDesktopTool} />;
+  })} retry={edit.status === 'error' && edit.canDiscard ? onRetry : undefined} retryLabel={retryLabel} noSpaceMessage={messages.safeKeyProNoSpace} downloadLabel={messages.downloadSafeKeyDesktopTool} approvals={edit.approvals} messages={messages} moderationExpired={edit.message === messages.editAccessFailures.edit_moderation_expired.message} />;
 }

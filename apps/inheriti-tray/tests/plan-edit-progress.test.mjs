@@ -105,3 +105,48 @@ it('offers sign-in when plan listing requires a fresh session', () => {
   expect(markup).not.toContain(trayMessages.retryLoadingPlans);
   expect(markup).not.toContain(trayMessages.discardEdit);
 });
+
+it.each(Object.values(trayMessages.editAccessFailures))('shows terminal approval title $title in the failed step', (failure) => {
+  const markup = renderToStaticMarkup(createElement(PlanEditProgress, {
+    messages: trayMessages,
+    edit: { status: 'error', canDiscard: true, phase: failure.phase, phaseHistory: ['acquiring_key', 'pending_auth', failure.phase], message: failure.message },
+    busy: false, onRetry() {},
+  }));
+  expect(markup).toContain(failure.title);
+  expect(markup).toContain(failure.message);
+  expect(markup).toContain('data-state="failed"');
+  expect(markup).toContain('×');
+  expect(markup).not.toContain('aria-current="step"');
+  expect(markup).toContain('Request access again</button>');
+});
+
+it('shows each named moderator decision and threshold count without exposing identifiers', () => {
+  const markup = renderToStaticMarkup(createElement(PlanEditProgress, {
+    messages: trayMessages, busy: true,
+    edit: { status: 'loading', phase: 'pending_moderation', phaseHistory: ['pending_auth', 'pending_moderation'], approvals: {
+      approvedModerators: 1, requiredApprovals: 2,
+      moderators: [
+        { id: '1', displayName: 'Ada', status: 'APPROVED' }, { id: '2', displayName: 'Grace', status: 'PENDING' },
+        { id: '3', displayName: 'Linus', status: 'DENIED' }, { id: '4', displayName: 'Alex', status: 'CANCELED' },
+        { id: 'private-id', displayName: 'private-id', status: 'IDLE' },
+      ],
+    } },
+  }));
+  for (const text of ['Ada', 'Grace', 'Linus', 'Alex', 'Approved', 'Pending', 'Denied', 'Canceled', 'Waiting', 'Moderator', '1 of 2 required approvals received']) expect(markup).toContain(text);
+  expect(markup).not.toContain('private-id');
+  expect(markup).toContain('role="list"');
+});
+
+it('labels only canceled moderators as expired when moderation timed out', () => {
+  const markup = renderToStaticMarkup(createElement(PlanEditProgress, {
+    messages: trayMessages, busy: false,
+    edit: { status: 'error', phase: 'pending_moderation', phaseHistory: ['pending_auth', 'pending_moderation'], message: trayMessages.editAccessFailures.edit_moderation_expired.message, approvals: {
+      approvedModerators: 1, requiredApprovals: 2,
+      moderators: [{ id: '1', displayName: 'Ada', status: 'APPROVED' }, { id: '2', displayName: 'Grace', status: 'CANCELED' }],
+    } },
+  }));
+  expect(markup).toContain('Approved');
+  expect(markup).toContain('data-status="EXPIRED"');
+  expect(markup).toContain('Expired');
+  expect(markup).not.toContain('data-status="CANCELED"');
+});

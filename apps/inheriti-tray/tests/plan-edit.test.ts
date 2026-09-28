@@ -559,3 +559,136 @@ describe('TrayPlanEdit', () => {
     expect(mock.discardLocal).not.toHaveBeenCalled();
   });
 });
+
+it.each([
+  ['edit_authentication_denied', 'pending_auth'], ['edit_authentication_expired', 'pending_auth'], ['edit_authentication_canceled', 'pending_auth'],
+  ['edit_moderation_denied', 'pending_moderation'], ['edit_moderation_expired', 'pending_moderation'], ['edit_moderation_canceled', 'pending_moderation'],
+  ['edit_session_expired', undefined],
+])('opens a fresh session after terminal access failure %s', async (code, phase) => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  mock.listAssets.mockRejectedValueOnce(new Error(code));
+  await edit.listAssets('plan-1', () => {});
+  expect(edit.state()).toMatchObject({ status: 'error', planId: 'plan-1', assets: [], canDiscard: true });
+  expect(edit.state().phase).toBe(phase);
+  expect(mock.values.get('plan-edit/attempt')).toMatchObject({ terminalAccessFailure: true });
+  expect(mock.clearRevealed).toHaveBeenCalled();
+  mock.context.mockResolvedValueOnce({ idempotencyKey: 'key-2', mode: 'DIRECT', totalShares: 2, masterKeyEncrypted: false });
+  mock.start.mockResolvedValueOnce({ id: 'edit-2' });
+  await edit.listAssets('plan-1', () => {});
+  expect(mock.discard).toHaveBeenCalledWith('plan-1', 'edit-1');
+  expect(mock.context).toHaveBeenCalledTimes(2);
+  expect(mock.start).toHaveBeenLastCalledWith('plan-1', 'DIRECT', 'key-2');
+  expect(mock.listAssets.mock.calls.at(-1)?.[1]).toBe('edit-2');
+  expect(edit.state().status).toBe('idle');
+});
+
+it('retains a write checkpoint after terminal approval failure', async () => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  mock.add.mockRejectedValueOnce(new Error('edit_authentication_denied'));
+  await edit.add('plan-1', asset, () => {});
+  expect(edit.state().status).toBe('recovery-required');
+  expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: true });
+  expect(mock.values.get('plan-edit/attempt')).not.toHaveProperty('terminalAccessFailure');
+  expect(mock.discardLocal).not.toHaveBeenCalled();
+});
+
+it('does not discard another actor terminal checkpoint on retry', async () => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  mock.values.set('plan-edit/attempt', { actor: 'other', organizationId: 'org-1', planId: 'plan-1', editId: 'edit-1', terminalAccessFailure: true });
+  await edit.listAssets('plan-1', () => {});
+  expect(mock.discardLocal).not.toHaveBeenCalled();
+  expect(mock.values.get('plan-edit/attempt')).toMatchObject({ actor: 'other', terminalAccessFailure: true });
+});
+
+
+it('retains the terminal checkpoint when server abort fails', async () => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  mock.listAssets.mockRejectedValueOnce(new Error('edit_moderation_denied'));
+  await edit.listAssets('plan-1', () => {});
+  mock.discard.mockRejectedValueOnce(new Error('offline'));
+  await edit.listAssets('plan-1', () => {});
+  expect(mock.values.get('plan-edit/attempt')).toMatchObject({ editId: 'edit-1', terminalAccessFailure: true });
+  expect(mock.context).toHaveBeenCalledTimes(1);
+  expect(mock.start).toHaveBeenCalledTimes(1);
+  expect(mock.discardLocal).not.toHaveBeenCalled();
+});
+
+it('updates moderator decisions in the same phase, retains terminal details and clears them on retry', async () => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  const pending = { requiredApprovals: 2, approvedModerators: 0, moderators: [{ id: 'moderator-1', displayName: 'Ada', status: 'PENDING' as const }] };
+  const denied = { requiredApprovals: 2, approvedModerators: 0, moderators: [{ id: 'moderator-1', displayName: 'Ada', status: 'DENIED' as const }] };
+  const seen: unknown[] = [];
+  mock.listAssets.mockImplementationOnce(async (_plan, _edit, _key, report) => {
+    report('pending_moderation', pending);
+    report('pending_moderation', denied);
+    throw new Error('edit_moderation_denied');
+  });
+  await edit.listAssets('plan-1', () => { if (edit.state().approvals) seen.push(edit.state().approvals); });
+  expect(seen).toContain(pending);
+  expect(edit.state().approvals).toEqual(denied);
+  mock.listAssets.mockImplementationOnce(async () => {
+    expect(edit.state().approvals).toBeUndefined();
+    return [];
+  });
+  await edit.listAssets('plan-1', () => {});
+  expect(edit.state().approvals).toBeUndefined();
+});
+
+it('clears moderator progress on dismissal and ignores delayed progress from the old access', async () => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  let report!: (phase: string, approvals: unknown) => void;
+  let finish!: (assets: unknown[]) => void;
+  const pending = { requiredApprovals: 1, approvedModerators: 0, moderators: [{ id: 'moderator-1', displayName: 'Ada', status: 'PENDING' }] };
+  mock.listAssets.mockImplementationOnce((_plan, _edit, _key, progress) => {
+    report = progress;
+    progress('pending_moderation', pending);
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  const loading = edit.listAssets('plan-1', () => {});
+  await vi.waitFor(() => expect(edit.state().approvals).toEqual(pending));
+  await edit.cancelAccess();
+  expect(edit.state().approvals).toBeUndefined();
+  report('pending_moderation', pending);
+  finish([]);
+  await loading;
+  expect(edit.state().approvals).toBeUndefined();
+});
+
+it.each(['add', 'replace'] as const)('ignores delayed moderator progress after %s is dismissed', async (operation) => {
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  await edit.selectOrganization('org-1');
+  await edit.load(() => {});
+  if (operation === 'replace') await edit.listAssets('plan-1', () => {});
+  let progress!: (phase: string, approvals: unknown) => void;
+  let awaitingKey!: () => void;
+  let finish!: (result: unknown) => void;
+  const approval = { requiredApprovals: 1, approvedModerators: 0, moderators: [{ id: '1', displayName: 'Ada', status: 'PENDING' }] };
+  const callbackIndex = operation === 'add' ? 4 : 5;
+  mock[operation].mockImplementationOnce((...args) => {
+    progress = args[callbackIndex];
+    awaitingKey = args[callbackIndex + 1];
+    progress('pending_moderation', approval);
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  const saving = operation === 'add' ? edit.add('plan-1', asset, () => {}) : edit.replace('plan-1', 'asset-1', asset, () => {});
+  await vi.waitFor(() => expect(edit.state().approvals).toEqual(approval));
+  edit.clearRevealed();
+  progress('pending_moderation', approval);
+  awaitingKey();
+  expect(edit.state().approvals).toBeUndefined();
+  finish({ status: 'RECOVERY_REQUIRED' });
+  await saving;
+  expect(edit.state().approvals).toBeUndefined();
+});
