@@ -49,3 +49,25 @@ describe.each([
     ]);
   });
 });
+
+
+it('uses the supplied auth for every scoped Node client and bearer request', async () => {
+  const auth = {
+    beginAuthorizationCode: vi.fn(), completeAuthorizationCode: vi.fn(),
+    beginDeviceAuthorization: vi.fn(), pollDeviceAuthorization: vi.fn(),
+    getAccessToken: vi.fn(async () => 'shared-token'), refresh: vi.fn(), clear: vi.fn(),
+  };
+  const authorization: Array<string | null> = [];
+  const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    authorization.push(new Headers(init?.headers).get('authorization'));
+    return new Response(JSON.stringify({ ok: true, result: { items: [], nextCursor: null } }));
+  });
+  const options = { apiUrl: 'https://business.test/integrations/', environment: 'TEST' as const,
+    business: true as const, configuration, auth, fetchImpl };
+  const first = createNodeIntegrationCore({ ...options, organizationId: 'org-1' });
+  const second = createNodeIntegrationCore({ ...options, organizationId: 'org-2' });
+  expect(first.auth).toBe(auth);
+  expect(second.auth).toBe(auth);
+  await Promise.all([first.listPlans(), second.listPlans()]);
+  expect(authorization).toEqual(['Bearer shared-token', 'Bearer shared-token']);
+});

@@ -2,7 +2,7 @@ import * as sdkNode from '@safetech/inheriti-client-sdk/node';
 import { createNodeElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node';
 import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
 import { ElementsIntegrationCore } from './index.js';
-import type { ElementsEnvironment } from './index.js';
+import type { ElementsEnvironment, OperatorAuthFacade } from './index.js';
 import { SdkPlanFacade } from './plans.js';
 import { composeOperatorAuth } from './operator-auth.js';
 import type { OperatorAuthOptions, OperatorAuthRuntime } from './operator-auth.js';
@@ -20,6 +20,7 @@ export type NodeIntegrationCoreOptions = OperatorAuthOptions & {
   environment: ElementsEnvironment;
   masterKeys?: MasterKeyResolver;
   keyVault?: KeyVault;
+  auth?: OperatorAuthFacade;
   /**
    * What custody this host holds locally: a passphrase-derived key, key material it already has, or
    * nothing. The Client SDK composes acquisition around it — a host that can derive never asks
@@ -38,7 +39,7 @@ export type NodeIntegrationCore = ElementsIntegrationCore<ListPlansInput, PlanPa
  * pulled from the auth client per request, so a refresh mid-session is invisible to the host.
  */
 export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): NodeIntegrationCore {
-  const auth = composeOperatorAuth(nodeAuthRuntime, options);
+  const auth = options.auth ?? composeOperatorAuth(nodeAuthRuntime, options);
   const bearer = async () => (await auth.getAccessToken()) ?? null;
   const elements = createNodeElementsClient({
     apiUrl: options.apiUrl,
@@ -89,4 +90,6 @@ export { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 export { revealProgressMessage } from './reveal-progress.js';
 export { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
 
+export type { OperatorAuthFacade } from './index.js';
+export { MemoryOperatorSessionStore } from './operator-auth.js';
 export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';

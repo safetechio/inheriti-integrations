@@ -33,15 +33,16 @@ describe('reveal progress wording', () => {
   // The wait that used to be printed at the governance gate, telling a person to approve a request
   // that had not been made yet.
   it('keeps the custodian prompt to the custodian step', () => {
-    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN'))).toContain('plan share is stored on your phone');
+    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN'))).toContain('custodian share is stored on your phone');
     expect(revealProgressMessage(progress('WAITING_FOR_AUTHENTICATION'))).not.toContain('custodian');
     expect(revealProgressMessage(progress('WAITING_FOR_MODERATION'))).not.toContain('custodian');
   });
 
   it('distinguishes a pending first claim from a later release approval', () => {
-    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('claim the current plan share, then release it');
+    expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('claim the current custodian share, then release it');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).toContain('After editing the plan, claim the new share again.');
     expect(revealProgressMessage(progress('CONNECTING_SAFEKEY_PRO'))).toContain('SafeKey PRO PIN');
+    expect(revealProgressMessage(progress('CUSTODIAN_SHARE_DISTRIBUTED'))).toBe('The custodian share was stored on the selected device.');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN_CLAIM'))).not.toContain('Approve');
     expect(revealProgressMessage(progress('WAITING_FOR_CUSTODIAN'))).toContain('approve its release');
   });

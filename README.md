@@ -20,3 +20,19 @@ only prints this setup notice and never edits shell files. Open a new shell afte
 For manual setup, Bash uses `source <(inheriti completion bash)`, Zsh uses
 `source <(inheriti completion zsh)` after `compinit`, and Fish uses
 `inheriti completion fish > ~/.config/fish/completions/inheriti.fish`.
+
+Start MCP with `inheriti-mcp --enable-secure-delivery` to enable field reveals and asset
+downloads through one-time local browser pages. Secret values, bytes, and delivery
+URLs never appear in tool results. Plan metadata includes asset codes and field
+names for selector discovery. Use `reveal_plan_secret` with `selector` for one
+field, `selectors` and optional `assets` for a selection, or `all: true` for all
+fields and downloadable files. A batch uses one plan-access flow and one secure
+browser page; every selected field and file still uses the SDK’s action checks
+and audit reporting. File downloads remain separate buttons on that page.
+
+MCP keeps authentication and acquired master keys in memory for the current
+session and selected organization. Use `logout` to cancel local work and forget
+held keys, or `abort_plan_access` to abandon an interrupted server access before
+retrying. Cancellation failures remain visible; a pending SafeKey Mobile key
+release may need to expire before retrying. Development builds reject LIVE
+configuration.

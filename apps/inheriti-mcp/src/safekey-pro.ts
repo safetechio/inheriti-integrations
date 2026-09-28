@@ -1,17 +1,17 @@
-import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 import { brandPage, mobile, pro, renderTemplate } from './local-page.js';
-import { businessDeployment, businessUiRpId, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node';
+import { openLocalBrowser } from './local-browser.js';
+import { businessDeployment, businessUiRpId, createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node';
 
 const canceled = () => new Error('local_delivery_canceled');
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 /** Human-only browser side channel. Its token, PIN and URL never enter an MCP result. */
 export async function openSafeKeyProPrompt(deployment: unknown, device: string | undefined,
-  context: { organizationId: string; planId: string; selector: string; kind: 'FIELD' | 'ASSET' }, signal: AbortSignal,
+  context: { organizationId: string; planId: string; selector: string; kind: 'FIELD' | 'ASSET' | 'SELECTION' }, signal: AbortSignal,
   open?: (url: string) => void) {
   if (signal.aborted) throw canceled();
   const channel = businessDeployment(deployment);
@@ -19,18 +19,19 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
   const token = randomBytes(24).toString('hex');
   const path = `/${token}`;
   let port = 0;
+  let closed = false;
   let state: 'choice' | 'pin' | 'touch' | 'waiting' | 'complete' | 'failed' | 'canceled' = 'waiting';
   let touch: { operation: 'login' | 'read' | 'write'; attempt: number; limit: number } | undefined;
   let selectedDevice: 'mobile' | 'pro' | undefined;
   let firstClaim = false;
   let choose: ((value: 'SK_MOBILE' | 'SK_PRO') => void) | undefined;
   let pin: ((value: Uint8Array) => void) | undefined;
-  let cachedPin: Uint8Array | undefined;
+  let pinSession: ReturnType<typeof createSafeKeyProPinSession> | undefined;
   let rejectChoice: ((reason: Error) => void) | undefined;
   let rejectPin: ((reason: Error) => void) | undefined;
   const sockets = new Set<Socket>();
   let closingTimer: ReturnType<typeof setTimeout> | undefined;
-  const details = renderTemplate('approval-details', { organization: escapeHtml(context.organizationId), plan: escapeHtml(context.planId), kind: context.kind === 'ASSET' ? 'Asset' : 'Field', selector: escapeHtml(context.selector) });
+  const details = renderTemplate('approval-details', { organization: escapeHtml(context.organizationId), plan: escapeHtml(context.planId), kind: ({ FIELD: 'Field', ASSET: 'Asset', SELECTION: 'Selected assets' })[context.kind], selector: escapeHtml(context.selector) });
   const page = (title: string, body: string, refresh = false) => brandPage(title, body + details, { refresh, footer: 'This approval stays on your device. Keep this page open until the request completes.' });
   const server = createServer((request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -71,14 +72,13 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       } else {
         const value = fields.get('pin');
         if (!value || value.length > 128 || !/^[\x20-\x7e]+$/.test(value)) { response.writeHead(400).end(); return; }
-        cachedPin = Uint8Array.from(Buffer.from(value, 'ascii'));
-        state = 'waiting'; pin?.(cachedPin.slice()); pin = undefined;
+        state = 'waiting'; pin?.(Uint8Array.from(Buffer.from(value, 'ascii'))); pin = undefined;
       }
       response.writeHead(303, { Location: path }).end();
     });
   });
   server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
-  const clearPin = () => { cachedPin?.fill(0); cachedPin = undefined; };
+  const clearPin = () => pinSession?.clearPin();
   const abort = () => { clearPin(); rejectChoice?.(canceled()); rejectPin?.(canceled()); };
   signal.addEventListener('abort', abort, { once: true });
   try {
@@ -90,21 +90,23 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       if (opened) return;
       opened = true;
       if (open) open(url);
-      else {
-        const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
-        const child = spawn(command, [url], { detached: true, stdio: 'ignore' });
-        child.on('error', abort); child.unref();
-      }
+      else openLocalBrowser(url, error => { clearPin(); rejectChoice?.(error); rejectPin?.(error); });
     };
-    const connectPro = async (signal?: AbortSignal) => createNodeSafeKeyProDevice({ device: await waitForSafeKeyProDevice(device, signal), rpId: rpId!,
-      getPin: async () => {
-        if (signal?.aborted) throw canceled();
-        if (cachedPin) return cachedPin.slice();
-        selectedDevice = 'pro';
-        state = 'pin';
-        const requested = new Promise<Uint8Array>((resolve, reject) => { pin = resolve; rejectPin = reject; });
-        openPage();
-        return requested;
+    pinSession = createSafeKeyProPinSession(async (operationSignal) => {
+      if (closed || signal.aborted || operationSignal?.aborted) throw canceled();
+      selectedDevice = 'pro';
+      state = 'pin';
+      const requested = new Promise<Uint8Array>((resolve, reject) => { pin = resolve; rejectPin = reject; });
+      const cancelPin = () => rejectPin?.(canceled());
+      operationSignal?.addEventListener('abort', cancelPin, { once: true });
+      openPage();
+      try { return await requested; }
+      finally { operationSignal?.removeEventListener('abort', cancelPin); }
+    });
+    const connectPro = async (operationSignal?: AbortSignal) => createNodeSafeKeyProDevice({ device: await waitForSafeKeyProDevice(device, operationSignal), rpId: rpId!,
+      getPin: () => {
+        if (closed || signal.aborted) throw canceled();
+        return pinSession!.getPin(operationSignal ?? signal);
       },
       onTouch: (operation, attempt, limit) => { state = 'touch'; touch = { operation, attempt, limit }; },
     });
@@ -115,17 +117,19 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
         (await connectPro(operationSignal ?? signal)).read(request, operationSignal),
     } : undefined;
     const shutdown = () => {
+      closed = true;
       if (closingTimer) clearTimeout(closingTimer);
       signal.removeEventListener('abort', abort); clearPin(); rejectChoice?.(canceled()); rejectPin?.(canceled());
       for (const socket of sockets) socket.destroy(); server.close();
     };
     return { selectCustodianDevice: () => {
-      if (signal.aborted) throw canceled();
+      if (closed || signal.aborted) throw canceled();
       state = 'choice';
       const choice = new Promise<'SK_MOBILE' | 'SK_PRO'>((resolve, reject) => { choose = resolve; rejectChoice = reject; });
       openPage();
       return choice;
     }, proDevice, close: (outcome?: 'complete' | 'failed' | 'canceled') => {
+      closed = true;
       if (!outcome || !opened) { shutdown(); return; }
       state = outcome;
       signal.removeEventListener('abort', abort); clearPin(); rejectChoice?.(canceled()); rejectPin?.(canceled());
@@ -133,6 +137,6 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
       closingTimer.unref();
     } };
   } catch (error) {
-    signal.removeEventListener('abort', abort); for (const socket of sockets) socket.destroy(); server.close(); throw error;
+    signal.removeEventListener('abort', abort); clearPin(); for (const socket of sockets) socket.destroy(); server.close(); throw error;
   }
 }

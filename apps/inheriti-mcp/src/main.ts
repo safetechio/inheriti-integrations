@@ -67,9 +67,9 @@ if (args.length === 1 && args[0] === '--version') {
     .catch(() => { process.stderr.write('version_unavailable\n'); process.exitCode = 1; });
 } else if (args[0] === 'update' && (args.length === 1 || (args.length === 2 && args[1] === '--install'))) {
   update(args.includes('--install')).catch(() => { process.stderr.write('update_failed\n'); process.exitCode = 1; });
-} else if (args.length === 0 || (args.length === 1 && args[0] === '--local-delivery')) {
-  runServer(args.includes('--local-delivery')).catch(() => { process.stderr.write('server_start_failed\n'); process.exitCode = 1; });
+} else if (args.length === 0 || (args.length === 1 && args[0] === '--enable-secure-delivery')) {
+  runServer(args.includes('--enable-secure-delivery')).catch(() => { process.stderr.write('server_start_failed\n'); process.exitCode = 1; });
 } else {
-  process.stderr.write('Usage: inheriti-mcp [--local-delivery] | --version | update [--install]\n');
+  process.stderr.write('Usage: inheriti-mcp [--enable-secure-delivery] | --version | update [--install]\n');
   process.exitCode = 1;
 }

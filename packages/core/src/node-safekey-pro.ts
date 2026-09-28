@@ -30,15 +30,17 @@ export async function waitForSafeKeyProDevice(configuredPath?: string, signal?: 
 
 export function createSafeKeyProPinSession(prompt: (signal?: AbortSignal) => Promise<Uint8Array>) {
   let pin: Uint8Array | undefined;
+  let generation = 0;
   return {
     getPin: async (signal?: AbortSignal) => {
       if (signal?.aborted) throw new Error('SAFEKEY_ABORTED');
       if (pin) return pin.slice();
+      const current = generation;
       const entered = await prompt(signal);
-      if (signal?.aborted) { entered.fill(0); throw new Error('SAFEKEY_ABORTED'); }
+      if (signal?.aborted || current !== generation) { entered.fill(0); throw new Error('SAFEKEY_ABORTED'); }
       pin = entered.slice();
       return entered;
     },
-    clearPin: () => { pin?.fill(0); pin = undefined; },
+    clearPin: () => { generation++; pin?.fill(0); pin = undefined; },
   };
 }

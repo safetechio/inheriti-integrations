@@ -420,7 +420,7 @@ describe('plans reveal', () => {
       'Opening the plan.',
       'Authentication request sent to SafeKey Mobile. Confirm it to continue.',
       'Collecting encrypted data shares.',
-      'This plan share is stored on your phone. Open SafeKey Mobile and approve its release for this access.',
+      'This custodian share is stored on your phone. Open SafeKey Mobile and approve its release for this access.',
       'Copied prod-db.password to the clipboard.',
     ]);
     expect(output.lines.join('\n')).not.toContain('WAITING_FOR_PARTICIPANTS');

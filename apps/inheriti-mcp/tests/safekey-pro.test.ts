@@ -1,4 +1,7 @@
+import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
+const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
+vi.mock('node:child_process', () => ({ spawn }));
 const { createNodeSafeKeyProDevice } = vi.hoisted(() => ({ createNodeSafeKeyProDevice: vi.fn((options: unknown) => ({ options, write: async () => undefined, read: async () => undefined })) }));
 vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-core-sdk/node')>(), createNodeSafeKeyProDevice }));
 vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-elements-core/node')>(), waitForSafeKeyProDevice: async () => '/dev/hidraw4' }));
@@ -22,8 +25,8 @@ it('keeps local choice off the model channel and closes after a mobile choice', 
   const html = await landing.text();
   expect(html).toContain('SafeKey PRO');
   expect(html).toContain('Choose a custodian device');
-  expect(html).toContain('A request to claim this plan share will be sent to your SafeKey Mobile.');
-  expect(html).toContain('Future access will require the same device');
+  expect(html).toContain('A request to claim this custodian share will be sent to your SafeKey Mobile.');
+  expect(html).toContain('After editing the plan, claim the new share again.');
   expect(html).toContain('Inheriti® Business');
   expect(html).toMatch(/font-family:\s*AppFont/);
   expect(html).toContain('data:image/png;base64,');
@@ -51,7 +54,7 @@ it('offers PRO while the device is disconnected and then asks to connect it', as
   const url = await page.url;
   const html = await (await fetch(url)).text();
   expect(html).toContain('SafeKey PRO');
-  expect(html).toContain('Connect your SafeKey PRO cold device to write this plan share.');
+  expect(html).toContain('Connect your SafeKey PRO cold device to write this custodian share.');
   const origin = new URL(url).origin;
   await fetch(url, { method: 'POST', headers: { Origin: origin }, body: 'choice=pro' });
   expect(await choice).toBe('SK_PRO');
@@ -104,6 +107,7 @@ it('binds a PRO choice to the Business RP ID and keeps PIN out of page responses
   expect(reading).toContain('Reading from SafeKey PRO');
   expect(reading).toContain('Touch request 2 of 20');
   page.prompt.close('complete');
+  expect(() => options.getPin()).toThrow('local_delivery_canceled');
   expect(await (await fetch(url)).text()).toContain('Request complete');
   page.prompt.close();
   await expect(fetch(url)).rejects.toThrow();
@@ -118,10 +122,37 @@ it('opens the PIN page directly for an existing PRO claim without selecting a de
   const url = await page.url;
   const html = await (await fetch(url)).text();
   expect(html).toContain('type="password"');
-  expect(html).not.toContain('Where should this plan share');
+  expect(html).not.toContain('Where should this custodian share');
   expect(html).toContain('Device PIN');
   expect(html).toContain('Connect &amp; collect');
   controller.abort();
   await expect(requested).rejects.toThrow('local_delivery_canceled');
   page.prompt.close();
+});
+
+it('cancels a pending PIN when the device operation is aborted independently', async () => {
+  const controller = new AbortController();
+  const operation = new AbortController();
+  const page = await promptPage('local', controller);
+  try {
+    await page.prompt.proDevice!.read({} as never, operation.signal);
+    const options = createNodeSafeKeyProDevice.mock.lastCall![0] as { getPin: () => Promise<Uint8Array> };
+    const requested = options.getPin();
+    await page.url;
+    operation.abort();
+    await expect(requested).rejects.toThrow('local_delivery_canceled');
+    expect(controller.signal.aborted).toBe(false);
+  } finally { page.prompt.close(); }
+});
+
+it.skipIf(process.platform === 'win32')('reports unavailable browser when the device choice launcher exits unsuccessfully', async () => {
+  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+  spawn.mockReturnValueOnce(child);
+  const prompt = await openSafeKeyProPrompt('local', undefined, context, new AbortController().signal);
+  try {
+    const choice = prompt.selectCustodianDevice();
+    const rejected = expect(choice).rejects.toThrow('local_browser_unavailable');
+    child.emit('exit', 3, null);
+    await rejected;
+  } finally { prompt.close(); }
 });

@@ -15,6 +15,6 @@ export function planDetail(plan: PlanDetail) {
     ...planSummary(plan),
     description: plan.description,
     governanceMode: plan.governance.mode,
-    assets: plan.assets.map(({ id, name, type, isBinary }) => ({ id, name, type, isBinary })),
+    assets: plan.assets.map(({ id, name, type, isBinary, code, fieldNames }) => ({ id, name, type, isBinary, code, fieldNames })),
   };
 }

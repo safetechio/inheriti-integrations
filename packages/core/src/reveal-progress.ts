@@ -37,6 +37,7 @@ export function revealProgressMessage(
     return custodianShareCopy.laterAccess.mobileRelease;
   }
   if (phase === 'CONNECTING_SAFEKEY_PRO') return 'Enter your SafeKey PRO PIN, then touch the device when prompted.';
+  if (phase === 'CUSTODIAN_SHARE_DISTRIBUTED') return 'The custodian share was stored on the selected device.';
   if (phase === 'RELEASING_MATERIAL') return 'Collecting encrypted data shares.';
   if (phase === 'RECONSTRUCTING') return 'Reconstructing and decrypting shares.';
   if (phase === 'OPEN') return 'Revealing the data.';
