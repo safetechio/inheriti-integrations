@@ -17,7 +17,7 @@ module.exports = {
   mac: {
     category: 'public.app-category.utilities',
     target: ['dmg'],
-    notarize: deployment === 'prod',
+    notarize: true,
     hardenedRuntime: true,
     entitlements: resolve(__dirname, 'build/entitlements.mac.plist'),
     entitlementsInherit: resolve(__dirname, 'build/entitlements.mac.plist'),
