@@ -132,7 +132,14 @@ export async function consumePlanFields(
   const keyOwner = context.keyOwner ?? 'Application';
   let presenter = options.quiet ? undefined : createRevealPresenter(terminal, moderatorNamesById, keyOwner);
   const onAbort = () => {
-    if (lastProgress?.phase === 'WAITING_FOR_MASTER_KEY') presenter?.deviceStatus('Canceling the SafeKey Mobile request...');
+    const message = lastProgress?.phase === 'WAITING_FOR_MASTER_KEY'
+      ? 'Canceling the SafeKey Mobile request...'
+      : 'Canceling the reveal...';
+    if (presenter) {
+      presenter.deviceStatus(message);
+      return;
+    }
+    terminal.writeError(message);
   };
   signal?.addEventListener('abort', onAbort, { once: true });
   const pausePresenter = () => { context.safeKeyPro?.setStatusRenderer?.(); presenter?.close(true); presenter = undefined; };
@@ -214,6 +221,7 @@ export async function consumePlanFields(
     signal?.removeEventListener('abort', onAbort);
     context.safeKeyPro?.setStatusRenderer?.();
     presenter?.close();
+    if (context.keyVault?.unavailable) terminal.writeError('The OS credential store is unavailable. The plan key is cached only for this command; the next command will request it again.');
   }
 }
 

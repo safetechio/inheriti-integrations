@@ -29,6 +29,14 @@ function consuming(value: unknown) {
 describe('plans reveal', () => {
   beforeEach(() => writeClipboard.mockClear());
 
+  it.each(['asset_selector_invalid', 'asset_not_found', 'asset_field_not_found', 'asset_value_invalid', 'asset_decoder_required'])
+    ('explains %s without exposing the raw code or protected data', (code) => {
+      const message = messageFor(Object.assign(new Error(code), { code, protectedValue: 'private-secret' }));
+      expect(message).not.toContain(code);
+      expect(message).not.toContain('private-secret');
+      expect(message).toMatch(/asset|field|decode/);
+    });
+
   it('maps a missing organisation key to custody guidance instead of a crypto or class name', () => {
     const error = Object.assign(new Error('master_key_required:INHERITI_BUSINESS:org-1'), {
       name: 'MasterKeyRequired',
@@ -42,6 +50,12 @@ describe('plans reveal', () => {
 
   it('does not claim cancellation succeeded when the relay cleanup failed', () => {
     expect(messageFor({ code: 'master_key_relay_cancellation_failed' })).toContain('may still be pending');
+  });
+
+  it('explains how to recover when server reveal cancellation is unconfirmed', () => {
+    expect(messageFor({ code: 'reveal_cancellation_failed' })).toBe(
+      'The local reveal stopped, but server cancellation could not be confirmed. Run `inheriti plans abort PLAN_ID` with this plan ID before revealing again, or wait for the request to expire.',
+    );
   });
 
   it('guides a direct runner away from a claimed SafeKey PRO share', () => {
@@ -169,11 +183,14 @@ describe('plans reveal', () => {
     expect(output.lines).not.toContain('Reconstructing and decrypting shares.');
   });
 
-  it('passes Ctrl+C cancellation to the reveal and closes the live card', async () => {
+  it.each([
+    ['WAITING_FOR_MASTER_KEY', 'Canceling the SafeKey Mobile request...'],
+    ['RECONSTRUCTING', 'Canceling the reveal...'],
+  ])('shows Ctrl+C cancellation during %s and closes the live card', async (phase, message) => {
     const controller = new AbortController();
     const region = { update: vi.fn(), close: vi.fn() };
     const withReveal = vi.fn(async (_planId, options) => {
-      options.onProgress({ phase: 'WAITING_FOR_MASTER_KEY' });
+      options.onProgress({ phase });
       await new Promise<void>((_resolve, reject) => {
         options.signal.addEventListener('abort', () => reject(Object.assign(new Error('reveal_canceled'), { name: 'AbortError' })), { once: true });
         controller.abort();
@@ -183,7 +200,24 @@ describe('plans reveal', () => {
     await expect(revealPlan(context({ withReveal }), output, 'plan-1', { field: 'asset.password', signal: controller.signal }))
       .rejects.toMatchObject({ name: 'AbortError' });
     expect(region.close).toHaveBeenCalledOnce();
+    expect(region.update.mock.calls.at(-1)?.[0]).toContain(message);
+    expect(output.writeError).not.toHaveBeenCalled();
     expect(output.lines.join('\n')).not.toContain('secret');
+  });
+
+  it('reports quiet reveal cancellation only on stderr', async () => {
+    const controller = new AbortController();
+    const output = terminal(false);
+    const withReveal = vi.fn(async (_planId, options) => {
+      options.onProgress({ phase: 'RECONSTRUCTING' });
+      controller.abort();
+      throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
+    });
+
+    await expect(resolvePlanField(context({ withReveal }), output, 'plan-1', 'asset.password', controller.signal))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(output.lines).toEqual([]);
+    expect(output.writeError).toHaveBeenCalledExactlyOnceWith('Canceling the reveal...');
   });
 
   it.each([false, true])('shows clipboard and first-access notice after delivery (live region: %s)', async (live) => {

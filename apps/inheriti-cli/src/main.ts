@@ -17,6 +17,7 @@ import { organizationCommand, selectedOrganization, OrganizationChoiceRequired }
 import { notifyCliUpdate, updateCli } from './commands/update.js';
 import type { Terminal } from './output.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
+import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
 
 function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
@@ -51,6 +52,8 @@ inheriti <command>
                      Run a process with reveal-authorized environment variables.
   secrets resolve [id] --field asset.field
                      Resolve one field for a machine wrapper. Raw output is intended for a pipe.
+  setup [--yes|--no-completion] [--shell bash|zsh|fish]
+                     Enable shell autocomplete (Yes is the default)
   completion <shell> Print the tab-completion script for bash, zsh or fish
   update [--install] Check for a newer CLI build; install after confirmation
   help [command]    Show detailed usage without signing in
@@ -80,6 +83,7 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's normal logs visible.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
     'plans abort': `Usage: inheriti plans abort PLAN_ID\n\nAbandon the current access request for this operator. The next reveal starts a new access flow.`,
+    setup: `Usage: inheriti setup [--yes|--no-completion] [--shell bash|zsh|fish]\n\nOffer to enable shell autocomplete, with Yes selected by default. --yes installs without prompting; --no-completion skips. No configuration or sign-in is required.`,
     completion: `Usage: inheriti completion <bash|zsh|fish>\n\nPrint a shell-completion script. This command does not require configuration or sign-in.`,
     update: `Usage: inheriti update [--install]\n\nCheck for an update in this build's channel. --install confirms and installs it with npm.`,
     help: `Usage: inheriti help [COMMAND [SUBCOMMAND]]\n\nExamples:\n  inheriti help plans reveal\n  inheriti plans reveal --help`,
@@ -110,6 +114,7 @@ export async function run(
   const topic = helpTopic(argv);
   if (topic) { terminal.write(commandUsage(topic, environmentVariables)); return 0; }
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
+  if (command === 'setup') return await setup(rest, environmentVariables, terminal);
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
   let business = Boolean(BUILD_DEPLOYMENT);
   try {
@@ -502,6 +507,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_id_required: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
   PlanIdRequired: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
   operator_reauthentication_required: 'The session expired. Run `inheriti login` again.',
+  operator_session_changed: 'The signed-in session changed during this command. Retry with the current account.',
   plan_not_found: 'No such plan in this Application.',
   plan_request_rate_limited: 'Too many requests. Try again shortly.',
   elements_api_unavailable: 'The plan service is unavailable. Try again shortly.',
@@ -513,8 +519,10 @@ const MESSAGES: Readonly<Record<string, string>> = {
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
+  reveal_cancellation_failed: 'The local reveal stopped, but server cancellation could not be confirmed. Run `inheriti plans abort PLAN_ID` with this plan ID before revealing again, or wait for the request to expire.',
   master_key_relay_cancellation_failed: 'Could not confirm cancellation in SafeKey Mobile. The release request may still be pending; wait for it to expire before trying again.',
   master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
+  master_key_cache_clear_failed: 'Could not clear the cached plan keys. Unlock the OS credential store and retry.',
   MasterKeyRelayTimedOut: 'Nobody released the organisation key in SafeKey Mobile in time.',
   master_key_relay_timed_out: 'Nobody released the organisation key in SafeKey Mobile in time.',
   MasterKeyRelayExpired: 'The key release request expired before it was answered. Start the reveal again.',
@@ -543,6 +551,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_share_reconstruction_failed: 'The released shares could not reconstruct this plan.',
   plan_reconstruction_failed: 'The plan could not be reconstructed from the released shares.',
   clipboard_unavailable: 'The reveal succeeded, but this terminal could not access the desktop clipboard. Nothing was printed.',
+  asset_selector_invalid: 'Use an asset code or ID followed by a field name, for example prod-db.password.',
+  asset_not_found: 'The requested asset is not in this plan. List the plan assets and check its code or ID.',
+  asset_field_not_found: 'The requested field is not declared for this asset. List the available fields and choose one of them.',
+  asset_value_invalid: 'The protected asset could not be decoded or is missing required data. Check the asset in the application where it was created before retrying.',
+  asset_decoder_required: 'This integration cannot decode the protected asset. Update the CLI and try again.',
   EEXIST: 'The output file already exists. Choose a new path; downloads never overwrite files.',
   ENOENT: 'The output directory does not exist.',
   EACCES: 'The output file cannot be created at that path.',

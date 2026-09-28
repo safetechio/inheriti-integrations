@@ -28,6 +28,7 @@ export class BrowserUnavailable extends Error {
  */
 export async function login(context: CliContext, terminal: Terminal): Promise<number> {
   if (!terminal.interactive) throw new InteractiveTerminalRequired();
+  if (await context.sessions.load()) await context.keyVault?.clear();
   const started = await context.core.auth.beginAuthorizationCode();
   terminal.write('Opening your browser to sign in…');
   const callback = waitForCallback(started.authorizationUrl, terminal);
@@ -45,6 +46,7 @@ export async function login(context: CliContext, terminal: Terminal): Promise<nu
  * plan policy remains responsible for approvals and release progression.
  */
 export async function loginWithDevice(context: CliContext, terminal: Terminal): Promise<number> {
+  if (await context.sessions.load()) await context.keyVault?.clear();
   const started = await context.core.auth.beginDeviceAuthorization() as DeviceTransaction;
   terminal.write(`Open ${started.verificationUri} and enter the code: ${started.userCode}`);
   terminal.write('Waiting for approval…');

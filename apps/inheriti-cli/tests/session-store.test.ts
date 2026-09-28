@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FileOperatorSessionStore, SessionStoreUnreadable, defaultSessionPath } from '../src/session-store.js';
 
 const session = {
@@ -19,6 +19,27 @@ async function storeInTemporaryDirectory(): Promise<{ store: FileOperatorSession
 }
 
 describe('FileOperatorSessionStore', () => {
+  it('preserves keys during token refresh and clears them when the login changes or ends', async () => {
+    const { path } = await storeInTemporaryDirectory();
+    const keys = { clear: vi.fn().mockResolvedValue(undefined) };
+    const store = new FileOperatorSessionStore(path, keys);
+    await store.save(session);
+    await store.save(Object.assign({}, session, { accessToken: 'refreshed' }));
+    expect(keys.clear).not.toHaveBeenCalled();
+    await store.save(Object.assign({}, session, { principal: Object.assign({}, session.principal, { sessionId: 'new-login' }) }));
+    expect(keys.clear).toHaveBeenCalledOnce();
+    await store.clear();
+    expect(keys.clear).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes the login even when protected-key deletion fails', async () => {
+    const { path } = await storeInTemporaryDirectory();
+    const keys = { clear: vi.fn().mockRejectedValue(new Error('locked')) };
+    const store = new FileOperatorSessionStore(path, keys);
+    await store.save(session);
+    await expect(store.clear()).rejects.toThrow('locked');
+    await expect(readFile(path)).rejects.toBeTruthy();
+  });
   it('is absent before the first login rather than failing', async () => {
     const { store } = await storeInTemporaryDirectory();
     await expect(store.load()).resolves.toBeUndefined();

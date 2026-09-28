@@ -1,6 +1,7 @@
 import { chmod, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { optionalToastPlugin } from './optional-toast-plugin.mjs';
@@ -22,9 +23,9 @@ const output = resolve(root, 'dist');
 await rm(output, { recursive: true, force: true });
 
 // Types are still checked against the real project; the bundle is what ships.
-const typecheck = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-  ['exec', 'tsc', '-p', 'tsconfig.build.json', '--noEmit'],
-  { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+const typecheck = spawnSync(process.execPath,
+  [createRequire(import.meta.url).resolve('typescript/bin/tsc'), '-p', 'tsconfig.build.json', '--noEmit'],
+  { cwd: root, stdio: 'inherit' });
 if (typecheck.status !== 0) process.exit(typecheck.status ?? 1);
 
 // `src/main.ts` carries the shebang; esbuild hoists it to the top of the bundle.
@@ -39,6 +40,7 @@ await build({
   sourcemap: true,
   logLevel: 'info',
   plugins: [optionalToastPlugin, optionalDevtoolsPlugin],
+  external: ['@napi-rs/keyring'],
   define: buildDefines(),
   // Some transitive dependencies are still CommonJS, and esbuild's ESM output has no `require` to
   // hand them — without this shim the bundle dies on its first `require('fs')`.

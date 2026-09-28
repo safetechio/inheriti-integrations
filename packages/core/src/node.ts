@@ -1,6 +1,6 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node';
 import { createNodeElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node';
-import type { DeclaredMasterKeySource, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
+import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
 import { ElementsIntegrationCore } from './index.js';
 import type { ElementsEnvironment } from './index.js';
 import { SdkPlanFacade } from './plans.js';
@@ -19,6 +19,7 @@ export type NodeIntegrationCoreOptions = OperatorAuthOptions & {
   apiUrl: string;
   environment: ElementsEnvironment;
   masterKeys?: MasterKeyResolver;
+  keyVault?: KeyVault;
   /**
    * What custody this host holds locally: a passphrase-derived key, key material it already has, or
    * nothing. The Client SDK composes acquisition around it — a host that can derive never asks
@@ -46,6 +47,7 @@ export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): 
     ...(options.business ? { business: true as const, ...(options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) }
       : { applicationId: options.applicationId }),
     ...(options.masterKeys ? { masterKeys: options.masterKeys } : {}),
+    ...(options.keyVault ? { keyVault: options.keyVault } : {}),
     ...(options.masterKey ? { masterKey: options.masterKey } : {}),
     ...(options.fetchImpl ? { transport: options.fetchImpl } : {}),
   });
@@ -55,7 +57,9 @@ export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): 
     auth,
     elements: new SdkPlanFacade(elements),
     scopedReveals: elements,
-    masterKeys: elements,
+    masterKeys: { forgetMasterKey: (ref) => elements.forgetMasterKey(ref),
+      hasMasterKey: async (ref) => (await elements.keyVault.load(ref)) !== undefined,
+      cancelMasterKeyRelaySession: (sessionId) => elements.cancelMasterKeyRelaySession(sessionId) },
     ...(options.business ? { organizations: { listOrganizations: () => new HttpElementsApiPort(options.apiUrl,
       options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
       options.organizationId !== undefined ? { organizationId: options.organizationId } : {}).listBusinessOrganizations() } } : {}),
@@ -84,3 +88,5 @@ export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevi
 export { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 export { revealProgressMessage } from './reveal-progress.js';
 export { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
+
+export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';

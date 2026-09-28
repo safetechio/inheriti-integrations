@@ -7,12 +7,14 @@ import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node
 import { createCliSafeKeyPro } from './safekey-pro.js';
 import type { Terminal } from './output.js';
 import { selectCliCustodianDevice } from './safekey-pro.js';
+import { CliKeyVault } from './key-vault.js';
 
 export interface CliContext {
   core: NodeIntegrationCore;
   sessions: FileOperatorSessionStore;
   organization?: BusinessOrganization;
   keyOwner: 'Application' | 'Organisation';
+  keyVault?: CliKeyVault;
   safeKeyPro?: ReturnType<typeof createCliSafeKeyPro>;
 }
 
@@ -28,7 +30,8 @@ export function createCliContext(
   client: 'interactive' | 'device' = 'interactive',
   organizationId?: string,
 ): CliContext {
-  const sessions = new FileOperatorSessionStore(sessionPath);
+  const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
+  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault);
   const source = createCliMasterKeySource(configuration);
   const core = createNodeIntegrationCore({
     apiUrl: configuration.apiUrl,
@@ -37,6 +40,7 @@ export function createCliContext(
     // Declared, not composed: the SDK decides between deriving and asking the device that holds the
     // key, and speaks the relay protocol. This host only says what it has.
     masterKey: source ? { source } : {},
+    keyVault,
     environment: configuration.environment,
     liveConfirmation: configuration.environment,
     configuration: {
@@ -50,7 +54,7 @@ export function createCliContext(
     sessions,
   });
   const safeKeyPro = createCliSafeKeyPro(configuration);
-  return { core, sessions, keyOwner: configuration.business ? 'Organisation' : 'Application',
+  return { core, sessions, keyVault, keyOwner: configuration.business ? 'Organisation' : 'Application',
     ...(safeKeyPro ? { safeKeyPro } : {}) };
 }
 

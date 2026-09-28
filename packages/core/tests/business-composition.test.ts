@@ -7,6 +7,18 @@ const configuration = {
   environment: 'TEST' as const, redirectUri: 'http://127.0.0.1/callback', scopes: ['openid', 'plan:list'],
 };
 
+it('reports and forgets a held Node key through the SDK vault', async () => {
+  let key: Uint8Array | undefined = new Uint8Array(32);
+  const keyVault = { store: vi.fn(), load: vi.fn(async () => key), remove: vi.fn(async () => { key = undefined; }) };
+  const core = createNodeIntegrationCore({ apiUrl: 'https://business.test/integrations/', environment: 'TEST',
+    business: true, organizationId: 'org-1', configuration, keyVault });
+  const ref = { system: 'INHERITI_BUSINESS' as const, contextId: 'org-1' };
+  expect(await core.hasMasterKey(ref)).toBe(true);
+  await core.forgetMasterKey();
+  expect(keyVault.remove).toHaveBeenCalledWith(ref);
+  expect(await core.hasMasterKey(ref)).toBe(false);
+});
+
 describe.each([
   ['Node', createNodeIntegrationCore],
   ['browser', createBrowserIntegrationCore],

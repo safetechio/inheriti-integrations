@@ -11,7 +11,7 @@ const candidates = (...values: readonly (readonly [string, string])[]): Candidat
 const ROOT = candidates(
   ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Business organizations'],
   ['plans', 'List and use plans'], ['secrets', 'Machine-oriented secret delivery'],
-  ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
+  ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
 const PLANS = candidates(
   ['list', 'List plans'], ['show', 'Show plan details'], ['logs', 'Show plan activity'],
@@ -101,6 +101,10 @@ export function completionNeedsPlanContext(words: readonly string[]): boolean {
 function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words: readonly string[]): Completion {
   const [command, subcommand, ...rest] = words;
   if (words.length <= 1) return { kind: 'static', candidates: ROOT };
+  if (command === 'setup') {
+    const values = words.at(-2) === '--shell' ? COMPLETION_SHELLS : ['--yes', '--no-completion', '--shell', '--help'];
+    return { kind: 'static', candidates: values.map((value) => ({ value })) };
+  }
   if (command === 'completion') return { kind: 'static', candidates: COMPLETION_SHELLS.map((value) => ({ value })) };
   if (command === 'organizations') {
     if (words.length === 2) return { kind: 'static', candidates: ORGANIZATIONS };
