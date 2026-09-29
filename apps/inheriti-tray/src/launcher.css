@@ -104,9 +104,9 @@ body { padding: 0; background: #fff; }
 .tray-step.is-active i { background: #2962ff; }
 
 /* Launcher */
-.tray-signed-out { position: relative; overflow: hidden; }
+.tray-signed-out { position: relative; }
 .tray-signed-out::before { content: ''; position: absolute; right: -20px; top: -20px; width: 180px; height: 140px; background: radial-gradient(#d6e0ff 1.2px, transparent 1.2px) 0 0 / 9px 9px; pointer-events: none; }
-.tray-sign-in-center { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 20px; padding: 32px; text-align: center; }
+.tray-sign-in-center { position: relative; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: safe center; align-items: center; gap: 20px; padding: 32px; text-align: center; }
 .tray-sign-in-logo { width: 64px; height: 64px; }
 .tray-sign-in-center h1 { font-size: 22px; line-height: 1.4; }
 .tray-sign-in-center p { color: #475467; font-size: 14px; }
@@ -117,12 +117,12 @@ body { padding: 0; background: #fff; }
 .tray-link { flex: none !important; min-height: 0; padding: 0; display: inline-flex; align-items: center; gap: 4px; color: #2962ff; border: 0; background: transparent; font-size: 13px; }
 .tray-link svg { width: 14px; height: 14px; display: block; }
 .tray-link:hover:not(:disabled) { color: #1642ba; border: 0; background: transparent; }
-.tray-home-header { flex: none; height: 60px; padding: 0 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eaecf0; }
+.tray-home-header { flex: none; min-height: 60px; padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid #eaecf0; }
 .tray-home-header > img { width: 28px; height: 28px; }
-.tray-home-header > strong { flex: 1; white-space: nowrap; font-size: 16px; }
+.tray-home-header > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .tray-home-header > strong span { font-weight: 400; }
 .tray-home-header em { font-style: normal; font-weight: 400; color: #2962ff; }
-.tray-organization-picker { max-width: 155px; }
+.tray-organization-picker { flex: 0 1 155px; min-width: 0; max-width: 100%; }
 .tray-organization-picker select { width: 100%; height: 34px; padding: 0 24px 0 10px; color: #2962ff; border-color: #2962ff; font-size: 14px; }
 .tray-home-content { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
 .tray-home-notice { padding: 8px 12px; border-radius: 8px; background: #fef3f2; font-size: 13px; }

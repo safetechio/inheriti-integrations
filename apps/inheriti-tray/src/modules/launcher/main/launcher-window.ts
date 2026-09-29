@@ -19,8 +19,11 @@ export function showLauncher(action?: string): void {
     window = new BrowserWindow({
       width: 380,
       height: 608,
+      useContentSize: true,
       show: false,
       resizable: false,
+      maximizable: false,
+      fullscreenable: false,
       title: app.getName(),
       icon: join(import.meta.dirname, 'tray.png'),
       webPreferences: {
