@@ -49,6 +49,26 @@ describe('TraySession', () => {
     }));
   });
 
+  it.each(['dev', 'prod'] as const)('uses the bound callback URI throughout %s sign-in', async (deployment) => {
+    const session = new TraySession(deployment);
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    let redirectUri = '';
+    mock.begin.mockImplementation(async () => {
+      redirectUri = configuration.redirectUri;
+      return { authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}` };
+    });
+    mock.complete.mockResolvedValue({});
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      expect(new URL(authorizationUrl).searchParams.get('redirect_uri')).toBe(redirectUri);
+      expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:[1-9]\d*\/oauth\/callback$/);
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(mock.core).toHaveBeenCalledTimes(1);
+    expect(configuration.redirectUri).toBe(redirectUri);
+    expect(mock.complete).toHaveBeenCalledWith(`${redirectUri}?code=code&state=state`);
+    expect(session.state().status).toBe('signed-in');
+  });
+
   it('uses local API and issuer overrides across core, creation, and edit', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
@@ -69,15 +89,42 @@ describe('TraySession', () => {
     mock.begin.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
     mock.clear.mockResolvedValue(undefined);
     const session = new TraySession('dev');
-    const signingIn = session.signIn(() => {}, async () => {});
+    const openBrowser = vi.fn().mockResolvedValue(undefined);
+    const signingIn = session.signIn(() => {}, openBrowser);
+    await vi.waitFor(() => expect(mock.begin).toHaveBeenCalledTimes(1));
     const signingOut = session.signOut();
     expect(mock.clear).not.toHaveBeenCalled();
     release({ authorizationUrl: 'https://issuer.test/authorize' });
     await signingIn;
     await signingOut;
+    expect(openBrowser).not.toHaveBeenCalled();
     expect(mock.complete).not.toHaveBeenCalled();
     expect(mock.clear).toHaveBeenCalledTimes(1);
     expect(session.state().status).toBe('signed-out');
+  });
+
+  it('drains canceled authorization before changing the callback URI on retry', async () => {
+    let release!: (value: { authorizationUrl: string }) => void;
+    mock.begin.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }))
+      .mockRejectedValueOnce(new Error('retry_failed'));
+    const session = new TraySession('dev');
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    const openBrowser = vi.fn().mockResolvedValue(undefined);
+    const first = session.signIn(() => {}, openBrowser);
+    await vi.waitFor(() => expect(mock.begin).toHaveBeenCalledTimes(1));
+    const firstUri = configuration.redirectUri;
+    await session.signOut();
+    await first;
+    const retry = session.signIn(() => {}, openBrowser);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(configuration.redirectUri).toBe(firstUri);
+    expect(mock.begin).toHaveBeenCalledTimes(1);
+    release({ authorizationUrl: 'https://issuer.test/authorize' });
+    await retry;
+    expect(mock.begin).toHaveBeenCalledTimes(2);
+    expect(configuration.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:[1-9]\d*\/oauth\/callback$/);
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(session.state()).toMatchObject({ status: 'error', message: 'retry_failed' });
   });
 
   it('rejects an organization absent from discovery', async () => {

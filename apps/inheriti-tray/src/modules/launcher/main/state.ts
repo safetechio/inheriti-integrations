@@ -1,5 +1,5 @@
 import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
-import type { BusinessOrganization, NodeIntegrationCore, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
@@ -27,6 +27,7 @@ export type TrayState = {
 
 export class TraySession {
   private readonly core: NodeIntegrationCore;
+  private readonly configuration: NodeIntegrationCoreOptions['configuration'];
   private organizations: BusinessOrganization[] = [];
   private selectedId: string | undefined;
   private accountName: string | undefined;
@@ -34,6 +35,7 @@ export class TraySession {
   private message: string | undefined;
   private authorization: AbortController | undefined;
   private pendingSignIn: Promise<void> | undefined;
+  private pendingAuthorization: ReturnType<NodeIntegrationCore['auth']['beginAuthorizationCode']> | undefined;
   private pendingSelections = 0;
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
@@ -45,20 +47,21 @@ export class TraySession {
     const config = BUSINESS_DEPLOYMENTS[deployment];
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
+    this.configuration = {
+      issuer,
+      clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
+      audience: 'inheriti-integrations-api',
+      environment: config.environment,
+      redirectUri: 'http://127.0.0.1/oauth/callback',
+      scopes: ['openid', 'profile'],
+    };
     this.core = createNodeIntegrationCore({
       apiUrl,
       business: true,
       environment: config.environment,
       liveConfirmation: config.environment,
       masterKey: {},
-      configuration: {
-        issuer,
-        clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
-        audience: 'inheriti-integrations-api',
-        environment: config.environment,
-        redirectUri: 'http://127.0.0.1:53682/oauth/callback',
-        scopes: ['openid', 'profile'],
-      },
+      configuration: this.configuration,
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
     this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
@@ -107,8 +110,17 @@ export class TraySession {
     this.message = undefined;
     onChange();
     try {
-      const started = await untilCanceled(this.core.auth.beginAuthorizationCode(), authorization.signal);
-      const session = await this.core.auth.completeAuthorizationCode(await waitForCallback(started.authorizationUrl, openBrowser, authorization.signal)) as OperatorSession;
+      const callbackUrl = await waitForCallback(async (redirectUri) => {
+        if (this.pendingAuthorization) await untilCanceled(this.pendingAuthorization.catch(() => undefined), authorization.signal);
+        authorization.signal.throwIfAborted();
+        this.configuration.redirectUri = redirectUri;
+        const pending = this.core.auth.beginAuthorizationCode();
+        this.pendingAuthorization = pending;
+        const started = await untilCanceled(pending, authorization.signal);
+        authorization.signal.throwIfAborted();
+        return started.authorizationUrl;
+      }, openBrowser, authorization.signal);
+      const session = await this.core.auth.completeAuthorizationCode(callbackUrl) as OperatorSession;
       if (authorization.signal.aborted) return;
       this.accountName = accountNameFromIdToken(session?.idToken);
       await this.discover(authorization.signal);

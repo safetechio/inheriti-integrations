@@ -3,6 +3,18 @@
 Source for the Inheriti CLI, MCP server, VS Code extension, InheritiGuard Chrome
 extension, and runtime integrations.
 
+Tray sign-in opens a temporary listener on `127.0.0.1` using an OS-assigned port
+in every deployment. Before releasing this build, add
+`http://127.0.0.1/oauth/callback` to the **Valid redirect URIs** of the
+`inheriti-business-integrations-interactive` Keycloak client in each SafeID realm
+(local, dev, staging, production), preserving the other registered redirects.
+Keycloak matches this loopback URI on any port while retaining the exact callback
+path; do not use a port wildcard. See [Keycloak redirect URI documentation](https://www.keycloak.org/securing-apps/oidc-layers#redirect-uris).
+The registration script in `bussiness/api/scripts/register-business-integration.cjs`
+accepts this no-port URI, but reports a mismatch for existing clients instead of
+updating their redirect list. Existing E2E realm imports likewise need their client
+redirects updated before testing this Tray build.
+
 The CLI reuses plan master keys across commands through the SDK's `KeyVault` port,
 backed by the operating system's credential store. Keys are scoped to the deployment,
 local state path, signed-in account, login session and key reference. Token refresh
