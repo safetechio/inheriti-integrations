@@ -26,6 +26,7 @@ function withConfigurationFile(contents: string): { INHERITI_ELEMENTS_CONFIG: st
 describe('CLI configuration', () => {
   it('defaults to TEST when the operator names no environment', () => {
     expect(resolveConfiguration(base).environment).toBe('TEST');
+    expect(resolveConfiguration(base).redirectUri).toBe('http://127.0.0.1/oauth/callback');
   });
 
   it('refuses LIVE in a development build even with an explicit confirmation', () => {

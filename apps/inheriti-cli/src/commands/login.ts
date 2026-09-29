@@ -29,11 +29,8 @@ export class BrowserUnavailable extends Error {
 export async function login(context: CliContext, terminal: Terminal): Promise<number> {
   if (!terminal.interactive) throw new InteractiveTerminalRequired();
   if (await context.sessions.load()) await context.keyVault?.clear();
-  const started = await context.core.auth.beginAuthorizationCode();
-  terminal.write('Opening your browser to sign in…');
-  const callback = waitForCallback(started.authorizationUrl, terminal);
-  openBrowser(started.authorizationUrl);
-  await context.core.auth.completeAuthorizationCode(await callback);
+  const callbackUrl = await waitForCallback(context, terminal);
+  await context.core.auth.completeAuthorizationCode(callbackUrl);
   terminal.write('Signed in.');
   return 0;
 }
@@ -55,36 +52,58 @@ export async function loginWithDevice(context: CliContext, terminal: Terminal): 
   return 0;
 }
 
-/**
- * Catches the redirect on the port the client is registered for.
- *
- * The whole callback URL is handed back rather than its parts: state and code are the SDK's to
- * check, and a CLI that parsed them itself would be a second implementation of that check.
- */
-function waitForCallback(authorizationUrl: string, terminal: Terminal): Promise<string> {
-  const { port } = new URL(authorizationUrl.includes('redirect_uri=')
-    ? decodeURIComponent(new URL(authorizationUrl).searchParams.get('redirect_uri') ?? '')
-    : 'http://127.0.0.1:53682');
+function waitForCallback(context: CliContext, terminal: Terminal): Promise<string> {
+  const redirect = new URL(context.authConfiguration.redirectUri);
+  if (redirect.protocol !== 'http:' || redirect.hostname !== '127.0.0.1'
+    || redirect.username || redirect.password || redirect.hash) {
+    throw new Error('login_requires_an_http_ipv4_loopback_callback');
+  }
   return new Promise((resolveCallback, reject) => {
+    let settled = false;
+    let ready = false;
     const server = createServer((request, response) => {
-      const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
+      let url: URL;
+      try { url = new URL(request.url ?? '/', redirect); }
+      catch { response.writeHead(400).end(); return; }
+      if (url.origin !== redirect.origin || url.pathname !== redirect.pathname) {
+        response.writeHead(404).end(); return;
+      }
+      if (settled || !ready) { response.writeHead(400).end(); return; }
       if (!url.searchParams.has('code') && !url.searchParams.has('error')) {
-        response.writeHead(404).end();
-        return;
+        response.writeHead(404).end(); return;
       }
       const failure = url.searchParams.get('error_description') ?? url.searchParams.get('error');
+      response.once('finish', () => server.closeAllConnections());
       response.writeHead(failure ? 400 : 200, { 'content-type': 'text/html; charset=utf-8' });
       response.end(callbackPage(failure));
-      server.close();
-      if (failure) {
-        reject(new Error(failure));
-        return;
-      }
-      resolveCallback(url.toString());
+      finish(failure ? new Error(failure) : undefined, url.toString(), true);
     });
-    server.once('error', reject);
-    server.listen(Number(port), '127.0.0.1', () => {
-      terminal.write(`Waiting for the browser… if it did not open, visit:\n  ${authorizationUrl}`);
+    const finish = (error?: unknown, callbackUrl?: string, responding = false) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      server.close();
+      if (!responding) server.closeAllConnections();
+      if (error !== undefined) { reject(error); return; }
+      resolveCallback(callbackUrl!);
+    };
+    const timeout = setTimeout(() => finish(new Error('login_browser_callback_timed_out')), 300_000);
+    server.once('error', (error) => finish(error));
+    server.listen(0, '127.0.0.1', () => {
+      if (settled) { server.close(); return; }
+      const address = server.address();
+      if (!address || typeof address === 'string') { finish(new Error('login_invalid_callback_address')); return; }
+      redirect.port = String(address.port);
+      context.authConfiguration.redirectUri = redirect.toString();
+      void Promise.resolve().then(async () => {
+        if (settled) return;
+        const started = await context.core.auth.beginAuthorizationCode();
+        if (settled) return;
+        ready = true;
+        terminal.write('Opening your browser to sign in…');
+        terminal.write(`Waiting for the browser… if it did not open, visit:\n  ${started.authorizationUrl}`);
+        openBrowser(started.authorizationUrl);
+      }).catch((error: unknown) => finish(error));
     });
   });
 }
@@ -118,9 +137,11 @@ function escapeHtml(value: string): string {
 function openBrowser(url: string): void {
   // Set where no browser should ever be launched — a test, or a shell that only wants the URL.
   if (process.env.INHERITI_ELEMENTS_NO_BROWSER) return;
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
   try {
-    spawn(command, [url], { stdio: 'ignore', detached: true }).unref();
+    const browser = spawn(command, [url], { stdio: 'ignore', detached: true });
+    browser.once('error', () => undefined);
+    browser.unref();
   } catch {
     // The URL is already on screen; the operator can open it themselves.
   }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { login, loginWithDevice } from '../src/commands/login.js';
 import { logout } from '../src/commands/logout.js';
 import { messageFor, run } from '../src/main.js';
@@ -6,6 +6,9 @@ import { OperatorNotSignedIn, PlanIdRequired, abortPlanAccess, listPlanLogs, lis
 import { completeWords, printCompletionScript } from '../src/commands/completion.js';
 import type { Terminal } from '../src/output.js';
 import { mkdtempSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import type { NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -36,6 +39,7 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
       load: async () => ({ principal: { issuer: 'issuer', environment: 'TEST', subject: 'operator' } }),
     },
     cleared,
+    authConfiguration: { redirectUri: 'http://127.0.0.1:53682/oauth/callback' },
     core: {
       auth,
       getAccessToken: () => auth.getAccessToken(),
@@ -121,34 +125,141 @@ describe('plan logs', () => {
 describe('login', () => {
   it('signs in through the browser and hands the whole callback back to the SDK', async () => {
     process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
-    const redirect = 'http://127.0.0.1:53999/oauth/callback';
+    const occupied = createServer();
+    await new Promise<void>((resolve, reject) => {
+      occupied.once('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EACCES' || error.code === 'EADDRINUSE') { resolve(); return; }
+        reject(error);
+      });
+      occupied.listen(53682, '127.0.0.1', resolve);
+    });
+    let redirect = '';
+    let authorizationReady!: () => void;
+    const ready = new Promise<void>((resolve) => { authorizationReady = resolve; });
     let completed: string | undefined;
     const terminal = recordingTerminal(true);
     const context = contextWith({
       auth: {
-        beginAuthorizationCode: async () => ({
-          authorizationUrl: `http://127.0.0.1:4564/auth?redirect_uri=${encodeURIComponent(redirect)}`,
-          expiresAt: 0,
-        }),
+        beginAuthorizationCode: async () => {
+          redirect = (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri;
+          authorizationReady();
+          return { authorizationUrl: `http://127.0.0.1:4564/auth?redirect_uri=${encodeURIComponent(redirect)}`, expiresAt: 0 };
+        },
         completeAuthorizationCode: async (callbackUrl: string) => { completed = callbackUrl; },
         getAccessToken: async () => 'access-token',
       },
     });
 
-    const signingIn = login(context, terminal);
-    // The callback the issuer would send once the operator approves in the browser.
-    await new Promise((settle) => { setTimeout(settle, 50); });
-    const callback = await fetch(`${redirect}?code=authorization-code&state=opaque`);
-    const html = await callback.text();
-    expect(html).toContain('font-family: AppFont');
-    expect(html).toContain('--primary: #2962ff');
-    expect(html).toContain('Inheriti® Business');
+    (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri
+      = 'http://127.0.0.1:53682/custom/callback?tenant=business';
+    try {
+      const signingIn = login(context, terminal);
+      // The callback the issuer would send once the operator approves in the browser.
+      await ready;
+      expect(new URL(redirect).port).not.toBe('53682');
+      expect(new URL(redirect).pathname).toBe('/custom/callback');
+      expect(new URL(redirect).searchParams.get('tenant')).toBe('business');
+      const wrongPath = new URL(redirect);
+      wrongPath.pathname = '/unrelated';
+      expect((await fetch(wrongPath)).status).toBe(404);
+      const callback = await fetch(`${redirect}&code=authorization-code&state=opaque`);
+      const html = await callback.text();
+      expect(html).toContain('font-family: AppFont');
+      expect(html).toContain('--primary: #2962ff');
+      expect(html).toContain('Inheriti® Business');
 
-    await expect(signingIn).resolves.toBe(0);
-    expect(completed).toContain('code=authorization-code');
-    expect(completed).toContain('state=opaque');
-    expect(terminal.lines.at(-1)).toBe('Signed in.');
-    delete process.env.INHERITI_ELEMENTS_NO_BROWSER;
+      await expect(signingIn).resolves.toBe(0);
+      expect(completed).toContain('code=authorization-code');
+      expect(completed).toContain('state=opaque');
+      expect(terminal.lines.at(-1)).toBe('Signed in.');
+    } finally {
+      if (occupied.listening) await new Promise<void>((resolve) => occupied.close(() => resolve()));
+      delete process.env.INHERITI_ELEMENTS_NO_BROWSER;
+    }
+  });
+
+  it('exchanges the assigned URI with state and PKCE through the real SDK', async () => {
+    process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
+    try {
+      const configuration: NodeIntegrationCoreOptions['configuration'] = {
+        issuer: 'https://issuer.test', clientId: 'cli-test', audience: 'inheriti-integrations-api',
+        environment: 'TEST', redirectUri: 'http://127.0.0.1/custom/callback?tenant=business', scopes: ['openid'],
+      };
+      const principal = {
+        issuer: configuration.issuer, audience: configuration.audience, authorizedParty: configuration.clientId,
+        environment: 'TEST' as const, subject: 'operator', sessionId: 'session', tokenId: 'token', scopes: ['openid'],
+      };
+      let nonce = '';
+      let exchanged: URLSearchParams | undefined;
+      const core = createNodeIntegrationCore({
+        apiUrl: 'https://business.test/integrations/', environment: 'TEST', business: true, configuration,
+        tokenValidator: {
+          validateAccessToken: async () => principal,
+          validateIdToken: async () => Object.assign({}, principal, { audience: configuration.clientId, nonce }),
+        },
+        fetchImpl: async (input, init) => {
+          if (String(input).endsWith('/.well-known/openid-configuration')) {
+            return Response.json({ issuer: configuration.issuer, authorization_endpoint: 'https://issuer.test/authorize', token_endpoint: 'https://issuer.test/token' });
+          }
+          expect(String(input)).toBe('https://issuer.test/token');
+          exchanged = new URLSearchParams(String(init?.body));
+          return Response.json({ access_token: 'access', id_token: 'id', token_type: 'Bearer', expires_in: 3600 });
+        },
+      });
+      let published!: (authorization: URL) => void;
+      const ready = new Promise<URL>((resolve) => { published = resolve; });
+      const terminal = recordingTerminal(true);
+      terminal.write = (line) => {
+        terminal.lines.push(line);
+        if (line.startsWith('Waiting for the browser')) published(new URL(line.split('\n  ')[1]!));
+      };
+      const context = { core, authConfiguration: configuration, sessions: { load: async () => null } } as unknown as Parameters<typeof login>[0];
+      const signingIn = login(context, terminal);
+      const authorization = await ready;
+      expect(authorization.searchParams.get('redirect_uri')).toBe(configuration.redirectUri);
+      expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
+      nonce = authorization.searchParams.get('nonce')!;
+      await fetch(`${configuration.redirectUri}&code=code&state=${encodeURIComponent(authorization.searchParams.get('state')!)}`);
+      await expect(signingIn).resolves.toBe(0);
+      expect(exchanged?.get('redirect_uri')).toBe(configuration.redirectUri);
+      expect(exchanged?.get('code')).toBe('code');
+      expect(exchanged?.get('code_verifier')).toBeTruthy();
+    } finally { delete process.env.INHERITI_ELEMENTS_NO_BROWSER; }
+  });
+
+  it('closes the assigned listener when authorization fails', async () => {
+    const context = contextWith({ auth: { beginAuthorizationCode: async () => { throw new Error('issuer unavailable'); } } });
+    await expect(login(context, recordingTerminal(true))).rejects.toThrow('issuer unavailable');
+    const redirect = (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri;
+    await expect(fetch(redirect)).rejects.toThrow();
+  });
+
+  it('times out pending authorization without printing a late browser URL', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => { started = resolve; });
+      let finishAuthorization!: (value: { authorizationUrl: string }) => void;
+      const pending = new Promise<{ authorizationUrl: string }>((resolve) => { finishAuthorization = resolve; });
+      const context = contextWith({ auth: { beginAuthorizationCode: () => { started(); return pending; } } });
+      const terminal = recordingTerminal(true);
+      const signingIn = login(context, terminal);
+      const result = expect(signingIn).rejects.toThrow('login_browser_callback_timed_out');
+      await ready;
+      await vi.advanceTimersByTimeAsync(300_000);
+      await result;
+      finishAuthorization({ authorizationUrl: 'https://issuer.test/late' });
+      await Promise.resolve();
+      expect(terminal.lines).toEqual([]);
+      const redirect = (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri;
+      await expect(fetch(redirect)).rejects.toThrow();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('rejects a callback outside HTTP IPv4 loopback', async () => {
+    const context = contextWith();
+    (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri = 'https://example.com/oauth/callback';
+    await expect(login(context, recordingTerminal(true))).rejects.toThrow('login_requires_an_http_ipv4_loopback_callback');
   });
 
   it('shows the verification URI and code when signing in headlessly', async () => {

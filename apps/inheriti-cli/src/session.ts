@@ -1,5 +1,5 @@
 import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
-import type { NodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node';
 import type { CliConfiguration } from './configuration.js';
 import { FileOperatorSessionStore } from './session-store.js';
 import { createCliMasterKeySource } from './master-keys.js';
@@ -11,6 +11,7 @@ import { CliKeyVault } from './key-vault.js';
 
 export interface CliContext {
   core: NodeIntegrationCore;
+  authConfiguration: NodeIntegrationCoreOptions['configuration'];
   sessions: FileOperatorSessionStore;
   organization?: BusinessOrganization;
   keyOwner: 'Application' | 'Organisation';
@@ -33,6 +34,14 @@ export function createCliContext(
   const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
   const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault);
   const source = createCliMasterKeySource(configuration);
+  const authConfiguration: NodeIntegrationCoreOptions['configuration'] = {
+    issuer: configuration.issuer,
+    clientId: client === 'device' ? configuration.clientId : configuration.interactiveClientId,
+    audience: configuration.business ? 'inheriti-integrations-api' : 'inheriti-elements-api',
+    environment: configuration.environment,
+    redirectUri: configuration.redirectUri,
+    scopes: configuration.scopes,
+  };
   const core = createNodeIntegrationCore({
     apiUrl: configuration.apiUrl,
     ...(configuration.business ? { business: true as const, ...(organizationId ? { organizationId } : {}) }
@@ -43,18 +52,11 @@ export function createCliContext(
     keyVault,
     environment: configuration.environment,
     liveConfirmation: configuration.environment,
-    configuration: {
-      issuer: configuration.issuer,
-      clientId: client === 'device' ? configuration.clientId : configuration.interactiveClientId,
-      audience: configuration.business ? 'inheriti-integrations-api' : 'inheriti-elements-api',
-      environment: configuration.environment,
-      redirectUri: configuration.redirectUri,
-      scopes: configuration.scopes,
-    },
+    configuration: authConfiguration,
     sessions,
   });
   const safeKeyPro = createCliSafeKeyPro(configuration);
-  return { core, sessions, keyVault, keyOwner: configuration.business ? 'Organisation' : 'Application',
+  return { core, authConfiguration, sessions, keyVault, keyOwner: configuration.business ? 'Organisation' : 'Application',
     ...(safeKeyPro ? { safeKeyPro } : {}) };
 }
 

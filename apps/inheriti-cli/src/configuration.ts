@@ -122,7 +122,7 @@ export function resolveConfiguration(
       clientId: BUSINESS_DEVICE_CLIENT_ID,
       interactiveClientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       scopes: ['openid'],
-      redirectUri: 'http://127.0.0.1:53682/oauth/callback',
+      redirectUri: 'http://127.0.0.1/oauth/callback',
       safeKeyProRpId: businessUiRpId(BUILD_DEPLOYMENT),
       ...(processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE ? {
         safeKeyProDevice: processEnvironment.INHERITI_SAFEKEY_PRO_DEVICE,
@@ -170,7 +170,7 @@ export function resolveConfiguration(
     environment,
     scopes: file.business ? ['openid'] : DEFAULT_SCOPES,
     // The device grant never redirects, but the SDK's configuration requires the field.
-    redirectUri: environmentVariables.INHERITI_ELEMENTS_REDIRECT_URI ?? 'http://127.0.0.1:53682/oauth/callback',
+    redirectUri: environmentVariables.INHERITI_ELEMENTS_REDIRECT_URI ?? 'http://127.0.0.1/oauth/callback',
     ...(masterKeyPassphrase === undefined ? {} : { masterKeyPassphrase, masterKeySalt: masterKeySalt! }),
     ...(file.business && file.deployment ? {
       safeKeyProRpId: businessUiRpId(file.deployment),
