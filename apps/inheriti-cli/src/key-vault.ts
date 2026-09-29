@@ -54,7 +54,9 @@ export class CliKeyVault implements KeyVault {
     if (key.length !== 32) throw new Error('invalid_master_key_material');
     const account = await this.account(ref);
     if (!account) return;
-    this.memory.set(account, key.slice());
+    const owned = key.slice();
+    this.memory.get(account)?.fill(0);
+    this.memory.set(account, owned);
     try {
       const { AsyncEntry } = await import('@napi-rs/keyring');
       await new AsyncEntry(this.service, account, { linux: { store: 'secret-service' } }).setPassword(Buffer.from(key).toString('hex'));

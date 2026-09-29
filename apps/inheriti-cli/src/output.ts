@@ -2,6 +2,7 @@ export interface Terminal {
   write(line: string): void;
   writeError(line: string): void;
   readonly interactive: boolean;
+  readonly stdoutIsTTY: boolean;
   /** How wide a table may be. A pipe has no width, so a fixed one keeps redirected output stable. */
   readonly columns: number;
   /** A redrawable TTY region. Absent for pipes, tests, and embedded callers. */
@@ -38,6 +39,7 @@ export function processTerminal(): Terminal {
     write: (line) => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
     interactive,
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
     columns: process.stdout.columns ?? 120,
     ...(interactive ? { createLiveRegion: () => liveRegion(process.stdout) } : {}),
   };

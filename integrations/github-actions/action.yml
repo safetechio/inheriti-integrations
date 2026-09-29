@@ -12,7 +12,7 @@ inputs:
     required: true
   output:
     description: Child output policy (suppress or inherit)
-    default: inherit
+    default: suppress
     required: false
   cli-version:
     description: Published @safetech/inheriti-cli version

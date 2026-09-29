@@ -5,7 +5,7 @@ set -euo pipefail
 : "${INHERITI_SECRETS_ENV:?env mappings are required}"
 : "${INHERITI_SECRETS_COMMAND:?run is required}"
 
-args=(secrets exec "$INHERITI_SECRETS_PLAN" --output "${INHERITI_SECRETS_OUTPUT:-inherit}")
+args=(secrets exec "$INHERITI_SECRETS_PLAN" --output "${INHERITI_SECRETS_OUTPUT:-suppress}")
 while IFS= read -r mapping; do
   [[ -z "$mapping" ]] && continue
   args+=(--env "$mapping")

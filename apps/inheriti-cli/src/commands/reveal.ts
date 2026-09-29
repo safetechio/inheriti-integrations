@@ -12,6 +12,7 @@ export interface RevealCommandOptions {
   field?: string;
   fields?: readonly string[];
   signal?: AbortSignal;
+  clipboardTtlMs?: number;
 }
 
 export async function resolvePlanField(
@@ -19,13 +20,27 @@ export async function resolvePlanField(
   terminal: Terminal,
   planId: string,
   selector: string,
-  signal?: AbortSignal,
+  options: { allowPlaintextOutput: boolean; signal?: AbortSignal },
 ): Promise<number> {
+  assertPlaintextDestination(terminal, options?.allowPlaintextOutput);
+  if (!isFieldSelector(selector)) throw new Error('Invalid field selector.');
+  const signal = options.signal;
+  if (signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   const plan = await loadRevealPlan(context, planId);
   await consumePlanFields(context, terminal, planId, plan, [selector], signal, async (fields) => {
     terminal.write(renderRequestedValue(fields[0]?.value));
   }, { quiet: true });
   return 0;
+}
+
+export function isFieldSelector(selector: string): boolean {
+  const separator = selector.lastIndexOf('.');
+  return !selector.startsWith('--') && separator > 0 && separator < selector.length - 1 && !/\s/u.test(selector);
+}
+
+export function assertPlaintextDestination(terminal: Terminal, allowed: boolean): void {
+  if (allowed !== true) throw Object.assign(new Error('Plaintext output requires --allow-plaintext-output.'), { code: 'plaintext_acknowledgment_required' });
+  if (terminal.stdoutIsTTY !== false) throw Object.assign(new Error('Plaintext output requires non-terminal stdout.'), { code: 'plaintext_terminal_rejected' });
 }
 
 export interface CliRevealPlan {
@@ -54,6 +69,7 @@ export async function revealPlan(
   planId: string,
   options: RevealCommandOptions,
 ): Promise<number> {
+  if (options.clipboardTtlMs !== undefined && (!Number.isSafeInteger(options.clipboardTtlMs) || options.clipboardTtlMs <= 0 || options.clipboardTtlMs > 2_147_483_647)) throw Object.assign(new Error('Invalid clipboard duration.'), { code: 'clipboard_ttl_invalid' });
   if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   const plan = await loadRevealPlan(context, planId);
   if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
@@ -86,16 +102,43 @@ export async function revealPlan(
   const copiedMessage = selectedFields.length === 1
     ? `Copied ${selectedFields[0]} to the clipboard.`
     : `Copied ${selectedFields.length} fields to the clipboard.`;
-  await consumePlanFields(context, terminal, planId, plan, selectedFields, options.signal, async (copied) => {
-    try {
-      await clipboard.write(copied.length === 1
+  let cleanup: Promise<void> | undefined;
+  try {
+    await consumePlanFields(context, terminal, planId, plan, selectedFields, options.signal, async (copied) => {
+      const content = copied.length === 1
         ? renderRequestedValue(copied[0]!.value)
-        : copied.map(({ selector, value }) => `${selector}: ${renderRequestedValue(value)}`).join('\n'));
-    } catch (cause) {
-      throw Object.assign(new Error('clipboard_unavailable', { cause }), { code: 'clipboard_unavailable' });
-    }
-  }, { completion: copiedMessage });
+        : copied.map(({ selector, value }) => `${selector}: ${renderRequestedValue(value)}`).join('\n');
+      try {
+        await clipboard.write(content);
+      } catch (cause) {
+        throw Object.assign(new Error('clipboard_unavailable', { cause }), { code: 'clipboard_unavailable' });
+      }
+      if (options.clipboardTtlMs !== undefined) cleanup = expireClipboard(content, options.clipboardTtlMs, terminal, options.signal);
+    }, { completion: copiedMessage });
+  } finally {
+    await cleanup;
+  }
+  if (options.signal?.aborted) throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
   return 0;
+}
+
+async function expireClipboard(content: string, ttlMs: number, terminal: Terminal, signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const finish = () => { clearTimeout(timer); signal?.removeEventListener('abort', finish); resolve(); };
+    const timer = setTimeout(finish, ttlMs);
+    signal?.addEventListener('abort', finish, { once: true });
+    if (signal?.aborted) finish();
+  });
+  try {
+    if (await clipboard.read() !== content) {
+      terminal.write('Clipboard changed; left untouched.');
+      return;
+    }
+    await clipboard.write('');
+    terminal.write(signal?.aborted ? 'Clipboard cleared after cancellation.' : 'Clipboard expired and cleared.');
+  } catch {
+    terminal.writeError('Clipboard cleanup failed.');
+  }
 }
 
 export async function loadRevealPlan(context: CliContext, planId: string): Promise<CliRevealPlan> {
@@ -116,7 +159,7 @@ export async function consumePlanFields(
   }>,
   signal: AbortSignal | undefined,
   destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void>,
-  options: { quiet?: boolean; completion?: string } = {},
+  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void } = {},
 ): Promise<boolean> {
   let lastLine: string | undefined;
   let lastProgress: RevealProgress | undefined;
@@ -191,6 +234,7 @@ export async function consumePlanFields(
         if (!presenter) terminal.write(line);
       },
     }, async (reveal) => {
+      if (reveal.session?.expiresAt !== undefined) options.onSession?.(reveal.session.expiresAt);
       await reveal.consumeFields(
         fields.map((field) => typeof field === 'string'
           ? { selector: field, options: { action: 'COPY_FIELD' as const } }

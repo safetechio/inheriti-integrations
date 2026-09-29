@@ -24,11 +24,11 @@ class LookupModule(LookupBase):
         for selector in terms:
             try:
                 value = subprocess.check_output(
-                    ["inheriti", "secrets", "resolve", plan, "--field", selector],
+                    ["inheriti", "secrets", "resolve", plan, "--field", selector, "--allow-plaintext-output"],
                     text=True,
                     stderr=subprocess.PIPE,
                 )
-            except (OSError, subprocess.CalledProcessError) as error:
-                raise AnsibleError(f"Inheriti could not resolve {selector}") from error
+            except (OSError, subprocess.CalledProcessError):
+                raise AnsibleError("Inheriti could not resolve the requested field") from None
             values.append(value.rstrip("\r\n"))
         return values

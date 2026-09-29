@@ -12,3 +12,7 @@ export INHERITI_SECRETS_ENV=$'DB_PASSWORD=database.password\nAPI_KEY=service.api
 
 The instance role provides AWS identity. SafeKey, DMS and moderation rules remain enforced by the
 Inheriti® reveal flow.
+
+Child stdout and stderr are suppressed by default. For explicit inherited logs, set
+`INHERITI_SECRETS_OUTPUT=inherit`; recipient output may contain credentials. See the
+[delivery and retention policy](../../README.md#delivery-and-retention).

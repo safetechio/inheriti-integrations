@@ -13,7 +13,7 @@ async function home(): Promise<string> {
   return path;
 }
 afterEach(async () => { await Promise.all(homes.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
-const terminal = (interactive = true) => ({ interactive, columns: 80, write: vi.fn(), writeError: vi.fn() });
+const terminal = (interactive = true) => ({ stdoutIsTTY: false, interactive, columns: 80, write: vi.fn(), writeError: vi.fn() });
 
 it('offers Yes first, shows the path, and appends only once while preserving shell text', async () => {
   const HOME = await home();

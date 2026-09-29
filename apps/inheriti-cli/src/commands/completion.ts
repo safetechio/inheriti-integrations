@@ -141,7 +141,8 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
 function commandOptions(command: string, subcommand: string, business: boolean): Candidate[] {
   if (subcommand === 'show') return optionCandidates(['--json', '--table'], business);
   if (subcommand === 'logs') return optionCandidates(['--limit', '--offset', '--json', '--table'], business);
-  if (subcommand === 'reveal' || (command === 'secrets' && subcommand === 'resolve')) return optionCandidates(['--field'], business);
+  if (subcommand === 'reveal') return optionCandidates(['--field', '--clipboard-ttl'], business);
+  if (command === 'secrets' && subcommand === 'resolve') return optionCandidates(['--field', '--allow-plaintext-output'], business);
   if (subcommand === 'download') return optionCandidates(['--asset', '--output'], business);
   if (subcommand === 'abort') return optionCandidates([], business);
   const options = command === 'secrets' ? ['--env', '--output', '--'] : ['--stdin', '--env', '--fd', '--temp-file', '--socket', '--ttl', '--output', '--'];

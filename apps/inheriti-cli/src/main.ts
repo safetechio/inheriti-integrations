@@ -8,7 +8,7 @@ import { login, loginWithDevice } from './commands/login.js';
 import { logout } from './commands/logout.js';
 import { abortPlanAccess, listPlanLogs, listPlans, resolvePlanId, showPlan } from './commands/plans.js';
 import type { ListPlansOptions, PlanLogsOptions } from './commands/plans.js';
-import { resolvePlanField, revealPlan } from './commands/reveal.js';
+import { isFieldSelector, assertPlaintextDestination, resolvePlanField, revealPlan } from './commands/reveal.js';
 import { downloadPlanAsset } from './commands/download.js';
 import { UsePlanInvalid, usePlan } from './commands/use.js';
 import { completeWords, completionNeedsPlanContext, printCompletionScript } from './commands/completion.js';
@@ -50,7 +50,7 @@ inheriti <command>
                      Run an exact executable with destination-bound secrets. No shell.
   secrets exec [id] [--env NAME=asset.field ...] [--output inherit] -- command [args]
                      Run a process with reveal-authorized environment variables.
-  secrets resolve [id] --field asset.field
+  secrets resolve [id] --field asset.field --allow-plaintext-output
                      Resolve one field for a machine wrapper. Raw output is intended for a pipe.
   setup [--yes|--no-completion] [--shell bash|zsh|fish]
                      Enable shell autocomplete (Yes is the default)
@@ -76,12 +76,12 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table]\n\nList non-sensitive plan metadata. --json never includes reconstructed secret values.`,
     'plans show': `Usage: inheriti plans show [PLAN_ID] [--json|--table]\n\nShow one plan's non-sensitive assets, fields, participants, governance, and reveal policy. An interactive terminal can prompt for PLAN_ID.`,
     'plans logs': `Usage: inheriti plans logs [PLAN_ID] [--limit N] [--offset N] [--json|--table]\n\nShow authorized plan activity. The table summarizes events; --json includes all safe log fields and total count. An interactive terminal can prompt for PLAN_ID.`,
-    'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. Values are never printed. In a terminal, omit --field to select fields with Space or choose ALL. Each field copy is authorized and audited independently.`,
+    'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...] [--clipboard-ttl DURATION]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. Values are never printed. In a terminal, omit --field to select fields with Space or choose ALL. Each field copy is authorized and audited independently. --clipboard-ttl waits in the foreground and conditionally clears unchanged clipboard content. Cleanup is best effort; clipboard history, synchronization, shutdown and SIGKILL remain outside its control.`,
     'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.`,
-    'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed when the child exits. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. Approve the exact command before an agent runs it.`,
+    'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h, up to 2147483647ms. --ttl bounds the whole command; authorization expiry may end delivery sooner. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed on handled completion; unlinking is not secure deletion. A socket trusts the local account, not the identity of its first peer. Sockets and descriptors are unsupported on Windows. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. --output inherit explicitly exposes child logs, which may contain credentials. Approve the exact command before an agent runs it.`,
     secrets: `Usage: inheriti secrets <exec|resolve>\n\nMachine-oriented secret delivery built on the same reveal and use flows as plans commands.`,
-    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's normal logs visible.`,
-    'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
+    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's logs visible and may expose credentials.`,
+    'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD --allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
     'plans abort': `Usage: inheriti plans abort PLAN_ID\n\nAbandon the current access request for this operator. The next reveal starts a new access flow.`,
     setup: `Usage: inheriti setup [--yes|--no-completion] [--shell bash|zsh|fish]\n\nOffer to enable shell autocomplete, with Yes selected by default. --yes installs without prompting; --no-completion skips. No configuration or sign-in is required.`,
     completion: `Usage: inheriti completion <bash|zsh|fish>\n\nPrint a shell-completion script. This command does not require configuration or sign-in.`,
@@ -118,6 +118,14 @@ export async function run(
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
   let business = Boolean(BUILD_DEPLOYMENT);
   try {
+    if (command === 'secrets' && rest[0] === 'resolve') {
+      const extracted = extractOrganization(rest);
+      if ('error' in extracted) { terminal.writeError(extracted.error); return 1; }
+      const args = extracted.argv.slice(1);
+      const parsed = parseResolveOptions(args[0] && !args[0].startsWith('--') ? args.slice(1) : args);
+      if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
+      assertPlaintextDestination(terminal, parsed.allowPlaintextOutput);
+    }
     const configuration = resolveConfiguration(environmentVariables, environmentVariables.INHERITI_ELEMENTS_CONFIRM_LIVE);
     business = configuration.business === true;
     // The device grant is a different OAuth client, so the choice has to be made before the context
@@ -202,10 +210,10 @@ async function secrets(
     const resolved = await resolvePlanId(context, terminal, planId);
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
-    try { return await resolvePlanField(context, terminal, resolved, parsed.field, controller.signal); }
+    try { return await resolvePlanField(context, terminal, resolved, parsed.field, { allowPlaintextOutput: parsed.allowPlaintextOutput, signal: controller.signal }); }
     finally { unregister(); }
   }
-  terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets resolve <id> --field asset.field');
+  terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets resolve <id> --field asset.field --allow-plaintext-output');
   return 1;
 }
 
@@ -246,7 +254,8 @@ async function plans(
     return await abortPlanAccess(context, terminal, await resolvePlanId(context, terminal, planId));
   }
   if (subcommand === 'reveal') {
-    const parsed = parseRevealOptions(options);
+    const hasPlanId = planId !== undefined && !planId.startsWith('--');
+    const parsed = parseRevealOptions(hasPlanId ? options : rest);
     if ('error' in parsed) {
       terminal.writeError(parsed.error);
       return 1;
@@ -254,7 +263,7 @@ async function plans(
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
     try {
-      const resolved = await resolvePlanId(context, terminal, planId, controller.signal);
+      const resolved = await resolvePlanId(context, terminal, hasPlanId ? planId : undefined, controller.signal);
       return await revealPlan(context, terminal, resolved, { ...parsed, signal: controller.signal });
     } finally { unregister(); }
   }
@@ -348,15 +357,28 @@ function parseLogOptions(argv: readonly string[]): PlanLogsOptions | { error: st
  * A reveal takes no mode. Whether a plan is governed is a property of the plan, which the command
  * reads before it starts, so asking the operator to declare it only ever produced the wrong one.
  */
-function parseRevealOptions(argv: readonly string[]): { fields?: string[] } | { error: string } {
+function parseRevealOptions(argv: readonly string[]): { fields?: string[]; clipboardTtlMs?: number } | { error: string } {
   const fields: string[] = [];
+  let clipboardTtlMs: number | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const option = argv[index];
+    if (option === '--clipboard-ttl') {
+      if (clipboardTtlMs !== undefined) return { error: '--clipboard-ttl may be given only once.' };
+      clipboardTtlMs = durationMs(argv[++index] ?? '');
+      if (clipboardTtlMs === undefined) return { error: '--clipboard-ttl expects a positive duration no greater than 2147483647ms.' };
+      continue;
+    }
     if (option === '--governed') return { error: GOVERNED_FLAG_REMOVED };
-    if (option !== '--field' || !argv[index + 1]) return { error: `Unknown or incomplete reveal option: ${option}` };
-    fields.push(argv[++index]!);
+    if (option !== '--field' || !argv[index + 1]) return { error: 'Unknown or incomplete reveal option.' };
+    const field = argv[++index]!;
+    if (!isFieldSelector(field)) return { error: '--field expects asset.field.' };
+    if (fields.includes(field)) return { error: '--field selectors must be unique.' };
+    fields.push(field);
   }
-  return fields.length === 0 ? {} : { fields };
+  const parsed: { fields?: string[]; clipboardTtlMs?: number } = {};
+  if (fields.length > 0) parsed.fields = fields;
+  if (clipboardTtlMs !== undefined) parsed.clipboardTtlMs = clipboardTtlMs;
+  return parsed;
 }
 
 function parseDownloadOptions(argv: readonly string[]): { asset: string; output: string } | { error: string } {
@@ -409,8 +431,9 @@ function parseUseOptions(argv: readonly string[], commandName = 'plans use'): Om
       if (!match) return { error: '--fd expects N=asset.field.' };
       fds.push({ fd: Number(match[1]), selector: match[2]! });
     } else if (option === '--ttl') {
+      if (ttlMs !== undefined) return { error: '--ttl may be given only once.' };
       ttlMs = durationMs(value);
-      if (ttlMs === undefined) return { error: '--ttl expects a positive duration such as 30s, 5m, or 1h.' };
+      if (ttlMs === undefined) return { error: '--ttl expects a positive duration no greater than 2147483647ms.' };
     } else if (option === '--output') {
       if (value !== 'suppress' && value !== 'inherit') return { error: '--output expects suppress or inherit.' };
       output = value;
@@ -424,15 +447,24 @@ function parseUseOptions(argv: readonly string[], commandName = 'plans use'): Om
   };
 }
 
-function parseResolveOptions(argv: readonly string[]): { field: string } | { error: string } {
+function parseResolveOptions(argv: readonly string[]): { field: string; allowPlaintextOutput: boolean } | { error: string } {
   let field: string | undefined;
+  let allowed = false;
   for (let index = 0; index < argv.length; index += 1) {
     const option = argv[index];
-    if (option !== '--field' || !argv[index + 1]) return { error: `Unknown or incomplete secrets resolve option: ${option}` };
+    if (option === '--allow-plaintext-output') {
+      if (allowed) return { error: '--allow-plaintext-output may be given only once.' };
+      allowed = true;
+      continue;
+    }
+    if (option !== '--field' || !argv[index + 1]) return { error: 'Unknown or incomplete secrets resolve option.' };
     if (field !== undefined) return { error: '--field may be mapped only once.' };
     field = argv[++index];
+    if (!isFieldSelector(field!)) return { error: '--field expects asset.field.' };
   }
-  return field === undefined ? { error: 'secrets resolve requires --field asset.field.' } : { field };
+  if (field === undefined) return { error: 'secrets resolve requires --field asset.field.' };
+  if (!allowed) return { error: 'Plaintext output requires --allow-plaintext-output.' };
+  return { field, allowPlaintextOutput: allowed };
 }
 
 function durationMs(value: string): number | undefined {
@@ -441,7 +473,7 @@ function durationMs(value: string): number | undefined {
   const amount = Number(match[1]);
   const factor = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2]!]!;
   const result = amount * factor;
-  return Number.isSafeInteger(result) && result > 0 ? result : undefined;
+  return Number.isSafeInteger(result) && result > 0 && result <= 2_147_483_647 ? result : undefined;
 }
 
 const GOVERNED_FLAG_REMOVED = 'Reveals no longer take --governed: the plan applies its own approval rules automatically.';
@@ -519,6 +551,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
+  use_canceled: 'Secret delivery canceled.',
   reveal_cancellation_failed: 'The local reveal stopped, but server cancellation could not be confirmed. Run `inheriti plans abort PLAN_ID` with this plan ID before revealing again, or wait for the request to expire.',
   master_key_relay_cancellation_failed: 'Could not confirm cancellation in SafeKey Mobile. The release request may still be pending; wait for it to expire before trying again.',
   master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
@@ -550,6 +583,9 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_share_decryption_failed: 'One of the released plan shares could not be decrypted.',
   plan_share_reconstruction_failed: 'The released shares could not reconstruct this plan.',
   plan_reconstruction_failed: 'The plan could not be reconstructed from the released shares.',
+  plaintext_acknowledgment_required: 'Plaintext output requires --allow-plaintext-output.',
+  plaintext_terminal_rejected: 'Plaintext output requires non-terminal stdout.',
+  clipboard_ttl_invalid: 'Invalid clipboard duration.',
   clipboard_unavailable: 'The reveal succeeded, but this terminal could not access the desktop clipboard. Nothing was printed.',
   asset_selector_invalid: 'Use an asset code or ID followed by a field name, for example prod-db.password.',
   asset_not_found: 'The requested asset is not in this plan. List the plan assets and check its code or ID.',

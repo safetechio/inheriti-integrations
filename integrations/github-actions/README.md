@@ -18,3 +18,8 @@ SafeKey Mobile when the plan requires it.
 
 The command runs in one process. Values are not written to `GITHUB_ENV`; only the child process sees
 the mapped environment variables. Pin both the Action commit and `cli-version` in production.
+
+Child output defaults to `suppress`. Set `output: inherit` explicitly only when you accept that
+child logs may expose credentials. Suppression preserves command failures and does not control
+recipient retention. Compatible CLI versions and Action revisions are pending release alignment;
+upgrade both together. See the [delivery policy](../README.md#delivery-and-retention).

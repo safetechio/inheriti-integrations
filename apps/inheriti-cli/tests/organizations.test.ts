@@ -12,7 +12,7 @@ afterAll(() => rmSync(home, { force: true, recursive: true }));
 const path = resolve(home, 'config.json');
 const configuration = { issuer: 'issuer', environment: 'TEST' } as CliConfiguration;
 const items = [{ id: 'one', name: 'One' }, { id: 'two', name: 'Two' }];
-const terminal = { interactive: false, columns: 80, write: () => {}, writeError: () => {} } as Terminal;
+const terminal = { stdoutIsTTY: false, interactive: false, columns: 80, write: () => {}, writeError: () => {} } as Terminal;
 
 function context(subject: string, available = items): CliContext {
   return {

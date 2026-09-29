@@ -95,3 +95,23 @@ it('rejects malformed stored material and never stores keys without a login', as
   expect(backend.values.size).toBe(1);
   await expect(vault().store(ref, new Uint8Array(1))).rejects.toThrow('invalid_master_key_material');
 });
+
+
+it('wipes owned keys on replacement and removal without wiping caller or load copies', async () => {
+  const held = vault();
+  const caller = key.slice();
+  await held.store(ref, caller);
+  const memory = (held as unknown as { memory: Map<string, Uint8Array> }).memory;
+  const previous = Array.from(memory.values())[0]!;
+  const loaded = await held.load(ref);
+  const replacement = new Uint8Array(32).fill(7);
+  await held.store(ref, replacement);
+  expect(previous).toEqual(new Uint8Array(32));
+  expect(caller).toEqual(key);
+  expect(loaded).toEqual(key);
+  const current = Array.from(memory.values())[0]!;
+  await held.remove(ref);
+  expect(current).toEqual(new Uint8Array(32));
+  expect(replacement).toEqual(new Uint8Array(32).fill(7));
+  expect(await held.load(ref)).toBeUndefined();
+});

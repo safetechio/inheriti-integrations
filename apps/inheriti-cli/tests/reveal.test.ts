@@ -3,12 +3,12 @@ import { resolvePlanField, revealPlan } from '../src/commands/reveal.js';
 import { messageFor } from '../src/main.js';
 import type { Terminal } from '../src/output.js';
 
-const { writeClipboard } = vi.hoisted(() => ({ writeClipboard: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('clipboardy', () => ({ default: { write: writeClipboard } }));
+const { writeClipboard, readClipboard } = vi.hoisted(() => ({ writeClipboard: vi.fn().mockResolvedValue(undefined), readClipboard: vi.fn() }));
+vi.mock('clipboardy', () => ({ default: { write: writeClipboard, read: readClipboard } }));
 
 function terminal(interactive = true): Terminal & { lines: string[] } {
   const lines: string[] = [];
-  return { lines, interactive, columns: 200, write: (line) => lines.push(line), writeError: vi.fn() };
+  return { lines, stdoutIsTTY: false, interactive, columns: 200, write: (line) => lines.push(line), writeError: vi.fn() };
 }
 
 function context(core: Record<string, unknown>): never {
@@ -214,7 +214,7 @@ describe('plans reveal', () => {
       throw Object.assign(new Error('reveal_canceled'), { name: 'AbortError' });
     });
 
-    await expect(resolvePlanField(context({ withReveal }), output, 'plan-1', 'asset.password', controller.signal))
+    await expect(resolvePlanField(context({ withReveal }), output, 'plan-1', 'asset.password', { allowPlaintextOutput: true, signal: controller.signal }))
       .rejects.toMatchObject({ name: 'AbortError' });
     expect(output.lines).toEqual([]);
     expect(output.writeError).toHaveBeenCalledExactlyOnceWith('Canceling the reveal...');
@@ -288,7 +288,7 @@ describe('plans reveal', () => {
     await resolvePlanField(context({
       getPlan: async () => ({ assets: [{ id: 'asset-1', code: 'prod-db', fieldNames: ['password'] }] }),
       withReveal,
-    }), output, 'plan-1', 'prod-db.password');
+    }), output, 'plan-1', 'prod-db.password', { allowPlaintextOutput: true });
 
     expect(output.lines).toEqual(['machine-secret']);
   });
@@ -562,5 +562,137 @@ describe('reveal mode', () => {
       },
     }), output, 'plan-1', { field: 'prod-db.password' });
     expect(requested).toBe('DIRECT');
+  });
+});
+
+describe('plaintext destination guard', () => {
+  it.each([[true, true, true], [false, true, true], [true, undefined, true], [false, undefined, true], [false, false, false]])
+    ('rejects before auth (interactive %s, stdout %s, acknowledged %s)', async (interactive, stdoutIsTTY, allowed) => {
+      const getAccessToken = vi.fn();
+      const getPlan = vi.fn();
+      const withReveal = vi.fn();
+      const output = { ...terminal(interactive), stdoutIsTTY: stdoutIsTTY as boolean };
+      await expect(resolvePlanField(context({ getAccessToken, getPlan, withReveal }), output, 'plan-1', 'asset.password', { allowPlaintextOutput: allowed })).rejects.toThrow(/Plaintext/);
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(getPlan).not.toHaveBeenCalled();
+      expect(withReveal).not.toHaveBeenCalled();
+      expect(output.lines).toEqual([]);
+    });
+
+  it.each(['asset', 'asset.', '.password', '--asset.password', 'asset. password'])('rejects malformed selector before auth: %s', async (selector) => {
+    const getAccessToken = vi.fn();
+    await expect(resolvePlanField(context({ getAccessToken }), terminal(false), 'plan-1', selector, { allowPlaintextOutput: true })).rejects.toThrow('Invalid field selector.');
+    expect(getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it.each(['fixture\nwith trailing newline\n', { password: 'fixture' }])('writes only the raw value', async (value) => {
+    const output = terminal(false);
+    await resolvePlanField(context({ withReveal: async (_id: string, _options: unknown, work: (reveal: unknown) => Promise<unknown>) => work(consuming(value)) }), output, 'plan-1', 'legacy.asset.password', { allowPlaintextOutput: true });
+    expect(output.lines).toEqual([typeof value === 'string' ? value : JSON.stringify(value)]);
+  });
+});
+
+describe('clipboard expiry', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    writeClipboard.mockReset().mockResolvedValue(undefined);
+    readClipboard.mockReset().mockResolvedValue('fixture-secret');
+  });
+
+  async function copied(output: Terminal, options = {}, finalize?: () => void) {
+    return revealPlan(context({ withReveal: async (_id: string, _options: unknown, work: (reveal: unknown) => Promise<unknown>) => {
+      await work(consuming('fixture-secret'));
+      finalize?.();
+    } }), output, 'plan-1', { field: 'asset.password', clipboardTtlMs: 100, ...options });
+  }
+
+  it('arms cleanup immediately, finishes SDK work, and stays alive until expiry', async () => {
+    const output = terminal(false);
+    const finalized = vi.fn();
+    let done = false;
+    const result = copied(output, {}, finalized).then(() => { done = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(finalized).toHaveBeenCalledOnce();
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(writeClipboard).toHaveBeenCalledExactlyOnceWith('fixture-secret');
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(writeClipboard).toHaveBeenLastCalledWith('');
+    expect(output.lines).toContain('Clipboard expired and cleared.');
+    expect(output.lines.join('\n')).not.toContain('fixture-secret');
+    vi.useRealTimers();
+  });
+
+  it('leaves replaced clipboard content untouched', async () => {
+    const output = terminal(false);
+    readClipboard.mockResolvedValue('replacement');
+    const result = copied(output);
+    await vi.advanceTimersByTimeAsync(100);
+    await result;
+    expect(writeClipboard).toHaveBeenCalledTimes(1);
+    expect(output.lines).toContain('Clipboard changed; left untouched.');
+    vi.useRealTimers();
+  });
+
+  it.each(['read', 'write'])('reports cleanup %s failure without content', async (stage) => {
+    const output = terminal(false);
+    if (stage === 'read') readClipboard.mockRejectedValue(new Error('fixture-secret'));
+    if (stage === 'write') writeClipboard.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('fixture-secret'));
+    const result = copied(output);
+    await vi.advanceTimersByTimeAsync(100);
+    await result;
+    expect(output.writeError).toHaveBeenCalledWith('Clipboard cleanup failed.');
+    expect(output.lines.join('\n')).not.toContain('fixture-secret');
+    vi.useRealTimers();
+  });
+
+  it('does not arm cleanup after initial copy failure', async () => {
+    writeClipboard.mockRejectedValue(new Error('fixture-secret'));
+    await expect(copied(terminal(false))).rejects.toMatchObject({ code: 'clipboard_unavailable' });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(readClipboard).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('clears immediately on cancellation after copying', async () => {
+    const output = terminal(false);
+    const controller = new AbortController();
+    const rejected = expect(copied(output, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    await rejected;
+    expect(writeClipboard).toHaveBeenLastCalledWith('');
+    expect(output.lines).toContain('Clipboard cleared after cancellation.');
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('cleans after SDK finalization fails after copying', async () => {
+    const rejected = expect(copied(terminal(false), {}, () => { throw new Error('finalization failed'); })).rejects.toThrow('finalization failed');
+    await vi.advanceTimersByTimeAsync(100);
+    await rejected;
+    expect(writeClipboard).toHaveBeenLastCalledWith('');
+    vi.useRealTimers();
+  });
+
+  it('expires the complete copied batch', async () => {
+    const output = terminal(false);
+    readClipboard.mockResolvedValue('asset.a: fixture-secret\nasset.b: fixture-secret');
+    const result = revealPlan(context({ withReveal: async (_id: string, _options: unknown, work: (reveal: unknown) => Promise<unknown>) => work(consuming('fixture-secret')) }), output, 'plan-1', { fields: ['asset.a', 'asset.b'], clipboardTtlMs: 100 });
+    await vi.advanceTimersByTimeAsync(100);
+    await result;
+    expect(writeClipboard).toHaveBeenNthCalledWith(1, 'asset.a: fixture-secret\nasset.b: fixture-secret');
+    expect(writeClipboard).toHaveBeenLastCalledWith('');
+    expect(output.lines.join('\n')).not.toContain('fixture-secret');
+    vi.useRealTimers();
+  });
+
+  it.each([0, -1, 2_147_483_648, Infinity, 1.5])('rejects unsafe duration %s before auth', async (clipboardTtlMs) => {
+    const getAccessToken = vi.fn();
+    await expect(revealPlan(context({ getAccessToken }), terminal(false), 'plan-1', { field: 'asset.password', clipboardTtlMs })).rejects.toMatchObject({ code: 'clipboard_ttl_invalid' });
+    expect(getAccessToken).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

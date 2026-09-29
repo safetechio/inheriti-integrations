@@ -8,7 +8,7 @@ if [[ "$#" -eq 0 ]]; then
   exit 2
 fi
 
-args=(secrets exec "$INHERITI_SECRETS_PLAN" --output "${INHERITI_SECRETS_OUTPUT:-inherit}")
+args=(secrets exec "$INHERITI_SECRETS_PLAN" --output "${INHERITI_SECRETS_OUTPUT:-suppress}")
 while IFS= read -r mapping; do
   [[ -z "$mapping" ]] && continue
   args+=(--env "$mapping")

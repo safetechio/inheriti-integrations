@@ -36,3 +36,11 @@ held keys, or `abort_plan_access` to abandon an interrupted server access before
 retrying. Cancellation failures remain visible; a pending SafeKey Mobile key
 release may need to expire before retrying. Development builds reject LIVE
 configuration.
+
+CLI secret delivery suppresses child output by default. Raw `secrets resolve` requires
+`--allow-plaintext-output` and nonterminal stdout; trusted receivers own plaintext retention.
+Clipboard expiry is opt-in with `plans reveal --clipboard-ttl 30s` and keeps the command alive
+for best-effort cleanup without erasing clipboard history. Organization-key session memory is
+allowed; existing scoped OS credential-store persistence is a separate, unchanged policy.
+See [delivery, retention and migration](integrations/README.md#delivery-and-retention) before
+upgrading wrappers. Matching CLI artifacts and Action revisions remain pending release alignment.

@@ -17,7 +17,7 @@ function temporaryState(): string {
 function recordingTerminal(interactive: boolean): Terminal & { lines: string[]; errors: string[] } {
   const lines: string[] = [];
   const errors: string[] = [];
-  return { lines, errors, interactive, columns: 200, write: (line) => lines.push(line), writeError: (line) => errors.push(line) };
+  return { lines, errors, stdoutIsTTY: false, interactive, columns: 200, write: (line) => lines.push(line), writeError: (line) => errors.push(line) };
 }
 
 /** Mirrors `ElementsIntegrationCore`, which delegates `getAccessToken` from `auth` to the top level. */

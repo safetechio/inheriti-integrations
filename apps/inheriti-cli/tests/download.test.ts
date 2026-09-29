@@ -7,7 +7,7 @@ import type { Terminal } from '../src/output.js';
 
 function fixture() {
   const lines: string[] = [];
-  const terminal = { lines, interactive: false, columns: 80, write: (line: string) => lines.push(line), writeError: vi.fn() } as Terminal & { lines: string[] };
+  const terminal = { lines, stdoutIsTTY: false, interactive: false, columns: 80, write: (line: string) => lines.push(line), writeError: vi.fn() } as Terminal & { lines: string[] };
   const exportAsset = vi.fn(async (_asset: string, destination: (asset: { bytes: Uint8Array }) => Promise<void>) => {
     await destination({ bytes: new Uint8Array([0, 255, 1]) });
   });
