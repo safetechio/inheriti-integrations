@@ -1,58 +1,11 @@
 # Inheriti Integrations
 
-Source for the Inheriti CLI, MCP server, VS Code extension, InheritiGuard Chrome
-extension, and runtime integrations.
+Inheriti Integrations brings Inheriti Business protection plans into the tools people already use. This repository contains desktop, browser, and developer tools for signing in, working with organizations, and protecting or accessing plan data.
 
-Tray sign-in opens a temporary listener on `127.0.0.1` using an OS-assigned port
-in every deployment. Before releasing this build, add
-`http://127.0.0.1/oauth/callback` to the **Valid redirect URIs** of the
-`inheriti-business-integrations-interactive` Keycloak client in each SafeID realm
-(local, dev, staging, production), preserving the other registered redirects.
-Keycloak matches this loopback URI on any port while retaining the exact callback
-path; do not use a port wildcard. See [Keycloak redirect URI documentation](https://www.keycloak.org/securing-apps/oidc-layers#redirect-uris).
-The registration script in `bussiness/api/scripts/register-business-integration.cjs`
-accepts this no-port URI, but reports a mismatch for existing clients instead of
-updating their redirect list. Existing E2E realm imports likewise need their client
-redirects updated before testing this Tray build.
+- **[Inheriti Tray](apps/inheriti-tray/README.md)** — a desktop companion for creating and editing plans.
+- **[Inheriti CLI](apps/inheriti-cli/README.md)** — plan workflows from the terminal.
+- **[Inheriti MCP](apps/inheriti-mcp/README.md)** — plan tools for MCP-compatible clients.
+- **[Inheriti IDE](apps/inheriti-ide/README.md)** — a VS Code extension for working with plans while coding.
+- **[InheritiGuard](apps/inheriti-guard/README.md)** — a Chrome extension for browser workflows.
 
-The CLI reuses plan master keys across commands through the SDK's `KeyVault` port,
-backed by the operating system's credential store. Keys are scoped to the deployment,
-local state path, signed-in account, login session and key reference. Token refresh
-preserves them; logout and a new login clear them. Keys are never written to
-`session.json`. If the credential store is unavailable, reveals use an in-memory
-cache for the current command and report that subsequent commands will request the
-key again. Clearing failures are reported rather than silently ignored.
-
-Run `inheriti setup` after installation to enable shell autocomplete; Yes is selected
-by default and the wizard shows the file it will update. Use `--yes` for explicit
-noninteractive installation, `--no-completion` to skip, or `--shell bash|zsh|fish`
-to select a shell. Setup requires no configuration or sign-in. Package installation
-only prints this setup notice and never edits shell files. Open a new shell after setup.
-
-For manual setup, Bash uses `source <(inheriti completion bash)`, Zsh uses
-`source <(inheriti completion zsh)` after `compinit`, and Fish uses
-`inheriti completion fish > ~/.config/fish/completions/inheriti.fish`.
-
-Start MCP with `inheriti-mcp --enable-secure-delivery` to enable field reveals and asset
-downloads through one-time local browser pages. Secret values, bytes, and delivery
-URLs never appear in tool results. Plan metadata includes asset codes and field
-names for selector discovery. Use `reveal_plan_secret` with `selector` for one
-field, `selectors` and optional `assets` for a selection, or `all: true` for all
-fields and downloadable files. A batch uses one plan-access flow and one secure
-browser page; every selected field and file still uses the SDK’s action checks
-and audit reporting. File downloads remain separate buttons on that page.
-
-MCP keeps authentication and acquired master keys in memory for the current
-session and selected organization. Use `logout` to cancel local work and forget
-held keys, or `abort_plan_access` to abandon an interrupted server access before
-retrying. Cancellation failures remain visible; a pending SafeKey Mobile key
-release may need to expire before retrying. Development builds reject LIVE
-configuration.
-
-CLI secret delivery suppresses child output by default. Raw `secrets resolve` requires
-`--allow-plaintext-output` and nonterminal stdout; trusted receivers own plaintext retention.
-Clipboard expiry is opt-in with `plans reveal --clipboard-ttl 30s` and keeps the command alive
-for best-effort cleanup without erasing clipboard history. Organization-key session memory is
-allowed; existing scoped OS credential-store persistence is a separate, unchanged policy.
-See [delivery, retention and migration](integrations/README.md#delivery-and-retention) before
-upgrading wrappers. Matching CLI artifacts and Action revisions remain pending release alignment.
+The integrations share the Inheriti Elements SDKs for authentication and plan operations. The [runtime integrations](integrations/README.md) include examples for cloud and automation platforms.
