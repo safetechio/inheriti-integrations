@@ -15,12 +15,12 @@
     "release": "pnpm run lint && pnpm run build && node ../../scripts/package-chrome-extension.mjs --production"
   },
   "devDependencies": {
-    "@types/chrome": "0.2.7",
-    "@safetech/inheriti-elements-test-kit": "workspace:*"
+    "@safetech/inheriti-elements-test-kit": "workspace:*",
+    "@types/chrome": "0.2.7"
   },
   "dependencies": {
+    "@safetech/inheriti-core-sdk": "4.0.34",
     "@safetech/inheriti-elements-brand": "workspace:*",
-    "@safetech/inheriti-core-sdk": "4.0.33",
     "@safetech/inheriti-elements-core": "workspace:*"
   }
 }

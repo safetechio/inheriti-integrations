@@ -31,8 +31,8 @@
     "package": "pnpm run build && node ../../scripts/package-workspace.mjs"
   },
   "dependencies": {
-    "@safetech/inheriti-client-sdk": "1.17.14",
-    "@safetech/inheriti-core-sdk": "4.0.33"
+    "@safetech/inheriti-client-sdk": "1.17.15",
+    "@safetech/inheriti-core-sdk": "4.0.34"
   },
   "devDependencies": {
     "@safetech/inheriti-elements-test-kit": "workspace:*"

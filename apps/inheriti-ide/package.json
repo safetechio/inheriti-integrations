@@ -147,7 +147,13 @@
       "properties": {
         "inheriti.deployment": {
           "type": "string",
-          "enum": ["", "local", "dev", "stg", "prod"],
+          "enum": [
+            "",
+            "local",
+            "dev",
+            "stg",
+            "prod"
+          ],
           "default": "",
           "description": "Business deployment. Resolves API, issuer and OAuth client; leave blank for standalone configuration."
         },
@@ -203,7 +209,7 @@
     "@types/vscode": "1.99.1"
   },
   "dependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.33",
+    "@safetech/inheriti-core-sdk": "4.0.34",
     "@safetech/inheriti-elements-brand": "workspace:*",
     "@safetech/inheriti-elements-core": "workspace:*"
   }
