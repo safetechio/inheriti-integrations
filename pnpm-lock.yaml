@@ -140,6 +140,9 @@ importers:
       '@safetech/inheriti-core-sdk':
         specifier: 4.0.34
         version: 4.0.34(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+      socket.io-client:
+        specifier: 4.8.4
+        version: 4.8.4
     devDependencies:
       '@safetech/inheriti-elements-test-kit':
         specifier: workspace:*

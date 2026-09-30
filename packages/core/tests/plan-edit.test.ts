@@ -13,6 +13,18 @@ vi.mock('@safetech/inheriti-client-sdk/node', () => ({
 import { createPlanEditOperations } from '../src/plan-edit.js';
 
 describe('plan edit operations', () => {
+  it('passes the plan event listener to the Node editor', async () => {
+    mock.createEditor.mockReturnValue({ listAssets: mock.listAssets, clearRevealedAssets: mock.clearRevealedAssets });
+    mock.listAssets.mockResolvedValueOnce([]);
+    const plan = { subscribe: vi.fn(), unsubscribe: vi.fn() };
+    const operations = createPlanEditOperations({
+      apiUrl: 'https://example.test/', environment: 'TEST', organizationId: 'org-1',
+      getBearerToken: async () => 'token', secureSessionStorage: {} as never,
+      payloadStorage: {} as never, editRecoveryStore: {} as never, eventListeners: { plan },
+    });
+    await operations.listAssets('plan-1', 'edit-1');
+    expect(mock.createEditor).toHaveBeenCalledWith(expect.objectContaining({ eventListeners: { plan } }));
+  });
   it.each(['cancel', 'discard'] as const)('retries only a %s before the server allows abort', async (action) => {
     mock.discard.mockReset();
     mock.createEditor.mockReturnValue({ discard: mock.discard, clearRevealedAssets: mock.clearRevealedAssets });

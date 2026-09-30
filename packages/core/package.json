@@ -32,7 +32,8 @@
   },
   "dependencies": {
     "@safetech/inheriti-client-sdk": "1.17.15",
-    "@safetech/inheriti-core-sdk": "4.0.34"
+    "@safetech/inheriti-core-sdk": "4.0.34",
+    "socket.io-client": "4.8.4"
   },
   "devDependencies": {
     "@safetech/inheriti-elements-test-kit": "workspace:*"

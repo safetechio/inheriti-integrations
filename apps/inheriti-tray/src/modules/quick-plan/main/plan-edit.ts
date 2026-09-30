@@ -1,4 +1,4 @@
-import { createPlanEditOperations } from '@safetech/inheriti-elements-core/node';
+import { createNodePlanEventListener, createPlanEditOperations } from '@safetech/inheriti-elements-core/node';
 import type { QuickPlanEditPhase, QuickPlanEditApprovalProgress, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { ProtectedCheckpoint } from '../../launcher/main/protected-checkpoint.js';
 import { trayMessages as messages } from '../../../messages.js';
@@ -42,6 +42,7 @@ type EditPhase = 'loading_context' | 'opening_edit' | QuickPlanEditPhase;
 export class TrayPlanEdit {
   private organizationId: string | undefined;
   private operations: Operations | undefined;
+  private eventConnection: ReturnType<typeof createNodePlanEventListener> | undefined;
   private checkpoint: ProtectedCheckpoint | undefined;
   private plans: PlanEditState['plans'] = [];
   private assets: PlanEditState['assets'] = [];
@@ -85,6 +86,7 @@ export class TrayPlanEdit {
     if (this.organizationId !== id && this.status === PLAN_EDIT_STATUS.recoveryRequired) throw new Error('edit_recovery_required');
     if (this.organizationId !== id) await this.abort();
     this.clearRevealed();
+    this.closeEvents();
     this.organizationId = id;
     this.operations = undefined;
     this.plans = [];
@@ -168,6 +170,7 @@ export class TrayPlanEdit {
 
   reset(): void {
     this.clearRevealed();
+    this.closeEvents();
     this.organizationId = undefined;
     this.operations = undefined;
     this.checkpoint = undefined;
@@ -468,6 +471,7 @@ export class TrayPlanEdit {
 
   private selectedOperations(): Operations {
     if (!this.organizationId || !this.checkpoint) throw new Error('organization_required');
+    this.eventConnection ??= createNodePlanEventListener(this.apiUrl, async () => (await this.getAccessToken()) ?? null);
     this.operations ??= createPlanEditOperations({
       apiUrl: this.apiUrl, environment: this.environment, organizationId: this.organizationId,
       getBearerToken: this.getAccessToken,
@@ -475,8 +479,14 @@ export class TrayPlanEdit {
       proDevice: this.custodian?.proDevice,
       ...(this.acquireKey ? { acquireKey: (signal?: AbortSignal, onRelaySession?: () => void) => this.acquireKey!(this.organizationId!, signal, onRelaySession) } : {}),
       secureSessionStorage: this.checkpoint, payloadStorage: this.checkpoint, editRecoveryStore: this.checkpoint,
+      eventListeners: { plan: this.eventConnection.listener },
     });
     return this.operations;
+  }
+
+  private closeEvents(): void {
+    this.eventConnection?.close();
+    this.eventConnection = undefined;
   }
 
   private session(): PlanEditSessionCoordinator {

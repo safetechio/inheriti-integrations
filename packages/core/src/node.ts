@@ -1,5 +1,7 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node';
 import { createNodeElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node';
+import { SocketIoSharedPlanEventListener } from '@safetech/inheriti-core-sdk/shared-configuration/vanilla';
+import { io } from 'socket.io-client';
 import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
 import { ElementsIntegrationCore } from './index.js';
 import type { ElementsEnvironment, OperatorAuthFacade } from './index.js';
@@ -77,6 +79,16 @@ export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-cl
 export { latestIntegrationBuild } from './node-update.js';
 export { createQuickPlanOperations, quickPlanAssetCatalog } from './quick-plan.js';
 export { createPlanEditOperations } from './plan-edit.js';
+export function createNodePlanEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>) {
+  const socket = io(new URL(apiUrl).origin, {
+    autoConnect: false,
+    auth: (callback) => {
+      Promise.resolve().then(getBearerToken).then((token) => callback({ token: token ?? '' })).catch(() => callback({ token: '' }));
+    },
+  });
+  const listener = new SocketIoSharedPlanEventListener(socket);
+  return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
+}
 export { createOrganizationKeys } from './organization-keys.js';
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node';
 export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';

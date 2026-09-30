@@ -12,6 +12,7 @@ export function createPlanEditOperations(options: {
   acquireKey?: (signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>;
   selectCustodianDevice?: PlanEditAssetReference['selectCustodianDevice'];
   proDevice?: PlanEditAssetReference['proDevice'];
+  eventListeners?: Parameters<typeof createNodeQuickPlanEditor>[0]['eventListeners'];
   fetchImpl?: typeof fetch;
 }) {
   const transport = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -29,6 +30,7 @@ export function createPlanEditOperations(options: {
       apiUrl: options.apiUrl, environment: options.environment, organizationId: options.organizationId, planId, editId,
       getBearerToken: bearer, transport, secureSessionStorage: options.secureSessionStorage, payloadStorage: options.payloadStorage,
       editRecoveryStore: options.editRecoveryStore,
+      ...(options.eventListeners ? { eventListeners: options.eventListeners } : {}),
     });
     active = { planId, editId, value };
     return value;
