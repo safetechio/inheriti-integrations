@@ -14,12 +14,11 @@ export function registerTrayEvents(appUrl?: string): void {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: messages.openLauncher, click: () => showLauncher() },
     { type: 'separator' },
-    { label: messages.savePrivately, click: () => showLauncher(messages.savePrivately) },
-    { label: messages.shareWithTeam, click: () => showLauncher(messages.shareWithTeam) },
-    { label: messages.addOrEditAsset, click: () => showLauncher(messages.addOrEditAsset) },
+    { label: messages.createPrivatePlanMenu, click: () => showLauncher(messages.savePrivately) },
+    { label: messages.createTeamPlanMenu, click: () => showLauncher(messages.shareWithTeam) },
+    { label: messages.editPlanAssetMenu, click: () => showLauncher(messages.addOrEditAsset) },
     { type: 'separator' },
     { label: messages.openApp, enabled: Boolean(appUrl), click: () => { if (appUrl) void shell.openExternal(appUrl); } },
-    { label: messages.settings, click: () => showLauncher(messages.settings) },
     { label: messages.quit, click: () => app.quit() },
   ]));
 }

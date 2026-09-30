@@ -1,9 +1,11 @@
 export const trayMessages = Object.freeze({
   appName: 'Inheriti® Tray',
   openLauncher: 'Open launcher',
+  createPrivatePlanMenu: 'Create new private plan',
+  createTeamPlanMenu: 'Share new plan with a team',
+  editPlanAssetMenu: 'Add or edit an asset from a plan',
   shareWithTeam: 'Share with a team',
   addOrEditAsset: 'Add or edit an asset',
-  settings: 'Settings',
   quit: 'Quit',
   invalidDeployment: 'Invalid deployment',
   invalidAppUrl: 'Invalid app URL',
