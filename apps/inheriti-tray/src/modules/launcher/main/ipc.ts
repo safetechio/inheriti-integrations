@@ -4,12 +4,13 @@ import type { TraySession } from './state.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { parseQuickPlanInput } from '../../quick-plan/main/quick-plan-input.js';
 
-export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void): void {
+export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
     const window = currentWindow();
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
+  ipcMain.handle('tray:inbox-state', (event) => { trusted(event); return session.inboxState(); });
   ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
     trusted(event);
     session.selectCustodianDevice(value);
@@ -26,9 +27,18 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (typeof id !== 'string') throw new Error(messages.invalidOrganization);
     await session.select(id);
     publish();
+    publishInbox?.();
     return session.state();
   });
-  ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); return session.state(); });
+  ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); publishInbox?.(); return session.state(); });
+  ipcMain.handle('tray:inbox-prepare', async (event) => {
+    trusted(event);
+    const pending = session.prepareInbox();
+    publishInbox?.();
+    const result = await pending;
+    publishInbox?.();
+    return result;
+  });
   ipcMain.handle('tray:create-quick-plan', async (event, input: unknown) => {
     trusted(event);
     await session.createQuickPlan(parseQuickPlanInput(input), publish);

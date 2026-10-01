@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -19,14 +19,16 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
-  createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: vi.fn() }),
+  createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
   createPlanEditOperations: mock.editOperations,
+  createNodePlanEventListener: () => ({ listener: {}, close: vi.fn() }),
 }));
 
 import { TraySession } from '../src/modules/launcher/main/state.js';
 import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
+import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
 
 const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'Note' }, secret: { text } });
 
@@ -301,6 +303,28 @@ describe('TraySession', () => {
     await session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
     expect(mock.operations).toHaveBeenCalledTimes(1);
     expect(mock.operations).toHaveBeenCalledWith(expect.objectContaining({ organizationId: 'org-a' }));
+  });
+
+  it('clears organization keys and Inbox identity before a rejected organization switch', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    mock.keyClear.mockClear();
+    const clearIdentity = vi.spyOn(TrayInboxIdentity.prototype, 'clear');
+    vi.spyOn(TrayPlanEdit.prototype, 'selectOrganization').mockImplementationOnce(async () => {
+      expect(mock.keyClear).toHaveBeenCalledTimes(1);
+      expect(clearIdentity).toHaveBeenCalledTimes(1);
+      throw new Error('edit_recovery_required');
+    });
+
+    await expect(session.select('org-b')).rejects.toThrow('edit_recovery_required');
+    expect(session.state().selectedId).toBe('org-a');
+    await session.select('org-b');
+    expect(session.state().selectedId).toBe('org-b');
+    expect(mock.keyClear).toHaveBeenCalledTimes(2);
+    clearIdentity.mockRestore();
   });
 
   it('keeps plan edit on the current organization when creation blocks a switch', async () => {

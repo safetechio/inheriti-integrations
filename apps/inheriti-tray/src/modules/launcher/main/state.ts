@@ -7,6 +7,8 @@ import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
 import { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
 import type { CustodianPromptState } from '../../quick-plan/main/custodian-prompt.js';
 import { createTraySafeKeyPro } from '../../quick-plan/main/safekey-pro.js';
+import { TrayInboxIdentity } from '../../inbox/main/identity.js';
+import type { InboxIdentityState } from '../../inbox/main/identity.js';
 import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import { trayMessages as messages } from '../../../messages.js';
@@ -42,6 +44,7 @@ export class TraySession {
   private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
   private readonly custodianPrompt = new CustodianPrompt();
   private readonly proDevice: ReturnType<typeof createTraySafeKeyPro>;
+  private readonly inboxIdentity: TrayInboxIdentity;
 
   constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -64,6 +67,7 @@ export class TraySession {
       configuration: this.configuration,
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
+    this.inboxIdentity = new TrayInboxIdentity(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal) => this.organizationKeys.resolve(id, signal));
     this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
     this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
     this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
@@ -143,6 +147,7 @@ export class TraySession {
       }
     } catch {}
     this.organizations = [];
+    this.inboxIdentity.clear();
     await this.organizationKeys.clear();
     this.quickPlans.clear();
     this.planEdit.reset();
@@ -158,6 +163,10 @@ export class TraySession {
     this.pendingSelections += 1;
     try {
       this.quickPlans.assertCanSelectOrganization(id);
+      if (this.selectedId !== id) {
+        await this.organizationKeys.clear();
+        this.inboxIdentity.clear();
+      }
       await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
       this.selectedId = id;
@@ -208,8 +217,13 @@ export class TraySession {
   async discardPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.discard(); }
   async cancelPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.cancelAccess(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
+  inboxState(): InboxIdentityState { return this.inboxIdentity.state(); }
+  prepareInbox(): Promise<InboxIdentityState> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return this.inboxIdentity.prepare(this.selectedId);
+  }
   clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); }
-  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); }
+  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inboxIdentity.clear(); void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
     this.custodianPrompt.cancel();
@@ -223,6 +237,7 @@ export class TraySession {
     await this.planEdit.clear();
     await this.core.auth.clear();
     await this.organizationKeys.clear();
+    this.inboxIdentity.clear();
     this.organizations = [];
     this.quickPlans.clear();
     this.selectedId = undefined;
@@ -237,6 +252,7 @@ export class TraySession {
     this.organizations = organizations;
     if (!this.organizations.some(({ id }) => id === this.selectedId)) {
       this.quickPlans.clear();
+      this.inboxIdentity.clear();
       this.planEdit.reset();
       this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;
     }

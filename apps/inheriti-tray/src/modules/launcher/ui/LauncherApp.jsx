@@ -8,9 +8,11 @@ import { ReviewPlan } from '../../quick-plan/ui/ReviewPlan.jsx';
 import { ReadyPlan } from '../../quick-plan/ui/ReadyPlan.jsx';
 import { useQuickPlanFlow } from '../../quick-plan/ui/hooks/useQuickPlanFlow.js';
 import { useTraySession } from './hooks/useTraySession.js';
+import { useInboxState } from '../../inbox/ui/useInboxState.js';
 
 export function LauncherApp({ messages }) {
   const session = useTraySession(messages);
+  const inbox = useInboxState();
   const { state } = session;
   const editFlow = usePlanEditFlow({ state, setState: session.setState, messages });
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
@@ -42,6 +44,7 @@ export function LauncherApp({ messages }) {
     canCreate={canCreate && !editFlow.busy}
     canEdit={!!state.selectedId && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
+    inbox={inbox.state} inboxError={inbox.error} onPrepareInbox={() => void inbox.prepare()}
     onOpenApp={() => void session.openApp()} onSignOut={() => void flow.signOut()}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName}

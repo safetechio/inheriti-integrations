@@ -21,7 +21,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     app.setAppUserModelId(`com.safetech.inheriti.tray.${deployment}`);
     session.setPublisher(() => publish(session));
     registerTrayEvents(appUrl);
-    registerTrayIpc(session, currentWindow, () => publish(session), appUrl, notify);
+    registerTrayIpc(session, currentWindow, () => publish(session), appUrl, notify, () => publishInbox(session));
     powerMonitor.on('lock-screen', () => hideForLock(session));
     powerMonitor.on('suspend', () => hideForLock(session));
     if (process.platform === 'linux') stopLinuxLock = watchLinuxLock(() => hideForLock(session));
@@ -62,4 +62,9 @@ function registerShortcut(): void {
 function publish(session: TraySession): void {
   const window = currentWindow();
   if (window && !window.isDestroyed()) window.webContents.send('tray:state-changed', session.state());
+}
+
+function publishInbox(session: TraySession): void {
+  const window = currentWindow();
+  if (window && !window.isDestroyed()) window.webContents.send('tray:inbox-state-changed', session.inboxState());
 }

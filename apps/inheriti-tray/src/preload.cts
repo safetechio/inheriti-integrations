@@ -1,15 +1,18 @@
 import electron = require('electron');
 const { contextBridge, ipcRenderer } = electron;
 import type { TrayState } from './modules/launcher/main/state.js';
+import type { InboxIdentityState } from './modules/inbox/main/identity.js';
 import type { CreateQuickPlanInput } from './modules/quick-plan/main/quick-plan-input.js' with { 'resolution-mode': 'import' };
 
 contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
+  inboxState: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-state'),
   selectCustodianDevice: (value: 'SK_MOBILE' | 'SK_PRO'): Promise<TrayState> => ipcRenderer.invoke('tray:select-custodian-device', value),
   submitSafeKeyProPin: (value: string): Promise<TrayState> => ipcRenderer.invoke('tray:submit-safekey-pro-pin', value),
   signIn: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-in'),
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
+  inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
   createQuickPlan: (input: CreateQuickPlanInput): Promise<TrayState> => ipcRenderer.invoke('tray:create-quick-plan', input),
   abandonCreation: (): Promise<TrayState> => ipcRenderer.invoke('tray:abandon-creation'),
   cancelKeyRequest: (): Promise<TrayState> => ipcRenderer.invoke('tray:cancel-key-request'),
@@ -32,6 +35,11 @@ contextBridge.exposeInMainWorld('inheritiTray', {
     const listener = (_event: Electron.IpcRendererEvent, state: TrayState) => callback(state);
     ipcRenderer.on('tray:state-changed', listener);
     return () => ipcRenderer.removeListener('tray:state-changed', listener);
+  },
+  onInboxStateChanged: (callback: (state: InboxIdentityState) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: InboxIdentityState) => callback(state);
+    ipcRenderer.on('tray:inbox-state-changed', listener);
+    return () => ipcRenderer.removeListener('tray:inbox-state-changed', listener);
   },
   onHidden: (callback: () => void): (() => void) => {
     const listener = () => callback();
