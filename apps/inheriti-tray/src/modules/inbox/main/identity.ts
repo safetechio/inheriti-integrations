@@ -39,6 +39,8 @@ function generateIdentity(): StoredIdentity {
 }
 
 function preparationError(error: unknown): string {
+  if (error instanceof Error && error.name === 'MasterKeyRequired')
+    return 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.';
   switch (error instanceof Error ? error.message : '') {
     case 'inbox_identity_replacement_required': return 'This Inbox identity was revoked. Replace it to use Secure Inbox on this device.';
     case 'inbox_identity_recovery_required': return 'This account has an Inbox identity on another device or session. Recovery is required.';

@@ -158,7 +158,7 @@ body { padding: 0; background: #fff; }
 .inbox-setup-spinner { flex: none; width: 16px; height: 16px; margin-top: 3px; border: 2px solid #dbe4ff; border-top-color: #2962ff; border-radius: 50%; animation: inbox-spin .8s linear infinite; }
 @keyframes inbox-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .inbox-setup-spinner { animation: none; border-top-color: #2962ff; } }
-.inbox-setup button { justify-self: start; }
+.inbox-setup button { justify-self: center; }
 .tray-external-arrow svg { width: 14px; height: 14px; display: block; }
 .tray-home .tray-footer { gap: 10px; background: #f9fafb; }
 .tray-account { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
@@ -361,7 +361,7 @@ body { padding: 0; background: #fff; }
 .inbox-reveal-confirm { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe4ff; border-radius: 8px; background: #fff; }
 .inbox-reveal-confirm p { margin: 0; color: #475467; font-size: 12px; }.inbox-reveal-confirm > div { display: flex; gap: 8px; }.inbox-reveal-confirm button { flex: 1; min-height: 30px; padding: 3px 8px; font-size: 12px; }
 .inbox-thread-composer { flex: none; display: grid; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid #eaecf0; background: #fff; }
-.inbox-thread-composer > div { display: flex; align-items: flex-end; gap: 8px; }.inbox-thread-composer textarea { min-width: 0; flex: 1; resize: none; font-size: 14px; }.inbox-thread-composer button { height: 36px; padding: 6px 10px; font-size: 12px; }.inbox-thread-composer .inbox-attach { width: 36px; padding: 0; display: grid; place-items: center; }.inbox-thread-composer .inbox-attach svg { width: 16px; height: 16px; }.inbox-thread-composer small { color: #667085; font-size: 11px; }
+.inbox-thread-composer > div { display: flex; align-items: center; gap: 8px; }.inbox-thread-composer textarea { min-width: 0; flex: 1; resize: none; font-size: 14px; }.inbox-thread-composer button { height: 36px; padding: 6px 10px; font-size: 12px; }.inbox-thread-composer .inbox-attach { width: 36px; padding: 0; display: grid; place-items: center; }.inbox-thread-composer .inbox-attach svg { width: 16px; height: 16px; }.inbox-thread-composer small { color: #667085; font-size: 11px; }
 .inbox-sheet { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; justify-content: flex-end; }
 .inbox-sheet-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: rgba(16,24,40,.32); }
 .inbox-sheet-body { position: relative; max-height: 80%; overflow: auto; display: grid; gap: 12px; padding: 16px; border-radius: 16px 16px 0 0; background: #fff; }

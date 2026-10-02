@@ -131,6 +131,19 @@ describe('Tray Inbox identity', () => {
     expect(stored.size).toBe(0);
   });
 
+  it('explains when this member has not claimed the organization key', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => ({
+      ok: true, json: async () => envelope(init.method === 'GET' ? null : { memberId: 'member-1' }),
+    })));
+    const missingKey = Object.assign(new Error('master_key_required:INHERITI_BUSINESS:org-1'), { name: 'MasterKeyRequired' });
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'),
+      vi.fn().mockRejectedValue(missingKey));
+    expect(await identity.prepare('org-1')).toEqual({
+      status: 'error',
+      message: 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.',
+    });
+  });
+
   it('does not resolve the organization key when a pending lookup finishes after clear', async () => {
     let finishLookup!: (response: { ok: boolean; json: () => Promise<unknown> }) => void;
     const fetcher = vi.fn().mockReturnValue(new Promise((resolve) => { finishLookup = resolve; }));
