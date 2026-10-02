@@ -13,7 +13,7 @@ export function InboxReadyPanel({ onClose, identity }) {
   const { screen, showMembers } = navigation;
   const conversation = inbox.conversations.items.find((item) => item.id === inbox.messages.conversationId);
   const memberNames = conversationMemberNames(conversation, inbox.participants.names, inbox.identity?.memberId);
-  const title = conversationTitle(memberNames);
+  const title = conversation?.title || conversationTitle(memberNames);
 
   return <main className="tray-screen inbox-panel">
     <header className="tray-screen-header tray-screen-heading inbox-header">
@@ -33,7 +33,7 @@ export function InboxReadyPanel({ onClose, identity }) {
         names={inbox.participants.names} ownMemberId={inbox.identity?.memberId} busy={inbox.conversations.busy}
         onRefresh={inbox.conversations.refresh} onSelect={navigation.openConversation} />
     </div>}
-    {screen === 'new' && <InboxMemberPicker query={inbox.participants.query} setQuery={inbox.participants.setQuery}
+    {screen === 'new' && <InboxMemberPicker title={inbox.title} setTitle={inbox.setTitle} query={inbox.participants.query} setQuery={inbox.participants.setQuery}
       onSearch={inbox.participants.search} participants={inbox.participants.items}
       memberIds={inbox.participants.memberIds} onToggle={inbox.participants.toggleMemberId}
       onClear={() => inbox.participants.setMemberIds([])} searchBusy={inbox.participants.busy}

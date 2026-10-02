@@ -21,11 +21,12 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
     if (query !== undefined && (typeof query !== 'string' || query.length > 100)) throw new Error('Invalid Secure Inbox search');
     return session.listInboxParticipants(query ? { q: query } : undefined);
   });
-  ipcMain.handle('tray:inbox-create-conversation', (event, memberIds: unknown) => {
+  ipcMain.handle('tray:inbox-create-conversation', (event, title: unknown, memberIds: unknown) => {
     trusted(event);
+    if (typeof title !== 'string' || !title.trim() || title.trim().length > 80) throw new Error('Invalid Secure Inbox title');
     if (!Array.isArray(memberIds) || memberIds.length < 1 || memberIds.length > 49 ||
       new Set(memberIds).size !== memberIds.length) throw new Error('Invalid Secure Inbox participants');
-    return session.createInboxConversation(memberIds.map(inboxId));
+    return session.createInboxConversation(title.trim(), memberIds.map(inboxId));
   });
   ipcMain.handle('tray:inbox-change-participants', (event, conversationId: unknown, action: unknown, memberId: unknown, expectedRevision: unknown) => {
     trusted(event);

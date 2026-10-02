@@ -36,3 +36,18 @@ it('shows only safe latest-message metadata in conversation rows', () => {
   expect(markup).toContain('<time>');
   expect(markup).not.toContain('End-to-end encrypted');
 });
+
+it('shows the shared conversation title and requires it when starting a conversation', () => {
+  globalThis.React = React;
+  const list = renderToStaticMarkup(createElement(InboxConversationList, {
+    conversations: [{ id: 'conversation', title: 'Project handover', participantMemberIds: ['me', 'ana'], unreadCount: 0 }],
+    names: { ana: 'Ana Torres' }, ownMemberId: 'me',
+  }));
+  const picker = renderToStaticMarkup(createElement(InboxMemberPicker, {
+    title: '', query: '', participants: [], memberIds: ['ana'], names: { ana: 'Ana Torres' },
+  }));
+  expect(list).toContain('Project handover');
+  expect(picker).toContain('id="inbox-conversation-title"');
+  expect(picker).toContain('required=""');
+  expect(picker).toContain('Start conversation</button>');
+});

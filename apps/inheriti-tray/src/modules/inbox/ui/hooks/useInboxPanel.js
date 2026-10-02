@@ -8,11 +8,11 @@ export function useInboxPanel(onClose, identity) {
   const conversations = useInboxConversations();
   const messages = useInboxMessages(onClose);
   const [toast, setToast] = useState(null);
+  const [title, setTitle] = useState('');
   const refresh = useRef(null);
   refresh.current = (signal) => {
     if (signal?.kind === 'NEW_MESSAGE') {
       setToast({ kind: 'info', message: 'A protected message is ready.' });
-      return;
     }
     if (signal?.recipientStatus === 'CONSUMED' && signal.senderMemberId === identity?.memberId &&
       signal.memberId !== identity?.memberId) {
@@ -34,13 +34,14 @@ export function useInboxPanel(onClose, identity) {
 
   async function createConversation(event) {
     event.preventDefault();
-    if (participants.memberIds.length < 1 || participants.memberIds.length > 49 || busy) return;
-    const conversation = await conversations.create(participants.memberIds);
+    if (!title.trim() || participants.memberIds.length < 1 || participants.memberIds.length > 49 || busy) return;
+    const conversation = await conversations.create(title.trim(), participants.memberIds);
     if (!conversation) return;
     participants.setMemberIds([]);
+    setTitle('');
     await messages.select(conversation.id);
     return conversation;
   }
 
-  return { participants, conversations, messages, identity, busy, error, toast, createConversation };
+  return { participants, conversations, messages, identity, busy, error, toast, title, setTitle, createConversation };
 }

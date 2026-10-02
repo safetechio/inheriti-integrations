@@ -77,10 +77,10 @@ export class TrayInbox {
   listParticipants(input?: { q?: string; limit?: number; offset?: number }) {
     return this.client().client.listParticipants(input);
   }
-  async createConversation(participantMemberIds: string[]) {
+  async createConversation(title: string, participantMemberIds: string[]) {
     const memberId = await this.registeredMemberId();
     if (!memberId) throw new Error('inbox_identity_not_ready');
-    return this.client().client.createConversation([memberId].concat(participantMemberIds));
+    return this.client().client.createConversation(title, [memberId].concat(participantMemberIds));
   }
   changeParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) {
     return this.client().client.changeParticipants(conversationId, input);

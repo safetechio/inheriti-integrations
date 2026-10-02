@@ -232,7 +232,7 @@ export class TraySession {
   prepareInbox(): Promise<InboxIdentityState> { return this.inbox.prepare(); }
   cancelInboxPreparation(): void { this.inbox.cancelPreparation(); }
   listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listParticipants(input); }
-  createInboxConversation(participantMemberIds: string[]) { return this.inbox.createConversation(participantMemberIds); }
+  createInboxConversation(title: string, participantMemberIds: string[]) { return this.inbox.createConversation(title, participantMemberIds); }
   changeInboxParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) { return this.inbox.changeParticipants(conversationId, input); }
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
   listInboxMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) { return this.inbox.listMessages(conversationId, input); }

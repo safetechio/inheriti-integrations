@@ -8,7 +8,7 @@ export function InboxConversationList({ conversations, names, ownMemberId, busy,
     {!busy && !conversations.length && <p className="inbox-empty">No conversations yet. Start one with a member of your organization.</p>}
     {!!conversations.length && <div className="inbox-conversation-rows">{conversations.map((conversation) => {
       const memberNames = conversationMemberNames(conversation, names, ownMemberId);
-      const title = conversationTitle(memberNames);
+      const title = conversation.title || conversationTitle(memberNames);
       const latest = conversation.latestMessage;
       const preview = conversationPreview(latest, ownMemberId);
       return <button type="button" className="inbox-conversation-row" key={conversation.id} onClick={() => onSelect(conversation.id)}>

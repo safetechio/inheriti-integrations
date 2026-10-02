@@ -106,13 +106,14 @@ it('creates an Inbox conversation with a bounded, unique member selection', asyn
   const createInboxConversation = vi.fn(async () => ({ id: 'conversation' }));
   registerTrayIpc({ createInboxConversation } as never, () => ({ webContents }) as never, vi.fn());
   const create = mock.handlers.get('tray:inbox-create-conversation')!;
-  expect(() => create({ sender: webContents, senderFrame: {} }, ['a'])).toThrow();
-  expect(() => create(event, [])).toThrow('Invalid Secure Inbox participants');
-  expect(() => create(event, ['a', 'a'])).toThrow('Invalid Secure Inbox participants');
-  expect(() => create(event, Array.from({ length: 50 }, (_, index) => String(index)))).toThrow('Invalid Secure Inbox participants');
-  expect(() => create(event, ['a', ''])).toThrow('Invalid Secure Inbox identifier');
-  await expect(create(event, ['a', 'b'])).resolves.toEqual({ id: 'conversation' });
-  expect(createInboxConversation).toHaveBeenCalledWith(['a', 'b']);
+  expect(() => create({ sender: webContents, senderFrame: {} }, 'Test', ['a'])).toThrow();
+  expect(() => create(event, '', ['a'])).toThrow('Invalid Secure Inbox title');
+  expect(() => create(event, 'Test', [])).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, 'Test', ['a', 'a'])).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, 'Test', Array.from({ length: 50 }, (_, index) => String(index)))).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, 'Test', ['a', ''])).toThrow('Invalid Secure Inbox identifier');
+  await expect(create(event, ' Test ', ['a', 'b'])).resolves.toEqual({ id: 'conversation' });
+  expect(createInboxConversation).toHaveBeenCalledWith('Test', ['a', 'b']);
 });
 
 it('retries a pending Inbox ACK only for a trusted renderer', async () => {

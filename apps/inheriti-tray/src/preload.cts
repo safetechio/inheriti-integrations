@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
   inboxCancelPreparation: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-preparation'),
   inboxParticipants: (query?: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-participants', query),
-  inboxCreateConversation: (memberIds: string[]): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', memberIds),
+  inboxCreateConversation: (title: string, memberIds: string[]): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', title, memberIds),
   inboxChangeParticipants: (conversationId: string, action: 'ADD' | 'REMOVE', memberId: string, expectedRevision: number): Promise<unknown> =>
     ipcRenderer.invoke('tray:inbox-change-participants', conversationId, action, memberId, expectedRevision),
   inboxConversations: (): Promise<unknown> => ipcRenderer.invoke('tray:inbox-conversations'),

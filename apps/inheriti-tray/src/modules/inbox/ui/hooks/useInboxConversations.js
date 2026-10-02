@@ -32,12 +32,12 @@ export function useInboxConversations() {
     }
   }
 
-  async function create(memberIds) {
+  async function create(title, memberIds) {
     const current = generation.current;
     setBusy('creating');
     setError('');
     try {
-      const conversation = await window.inheritiTray.inboxCreateConversation(memberIds);
+      const conversation = await window.inheritiTray.inboxCreateConversation(title, memberIds);
       if (generation.current !== current) return;
       request.current++;
       setItems((existing) => [conversation].concat(existing.filter(({ id }) => id !== conversation.id)));

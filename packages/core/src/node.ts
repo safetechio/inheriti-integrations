@@ -119,7 +119,7 @@ export function createNodeInbox(options: {
   const file = new NodeInboxFile(api);
   return {
     listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
-    createConversation: (participantMemberIds: string[]) => api.createInboxConversation({ participantMemberIds }),
+    createConversation: (title: string, participantMemberIds: string[]) => api.createInboxConversation({ title, participantMemberIds }),
     changeParticipants: (conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) =>
       api.changeInboxParticipants(conversationId, input),
     listConversations: (input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxConversations(input, signal),

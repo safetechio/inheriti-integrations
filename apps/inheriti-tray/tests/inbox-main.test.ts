@@ -55,8 +55,8 @@ describe('Tray Secure Inbox main process', () => {
     vi.spyOn(TrayInboxIdentity.prototype, 'registeredMemberId').mockResolvedValueOnce('member-a');
     const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
       async () => 'a'.repeat(64), () => 'org-a');
-    await inbox.createConversation(['member-b']);
-    expect(createConversation).toHaveBeenCalledExactlyOnceWith(['member-a', 'member-b']);
+    await inbox.createConversation('Project handover', ['member-b']);
+    expect(createConversation).toHaveBeenCalledExactlyOnceWith('Project handover', ['member-a', 'member-b']);
   });
 
   it('forwards conversation and recipient changes only for the selected organization', async () => {
