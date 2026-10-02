@@ -1,5 +1,6 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node';
-import { createNodeElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node';
+import { createNodeElementsClient, HttpElementsApiPort, NodeInboxText } from '@safetech/inheriti-client-sdk/node';
+import type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/node';
 import { SocketIoSharedPlanEventListener } from '@safetech/inheriti-core-sdk/shared-configuration/vanilla';
 import { io } from 'socket.io-client';
 import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
@@ -90,6 +91,26 @@ export function createNodePlanEventListener(apiUrl: string, getBearerToken: () =
   return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
 }
 export { createOrganizationKeys } from './organization-keys.js';
+export type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/node';
+export function createNodeInbox(options: {
+  apiUrl: string;
+  environment: ElementsEnvironment;
+  organizationId: string;
+  getBearerToken: () => Promise<string | null>;
+  fetchImpl?: typeof fetch;
+}) {
+  const api = new HttpElementsApiPort(options.apiUrl, options.environment, options.getBearerToken,
+    options.fetchImpl ?? globalThis.fetch.bind(globalThis), { organizationId: options.organizationId });
+  const text = new NodeInboxText(api);
+  return {
+    listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
+    createConversation: (participantMemberIds: string[]) => api.createInboxConversation({ participantMemberIds }),
+    listConversations: (input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxConversations(input, signal),
+    listMessages: (conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMessages(conversationId, input, signal),
+    sendText: (input: { conversationId: string; text: string; expiresAt: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.send(input),
+    openText: (input: { conversationId: string; messageId: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.open(input),
+  };
+}
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node';
 export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 export type { QuickPlanEditPhase, QuickPlanEditApprovalProgress } from '@safetech/inheriti-client-sdk/node';
