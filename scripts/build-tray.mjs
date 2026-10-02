@@ -54,4 +54,5 @@ const integrationCore = await packageDirectory(root, '@safetech/inheriti-element
 const clientSdk = await packageDirectory(integrationCore, '@safetech/inheriti-client-sdk');
 const coreSdk = await packageDirectory(clientSdk, '@safetech/inheriti-core-sdk');
 await cp(resolve(coreSdk, 'dist/workers'), resolve(output, 'workers'), { recursive: true });
+await cp(resolve(coreSdk, 'dist/workers/inbox.node-worker.js'), resolve(output, 'inbox.node-worker.js'));
 await writeBuildDeployment(output);
