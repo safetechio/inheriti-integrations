@@ -4,12 +4,22 @@ import { shell } from 'electron';
 const mock = vi.hoisted(() => ({ handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(), notify: vi.fn() }));
 
 vi.mock('electron', () => ({
+  app: { getVersion: () => '0.0.5' },
   ipcMain: { handle: (name: string, handler: (...args: unknown[]) => Promise<unknown>) => mock.handlers.set(name, handler) },
   shell: { openExternal: vi.fn() },
 }));
 vi.mock('../src/modules/quick-plan/main/quick-plan-input.js', () => ({ parseQuickPlanInput: (input: unknown) => input }));
 
 import { registerTrayIpc } from '../src/modules/launcher/main/ipc.js';
+
+it('shows the installed version only to the trusted Tray renderer', () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  registerTrayIpc({} as never, () => ({ webContents }) as never, vi.fn());
+  const version = mock.handlers.get('tray:version')!;
+  expect(() => version({ sender: webContents, senderFrame: {} })).toThrow();
+  expect(version({ sender: webContents, senderFrame: frame })).toBe('0.0.5');
+});
 
 it('notifies only after confirmed protection or update using generic text', async () => {
   const frame = {};
@@ -87,6 +97,22 @@ it('passes a bounded Inbox member search to the selected session', async () => {
   await search(event, 'Ada');
   expect(listInboxParticipants).toHaveBeenCalledWith({ q: 'Ada' });
   expect(() => search(event, 'x'.repeat(101))).toThrow('Invalid Secure Inbox search');
+});
+
+it('creates an Inbox conversation with a bounded, unique member selection', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const createInboxConversation = vi.fn(async () => ({ id: 'conversation' }));
+  registerTrayIpc({ createInboxConversation } as never, () => ({ webContents }) as never, vi.fn());
+  const create = mock.handlers.get('tray:inbox-create-conversation')!;
+  expect(() => create({ sender: webContents, senderFrame: {} }, ['a'])).toThrow();
+  expect(() => create(event, [])).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, ['a', 'a'])).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, Array.from({ length: 50 }, (_, index) => String(index)))).toThrow('Invalid Secure Inbox participants');
+  expect(() => create(event, ['a', ''])).toThrow('Invalid Secure Inbox identifier');
+  await expect(create(event, ['a', 'b'])).resolves.toEqual({ id: 'conversation' });
+  expect(createInboxConversation).toHaveBeenCalledWith(['a', 'b']);
 });
 
 it('retries a pending Inbox ACK only for a trusted renderer', async () => {

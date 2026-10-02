@@ -2,10 +2,12 @@ import electron = require('electron');
 const { contextBridge, ipcRenderer } = electron;
 import type { TrayState } from './modules/launcher/main/state.js';
 import type { InboxIdentityState } from './modules/inbox/main/identity.js';
+import type { TrayInboxSignal } from './modules/inbox/main/inbox.js';
 import type { CreateQuickPlanInput } from './modules/quick-plan/main/quick-plan-input.js' with { 'resolution-mode': 'import' };
 
 contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
+  version: (): Promise<string> => ipcRenderer.invoke('tray:version'),
   inboxState: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-state'),
   selectCustodianDevice: (value: 'SK_MOBILE' | 'SK_PRO'): Promise<TrayState> => ipcRenderer.invoke('tray:select-custodian-device', value),
   submitSafeKeyProPin: (value: string): Promise<TrayState> => ipcRenderer.invoke('tray:submit-safekey-pro-pin', value),
@@ -13,12 +15,18 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
   inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
+  inboxCancelPreparation: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-preparation'),
   inboxParticipants: (query?: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-participants', query),
-  inboxCreateConversation: (memberId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', memberId),
+  inboxCreateConversation: (memberIds: string[]): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', memberIds),
+  inboxChangeParticipants: (conversationId: string, action: 'ADD' | 'REMOVE', memberId: string, expectedRevision: number): Promise<unknown> =>
+    ipcRenderer.invoke('tray:inbox-change-participants', conversationId, action, memberId, expectedRevision),
   inboxConversations: (): Promise<unknown> => ipcRenderer.invoke('tray:inbox-conversations'),
   inboxMessages: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-messages', conversationId),
   inboxSendText: (conversationId: string, text: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-text', conversationId, text, expiresAt),
+  inboxSendFile: (conversationId: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-file', conversationId, expiresAt),
   inboxOpenText: (conversationId: string, messageId: string): Promise<{ text: string; leaseId: string; leaseExpiresAt: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-open-text', conversationId, messageId),
+  inboxOpenFile: (conversationId: string, messageId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-open-file', conversationId, messageId),
+  inboxCancelTransfer: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-transfer'),
   inboxRetryAck: (conversationId: string, messageId: string): Promise<{ acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-retry-ack', conversationId, messageId),
   inboxHideText: (): Promise<void> => ipcRenderer.invoke('tray:inbox-hide-text'),
   createQuickPlan: (input: CreateQuickPlanInput): Promise<TrayState> => ipcRenderer.invoke('tray:create-quick-plan', input),
@@ -48,6 +56,16 @@ contextBridge.exposeInMainWorld('inheritiTray', {
     const listener = (_event: Electron.IpcRendererEvent, state: InboxIdentityState) => callback(state);
     ipcRenderer.on('tray:inbox-state-changed', listener);
     return () => ipcRenderer.removeListener('tray:inbox-state-changed', listener);
+  },
+  onInboxChanged: (callback: (signal: TrayInboxSignal | null) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, signal: TrayInboxSignal | null) => callback(signal);
+    ipcRenderer.on('tray:inbox-changed', listener);
+    return () => ipcRenderer.removeListener('tray:inbox-changed', listener);
+  },
+  onInboxTransferProgress: (callback: (progress: { completed: number; total: number; stage?: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: { completed: number; total: number; stage?: string }) => callback(progress);
+    ipcRenderer.on('tray:inbox-transfer-progress', listener);
+    return () => ipcRenderer.removeListener('tray:inbox-transfer-progress', listener);
   },
   onHidden: (callback: () => void): (() => void) => {
     const listener = () => callback();

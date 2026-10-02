@@ -12,6 +12,13 @@ export class InboxReadAck {
 
   clear(): void { this.pending = undefined; }
 
+  remember(organizationId: string, conversationId: string, messageId: string, deviceId: string,
+    leaseId: string, acknowledgement: 'ACKNOWLEDGED' | 'PENDING'): void {
+    this.pending = acknowledgement === 'PENDING'
+      ? { organizationId, conversationId, messageId, deviceId, leaseId }
+      : undefined;
+  }
+
   async open(conversationId: string, messageId: string) {
     const { organizationId, client } = this.client();
     this.pending = undefined;
@@ -21,9 +28,8 @@ export class InboxReadAck {
       const opened = await client.openText({ conversationId, messageId, identity, tenantKeyHex, signal });
       return { opened, deviceId: identity.deviceId };
     });
-    this.pending = result.opened.acknowledgement === 'PENDING'
-      ? { organizationId, conversationId, messageId, deviceId: result.deviceId, leaseId: result.opened.leaseId }
-      : undefined;
+    this.remember(organizationId, conversationId, messageId, result.deviceId,
+      result.opened.leaseId, result.opened.acknowledgement);
     return result.opened;
   }
 

@@ -2,19 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 
 export function useInboxParticipants() {
   const generation = useRef(0);
+  const request = useRef(0);
+  const appliedQuery = useRef('');
   const [items, setItems] = useState([]);
   const [names, setNames] = useState({});
   const [query, setQuery] = useState('');
-  const [memberId, setMemberId] = useState('');
+  const [memberIds, setMemberIds] = useState([]);
   const [busy, setBusy] = useState('loading');
   const [error, setError] = useState('');
 
   useEffect(() => {
     const current = ++generation.current;
+    const latest = ++request.current;
     window.inheritiTray.inboxParticipants()
-      .then((page) => { if (generation.current === current) remember(page.items); })
-      .catch(() => { if (generation.current === current) setError('Could not load members. Try again.'); })
-      .finally(() => { if (generation.current === current) setBusy(''); });
+      .then((page) => { if (generation.current === current && request.current === latest) remember(page.items); })
+      .catch(() => { if (generation.current === current && request.current === latest) setError('Could not load members. Try again.'); })
+      .finally(() => { if (generation.current === current && request.current === latest) setBusy(''); });
     return () => { generation.current++; };
   }, []);
 
@@ -24,22 +27,34 @@ export function useInboxParticipants() {
       Object.fromEntries(found.map(({ memberId: id, name }) => [id, name]))));
   }
 
-  async function search(event) {
-    event.preventDefault();
+  async function loadMembers(value, phase) {
     const current = generation.current;
-    setBusy('searching');
+    const latest = ++request.current;
+    setBusy(phase);
     setError('');
     try {
-      const page = await window.inheritiTray.inboxParticipants(query.trim());
-      if (generation.current !== current) return;
+      const page = await window.inheritiTray.inboxParticipants(value);
+      if (generation.current !== current || request.current !== latest) return;
       remember(page.items);
-      setMemberId('');
     } catch {
-      if (generation.current === current) setError('Could not search members. Try again.');
+      if (generation.current === current && request.current === latest) setError('Could not load members. Try again.');
     } finally {
-      if (generation.current === current) setBusy('');
+      if (generation.current === current && request.current === latest) setBusy('');
     }
   }
 
-  return { items, names, query, setQuery, memberId, setMemberId, busy, error, search };
+  function search(event) {
+    event.preventDefault();
+    appliedQuery.current = query.trim();
+    return loadMembers(appliedQuery.current, 'searching');
+  }
+  function refresh() { return loadMembers(appliedQuery.current, 'loading'); }
+
+  function toggleMemberId(id) {
+    setMemberIds((selected) => selected.includes(id)
+      ? selected.filter((memberId) => memberId !== id)
+      : selected.length < 49 ? selected.concat(id) : selected);
+  }
+
+  return { items, names, query, setQuery, memberIds, setMemberIds, toggleMemberId, busy, error, search, refresh };
 }

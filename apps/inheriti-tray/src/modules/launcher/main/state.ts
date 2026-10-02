@@ -8,6 +8,7 @@ import { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
 import type { CustodianPromptState } from '../../quick-plan/main/custodian-prompt.js';
 import { createTraySafeKeyPro } from '../../quick-plan/main/safekey-pro.js';
 import { TrayInbox } from '../../inbox/main/inbox.js';
+import type { TrayInboxSignal } from '../../inbox/main/inbox.js';
 import type { InboxIdentityState } from '../../inbox/main/identity.js';
 import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
@@ -45,6 +46,8 @@ export class TraySession {
   private readonly custodianPrompt = new CustodianPrompt();
   private readonly proDevice: ReturnType<typeof createTraySafeKeyPro>;
   private readonly inbox: TrayInbox;
+  private inboxPublisher: ((signal?: TrayInboxSignal) => void) | undefined;
+  private inboxStatePublisher: (() => void) | undefined;
 
   constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -68,10 +71,10 @@ export class TraySession {
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken() });
     this.inbox = new TrayInbox(apiUrl, config.environment, () => this.core.auth.getAccessToken(),
-      (id, signal) => this.organizationKeys.resolve(id, signal), () => {
+      (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), () => {
         if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
         return this.selectedId;
-      });
+      }, (signal) => this.inboxPublisher?.(signal), () => this.inboxStatePublisher?.());
     this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
     this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
     this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
@@ -81,6 +84,8 @@ export class TraySession {
   }
 
   setPublisher(publish: () => void): void { this.custodianPrompt.setPublisher(publish); }
+  setInboxPublisher(publish: (signal?: TrayInboxSignal) => void): void { this.inboxPublisher = publish; }
+  setInboxStatePublisher(publish: () => void): void { this.inboxStatePublisher = publish; }
   selectCustodianDevice(value: unknown): void { this.custodianPrompt.select(value); }
   submitSafeKeyProPin(value: unknown): void { this.custodianPrompt.submitPin(value); }
 
@@ -174,6 +179,7 @@ export class TraySession {
       await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
       this.selectedId = id;
+      this.inbox.listen();
     } finally {
       this.pendingSelections -= 1;
     }
@@ -222,13 +228,19 @@ export class TraySession {
   async cancelPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.cancelAccess(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
   inboxState(): InboxIdentityState { return this.inbox.state(); }
+  registeredInboxMemberId(): Promise<string | undefined> { return this.inbox.registeredMemberId(); }
   prepareInbox(): Promise<InboxIdentityState> { return this.inbox.prepare(); }
+  cancelInboxPreparation(): void { this.inbox.cancelPreparation(); }
   listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listParticipants(input); }
   createInboxConversation(participantMemberIds: string[]) { return this.inbox.createConversation(participantMemberIds); }
+  changeInboxParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) { return this.inbox.changeParticipants(conversationId, input); }
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
   listInboxMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) { return this.inbox.listMessages(conversationId, input); }
   sendInboxText(conversationId: string, text: string, expiresAt: string) { return this.inbox.sendText(conversationId, text, expiresAt); }
+  sendInboxFile(conversationId: string, expiresAt: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.sendFile(conversationId, expiresAt, progress); }
   openInboxText(conversationId: string, messageId: string) { return this.inbox.openText(conversationId, messageId); }
+  openInboxFile(conversationId: string, messageId: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.openFile(conversationId, messageId, progress); }
+  cancelInboxTransfer(): void { this.inbox.cancelTransfer(); }
   retryInboxAck(conversationId: string, messageId: string) { return this.inbox.retryAck(conversationId, messageId); }
   hideInboxText(): void { this.inbox.hide(); }
   clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); this.inbox.hide(); }
@@ -270,6 +282,7 @@ export class TraySession {
     if (this.selectedId) {
       await this.quickPlans.selectOrganization(this.selectedId);
       await this.planEdit.selectOrganization(this.selectedId);
+      this.inbox.listen();
     }
   }
 }

@@ -1,5 +1,5 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node';
-import { createNodeElementsClient, HttpElementsApiPort, NodeInboxText } from '@safetech/inheriti-client-sdk/node';
+import { createNodeElementsClient, HttpElementsApiPort, NodeInboxFile, NodeInboxText } from '@safetech/inheriti-client-sdk/node';
 import type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/node';
 import { SocketIoSharedPlanEventListener } from '@safetech/inheriti-core-sdk/shared-configuration/vanilla';
 import { io } from 'socket.io-client';
@@ -90,6 +90,20 @@ export function createNodePlanEventListener(apiUrl: string, getBearerToken: () =
   const listener = new SocketIoSharedPlanEventListener(socket);
   return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
 }
+export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>,
+  onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string } | { tenantId: string; kind: 'PARTICIPANTS' | 'CONVERSATIONS' }) => void,
+  onConnect: () => void) {
+  const socket = io(new URL(apiUrl).origin, {
+    autoConnect: false,
+    auth: (callback) => {
+      Promise.resolve().then(getBearerToken).then((token) => callback({ token: token ?? '' })).catch(() => callback({ token: '' }));
+    },
+  });
+  socket.on('inbox:changed', onChange);
+  socket.on('connect', onConnect);
+  socket.connect();
+  return () => { socket.removeAllListeners(); socket.disconnect(); };
+}
 export { createOrganizationKeys } from './organization-keys.js';
 export type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/node';
 export function createNodeInbox(options: {
@@ -102,13 +116,18 @@ export function createNodeInbox(options: {
   const api = new HttpElementsApiPort(options.apiUrl, options.environment, options.getBearerToken,
     options.fetchImpl ?? globalThis.fetch.bind(globalThis), { organizationId: options.organizationId });
   const text = new NodeInboxText(api);
+  const file = new NodeInboxFile(api);
   return {
     listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
     createConversation: (participantMemberIds: string[]) => api.createInboxConversation({ participantMemberIds }),
+    changeParticipants: (conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) =>
+      api.changeInboxParticipants(conversationId, input),
     listConversations: (input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxConversations(input, signal),
     listMessages: (conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMessages(conversationId, input, signal),
     sendText: (input: { conversationId: string; text: string; expiresAt: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.send(input),
     openText: (input: { conversationId: string; messageId: string; identity: InboxLocalIdentity; tenantKeyHex: string; signal?: AbortSignal }) => text.open(input),
+    sendFile: (input: import('@safetech/inheriti-client-sdk/node').SendInboxFileInput) => file.sendFile(input),
+    openFile: (input: import('@safetech/inheriti-client-sdk/node').OpenInboxFileInput) => file.openFile(input),
     ackText: (input: { conversationId: string; messageId: string; deviceId: string; leaseId: string; signal?: AbortSignal }) =>
       text.ack(input.conversationId, input.messageId, input.deviceId, input.leaseId, input.signal),
   };

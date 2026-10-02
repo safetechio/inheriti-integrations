@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { SignedOut } from './components/SignedOut.jsx';
 import { Home } from './components/Home.jsx';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
@@ -9,15 +9,26 @@ import { ReviewPlan } from '../../quick-plan/ui/ReviewPlan.jsx';
 import { ReadyPlan } from '../../quick-plan/ui/ReadyPlan.jsx';
 import { useQuickPlanFlow } from '../../quick-plan/ui/hooks/useQuickPlanFlow.js';
 import { useTraySession } from './hooks/useTraySession.js';
-import { useInboxState } from '../../inbox/ui/useInboxState.js';
 import { InboxPanel } from '../../inbox/ui/InboxPanel.jsx';
 
 export function LauncherApp({ messages }) {
   const session = useTraySession(messages);
-  const inbox = useInboxState();
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxRequested, setInboxRequested] = useState(false);
+  const [inboxHasNew, setInboxHasNew] = useState(false);
   const closeInbox = useCallback(() => setInboxOpen(false), []);
   const { state } = session;
+  useEffect(() => window.inheritiTray.onAction((action) => {
+    if (action === messages.openSecureInbox) setInboxRequested(true);
+  }), [messages]);
+  useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
+    if (signal?.kind === 'NEW_MESSAGE' && !inboxOpen) setInboxHasNew(true);
+  }), [inboxOpen]);
+  useEffect(() => {
+    if (!inboxRequested || state?.status !== 'signed-in' || !state.selectedId) return;
+    setInboxOpen(true);
+    setInboxRequested(false);
+  }, [inboxRequested, state?.status, state?.selectedId]);
   const editFlow = usePlanEditFlow({ state, setState: session.setState, messages });
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
     canHandleAction: !editFlow.editing,
@@ -42,16 +53,16 @@ export function LauncherApp({ messages }) {
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
-  if (inboxOpen && state.selectedId && inbox.state?.status === 'ready') return <InboxPanel key={state.selectedId} onClose={closeInbox} />;
+  if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox} organizationSelected={!!state.selectedId} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
-    onOrganizationChange={(id) => { closeInbox(); editFlow.close(); void flow.selectOrganization(id); }}
+    onOrganizationChange={(id) => { closeInbox(); setInboxHasNew(false); editFlow.close(); void flow.selectOrganization(id); }}
     canCreate={canCreate && !editFlow.busy}
     canEdit={!!state.selectedId && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
-    inbox={inbox.state} inboxError={inbox.error} onPrepareInbox={() => void inbox.prepare()} onOpenInbox={() => setInboxOpen(true)}
-    onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); void flow.signOut(); }}
+    onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
+    onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); void flow.signOut(); }}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName}
   />;

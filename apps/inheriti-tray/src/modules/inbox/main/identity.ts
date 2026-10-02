@@ -12,7 +12,7 @@ type StoredIdentity = {
   signingKeyFingerprint: string;
 };
 
-export type InboxIdentityState = { status: 'unavailable' | 'ready' | 'missing' | 'preparing' | 'error'; message?: string };
+export type InboxIdentityState = { status: 'unavailable' | 'ready' | 'missing' | 'preparing' | 'error'; message?: string; memberId?: string };
 
 function tokenScope(token: string): { subject: string; family: string } {
   const segment = token.split('.')[1];
@@ -54,9 +54,23 @@ export class TrayInboxIdentity {
   private requestAbort: AbortController | undefined;
   private generation = 0;
 
-  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly resolveOrganizationKey?: (organizationId: string, signal: AbortSignal) => Promise<string>) {}
+  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly resolveOrganizationKey?: (organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly onStateChange?: () => void) {}
 
   state(): InboxIdentityState { return this.status; }
+  async registeredMemberId(organizationId: string): Promise<string | undefined> {
+    if (this.status.status === 'ready') return this.status.memberId;
+    if (!this.checkpoint.isAvailable()) return undefined;
+    const bearer = await this.token();
+    if (!bearer) return undefined;
+    const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(bearer, organizationId));
+    if (!identity) return undefined;
+    const current = await this.request('GET', 'devices/me', bearer, organizationId, new AbortController().signal);
+    if (current === null) return undefined;
+    this.assertCurrentIdentity(current, identity);
+    if (!current || typeof current !== 'object' || !('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId)
+      throw new Error('invalid_inbox_identity_response');
+    return current.memberId;
+  }
   cancelOperation(): void { if (!this.pending) this.requestAbort?.abort(); }
   clear(): void {
     this.generation += 1;
@@ -65,6 +79,17 @@ export class TrayInboxIdentity {
     this.pending = undefined;
     this.pendingOrganization = undefined;
     this.status = { status: 'missing' };
+  }
+
+  cancelPreparation(): void {
+    if (!this.pending) return;
+    this.generation += 1;
+    this.requestAbort?.abort();
+    this.requestAbort = undefined;
+    this.pending = undefined;
+    this.pendingOrganization = undefined;
+    this.status = { status: 'missing' };
+    this.onStateChange?.();
   }
 
   async withIdentity<T>(organizationId: string, run: (identity: InboxLocalIdentity, signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -103,7 +128,7 @@ export class TrayInboxIdentity {
     const abort = new AbortController();
     this.requestAbort = abort;
     this.pendingOrganization = organizationId;
-    this.status = { status: 'preparing' };
+    this.set({ status: 'preparing', message: 'Securing this device…' }, generation);
     const pending = this.runPrepare(organizationId, generation, abort.signal);
     const tracked = pending.finally(() => {
       if (this.pending === tracked) {
@@ -128,10 +153,11 @@ export class TrayInboxIdentity {
       signal.throwIfAborted();
       if (current !== null) {
         this.assertCurrentIdentity(current, identity);
+        if (!current || typeof current !== 'object' || !('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId) throw new Error('invalid_inbox_identity_response');
         signal.throwIfAborted();
-        await this.resolveOrganizationKey?.(organizationId, signal);
+        await this.requestOrganizationKey(organizationId, generation, signal);
         signal.throwIfAborted();
-        return this.set({ status: 'ready' }, generation);
+        return this.set({ status: 'ready', memberId: current.memberId }, generation);
       }
       if (!identity) {
         signal.throwIfAborted();
@@ -140,17 +166,25 @@ export class TrayInboxIdentity {
         this.checkpoint.setItem(path, identity);
       }
       signal.throwIfAborted();
-      await this.request('POST', 'devices', bearer, organizationId, signal, {
+      const registered = await this.request('POST', 'devices', bearer, organizationId, signal, {
         encryptionPublicKey: identity.encryptionPublicKey,
         signingPublicKey: identity.signingPublicKey,
       });
+      if (!registered || typeof registered !== 'object' || !('memberId' in registered) || typeof registered.memberId !== 'string' || !registered.memberId) throw new Error('invalid_inbox_identity_response');
       signal.throwIfAborted();
-      await this.resolveOrganizationKey?.(organizationId, signal);
+      await this.requestOrganizationKey(organizationId, generation, signal);
       signal.throwIfAborted();
-      return this.set({ status: 'ready' }, generation);
+      return this.set({ status: 'ready', memberId: registered.memberId }, generation);
     } catch (error) {
       return this.set({ status: 'error', message: preparationError(error) }, generation);
     }
+  }
+
+  private async requestOrganizationKey(organizationId: string, generation: number, signal: AbortSignal): Promise<void> {
+    this.set({ status: 'preparing', message: 'Contacting SafeKey Mobile for your organization key…' }, generation);
+    await this.resolveOrganizationKey?.(organizationId, signal, () => {
+      this.set({ status: 'preparing', message: 'Organization key request sent to SafeKey Mobile. Approve it there to continue.' }, generation);
+    });
   }
 
   private identityPath(bearer: string, organizationId: string): string {
@@ -169,7 +203,7 @@ export class TrayInboxIdentity {
   }
 
   private set(value: InboxIdentityState, generation: number): InboxIdentityState {
-    if (generation === this.generation) this.status = value;
+    if (generation === this.generation) { this.status = value; this.onStateChange?.(); }
     return this.status;
   }
 

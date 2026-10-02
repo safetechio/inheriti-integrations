@@ -1,6 +1,7 @@
 import { app, globalShortcut, Notification, powerMonitor } from 'electron';
 import { currentWindow, prepareToQuit, showLauncher } from './launcher-window.js';
 import type { TraySession } from './state.js';
+import type { TrayInboxSignal } from '../../inbox/main/inbox.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { registerTrayEvents } from './tray.js';
 import { registerTrayIpc } from './ipc.js';
@@ -8,6 +9,7 @@ import { watchLinuxLock } from './linux-lock.js';
 
 export function registerAppEvents(session: TraySession, appUrl: string | undefined, deployment: string): void {
   let stopLinuxLock: (() => void) | undefined;
+  const seenInboxMessages = new Set<string>();
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
@@ -20,6 +22,11 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.tray.${deployment}`);
     session.setPublisher(() => publish(session));
+    session.setInboxPublisher((signal) => {
+      publishInboxChanged(signal);
+      void notifyNewInboxMessage(session, signal, seenInboxMessages);
+    });
+    session.setInboxStatePublisher(() => publishInbox(session));
     registerTrayEvents(appUrl);
     registerTrayIpc(session, currentWindow, () => publish(session), appUrl, notify, () => publishInbox(session));
     powerMonitor.on('lock-screen', () => hideForLock(session));
@@ -67,4 +74,32 @@ function publish(session: TraySession): void {
 function publishInbox(session: TraySession): void {
   const window = currentWindow();
   if (window && !window.isDestroyed()) window.webContents.send('tray:inbox-state-changed', session.inboxState());
+}
+
+function publishInboxChanged(signal?: TrayInboxSignal): void {
+  const window = currentWindow();
+  if (window && !window.isDestroyed()) window.webContents.send('tray:inbox-changed', signal ?? null);
+}
+
+async function notifyNewInboxMessage(session: TraySession, signal: TrayInboxSignal | undefined, seen: Set<string>): Promise<void> {
+  if (!signal || !('messageId' in signal) || signal.status !== 'AVAILABLE' || signal.recipientStatus) return;
+  const organizationId = session.state().selectedId;
+  if (!organizationId) return;
+  const key = `${organizationId}:${signal.messageId}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  try {
+    const memberId = await session.registeredInboxMemberId();
+    if (!memberId || session.state().selectedId !== organizationId) { seen.delete(key); return; }
+    if (signal.senderMemberId === memberId) return;
+    const page = await session.listInboxMessages(signal.conversationId, { status: 'AVAILABLE' });
+    if (session.state().selectedId !== organizationId) return;
+    const message = page.items.find((item: { id: string; senderMemberId: string; recipientStatus?: string }) => item.id === signal.messageId);
+    if (!message || message.senderMemberId === memberId || message.recipientStatus !== 'UNREAD') return;
+    publishInboxChanged({ kind: 'NEW_MESSAGE' });
+    const window = currentWindow();
+    if (!window || window.isDestroyed() || !window.isVisible()) notify('A protected message is ready in Secure Inbox.');
+  } catch {
+    seen.delete(key);
+  }
 }

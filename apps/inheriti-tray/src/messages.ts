@@ -1,6 +1,7 @@
 export const trayMessages = Object.freeze({
   appName: 'Inheriti® Tray',
   openLauncher: 'Open launcher',
+  openSecureInbox: 'Open Secure Inbox',
   createPrivatePlanMenu: 'Create new private plan',
   createTeamPlanMenu: 'Share new plan with a team',
   editPlanAssetMenu: 'Add or edit an asset from a plan',
@@ -119,7 +120,8 @@ export const trayMessages = Object.freeze({
   editConflict: 'Another edit is active or this plan changed. Refresh or open Inheriti® Business.',
   editExpired: 'The edit window expired. Start a new edit.',
   choosePlan: 'Choose a plan',
-  noEditablePlans: 'No eligible plans are available.',
+  noEditablePlansTitle: 'No plans ready to edit',
+  noEditablePlans: 'Plans you can edit will appear here. Create or manage a plan in Inheriti® Business.',
   loadingPlans: 'Loading eligible plans…',
   savingEdit: 'Securing the updated plan…',
   editUnavailable: 'Could not load eligible plans. Try again.',

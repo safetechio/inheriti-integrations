@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScreenHeader } from '../../_shared/ui/components/ScreenHeader.jsx';
 import { ScreenFooter } from '../../_shared/ui/components/ScreenFooter.jsx';
+import { EmptyState } from '../../_shared/ui/components/EmptyState.jsx';
 import { QuickPlanForm } from './QuickPlanForm.jsx';
 import { PlanEditProgress } from './PlanEditProgress.jsx';
 import { PlanEditSuccess } from './PlanEditSuccess.jsx';
@@ -27,6 +28,7 @@ export function PlanEditPanel({ messages, state, flow, onOpenApp, onSignIn }) {
   const formVisible = flow.action === 'add' || (flow.action === 'replace' && flow.assetId && flow.form.assetType);
   const filteredAssets = (edit.assets || []).filter(({ name, type }) => `${name} ${messages.assetTypes[type] || type}`.toLowerCase().includes(flow.query.toLowerCase()));
   const activeAssetId = filteredAssets.some(({ id }) => id === selectedAssetId) ? selectedAssetId : filteredAssets[0]?.id || '';
+  const noEligiblePlans = edit.status === 'idle' && edit.plans.length === 0;
 
   if (edit.status === 'updated') return <PlanEditSuccess messages={messages}
     planId={edit.planId}
@@ -38,7 +40,7 @@ export function PlanEditPanel({ messages, state, flow, onOpenApp, onSignIn }) {
     <div className="tray-scroll edit-scroll">
       {!progressOnly && edit.plans.length > 0 && <PlanPicker plans={edit.plans} value={flow.planId} onChange={(id) => { setSelectedAssetId(''); flow.setPlanId(id); }} disabled={blocked || flow.canceling} label={messages.plan || 'Plan'} placeholder={messages.choosePlan} />}
       <PlanEditProgress messages={messages} edit={edit} busy={flow.busy} onRetry={() => void flow.retryAccess()} />
-      {edit.status === 'idle' && edit.plans.length === 0 && <p role="status">{messages.noEditablePlans}</p>}
+      {noEligiblePlans && <EmptyState title={messages.noEditablePlansTitle} description={messages.noEditablePlans} actionLabel={messages.openApp} onAction={onOpenApp} />}
       {edit.message && !(edit.status === 'error' && edit.phase) && <p role="status">{edit.message}</p>}
       {edit.status === 'recovery-required' && edit.canRecover && <button type="button" disabled={flow.busy} onClick={() => void flow.recover()}>{messages.recoverEdit}</button>}
       {edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={onSignIn}>{messages.signIn}</button>}
@@ -59,7 +61,7 @@ export function PlanEditPanel({ messages, state, flow, onOpenApp, onSignIn }) {
     </div>
     {!formVisible && !progressOnly && !failed && <ScreenFooter>
       <button className="button-secondary" type="button" disabled={cancelDisabled} onClick={() => void flow.cancel()}>{flow.canceling ? messages.cancelingEdit : messages.cancel}</button>
-      {!accessingAssets && <button type="button" disabled={blocked || !flow.planId || (flow.action === 'replace' && !activeAssetId)} onClick={() => flow.action === 'replace' ? void flow.chooseAsset(activeAssetId) : void flow.chooseAction('add')}>{flow.action === 'replace' ? messages.editAssetAction : messages.addAsset}</button>}
+      {!accessingAssets && !noEligiblePlans && <button type="button" disabled={blocked || !flow.planId || (flow.action === 'replace' && !activeAssetId)} onClick={() => flow.action === 'replace' ? void flow.chooseAsset(activeAssetId) : void flow.chooseAction('add')}>{flow.action === 'replace' ? messages.editAssetAction : messages.addAsset}</button>}
     </ScreenFooter>}
   </section>;
 }

@@ -27,6 +27,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   }, [state?.status]);
 
   useEffect(() => window.inheritiTray.onAction((action) => {
+    if (action === messages.openSecureInbox) return;
     if (!canHandleAction || step !== 'actions' || !state?.selectedId || state.status !== 'signed-in' || busy || preparing) return;
     if (action === messages.addOrEditAsset) {
       onEditAction();

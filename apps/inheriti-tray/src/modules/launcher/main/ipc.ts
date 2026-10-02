@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron';
+import { app, ipcMain, shell } from 'electron';
 import type { BrowserWindow } from 'electron';
 import type { TraySession } from './state.js';
 import { trayMessages as messages } from '../../../messages.js';
@@ -11,6 +11,7 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
+  ipcMain.handle('tray:version', (event) => { trusted(event); return app.getVersion(); });
   ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
     trusted(event);
     session.selectCustodianDevice(value);

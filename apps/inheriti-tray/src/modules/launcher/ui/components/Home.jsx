@@ -1,7 +1,9 @@
 import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
-import { ChevronRightIcon, EditIcon, ExternalLinkIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { useAppVersion } from '../hooks/useAppVersion.js';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, canCreate, canEdit, onCreate, onEdit, inbox, inboxError, onPrepareInbox, onOpenInbox, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
+  const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
   return <main className="tray-screen tray-home">
@@ -21,11 +23,13 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
       {notice && <p className="tray-home-notice error" role="alert">{notice}</p>}
       <section className="tray-hero">
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>
-        <button id="save-plan" type="button" disabled={!canCreate} onClick={onCreate}><span className="tray-plus" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M6 2v8M2 6h8" /></svg></span>{messages.savePlan}</button>
       </section>
       <div className="tray-home-section">
         <h2>Protection plans</h2>
         <div className="tray-home-actions">
+          <button id="save-plan" type="button" disabled={!canCreate} onClick={onCreate}>
+            <span className="tray-action-icon"><PlusIcon /></span><span><strong>{messages.savePlan}</strong><small>Protect a secret in a new plan</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
+          </button>
           <button id="add-asset" type="button" disabled={!canEdit} onClick={onEdit}>
             <span className="tray-action-icon"><EditIcon /></span><span><strong>{messages.addOrEditAsset}</strong><small>Update a plan that's already protected</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
           </button>
@@ -36,11 +40,11 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
       </div>
       <div className="tray-home-section">
         <h2>Secure Inbox</h2>
-        <p role="status">{inbox?.status === 'ready' ? 'This device is ready for Secure Inbox.' : inbox?.status === 'preparing' ? 'Preparing this device…' : inboxError || inbox?.message || 'Prepare this device to use Secure Inbox.'}</p>
-        <button type="button" disabled={!selectedId || inbox?.status === 'ready' || inbox?.status === 'preparing'} onClick={onPrepareInbox}>Prepare Secure Inbox</button>
-        <button type="button" disabled={!selectedId || inbox?.status !== 'ready'} onClick={onOpenInbox}>Open Secure Inbox</button>
+        <div className="tray-home-actions"><button id="open-inbox" type="button" onClick={onOpenInbox}>
+          <span className="tray-action-icon"><LockIcon /></span><span><strong>Open Secure Inbox</strong><small>Private messages and files</small></span>{inboxHasNew && <span className="inbox-unread-badge" aria-label="New protected message">•</span>}<span className="tray-action-arrow"><ChevronRightIcon /></span>
+        </button></div>
       </div>
     </div>
-    <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>{messages.signOut}</button></ScreenFooter>
+    <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}{version && <span className="tray-version">· v{version}</span>}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>{messages.signOut}</button></ScreenFooter>
   </main>;
 }

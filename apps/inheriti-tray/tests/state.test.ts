@@ -21,6 +21,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear }),
   createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: mock.openInbox, ackText: mock.ackInbox }),
+  createNodeInboxEventListener: () => vi.fn(),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
   createPlanEditOperations: mock.editOperations,
@@ -44,7 +45,7 @@ describe('TraySession', () => {
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
   });
 
-  it('retains a pending lease for retry and clears it when hidden', async () => {
+  it('retains a pending lease for retry after hiding', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
     const session = new TraySession('local');
@@ -70,7 +71,7 @@ describe('TraySession', () => {
     await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow('inbox_ack_retry_unavailable');
     await session.openInboxText('conversation-1', 'message-1');
     session.hideInboxText();
-    await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow('inbox_ack_retry_unavailable');
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
   });
 
   it.each(['local', 'dev', 'stg', 'prod'] as const)('requests only identity scopes for %s Business sign-in', (deployment) => {

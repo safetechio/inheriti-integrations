@@ -15,6 +15,7 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({
 }));
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
   createPlanEditOperations: () => ({ list: mock.list, context: mock.context, start: mock.start, add: mock.add, listAssets: mock.listAssets, getAsset: mock.getAsset, replace: mock.replace, abort: mock.abort, recover: mock.recover, discard: mock.discard, cancel: mock.cancel, cancelReveal: mock.cancelReveal, discardLocal: mock.discardLocal, clearRevealed: mock.clearRevealed }),
+  createNodePlanEventListener: () => ({ listener: {}, close: vi.fn() }),
 }));
 import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
 

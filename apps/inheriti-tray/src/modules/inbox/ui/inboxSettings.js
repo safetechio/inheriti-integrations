@@ -1,0 +1,2 @@
+export const INBOX_REVEAL_SECONDS = 30;
+export const INBOX_MESSAGE_EXPIRY_DAYS = 7;

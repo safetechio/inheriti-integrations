@@ -9,6 +9,31 @@ const chrome = ['google-chrome', 'chromium'].find((binary) => {
   try { execFileSync('which', [binary]); return true; } catch { return false; }
 });
 
+it.skipIf(!chrome)('opens Secure Inbox from a tray action after sign-in and organization selection', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-inbox-action-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      window.inheritiTray={state:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),
+        onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},
+        onAction:(callback)=>{(window.actions??=[]).push(callback);return()=>{}},signIn:async()=>{},signOut:async()=>{},
+        select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},
+        openApp:async()=>{},version:async()=>'',onInboxStateChanged:()=>()=>{},inboxState:async()=>({status:'error'}),
+        inboxPrepare:async()=>({status:'error'}),inboxCancelPreparation:async()=>{}};
+      setTimeout(()=>window.actions.forEach((action)=>action('Open Secure Inbox')),150);
+      setTimeout(()=>window.stateChanged(base),250);
+      setTimeout(()=>{document.getElementById('root').dataset.beforeSelection=String(!!document.querySelector('.inbox-panel'));const select=document.getElementById('organization');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'org-1');select.dispatchEvent(new Event('change',{bubbles:true}));},350);
+      setTimeout(()=>{document.getElementById('root').dataset.afterSelection=String(!!document.querySelector('.inbox-panel'));},550);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=700', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-before-selection="false"');
+    expect(html).toContain('data-after-selection="true"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('opens private and team capture for their tray actions', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-react-'));
   try {

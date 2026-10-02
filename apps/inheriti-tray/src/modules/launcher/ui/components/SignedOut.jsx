@@ -1,7 +1,9 @@
 import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ExternalLinkIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { useAppVersion } from '../hooks/useAppVersion.js';
 
 export function SignedOut({ messages, status, authorizing, onSignIn, onCancelSignIn, onOpenApp }) {
+  const version = useAppVersion();
   return <main className="tray-screen tray-signed-out">
     <div className="tray-sign-in-center">
       <img src="tray.png" alt="" className="tray-sign-in-logo" />
@@ -11,6 +13,7 @@ export function SignedOut({ messages, status, authorizing, onSignIn, onCancelSig
         {authorizing && <button id="sign-out" className="button-secondary" type="button" onClick={onCancelSignIn}>{messages.cancelSignIn}</button>}
         <span>You'll continue in your browser.</span>
       </div>
+      {version && <small className="tray-version">Version {version}</small>}
     </div>
     <ScreenFooter><button id="app" className="tray-link" type="button" onClick={onOpenApp}>{messages.openApp}<ExternalLinkIcon /></button></ScreenFooter>
   </main>;

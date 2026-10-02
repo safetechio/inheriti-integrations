@@ -17,7 +17,7 @@ export function showLauncher(action?: string): void {
   if (!app.isReady()) return;
   if (!window || window.isDestroyed()) {
     window = new BrowserWindow({
-      width: 380,
+      width: process.platform === 'linux' ? 480 : 380,
       height: 720,
       useContentSize: true,
       show: false,

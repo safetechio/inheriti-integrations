@@ -1,17 +1,25 @@
-export function InboxMemberPicker({ query, setQuery, onSearch, participants, memberId, setMemberId, onCreate, busy }) {
-  return <>
-    <form onSubmit={onSearch}>
-      <label htmlFor="inbox-search">Search members</label>
-      <input id="inbox-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} disabled={!!busy} />
-      <button type="submit" disabled={!!busy}>Search</button>
-    </form>
-    <form onSubmit={onCreate}>
-      <label htmlFor="inbox-member">Start a two-person conversation</label>
-      <select id="inbox-member" value={memberId} onChange={(event) => setMemberId(event.target.value)} disabled={!!busy}>
-        <option value="">Choose a member</option>
-        {participants.map(({ memberId: id, name }) => <option value={id} key={id}>{name}</option>)}
-      </select>
-      <button type="submit" disabled={!memberId || !!busy}>Start conversation</button>
-    </form>
-  </>;
+import { InboxSkeleton } from './InboxSkeleton.jsx';
+import { initials } from '../utils/inboxDisplay.js';
+
+export function InboxMemberPicker({ query, setQuery, onSearch, participants, memberIds, onToggle, onClear, onCreate, busy, searchBusy, names }) {
+  return <div className="inbox-new-screen">
+    <div className="tray-scroll inbox-new-content">
+      <form className="inbox-search" onSubmit={onSearch}><label htmlFor="inbox-search">Search members</label><div className="inbox-search-row"><input id="inbox-search" type="search" placeholder="Search members" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} disabled={!!busy} /><button type="submit" className="button-secondary" disabled={!!busy}>Search</button></div></form>
+      {memberIds.length > 0 && <div className="inbox-picked" aria-label="Selected members">{memberIds.map((id) => <button type="button" key={id} onClick={() => onToggle(id)} aria-label={`Remove ${names[id] || 'member'} from selection`}><span className="inbox-avatar">{initials(names[id] || 'M')}</span>{names[id] || 'Member'} ×</button>)}</div>}
+      <div className="inbox-member-intro">
+        <h2 className="inbox-overline">Members</h2>
+        <p className="inbox-member-hint">Active members appear here once they open Secure Inbox in Inheriti® Tray to register their device key.</p>
+      </div>
+      <div className="inbox-member-list" role="group" aria-label="Members">
+        {searchBusy && <InboxSkeleton label={searchBusy === 'searching' ? 'Searching members…' : 'Loading members…'} kind="members" />}
+        {!searchBusy && participants.length === 0 && <p className="inbox-member-empty">{query.trim() ? 'No ready members match this search.' : 'No members ready yet.'}</p>}
+        {!searchBusy && participants.map(({ memberId, name }) => <label className="inbox-member-row" key={memberId}>
+          <span className="inbox-avatar" aria-hidden="true">{initials(name)}</span><span>{name}</span>
+          <input type="checkbox" checked={memberIds.includes(memberId)} onChange={() => onToggle(memberId)} disabled={!!busy || (memberIds.length >= 49 && !memberIds.includes(memberId))} />
+        </label>)}
+      </div>
+      <p className="inbox-selection-limit">Choose up to 49 members to join you. You are included automatically.</p>
+    </div>
+    <form className="inbox-new-footer" onSubmit={onCreate}><button type="button" className="button-secondary" onClick={onClear} disabled={!!busy || !memberIds.length}>Clear</button><button type="submit" disabled={!!busy || !memberIds.length}>{busy === 'creating' ? 'Starting…' : 'Start conversation'}</button></form>
+  </div>;
 }
