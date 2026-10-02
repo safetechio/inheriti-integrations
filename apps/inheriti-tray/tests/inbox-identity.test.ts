@@ -41,6 +41,55 @@ describe('Tray Inbox identity', () => {
     expect(resolveKey).toHaveBeenCalledTimes(2);
   });
 
+  it('passes matching protected keys only to a validated main-process operation', async () => {
+    let registered: { signingPublicKey: string; encryptionPublicKey: string } | undefined;
+    const fetcher = vi.fn().mockImplementation(async (_url, init: RequestInit) => {
+      if (init.method === 'POST') {
+        registered = JSON.parse(String(init.body));
+        return { ok: true, json: async () => envelope({}) };
+      }
+      return { ok: true, json: async () => envelope(registered ? {
+        id: 'device-1', tenantId: 'org-1', memberId: 'member-1', status: 'ACTIVE',
+        encryptionPublicKey: registered.encryptionPublicKey, signingPublicKey: registered.signingPublicKey,
+        signingKeyFingerprint: (await import('node:crypto')).createHash('sha256').update(Buffer.from(registered.signingPublicKey, 'base64')).digest('hex'),
+      } : null) };
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    expect(await identity.prepare('org-1')).toEqual({ status: 'ready' });
+    const run = vi.fn().mockResolvedValue('done');
+    expect(await identity.withIdentity('org-1', run)).toBe('done');
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'org-1', memberId: 'member-1', deviceId: 'device-1',
+      signingPrivateKey: expect.any(String), encryptionPrivateKey: expect.any(String),
+    }), expect.any(AbortSignal));
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    identity.clear();
+    await expect(identity.withIdentity('org-1', run)).rejects.toThrow('inbox_identity_not_ready');
+  });
+
+  it('drops an operation result after the window hides', async () => {
+    let registered: { signingPublicKey: string; encryptionPublicKey: string } | undefined;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => {
+      if (init.method === 'POST') {
+        registered = JSON.parse(String(init.body));
+        return { ok: true, json: async () => envelope({}) };
+      }
+      return { ok: true, json: async () => envelope(registered ? {
+        id: 'device-1', tenantId: 'org-1', memberId: 'member-1', status: 'ACTIVE',
+        signingKeyFingerprint: (await import('node:crypto')).createHash('sha256').update(Buffer.from(registered.signingPublicKey, 'base64')).digest('hex'),
+      } : null) };
+    }));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    await identity.prepare('org-1');
+    let finish!: (value: string) => void;
+    const pending = identity.withIdentity('org-1', async () => new Promise<string>((resolve) => { finish = resolve; }));
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    identity.cancelOperation();
+    finish('plaintext');
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('refuses an active remote identity without matching local private keys', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => envelope({ status: 'ACTIVE', signingKeyFingerprint: 'other' }) }));
     const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));

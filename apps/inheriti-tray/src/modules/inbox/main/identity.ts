@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import { hostname } from 'node:os';
 import { app } from 'electron';
 import { ProtectedCheckpoint } from '../../launcher/main/protected-checkpoint.js';
+import type { InboxLocalIdentity } from '@safetech/inheriti-elements-core/node';
 
 type StoredIdentity = {
   encryptionPrivateKey: string;
@@ -56,6 +57,7 @@ export class TrayInboxIdentity {
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly resolveOrganizationKey?: (organizationId: string, signal: AbortSignal) => Promise<string>) {}
 
   state(): InboxIdentityState { return this.status; }
+  cancelOperation(): void { if (!this.pending) this.requestAbort?.abort(); }
   clear(): void {
     this.generation += 1;
     this.requestAbort?.abort();
@@ -65,7 +67,34 @@ export class TrayInboxIdentity {
     this.status = { status: 'missing' };
   }
 
+  async withIdentity<T>(organizationId: string, run: (identity: InboxLocalIdentity, signal: AbortSignal) => Promise<T>): Promise<T> {
+    if (this.status.status !== 'ready' || this.pending || this.requestAbort) throw new Error('inbox_identity_not_ready');
+    const abort = new AbortController();
+    this.requestAbort = abort;
+    try {
+      const bearer = await this.token();
+      abort.signal.throwIfAborted();
+      if (!bearer) throw new Error('reauthentication_required');
+      const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(bearer, organizationId));
+      const current = await this.request('GET', 'devices/me', bearer, organizationId, abort.signal);
+      abort.signal.throwIfAborted();
+      this.assertCurrentIdentity(current, identity);
+      const device = current as { id: string; tenantId: string; memberId: string };
+      if (!device.id || !device.tenantId || !device.memberId || !identity) throw new Error('invalid_inbox_identity_response');
+      const result = await run({
+        tenantId: device.tenantId, memberId: device.memberId, deviceId: device.id,
+        encryptionPublicKey: identity.encryptionPublicKey, encryptionPrivateKey: identity.encryptionPrivateKey,
+        signingPublicKey: identity.signingPublicKey, signingPrivateKey: identity.signingPrivateKey,
+      }, abort.signal);
+      abort.signal.throwIfAborted();
+      return result;
+    } finally {
+      if (this.requestAbort === abort) this.requestAbort = undefined;
+    }
+  }
+
   prepare(organizationId: string): Promise<InboxIdentityState> {
+    if (this.requestAbort && !this.pending) throw new Error('inbox_identity_in_progress');
     if (this.pending) {
       if (this.pendingOrganization !== organizationId) throw new Error('inbox_identity_in_progress');
       return this.pending;
@@ -93,19 +122,12 @@ export class TrayInboxIdentity {
       const bearer = await this.token();
       signal.throwIfAborted();
       if (!bearer) throw new Error('reauthentication_required');
-      const { subject, family } = tokenScope(bearer);
-      const device = createHash('sha256').update(hostname()).update(app.getPath('userData')).digest('hex');
-      const path = `inbox/identity/${this.environment}/${family}/${subject}/${organizationId}/${device}`;
+      const path = this.identityPath(bearer, organizationId);
       let identity = this.checkpoint.getItem<StoredIdentity>(path);
       const current = await this.request('GET', 'devices/me', bearer, organizationId, signal);
       signal.throwIfAborted();
       if (current !== null) {
-        if (!current || typeof current !== 'object' || !('status' in current)) throw new Error('invalid_inbox_identity_response');
-        if (current.status === 'REVOKED') throw new Error('inbox_identity_replacement_required');
-        if (current.status !== 'ACTIVE' || !('signingKeyFingerprint' in current)) throw new Error('invalid_inbox_identity_response');
-        if (!identity || current.signingKeyFingerprint !== identity.signingKeyFingerprint
-          || ('encryptionPublicKey' in current && current.encryptionPublicKey !== identity.encryptionPublicKey)
-          || ('signingPublicKey' in current && current.signingPublicKey !== identity.signingPublicKey)) throw new Error('inbox_identity_recovery_required');
+        this.assertCurrentIdentity(current, identity);
         signal.throwIfAborted();
         await this.resolveOrganizationKey?.(organizationId, signal);
         signal.throwIfAborted();
@@ -129,6 +151,21 @@ export class TrayInboxIdentity {
     } catch (error) {
       return this.set({ status: 'error', message: preparationError(error) }, generation);
     }
+  }
+
+  private identityPath(bearer: string, organizationId: string): string {
+    const { subject, family } = tokenScope(bearer);
+    const device = createHash('sha256').update(hostname()).update(app.getPath('userData')).digest('hex');
+    return `inbox/identity/${this.environment}/${family}/${subject}/${organizationId}/${device}`;
+  }
+
+  private assertCurrentIdentity(current: unknown, identity: StoredIdentity | null): void {
+    if (!current || typeof current !== 'object' || !('status' in current)) throw new Error('invalid_inbox_identity_response');
+    if (current.status === 'REVOKED') throw new Error('inbox_identity_replacement_required');
+    if (current.status !== 'ACTIVE' || !('signingKeyFingerprint' in current)) throw new Error('invalid_inbox_identity_response');
+    if (!identity || current.signingKeyFingerprint !== identity.signingKeyFingerprint
+      || ('encryptionPublicKey' in current && current.encryptionPublicKey !== identity.encryptionPublicKey)
+      || ('signingPublicKey' in current && current.signingPublicKey !== identity.signingPublicKey)) throw new Error('inbox_identity_recovery_required');
   }
 
   private set(value: InboxIdentityState, generation: number): InboxIdentityState {

@@ -20,6 +20,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear }),
+  createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: vi.fn() }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
   createPlanEditOperations: mock.editOperations,

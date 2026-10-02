@@ -1,7 +1,7 @@
 import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon } from '../../../_shared/ui/components/Icons.jsx';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, canCreate, canEdit, onCreate, onEdit, inbox, inboxError, onPrepareInbox, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, canCreate, canEdit, onCreate, onEdit, inbox, inboxError, onPrepareInbox, onOpenInbox, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
   return <main className="tray-screen tray-home">
@@ -38,6 +38,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         <h2>Secure Inbox</h2>
         <p role="status">{inbox?.status === 'ready' ? 'This device is ready for Secure Inbox.' : inbox?.status === 'preparing' ? 'Preparing this device…' : inboxError || inbox?.message || 'Prepare this device to use Secure Inbox.'}</p>
         <button type="button" disabled={!selectedId || inbox?.status === 'ready' || inbox?.status === 'preparing'} onClick={onPrepareInbox}>Prepare Secure Inbox</button>
+        <button type="button" disabled={!selectedId || inbox?.status !== 'ready'} onClick={onOpenInbox}>Open Secure Inbox</button>
       </div>
     </div>
     <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>{messages.signOut}</button></ScreenFooter>

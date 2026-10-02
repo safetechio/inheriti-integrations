@@ -63,3 +63,28 @@ it('opens an updated backup plan in Business', async () => {
   await mock.handlers.get('tray:open-app')!(event, 'edited-plan');
   expect(shell.openExternal).toHaveBeenCalledWith('https://business.example/organization/plans/backup/edited-plan');
 });
+
+it('returns Inbox plaintext only through a trusted explicit open', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const openInboxText = vi.fn(async () => ({ text: 'secret', leaseId: 'lease', leaseExpiresAt: 'later' }));
+  registerTrayIpc({ openInboxText } as never, () => ({ webContents }) as never, vi.fn());
+  const open = mock.handlers.get('tray:inbox-open-text')!;
+  expect(() => open({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).toThrow();
+  expect(openInboxText).not.toHaveBeenCalled();
+  expect(await open(event, 'conversation', 'message')).toEqual({ text: 'secret', leaseId: 'lease', leaseExpiresAt: 'later' });
+  expect(openInboxText).toHaveBeenCalledWith('conversation', 'message');
+});
+
+it('passes a bounded Inbox member search to the selected session', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const listInboxParticipants = vi.fn(async () => ({ items: [] }));
+  registerTrayIpc({ listInboxParticipants } as never, () => ({ webContents }) as never, vi.fn());
+  const search = mock.handlers.get('tray:inbox-participants')!;
+  await search(event, 'Ada');
+  expect(listInboxParticipants).toHaveBeenCalledWith({ q: 'Ada' });
+  expect(() => search(event, 'x'.repeat(101))).toThrow('Invalid Secure Inbox search');
+});

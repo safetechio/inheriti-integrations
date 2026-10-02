@@ -1,4 +1,4 @@
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeInbox, createNodeIntegrationCore, createOrganizationKeys, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
 import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
@@ -30,6 +30,8 @@ export type TrayState = {
 export class TraySession {
   private readonly core: NodeIntegrationCore;
   private readonly configuration: NodeIntegrationCoreOptions['configuration'];
+  private readonly inboxApiUrl: string;
+  private readonly inboxEnvironment: 'TEST' | 'LIVE';
   private organizations: BusinessOrganization[] = [];
   private selectedId: string | undefined;
   private accountName: string | undefined;
@@ -50,6 +52,8 @@ export class TraySession {
     const config = BUSINESS_DEPLOYMENTS[deployment];
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
+    this.inboxApiUrl = apiUrl;
+    this.inboxEnvironment = config.environment;
     this.configuration = {
       issuer,
       clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
@@ -164,8 +168,8 @@ export class TraySession {
     try {
       this.quickPlans.assertCanSelectOrganization(id);
       if (this.selectedId !== id) {
-        await this.organizationKeys.clear();
         this.inboxIdentity.clear();
+        await this.organizationKeys.clear();
       }
       await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
@@ -222,7 +226,46 @@ export class TraySession {
     if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
     return this.inboxIdentity.prepare(this.selectedId);
   }
-  clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); }
+  private inbox() {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    return { organizationId: this.selectedId, client: createNodeInbox({
+      apiUrl: this.inboxApiUrl, environment: this.inboxEnvironment, organizationId: this.selectedId,
+      getBearerToken: async () => (await this.core.auth.getAccessToken()) ?? null,
+    }) };
+  }
+  listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) {
+    const { client } = this.inbox();
+    return client.listParticipants(input);
+  }
+  createInboxConversation(participantMemberIds: string[]) {
+    const { client } = this.inbox();
+    return client.createConversation(participantMemberIds);
+  }
+  listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) {
+    const { client } = this.inbox();
+    return client.listConversations(input);
+  }
+  listInboxMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) {
+    const { client } = this.inbox();
+    return client.listMessages(conversationId, input);
+  }
+  sendInboxText(conversationId: string, text: string, expiresAt: string) {
+    const { organizationId, client } = this.inbox();
+    return this.inboxIdentity.withIdentity(organizationId, async (identity, signal) => {
+      const tenantKeyHex = await this.organizationKeys.resolve(organizationId, signal);
+      signal.throwIfAborted();
+      return client.sendText({ conversationId, text, expiresAt, identity, tenantKeyHex });
+    });
+  }
+  openInboxText(conversationId: string, messageId: string) {
+    const { organizationId, client } = this.inbox();
+    return this.inboxIdentity.withIdentity(organizationId, async (identity, signal) => {
+      const tenantKeyHex = await this.organizationKeys.resolve(organizationId, signal);
+      signal.throwIfAborted();
+      return client.openText({ conversationId, messageId, identity, tenantKeyHex });
+    });
+  }
+  clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); this.inboxIdentity.cancelOperation(); }
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inboxIdentity.clear(); void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
@@ -231,13 +274,13 @@ export class TraySession {
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
     this.planEdit.assertIdle();
+    this.inboxIdentity.clear();
     this.authorization?.abort();
     await this.pendingSignIn;
     this.authorization = undefined;
     await this.planEdit.clear();
     await this.core.auth.clear();
     await this.organizationKeys.clear();
-    this.inboxIdentity.clear();
     this.organizations = [];
     this.quickPlans.clear();
     this.selectedId = undefined;

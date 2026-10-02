@@ -161,3 +161,12 @@ body { padding: 0; background: #fff; }
 .tray-account small i { width: 6px; height: 6px; border-radius: 50%; background: #12b76a; }
 .tray-home #sign-out { flex: none; min-height: 0; padding: 6px 10px; color: #475467; border: 0; background: transparent; font-size: 13px; }
 .tray-home #sign-out:hover:not(:disabled) { background: #eaecf0; }
+.inbox-content { display: grid; align-content: start; gap: 12px; padding: 16px; }
+.inbox-content section, .inbox-content form { gap: 8px; }
+.inbox-content h2 { font-size: 16px; }
+.inbox-list { display: grid; gap: 8px; }
+.inbox-list > button { text-align: left; }
+.inbox-list [aria-current="true"] { border-color: var(--primary); background: #edf2ff; }
+.inbox-message { display: grid; gap: 6px; padding: 12px; border: 1px solid #eaecf0; border-radius: var(--radius-s); }
+.inbox-message small { color: var(--gray-text); }
+.inbox-revealed { white-space: pre-wrap; overflow-wrap: anywhere; }
