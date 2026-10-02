@@ -314,13 +314,13 @@ body { padding: 0; background: #fff; }
 .inbox-sealed-copy { margin: 0; color: #667085; font-size: 13px; }.is-own .inbox-sealed-copy { color: #fff; }
 .inbox-reveal { display: grid; gap: 8px; }.inbox-reveal > button { justify-self: start; min-height: 30px; padding: 3px 10px; font-size: 12px; }
 .inbox-revealed { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; animation: inbox-text-reveal .65s ease-out both; }
-.inbox-reveal-progress { display: grid; gap: 10px; min-width: 220px; }
-.inbox-reveal-progress ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.inbox-reveal-progress li { display: flex; align-items: center; gap: 8px; color: #475467; font-size: 12px; line-height: 1.4; animation: inbox-reveal-step 2.4s ease-in-out infinite; }
-.inbox-reveal-progress li:nth-child(2) { animation-delay: .8s; }
-.inbox-reveal-progress li:nth-child(3) { animation-delay: 1.6s; }
-.inbox-reveal-step-mark { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; background: #fff; color: #667085; font-size: 10px; }
-.inbox-reveal-progress li:nth-child(1) .inbox-reveal-step-mark { border-color: #2962ff; }
+.inbox-step-progress { display: grid; gap: 10px; min-width: 220px; }
+.inbox-step-progress ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.inbox-step-progress li { display: flex; align-items: center; gap: 8px; color: #475467; font-size: 12px; line-height: 1.4; animation: inbox-reveal-step 2.4s ease-in-out infinite; }
+.inbox-step-progress li:nth-child(2) { animation-delay: .8s; }
+.inbox-step-progress li:nth-child(3) { animation-delay: 1.6s; }
+.inbox-step-mark { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; background: #fff; color: #667085; font-size: 10px; }
+.inbox-step-progress li:nth-child(1) .inbox-step-mark { border-color: #2962ff; }
 @keyframes inbox-reveal-step { 0%, 100% { opacity: .55; } 30% { opacity: 1; color: #1642ba; } }
 @keyframes inbox-text-reveal { from { filter: blur(7px); opacity: 0; transform: translateY(4px); letter-spacing: .08em; } to { filter: blur(0); opacity: 1; transform: translateY(0); letter-spacing: normal; } }
 .inbox-opening, .inbox-send-status { display: flex; align-items: center; gap: 8px; color: #475467; font-size: 12px; }
@@ -330,6 +330,7 @@ body { padding: 0; background: #fff; }
 .inbox-send-status { flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid #eaecf0; background: #f5f8ff; }
 .inbox-send-status .inbox-link { margin-left: auto; }
 .inbox-send-status .inbox-progress-track { flex-basis: 100%; }
+.inbox-send-status .inbox-step-progress { width: 100%; }
 .inbox-progress-track { display: block; width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: #dbe4ff; }
 .inbox-progress-track > span { display: block; height: 100%; border-radius: inherit; background: #2962ff; transition: width .25s linear; }
 .inbox-progress-track.is-indeterminate > span { width: 35%; animation: inbox-progress 1.3s ease-in-out infinite alternate; }
@@ -352,7 +353,7 @@ body { padding: 0; background: #fff; }
 .inbox-new-button { display: inline-flex; align-items: center; gap: 4px; }
 .inbox-new-button svg { width: 14px; height: 14px; }
 @keyframes inbox-progress { to { transform: translateX(190%); } }
-@media (prefers-reduced-motion: reduce) { .inbox-progress-track > span { transition: none; }.inbox-progress-track.is-indeterminate > span { animation: none; width: 100%; }.inbox-reveal-progress li, .inbox-revealed { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .inbox-progress-track > span { transition: none; }.inbox-progress-track.is-indeterminate > span { animation: none; width: 100%; }.inbox-step-progress li, .inbox-revealed { animation: none; } }
 .inbox-ack-pending { margin: 0; padding: 6px 8px; border-radius: 6px; color: #8c5100; background: #fff4d6; font-size: 12px; }
 .inbox-reveal-confirm { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe4ff; border-radius: 8px; background: #fff; }
 .inbox-reveal-confirm p { margin: 0; color: #475467; font-size: 12px; }.inbox-reveal-confirm > div { display: flex; gap: 8px; }.inbox-reveal-confirm button { flex: 1; min-height: 30px; padding: 3px 8px; font-size: 12px; }

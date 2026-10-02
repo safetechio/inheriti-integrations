@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { getInboxMessageState, useInboxMessageState } from '../hooks/useInboxMessageState.js';
 import { InboxSkeleton } from './InboxSkeleton.jsx';
 import { InboxRevealProgress } from './InboxRevealProgress.jsx';
+import { InboxProgressSteps } from './InboxProgressSteps.jsx';
 import { INBOX_MESSAGE_EXPIRY_DAYS, INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
+
+const sendSteps = ['Checking members', 'Sealing on this device', 'Sending protected message'];
 
 function MessageCard({ message, name, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onHide, onRetryAck, onCancelTransfer }) {
   const [confirm, setConfirm] = useState(false);
@@ -44,24 +47,39 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
 }
 
 export function InboxMessageList({ conversationId, messages, names, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile, onSend, onSendFile, onCancelTransfer, transfer, draft, setDraft, busy }) {
+  const scroll = useRef(null);
+  const previous = useRef({ conversationId: '', newestMessageId: '' });
+  const newestMessageId = messages[0]?.id || '';
+  useLayoutEffect(() => {
+    const panel = scroll.current;
+    if (!panel || !newestMessageId) {
+      previous.current = { conversationId, newestMessageId };
+      return;
+    }
+    const smooth = previous.current.conversationId === conversationId && previous.current.newestMessageId &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    panel.scrollTo({ top: panel.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+    previous.current = { conversationId, newestMessageId };
+  }, [conversationId, newestMessageId]);
   const unread = messages.filter((message) => getInboxMessageState(message, message.senderMemberId === ownMemberId).kind === 'unread').length;
   const shareProgress = transfer && (transfer.stage === 'UPLOADING' || transfer.stage === 'DOWNLOADING');
   const transferLabel = transfer?.stage === 'UPLOADING' ? 'Uploading encrypted shares' : transfer?.stage === 'DOWNLOADING' ? 'Downloading encrypted shares'
     : transfer?.stage === 'SPLITTING' ? 'Sealing file on this device' : transfer?.stage === 'RECONSTRUCTING' ? 'Opening file on this device'
       : busy === 'sending-file' ? 'Preparing protected file' : 'Opening protected file';
   return <section className="inbox-thread">
-    <div className="tray-scroll inbox-thread-scroll">
+    <div ref={scroll} className="tray-scroll inbox-thread-scroll">
       <div className="inbox-thread-notice"><LockIcon /><span>Messages are encrypted on your device. Each member can reveal a message once, then it’s gone.</span></div>
       <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
       {busy === 'loading' && <InboxSkeleton label="Loading messages…" kind="messages" />}
       {busy !== 'loading' && !messages.length && <p className="inbox-empty">No protected messages yet. Send the first one below.</p>}
-      {messages.map((message) => <MessageCard key={message.id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} />)}
+      {messages.toReversed().map((message) => <MessageCard key={message.id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} />)}
     </div>
-    {(busy === 'sending' || (busy === 'sending-file' && transfer)) && <div className="inbox-send-status" role="status">
+    {busy === 'sending' && <div className="inbox-send-status"><InboxProgressSteps label="Sending protected message" steps={sendSteps} /></div>}
+    {busy === 'sending-file' && transfer && <div className="inbox-send-status" role="status">
       <span className="inbox-setup-spinner" aria-hidden="true" />
-      <span>{busy === 'sending' ? 'Sealing and sending message…' : `${transferLabel}${shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}`}</span>
-      {busy === 'sending-file' && <button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel</button>}
-      {busy === 'sending-file' && <span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span>}
+      <span>{transferLabel}{shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}</span>
+      <button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel</button>
+      <span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span>
     </div>}
     <form className="inbox-thread-composer" onSubmit={onSend}>
       <label htmlFor="inbox-draft" className="sr-only">Write a protected message</label>
