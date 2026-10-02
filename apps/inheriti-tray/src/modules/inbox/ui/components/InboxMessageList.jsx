@@ -54,10 +54,15 @@ export function InboxMessageList({ conversationId, messages, names, ownMemberId,
       <div className="inbox-thread-notice"><LockIcon /><span>Messages are encrypted on your device. Each member can reveal a message once, then it’s gone.</span></div>
       <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
       {busy === 'loading' && <InboxSkeleton label="Loading messages…" kind="messages" />}
-      {!busy && !messages.length && <p className="inbox-empty">No protected messages yet. Send the first one below.</p>}
+      {busy !== 'loading' && !messages.length && <p className="inbox-empty">No protected messages yet. Send the first one below.</p>}
       {messages.map((message) => <MessageCard key={message.id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} />)}
-      {(busy === 'sending' || busy === 'sending-file') && <div className="inbox-thread-message is-own inbox-pending-message" role="status"><div className="inbox-thread-message-content"><small>You · now</small><div className="inbox-message-bubble"><span>{busy === 'sending' ? 'Sealing and sending message…' : 'Protecting file…'}</span>{busy === 'sending-file' && <><span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span><small>{transferLabel}{shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}</small></>}</div>{busy === 'sending-file' && <button type="button" className="inbox-pending-cancel" onClick={onCancelTransfer}>Cancel transfer</button>}</div></div>}
     </div>
+    {(busy === 'sending' || (busy === 'sending-file' && transfer)) && <div className="inbox-send-status" role="status">
+      <span className="inbox-setup-spinner" aria-hidden="true" />
+      <span>{busy === 'sending' ? 'Sealing and sending message…' : `${transferLabel}${shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}`}</span>
+      {busy === 'sending-file' && <button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel</button>}
+      {busy === 'sending-file' && <span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span>}
+    </div>}
     <form className="inbox-thread-composer" onSubmit={onSend}>
       <label htmlFor="inbox-draft" className="sr-only">Write a protected message</label>
       <div><button type="button" className="button-secondary inbox-attach" aria-label="Attach a file up to 10 MB" title="Attach a file up to 10 MB" disabled={!!busy} onClick={onSendFile}><PlusIcon /></button><textarea id="inbox-draft" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10000} rows={2} placeholder="Write a protected message" disabled={!!busy} /><button type="submit" disabled={!draft.trim() || !!busy}>Send</button></div>

@@ -304,12 +304,6 @@ body { padding: 0; background: #fff; }
 .inbox-thread-message-content { min-width: 0; display: grid; gap: 4px; }
 .inbox-thread-message-content > small { color: #667085; font-size: 11px; }
 .is-own .inbox-thread-message-content { justify-items: end; }
-.inbox-pending-message .inbox-message-bubble { min-width: 196px; }
-.inbox-pending-message .inbox-message-bubble > span:first-child { font-size: 13px; }
-.inbox-pending-message .inbox-message-bubble > small { color: #dbe4ff; font-size: 11px; }
-.inbox-pending-message .inbox-progress-track { background: rgba(255,255,255,.28); }
-.inbox-pending-message .inbox-progress-track > span { background: #fff; }
-.inbox-pending-cancel { padding: 0; border: 0; background: transparent; color: #1642ba; font-size: 11px; }
 .inbox-message-bubble { position: relative; overflow: hidden; display: grid; gap: 10px; padding: 12px; border: 1px solid #dbe4ff; border-radius: 12px 12px 12px 4px; background: #fff; }
 .is-opening .inbox-message-bubble { background: #f5f8ff; }
 .is-own .inbox-message-bubble { border-color: #2962ff; border-radius: 12px 12px 4px 12px; background: #2962ff; color: #fff; }
@@ -333,7 +327,9 @@ body { padding: 0; background: #fff; }
 .inbox-opening { display: grid; grid-template-columns: 16px 1fr; align-items: center; }
 .inbox-opening .inbox-progress-track { grid-column: 1 / -1; }
 .inbox-opening small, .inbox-opening button { grid-column: 2; justify-self: start; }
-.inbox-send-status { padding: 8px 14px; border-top: 1px solid #eaecf0; background: #f5f8ff; }
+.inbox-send-status { flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid #eaecf0; background: #f5f8ff; }
+.inbox-send-status .inbox-link { margin-left: auto; }
+.inbox-send-status .inbox-progress-track { flex-basis: 100%; }
 .inbox-progress-track { display: block; width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: #dbe4ff; }
 .inbox-progress-track > span { display: block; height: 100%; border-radius: inherit; background: #2962ff; transition: width .25s linear; }
 .inbox-progress-track.is-indeterminate > span { width: 35%; animation: inbox-progress 1.3s ease-in-out infinite alternate; }

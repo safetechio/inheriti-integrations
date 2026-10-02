@@ -24,10 +24,16 @@ it('does not offer the sender a one-time reveal and shows real recipient status'
 });
 
 it('shows live transfer progress and a pending read without plaintext', () => {
+  const choosing = render({ busy: 'sending-file', transfer: null });
+  expect(choosing).not.toContain('inbox-send-status');
+  expect(choosing).not.toContain('You · now');
+
   const transfer = render({ busy: 'sending-file', transfer: { stage: 'UPLOADING', completed: 2, total: 4 } });
   expect(transfer).toContain('Uploading encrypted shares');
   expect(transfer).toContain('2 of 4 shares');
+  expect(transfer).toContain('inbox-send-status');
   expect(transfer).toContain('width:50%');
+  expect(transfer).not.toContain('You · now');
 
   const pending = render({ messages: [{ id: 'message', senderMemberId: 'other', status: 'AVAILABLE',
     recipientStatus: 'LEASED', contentKind: 'TEXT', createdAt: new Date().toISOString(),

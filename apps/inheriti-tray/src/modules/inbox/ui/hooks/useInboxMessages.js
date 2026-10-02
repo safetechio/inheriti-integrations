@@ -96,8 +96,10 @@ export function useInboxMessages(onClose) {
       if (generation.current !== current) return;
       setDraft('');
       await refresh();
-    } catch {
-      if (generation.current === current) setError('Could not send the message. Your text is still here.');
+    } catch (failure) {
+      if (generation.current === current) setError(String(failure).includes('INBOX_UNAVAILABLE')
+        ? 'This organization needs two active message storage locations before you can send. Ask an owner or manager to add one. Your text is still here.'
+        : 'Could not send the message. Your text is still here.');
     } finally {
       if (generation.current === current) setBusy('');
     }
@@ -115,7 +117,9 @@ export function useInboxMessages(onClose) {
       if (generation.current !== current || result?.cancelled) return;
       await refresh();
     } catch (failure) {
-      if (generation.current === current && !String(failure).includes('AbortError')) setError('Could not send the file. Check the 10 MB limit and try again.');
+      if (generation.current === current && !String(failure).includes('AbortError')) setError(String(failure).includes('INBOX_UNAVAILABLE')
+        ? 'This organization needs two active message storage locations before you can send. Ask an owner or manager to add one.'
+        : 'Could not send the file. Check the 10 MB limit and try again.');
     } finally {
       if (generation.current === current) { setBusy(''); setTransfer(null); }
     }
