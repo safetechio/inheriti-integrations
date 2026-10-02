@@ -15,11 +15,12 @@ export function useInboxMessages(onClose, expiresInDays) {
       setRevealed(null);
       onClose();
     });
-    return () => { generation.current++; stop(); };
+    return () => { generation.current++; stop(); void window.inheritiTray.inboxHideText(); };
   }, [onClose]);
 
   async function select(id) {
     const current = ++generation.current;
+    void window.inheritiTray.inboxHideText();
     setConversationId(id);
     setRevealed(null);
     setItems([]);
@@ -61,8 +62,10 @@ export function useInboxMessages(onClose, expiresInDays) {
     setError('');
     setBusy('opening');
     try {
+      await window.inheritiTray.inboxHideText();
+      if (generation.current !== current) return;
       const result = await window.inheritiTray.inboxOpenText(conversationId, messageId);
-      if (generation.current === current) setRevealed({ messageId, text: result.text });
+      if (generation.current === current) setRevealed({ messageId, text: result.text, acknowledgement: result.acknowledgement });
     } catch {
       if (generation.current === current) setError('Could not open the message. Try again.');
     } finally {
@@ -70,5 +73,25 @@ export function useInboxMessages(onClose, expiresInDays) {
     }
   }
 
-  return { conversationId, items, draft, setDraft, revealed, setRevealed, busy, error, select, send, view };
+  async function retryAck() {
+    if (!revealed || revealed.acknowledgement !== 'PENDING' || busy) return;
+    const current = generation.current;
+    setBusy('acknowledging');
+    setError('');
+    try {
+      const result = await window.inheritiTray.inboxRetryAck(conversationId, revealed.messageId);
+      if (generation.current === current) setRevealed({ messageId: revealed.messageId, text: revealed.text, acknowledgement: result.acknowledgement });
+    } catch {
+      if (generation.current === current) {
+        setRevealed(null);
+        setError('Could not confirm this read. Open the message again if it is still available.');
+      }
+    } finally {
+      if (generation.current === current) setBusy('');
+    }
+  }
+
+  function hide() { setRevealed(null); void window.inheritiTray.inboxHideText(); }
+
+  return { conversationId, items, draft, setDraft, revealed, busy, error, select, send, view, retryAck, hide };
 }

@@ -88,3 +88,19 @@ it('passes a bounded Inbox member search to the selected session', async () => {
   expect(listInboxParticipants).toHaveBeenCalledWith({ q: 'Ada' });
   expect(() => search(event, 'x'.repeat(101))).toThrow('Invalid Secure Inbox search');
 });
+
+it('retries a pending Inbox ACK only for a trusted renderer', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const retryInboxAck = vi.fn(async () => ({ acknowledgement: 'PENDING' }));
+  const hideInboxText = vi.fn();
+  registerTrayIpc({ retryInboxAck, hideInboxText } as never, () => ({ webContents }) as never, vi.fn());
+  const retry = mock.handlers.get('tray:inbox-retry-ack')!;
+  expect(() => retry({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).toThrow();
+  await expect(retry(event, 'conversation', 'message')).resolves.toEqual({ acknowledgement: 'PENDING' });
+  expect(retryInboxAck).toHaveBeenCalledWith('conversation', 'message');
+  expect(() => retry(event, '', 'message')).toThrow('Invalid Secure Inbox identifier');
+  await mock.handlers.get('tray:inbox-hide-text')!(event);
+  expect(hideInboxText).toHaveBeenCalledOnce();
+});

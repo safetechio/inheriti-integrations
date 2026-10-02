@@ -24,7 +24,7 @@ export function InboxPanel({ onClose }) {
         busy={inbox.busy} onRefresh={inbox.conversations.refresh} onSelect={inbox.messages.select} />
       {inbox.messages.conversationId && <InboxMessageList conversationId={inbox.messages.conversationId}
         messages={inbox.messages.items} names={inbox.participants.names} revealed={inbox.messages.revealed}
-        onHide={() => inbox.messages.setRevealed(null)} onRefresh={inbox.messages.select} onView={inbox.messages.view}
+        onHide={inbox.messages.hide} onRetryAck={inbox.messages.retryAck} onRefresh={inbox.messages.select} onView={inbox.messages.view}
         onSend={inbox.messages.send} draft={inbox.messages.draft} setDraft={inbox.messages.setDraft} busy={inbox.busy}
         expiresInDays={expiresInDays} />}
     </div>

@@ -108,7 +108,9 @@ export function createNodeInbox(options: {
     listConversations: (input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxConversations(input, signal),
     listMessages: (conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMessages(conversationId, input, signal),
     sendText: (input: { conversationId: string; text: string; expiresAt: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.send(input),
-    openText: (input: { conversationId: string; messageId: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.open(input),
+    openText: (input: { conversationId: string; messageId: string; identity: InboxLocalIdentity; tenantKeyHex: string; signal?: AbortSignal }) => text.open(input),
+    ackText: (input: { conversationId: string; messageId: string; deviceId: string; leaseId: string; signal?: AbortSignal }) =>
+      text.ack(input.conversationId, input.messageId, input.deviceId, input.leaseId, input.signal),
   };
 }
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node';

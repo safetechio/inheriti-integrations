@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -20,7 +20,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear }),
-  createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: vi.fn() }),
+  createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: mock.openInbox, ackText: mock.ackInbox }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
   createPlanEditOperations: mock.editOperations,
@@ -42,6 +42,35 @@ describe('TraySession', () => {
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
     mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+
+  it('retains a pending lease for retry and clears it when hidden', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    const session = new TraySession('local');
+    await session.restore();
+    const identity = { tenantId: 'org-1', memberId: 'member-1', deviceId: 'device-1',
+      encryptionPublicKey: '', encryptionPrivateKey: '', signingPublicKey: '', signingPrivateKey: '' };
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    mock.openInbox.mockResolvedValue({ text: 'secret', leaseId: 'lease-1',
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), acknowledgement: 'PENDING' });
+    mock.ackInbox.mockResolvedValue('ACKNOWLEDGED');
+    await expect(session.openInboxText('conversation-1', 'message-1')).resolves.toMatchObject({ acknowledgement: 'PENDING' });
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
+    expect(mock.ackInbox).toHaveBeenCalledWith(expect.objectContaining({ leaseId: 'lease-1', deviceId: 'device-1' }));
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow('inbox_ack_retry_unavailable');
+    await session.openInboxText('conversation-1', 'message-1');
+    mock.ackInbox.mockRejectedValueOnce(new Error('inbox_identity_http_503'));
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'PENDING' });
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
+    await session.openInboxText('conversation-1', 'message-1');
+    mock.ackInbox.mockRejectedValueOnce(Object.assign(new Error('request_failed'), { status: 403 }));
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow();
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow('inbox_ack_retry_unavailable');
+    await session.openInboxText('conversation-1', 'message-1');
+    session.hideInboxText();
+    await expect(session.retryInboxAck('conversation-1', 'message-1')).rejects.toThrow('inbox_ack_retry_unavailable');
   });
 
   it.each(['local', 'dev', 'stg', 'prod'] as const)('requests only identity scopes for %s Business sign-in', (deployment) => {

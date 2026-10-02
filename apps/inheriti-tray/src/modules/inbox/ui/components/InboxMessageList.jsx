@@ -1,4 +1,4 @@
-export function InboxMessageList({ conversationId, messages, names, revealed, onHide, onRefresh, onView, onSend, draft, setDraft, busy, expiresInDays }) {
+export function InboxMessageList({ conversationId, messages, names, revealed, onHide, onRetryAck, onRefresh, onView, onSend, draft, setDraft, busy, expiresInDays }) {
   const nameFor = (id) => names[id] || id;
   return <section>
     <h2>Messages</h2>
@@ -8,8 +8,11 @@ export function InboxMessageList({ conversationId, messages, names, revealed, on
       <p>Protected message from {nameFor(message.senderMemberId)}</p>
       <small>{new Date(message.createdAt).toLocaleString()} · {message.status}</small>
       {revealed?.messageId === message.id
-        ? <><p className="inbox-revealed">{revealed.text}</p><button type="button" className="button-secondary" onClick={onHide}>Hide</button></>
-        : <button type="button" className="button-secondary" disabled={!!busy || message.status !== 'AVAILABLE'} onClick={() => onView(message.id)}>View</button>}
+        ? <><p className="inbox-revealed">{revealed.text}</p>
+          {revealed.acknowledgement === 'PENDING' && <p role="status">Read acknowledgement pending. Keep this window open and retry.</p>}
+          {revealed.acknowledgement === 'PENDING' && <button type="button" className="button-secondary" disabled={!!busy} onClick={onRetryAck}>Retry acknowledgement</button>}
+          <button type="button" className="button-secondary" onClick={onHide}>Hide</button></>
+        : <button type="button" className="button-secondary" disabled={!!busy || message.status !== 'AVAILABLE'} onClick={() => onView(message.id)}>{message.status === 'DELETING' ? 'Deleting' : 'View'}</button>}
     </article>)}</div>
     <form onSubmit={onSend}>
       <label htmlFor="inbox-draft">Message</label>

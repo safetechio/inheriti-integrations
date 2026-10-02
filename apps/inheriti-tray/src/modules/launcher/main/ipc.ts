@@ -2,7 +2,8 @@ import { ipcMain, shell } from 'electron';
 import type { BrowserWindow } from 'electron';
 import type { TraySession } from './state.js';
 import { trayMessages as messages } from '../../../messages.js';
-import { parseQuickPlanInput } from '../../quick-plan/main/quick-plan-input.js';
+import { registerQuickPlanIpc } from '../../quick-plan/main/ipc.js';
+import { registerInboxIpc } from '../../inbox/main/ipc.js';
 
 export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
@@ -10,7 +11,6 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
-  ipcMain.handle('tray:inbox-state', (event) => { trusted(event); return session.inboxState(); });
   ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
     trusted(event);
     session.selectCustodianDevice(value);
@@ -31,112 +31,8 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); publishInbox?.(); return session.state(); });
-  ipcMain.handle('tray:inbox-prepare', async (event) => {
-    trusted(event);
-    const pending = session.prepareInbox();
-    publishInbox?.();
-    const result = await pending;
-    publishInbox?.();
-    return result;
-  });
-  const inboxId = (value: unknown) => {
-    if (typeof value !== 'string' || !value || value.length > 200) throw new Error('Invalid Secure Inbox identifier');
-    return value;
-  };
-  ipcMain.handle('tray:inbox-participants', (event, query: unknown) => {
-    trusted(event);
-    if (query !== undefined && (typeof query !== 'string' || query.length > 100)) throw new Error('Invalid Secure Inbox search');
-    return session.listInboxParticipants(query ? { q: query } : undefined);
-  });
-  ipcMain.handle('tray:inbox-create-conversation', (event, memberId: unknown) => {
-    trusted(event);
-    return session.createInboxConversation([inboxId(memberId)]);
-  });
-  ipcMain.handle('tray:inbox-conversations', (event) => { trusted(event); return session.listInboxConversations(); });
-  ipcMain.handle('tray:inbox-messages', (event, conversationId: unknown) => {
-    trusted(event);
-    return session.listInboxMessages(inboxId(conversationId));
-  });
-  ipcMain.handle('tray:inbox-send-text', (event, conversationId: unknown, content: unknown, expiresAt: unknown) => {
-    trusted(event);
-    if (typeof content !== 'string' || !content.trim() || content.length > 10000 || typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt))) throw new Error('Invalid Secure Inbox message');
-    return session.sendInboxText(inboxId(conversationId), content, expiresAt);
-  });
-  ipcMain.handle('tray:inbox-open-text', (event, conversationId: unknown, messageId: unknown) => {
-    trusted(event);
-    return session.openInboxText(inboxId(conversationId), inboxId(messageId));
-  });
-  ipcMain.handle('tray:create-quick-plan', async (event, input: unknown) => {
-    trusted(event);
-    await session.createQuickPlan(parseQuickPlanInput(input), publish);
-    const state = session.state();
-    if (state.creation?.status === 'ready') notify?.(messages.planProtectedNotification);
-    return state;
-  });
-  ipcMain.handle('tray:abandon-creation', (event) => {
-    trusted(event);
-    session.abandonCreation();
-    publish();
-    return session.state();
-  });
-  ipcMain.handle('tray:cancel-key-request', (event) => {
-    trusted(event);
-    session.cancelKeyRequest();
-    return session.state();
-  });
-  ipcMain.handle('tray:editable-plans', async (event) => {
-    trusted(event);
-    await session.loadEditablePlans(publish);
-    return session.state();
-  });
-  ipcMain.handle('tray:add-plan-asset', async (event, planId: unknown, input: unknown) => {
-    trusted(event);
-    if (typeof planId !== 'string' || !planId || planId.length > 200) throw new Error('Invalid plan');
-    const asset = parseQuickPlanInput({ title: 'Added asset', asset: input }).asset;
-    await session.addPlanAsset(planId, asset, publish);
-    const state = session.state();
-    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
-    return state;
-  });
-  ipcMain.handle('tray:list-plan-assets', async (event, planId: unknown) => {
-    trusted(event);
-    if (typeof planId !== 'string' || !planId || planId.length > 200) throw new Error('Invalid plan');
-    await session.listPlanAssets(planId, publish);
-    return session.state();
-  });
-  ipcMain.handle('tray:get-plan-asset', async (event, planId: unknown, assetId: unknown) => {
-    trusted(event);
-    if (typeof planId !== 'string' || !planId || planId.length > 200 || typeof assetId !== 'string' || !assetId || assetId.length > 200) throw new Error(messages.invalidAsset);
-    return session.getPlanAsset(planId, assetId);
-  });
-  ipcMain.handle('tray:replace-plan-asset', async (event, planId: unknown, assetId: unknown, input: unknown) => {
-    trusted(event);
-    if (typeof planId !== 'string' || !planId || planId.length > 200 || typeof assetId !== 'string' || !assetId || assetId.length > 200) throw new Error(messages.invalidAsset);
-    const asset = parseQuickPlanInput({ title: 'Edited asset', asset: input }).asset;
-    await session.replacePlanAsset(planId, assetId, asset, publish);
-    const state = session.state();
-    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
-    return state;
-  });
-  ipcMain.handle('tray:discard-plan-edit', async (event) => {
-    trusted(event);
-    await session.discardPlanEdit();
-    publish();
-    return session.state();
-  });
-  ipcMain.handle('tray:cancel-plan-edit', async (event) => {
-    trusted(event);
-    await session.cancelPlanEdit();
-    publish();
-    return session.state();
-  });
-  ipcMain.handle('tray:recover-plan-edit', async (event) => {
-    trusted(event);
-    await session.recoverPlanEdit(publish);
-    const state = session.state();
-    if (state.edit.status === 'updated') notify?.(messages.planUpdatedNotification);
-    return state;
-  });
+  registerInboxIpc(session, trusted, publishInbox);
+  registerQuickPlanIpc(session, trusted, publish, notify);
   ipcMain.handle('tray:open-app', (event, planId?: unknown) => {
     trusted(event);
     if (!appUrl) throw new Error(messages.appUrlNotConfigured);
