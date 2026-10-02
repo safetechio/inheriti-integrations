@@ -117,7 +117,7 @@ function callbackPage(failure: string | null): string {
   const signedIn = failure === null;
   const resources = new URL(import.meta.url.endsWith('/main.js') ? './' : '../', import.meta.url);
   const font = readFileSync(new URL('assets/font-app.ttf', resources)).toString('base64');
-  const logo = readFileSync(new URL('assets/inheriti-business-logo.png', resources)).toString('base64');
+  const logo = readFileSync(new URL('assets/tray.png', resources)).toString('base64');
   return readFileSync(new URL('templates/login-callback.html', resources), 'utf8')
     .replace('{{font}}', font)
     .replace('{{logo}}', logo)

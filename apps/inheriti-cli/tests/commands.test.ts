@@ -166,7 +166,7 @@ describe('login', () => {
       const html = await callback.text();
       expect(html).toContain('font-family: AppFont');
       expect(html).toContain('--primary: #2962ff');
-      expect(html).toContain('Inheriti® Business');
+      expect(html).toContain('Inheriti® CLI');
 
       await expect(signingIn).resolves.toBe(0);
       expect(completed).toContain('code=authorization-code');

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{heading}} · Inheriti® Business</title>
+    <title>{{heading}} · Inheriti® CLI</title>
     <style>
       @font-face {
         font-family: AppFont;
@@ -46,13 +46,15 @@
       .brand {
         display: flex;
         align-items: center;
+        gap: 12px;
         padding: 24px 32px;
         border-bottom: 1px solid var(--line);
       }
       .brand img {
         display: block;
-        width: 180px;
-        height: auto;
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
       }
       .content {
         padding: 32px;
@@ -92,7 +94,8 @@
   <body>
     <main class="card">
       <header class="brand">
-        <img src="data:image/png;base64,{{logo}}" alt="Inheriti® Business" />
+        <img src="data:image/png;base64,{{logo}}" alt="" />
+        <span>Inheriti® CLI</span>
       </header>
       <div class="content">
         <p class="eyebrow">{{statusLabel}}</p>
