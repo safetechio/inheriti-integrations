@@ -14,7 +14,7 @@ const artifactsDirectory = process.argv.find((argument) => argument.startsWith('
 const stage = await mkdtemp(join(tmpdir(), 'inheriti-tray-'));
 await cp(resolve(root, 'dist'), resolve(stage, 'dist'), { recursive: true });
 await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
-  name: 'inheriti-tray', version, type: 'module', main: 'dist/main.js', desktopName: 'inheriti-tray',
+  name: 'inheriti-go', version, type: 'module', main: 'dist/main.js', desktopName: 'inheriti-go',
 }, null, 2)}\n`);
 const platform = process.argv.find((argument) => /^--(?:linux|mac|win)$/u.test(argument)) ??
   ({ linux: '--linux', darwin: '--mac', win32: '--win' })[process.platform];

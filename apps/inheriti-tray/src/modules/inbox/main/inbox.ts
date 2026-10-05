@@ -1,4 +1,4 @@
-import { createNodeInbox, createNodeInboxEventListener } from '@safetech/inheriti-elements-core/node';
+import { createNodeInbox, createNodeInboxEventListener, suggestInboxTextAsset } from '@safetech/inheriti-elements-core/node';
 import { dialog } from 'electron';
 import { open, readFile, stat, unlink } from 'node:fs/promises';
 import { extname, basename } from 'node:path';
@@ -23,6 +23,7 @@ export class TrayInbox {
   private readonly read: InboxReadAck;
   private stopSignals: (() => void) | undefined;
   private transfer: AbortController | undefined;
+  private cachedClient: { organizationId: string; client: ReturnType<typeof createNodeInbox> } | undefined;
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE',
     private readonly token: () => Promise<string | undefined>,
@@ -37,8 +38,9 @@ export class TrayInbox {
   state(): InboxIdentityState { return this.identity.state(); }
   registeredMemberId(): Promise<string | undefined> { return this.identity.registeredMemberId(this.selectedOrganization()); }
   prepare(): Promise<InboxIdentityState> { return this.identity.prepare(this.selectedOrganization()); }
+  replace(): Promise<InboxIdentityState> { return this.identity.replace(this.selectedOrganization()); }
   cancelPreparation(): void { this.identity.cancelPreparation(); }
-  clear(): void { this.cancelTransfer(); this.stopSignals?.(); this.stopSignals = undefined; this.read.clear(); this.identity.clear(); }
+  clear(): void { this.cancelTransfer(); this.stopSignals?.(); this.stopSignals = undefined; this.read.clear(); this.identity.clear(); this.cachedClient = undefined; }
   hide(): void { this.cancelTransfer(); this.identity.cancelOperation(); }
   cancelTransfer(): void { this.transfer?.abort(); }
 
@@ -57,7 +59,7 @@ export class TrayInbox {
 
   private async saveOpenedFile(file: { name: string; mimeType: string; bytes: Uint8Array }, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
-    const selected = await dialog.showSaveDialog({ title: 'Save Secure Inbox file', defaultPath: file.name });
+    const selected = await dialog.showSaveDialog({ title: 'Save Secure Chat file', defaultPath: file.name });
     if (selected.canceled || !selected.filePath) throw new Error('inbox_file_save_cancelled');
     signal.throwIfAborted();
     const destination = await open(selected.filePath, 'wx');
@@ -68,10 +70,12 @@ export class TrayInbox {
 
   private client() {
     const organizationId = this.selectedOrganization();
-    return { organizationId, client: createNodeInbox({
+    if (this.cachedClient?.organizationId === organizationId) return this.cachedClient;
+    this.cachedClient = { organizationId, client: createNodeInbox({
       apiUrl: this.apiUrl, environment: this.environment, organizationId,
       getBearerToken: async () => (await this.token()) ?? null,
     }) };
+    return this.cachedClient;
   }
 
   listParticipants(input?: { q?: string; limit?: number; offset?: number }) {
@@ -106,6 +110,78 @@ export class TrayInbox {
   listMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) {
     return this.client().client.listMessages(conversationId, input);
   }
+  async clearHistory(conversationId: string) {
+    const { organizationId, client } = this.client();
+    const result = await this.identity.withIdentity(organizationId, (_identity, signal) =>
+      client.clearHistory(conversationId, signal));
+    this.read.clear();
+    this.identity.cancelOperation();
+    return result;
+  }
+  prepareNormal(conversationId: string) { return this.client().client.prepareNormal(conversationId); }
+  listNormalMetadata(conversationId: string) { return this.client().client.listNormal(conversationId, { limit: 25 }); }
+  listParents(conversationId: string) {
+    const { organizationId, client } = this.client();
+    return this.identity.withIdentity(organizationId, async (identity, signal) => {
+      const page = await client.listParents(conversationId, { limit: 25 }, signal);
+      const items = await Promise.all(page.items.map(async (message: {
+        parentId: string; sequence: number; mode: string; status: string; senderMemberId: string;
+        senderDeviceId: string; participantRevision: number; createdAt: string;
+      }) => {
+        const opened = await client.openParent({ conversationId, parentId: message.parentId, identity, signal });
+        return { parentId: message.parentId, sequence: message.sequence, mode: message.mode, status: message.status,
+          senderMemberId: message.senderMemberId, senderDeviceId: message.senderDeviceId,
+          participantRevision: message.participantRevision, createdAt: message.createdAt,
+          segments: opened.segments };
+      }));
+      signal.throwIfAborted();
+      const newestNormal = items.filter((item) => item.mode !== 'PROTECTED')
+        .reduce((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, undefined as typeof items[number] | undefined);
+      const read = newestNormal ? await client.markNormalRead({ conversationId, parentId: newestNormal.parentId, identity, signal }).catch(() => null) : null;
+      const unreadCount = read ? (await client.listParents(conversationId, { limit: 25 }, signal)).unreadCount : page.unreadCount;
+      return { items, total: page.total, unreadCount };
+    });
+  }
+  sendParent(conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>) {
+    const { organizationId, client } = this.client();
+    return this.identity.withIdentity(organizationId, async (identity, signal) => {
+      const tenantKeyHex = segments.some((segment) => 'protectedText' in segment)
+        ? await this.resolveKey(organizationId, signal) : undefined;
+      signal.throwIfAborted();
+      return client.sendParent({ conversationId, parentId, segments, identity, tenantKeyHex, signal });
+    });
+  }
+  async revealUnit(conversationId: string, parentId: string, unitId: string) {
+    const opened = await this.read.openUnit(conversationId, parentId, unitId);
+    return { text: opened.text, leaseId: opened.leaseId, leaseExpiresAt: opened.leaseExpiresAt,
+      acknowledgement: opened.acknowledgement, suggestion: suggestInboxTextAsset(opened.text) };
+  }
+  listNormal(conversationId: string) {
+    const { organizationId, client } = this.client();
+    return this.identity.withIdentity(organizationId, async (identity, signal) => {
+      // Reads are limited to 25 individual decryptions until paginated history is available.
+      const page = await client.listNormal(conversationId, { limit: 25 }, signal);
+      const items = await Promise.all(page.items.map(async (message: {
+        parentId: string; sequence: number; senderMemberId: string; senderDeviceId: string;
+        participantRevision: number; createdAt: string;
+      }) => {
+        const opened = await client.openNormal({ conversationId, parentId: message.parentId, identity, signal });
+        return { parentId: message.parentId, sequence: message.sequence, senderMemberId: message.senderMemberId,
+          senderDeviceId: message.senderDeviceId, participantRevision: message.participantRevision,
+          createdAt: message.createdAt, text: opened.text };
+      }));
+      signal.throwIfAborted();
+      const read = items.length ? await client.markNormalRead({ conversationId, parentId: items[0].parentId, identity, signal }).catch(() => null) : null;
+      return { items, total: page.total, limit: page.limit, offset: page.offset,
+        unreadCount: read ? 0 : page.unreadCount,
+        readThroughSequence: read?.readThroughSequence ?? page.readThroughSequence };
+    });
+  }
+  sendNormal(conversationId: string, parentId: string, text: string) {
+    const { organizationId, client } = this.client();
+    return this.identity.withIdentity(organizationId, (identity) =>
+      client.sendNormal({ conversationId, parentId, text, identity }));
+  }
   sendText(conversationId: string, text: string, expiresAt: string) {
     const { organizationId, client } = this.client();
     return this.identity.withIdentity(organizationId, async (identity, signal) => {
@@ -119,7 +195,7 @@ export class TrayInbox {
     let bytes: Buffer | undefined;
     try {
       const { organizationId, client } = this.client();
-      const selected = await dialog.showOpenDialog({ properties: ['openFile'], title: 'Choose a file for Secure Inbox' });
+      const selected = await dialog.showOpenDialog({ properties: ['openFile'], title: 'Choose a file for Secure Chat' });
       operation.signal.throwIfAborted();
       if (this.selectedOrganization() !== organizationId) throw new Error('inbox_organization_changed');
       if (selected.canceled || !selected.filePaths[0]) return { cancelled: true };
@@ -157,6 +233,10 @@ export class TrayInbox {
       return result.opened;
     } finally { this.transfer = undefined; }
   }
-  openText(conversationId: string, messageId: string) { return this.read.open(conversationId, messageId); }
+  async openText(conversationId: string, messageId: string) {
+    const opened = await this.read.open(conversationId, messageId);
+    return { text: opened.text, leaseId: opened.leaseId, leaseExpiresAt: opened.leaseExpiresAt,
+      acknowledgement: opened.acknowledgement, suggestion: suggestInboxTextAsset(opened.text) };
+  }
   retryAck(conversationId: string, messageId: string) { return this.read.retry(conversationId, messageId); }
 }

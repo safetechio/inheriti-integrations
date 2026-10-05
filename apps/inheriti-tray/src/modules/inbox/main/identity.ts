@@ -11,8 +11,9 @@ type StoredIdentity = {
   signingPublicKey: string;
   signingKeyFingerprint: string;
 };
+type StagedReplacement = { identity: StoredIdentity; expectedSigningFingerprint: string };
 
-export type InboxIdentityState = { status: 'unavailable' | 'ready' | 'missing' | 'preparing' | 'error'; message?: string; memberId?: string };
+export type InboxIdentityState = { status: 'unavailable' | 'ready' | 'missing' | 'preparing' | 'replacement_required' | 'error'; message?: string; memberId?: string };
 
 function tokenScope(token: string): { subject: string; family: string } {
   const segment = token.split('.')[1];
@@ -42,9 +43,10 @@ function preparationError(error: unknown): string {
   if (error instanceof Error && error.name === 'MasterKeyRequired')
     return 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.';
   switch (error instanceof Error ? error.message : '') {
-    case 'inbox_identity_replacement_required': return 'This Inbox identity was revoked. Replace it to use Secure Inbox on this device.';
-    case 'inbox_identity_recovery_required': return 'This account has an Inbox identity on another device or session. Recovery is required.';
-    default: return 'Could not prepare Secure Inbox. Sign in and try again.';
+    case 'inbox_identity_replacement_required': return 'This Secure Chat device was revoked. Replace it to continue.';
+    case 'inbox_identity_recovery_required': return 'This account has a Secure Chat device with different keys. Replace it to continue.';
+    case 'inbox_identity_changed': return 'The current Secure Chat device changed. Check the account before trying again.';
+    default: return 'Could not prepare Secure Chat. Sign in and try again.';
   }
 }
 
@@ -55,6 +57,8 @@ export class TrayInboxIdentity {
   private pendingOrganization: string | undefined;
   private requestAbort: AbortController | undefined;
   private generation = 0;
+  private operationTail: Promise<void> = Promise.resolve();
+  private operationOrganization: string | undefined;
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly resolveOrganizationKey?: (organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly onStateChange?: () => void) {}
 
@@ -73,13 +77,15 @@ export class TrayInboxIdentity {
       throw new Error('invalid_inbox_identity_response');
     return current.memberId;
   }
-  cancelOperation(): void { if (!this.pending) this.requestAbort?.abort(); }
+  cancelOperation(): void { if (!this.pending) { this.generation += 1; this.requestAbort?.abort(); } }
   clear(): void {
     this.generation += 1;
     this.requestAbort?.abort();
     this.requestAbort = undefined;
     this.pending = undefined;
     this.pendingOrganization = undefined;
+    this.operationTail = Promise.resolve();
+    this.operationOrganization = undefined;
     this.status = { status: 'missing' };
   }
 
@@ -95,13 +101,34 @@ export class TrayInboxIdentity {
   }
 
   async withIdentity<T>(organizationId: string, run: (identity: InboxLocalIdentity, signal: AbortSignal) => Promise<T>): Promise<T> {
-    if (this.status.status !== 'ready' || this.pending || this.requestAbort) throw new Error('inbox_identity_not_ready');
+    if (this.status.status !== 'ready' || this.pending || (this.operationOrganization && this.operationOrganization !== organizationId))
+      throw new Error('inbox_identity_not_ready');
+    const generation = this.generation;
+    const queued = this.operationOrganization !== undefined;
+    const bearerAtEnqueue = this.token();
+    void bearerAtEnqueue.catch(() => {});
+    const previous = this.operationTail;
+    let release!: () => void;
+    const slot = new Promise<void>((resolve) => { release = resolve; });
+    this.operationTail = slot;
+    this.operationOrganization = organizationId;
+    await previous;
     const abort = new AbortController();
-    this.requestAbort = abort;
     try {
-      const bearer = await this.token();
+      if (generation !== this.generation || this.status.status !== 'ready' || this.pending) throw new Error('inbox_identity_not_ready');
+      this.requestAbort = abort;
+      const originalBearer = await bearerAtEnqueue;
+      abort.signal.throwIfAborted();
+      if (!originalBearer) throw new Error('reauthentication_required');
+      const bearer = queued ? await this.token() : originalBearer;
       abort.signal.throwIfAborted();
       if (!bearer) throw new Error('reauthentication_required');
+      if (queued) {
+        const originalScope = tokenScope(originalBearer);
+        const currentScope = tokenScope(bearer);
+        if (originalScope.subject !== currentScope.subject || originalScope.family !== currentScope.family)
+          throw new Error('inbox_identity_not_ready');
+      }
       const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(bearer, organizationId));
       const current = await this.request('GET', 'devices/me', bearer, organizationId, abort.signal);
       abort.signal.throwIfAborted();
@@ -117,10 +144,18 @@ export class TrayInboxIdentity {
       return result;
     } finally {
       if (this.requestAbort === abort) this.requestAbort = undefined;
+      if (this.operationTail === slot) this.operationOrganization = undefined;
+      release();
     }
   }
 
-  prepare(organizationId: string): Promise<InboxIdentityState> {
+  prepare(organizationId: string): Promise<InboxIdentityState> { return this.start(organizationId, false); }
+  replace(organizationId: string): Promise<InboxIdentityState> {
+    if (this.status.status !== 'replacement_required') throw new Error('inbox_replacement_not_required');
+    return this.start(organizationId, true);
+  }
+
+  private start(organizationId: string, replace: boolean): Promise<InboxIdentityState> {
     if (this.requestAbort && !this.pending) throw new Error('inbox_identity_in_progress');
     if (this.pending) {
       if (this.pendingOrganization !== organizationId) throw new Error('inbox_identity_in_progress');
@@ -131,7 +166,7 @@ export class TrayInboxIdentity {
     this.requestAbort = abort;
     this.pendingOrganization = organizationId;
     this.set({ status: 'preparing', message: 'Securing this device…' }, generation);
-    const pending = this.runPrepare(organizationId, generation, abort.signal);
+    const pending = this.runPrepare(organizationId, generation, abort.signal, replace);
     const tracked = pending.finally(() => {
       if (this.pending === tracked) {
         this.pending = undefined;
@@ -143,8 +178,9 @@ export class TrayInboxIdentity {
     return this.pending;
   }
 
-  private async runPrepare(organizationId: string, generation: number, signal: AbortSignal): Promise<InboxIdentityState> {
+  private async runPrepare(organizationId: string, generation: number, signal: AbortSignal, replace: boolean): Promise<InboxIdentityState> {
     if (!this.checkpoint.isAvailable()) return this.set({ status: 'unavailable', message: 'Secure local storage is unavailable.' }, generation);
+    let replacementCompleted = false;
     try {
       const bearer = await this.token();
       signal.throwIfAborted();
@@ -153,6 +189,51 @@ export class TrayInboxIdentity {
       let identity = this.checkpoint.getItem<StoredIdentity>(path);
       const current = await this.request('GET', 'devices/me', bearer, organizationId, signal);
       signal.throwIfAborted();
+      const stagedPath = `${path}/replacement`;
+      const staged = this.checkpoint.getItem<StagedReplacement>(stagedPath);
+      const replacementRegistered = staged && current && typeof current === 'object' && 'status' in current && current.status === 'ACTIVE'
+        && 'signingKeyFingerprint' in current && staged.identity.signingKeyFingerprint === current.signingKeyFingerprint
+        && (!('encryptionPublicKey' in current) || current.encryptionPublicKey === staged.identity.encryptionPublicKey)
+        && (!('signingPublicKey' in current) || current.signingPublicKey === staged.identity.signingPublicKey);
+      if (replacementRegistered && staged) {
+        this.checkpoint.setItem(path, staged.identity);
+        this.checkpoint.removeItem(stagedPath);
+        identity = staged.identity;
+        replacementCompleted = true;
+      }
+      if (replace && replacementRegistered && staged) {
+        if (!('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId) throw new Error('invalid_inbox_identity_response');
+        await this.requestOrganizationKey(organizationId, generation, signal);
+        signal.throwIfAborted();
+        return this.set({ status: 'ready', memberId: current.memberId }, generation);
+      }
+      if (replace) {
+        if (!current || typeof current !== 'object' || !('status' in current) || !('signingKeyFingerprint' in current)
+          || typeof current.signingKeyFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(current.signingKeyFingerprint))
+          throw new Error('invalid_inbox_identity_response');
+        if (current.status !== 'ACTIVE' && current.status !== 'REVOKED') throw new Error('invalid_inbox_identity_response');
+        if (staged && staged.expectedSigningFingerprint !== current.signingKeyFingerprint) throw new Error('inbox_identity_changed');
+        if (!staged && current.status === 'ACTIVE') {
+          try { this.assertCurrentIdentity(current, identity); throw new Error('inbox_replacement_not_required'); }
+          catch (error) { if (!(error instanceof Error) || error.message !== 'inbox_identity_recovery_required') throw error; }
+        }
+        const replacement = staged ?? { identity: generateIdentity(), expectedSigningFingerprint: current.signingKeyFingerprint };
+        if (!staged) this.checkpoint.setItem(stagedPath, replacement);
+        const registered = await this.request('POST', 'devices/replace', bearer, organizationId, signal, {
+          expectedSigningFingerprint: replacement.expectedSigningFingerprint,
+          encryptionPublicKey: replacement.identity.encryptionPublicKey,
+          signingPublicKey: replacement.identity.signingPublicKey,
+        });
+        if (!registered || typeof registered !== 'object' || !('memberId' in registered) || typeof registered.memberId !== 'string' || !registered.memberId)
+          throw new Error('invalid_inbox_identity_response');
+        signal.throwIfAborted();
+        this.checkpoint.setItem(path, replacement.identity);
+        this.checkpoint.removeItem(stagedPath);
+        replacementCompleted = true;
+        await this.requestOrganizationKey(organizationId, generation, signal);
+        signal.throwIfAborted();
+        return this.set({ status: 'ready', memberId: registered.memberId }, generation);
+      }
       if (current !== null) {
         this.assertCurrentIdentity(current, identity);
         if (!current || typeof current !== 'object' || !('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId) throw new Error('invalid_inbox_identity_response');
@@ -178,7 +259,9 @@ export class TrayInboxIdentity {
       signal.throwIfAborted();
       return this.set({ status: 'ready', memberId: registered.memberId }, generation);
     } catch (error) {
-      return this.set({ status: 'error', message: preparationError(error) }, generation);
+      const reason = error instanceof Error ? error.message : '';
+      const replacementRequired = (replace && !replacementCompleted) || reason === 'inbox_identity_replacement_required' || reason === 'inbox_identity_recovery_required';
+      return this.set({ status: replacementRequired ? 'replacement_required' : 'error', message: preparationError(error) }, generation);
     }
   }
 

@@ -47,7 +47,7 @@ it('hides and reloads the launcher on lock and suspend while clearing session da
   mock.watchLinuxLock.mockReturnValue(mock.stopLinuxLock);
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(mock.powerEvents.size).toBe(2));
-  expect(mock.setAppUserModelId).toHaveBeenCalledWith('com.safetech.inheriti.tray.dev');
+  expect(mock.setAppUserModelId).toHaveBeenCalledWith('com.safetech.inheriti.go.dev');
   mock.powerEvents.get('lock-screen')?.();
   mock.powerEvents.get('suspend')?.();
   expect(mock.clearOnLock).toHaveBeenCalledTimes(2);
@@ -68,9 +68,24 @@ it('notifies once for an unread message from another member while hidden', async
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE' });
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE' });
   await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
-  expect(mock.showNotification).toHaveBeenCalledWith({ title: expect.any(String), body: 'A protected message is ready in Secure Inbox.' });
+  expect(mock.showNotification).toHaveBeenCalledWith({ title: expect.any(String), body: 'A new message is ready in Secure Chat.' });
   expect(mock.send).toHaveBeenCalledWith('tray:inbox-changed', { kind: 'NEW_MESSAGE' });
   expect(listInboxMessages).toHaveBeenCalledOnce();
+});
+
+it('notifies for an unread normal parent without opening its ciphertext', async () => {
+  const setInboxPublisher = vi.fn();
+  const listNormalInboxMetadata = vi.fn(async () => ({ items: [{ parentId: 'parent-1', senderMemberId: 'other', sequence: 3 }],
+    readThroughSequence: 1 }));
+  const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    listInboxMessages: vi.fn(async () => ({ items: [] })), listNormalInboxMetadata };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ conversationId: 'conversation-1', messageId: 'parent-1', status: 'AVAILABLE' });
+  await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
+  expect(listNormalInboxMetadata).toHaveBeenCalledWith('conversation-1');
+  expect(mock.showNotification).toHaveBeenCalledWith({ title: expect.any(String), body: 'A new message is ready in Secure Chat.' });
 });
 
 it('does not notify for a message sent by the signed-in member', async () => {

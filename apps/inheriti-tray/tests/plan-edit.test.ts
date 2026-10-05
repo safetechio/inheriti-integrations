@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mock.available = true;
   mock.values.clear();
-  mock.list.mockResolvedValue({ items: [{ id: 'plan-1', name: 'One', status: 'PROTECTED' }], nextCursor: null });
+  mock.list.mockResolvedValue({ items: [{ id: 'plan-1', name: 'One', status: 'PROTECTED', assetSummary: { count: 1, types: ['PLAIN-TEXT'], names: ['Note'] } }], nextCursor: null });
   mock.context.mockResolvedValue({ idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, masterKeyEncrypted: false });
   mock.start.mockResolvedValue({ id: 'edit-1' });
   mock.add.mockResolvedValue({ status: 'UPDATED' });
@@ -297,7 +297,7 @@ describe('TrayPlanEdit', () => {
     const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
-    expect(edit.state().plans).toEqual([{ id: 'plan-1', name: 'One' }]);
+    expect(edit.state().plans).toEqual([{ id: 'plan-1', name: 'One', assetCount: 1, assetNames: ['Note'] }]);
     mock.start.mockRejectedValueOnce(new Error('network'));
     await edit.add('plan-1', asset, () => {});
     await edit.add('plan-1', asset, () => {});
@@ -333,8 +333,8 @@ describe('TrayPlanEdit', () => {
 
   it('releases the first plan session before listing assets for another plan', async () => {
     mock.list.mockResolvedValueOnce({ items: [
-      { id: 'plan-1', name: 'One', status: 'PROTECTED' },
-      { id: 'plan-2', name: 'Two', status: 'PROTECTED' },
+      { id: 'plan-1', name: 'One', status: 'PROTECTED', assetSummary: { count: 1, types: ['PLAIN-TEXT'], names: ['Note'] } },
+      { id: 'plan-2', name: 'Two', status: 'PROTECTED', assetSummary: { count: 1, types: ['PLAIN-TEXT'], names: ['Note'] } },
     ], nextCursor: null });
     const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
     await edit.selectOrganization('org-1');

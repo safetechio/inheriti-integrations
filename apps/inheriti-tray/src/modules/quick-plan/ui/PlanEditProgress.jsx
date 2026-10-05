@@ -53,7 +53,7 @@ export function PlanEditProgress({ messages, edit, busy, onRetry }) {
     : [...preparation];
   if (!revealing && ['loading_context', 'opening_edit', 'checking_edit', 'opening_plan'].includes(edit.phase)) visible.push('opening');
   if (visible.length === 0) {
-    const title = messages.editSteps[edit.phase] || messages.loadingPlans;
+    const title = messages.editSteps[edit.phase] || messages.editSteps.opening_edit;
     return <ProgressSteps label={messages.editAccessProgress} steps={[{ id: 'opening', title, description: active ? '' : edit.message, status: active ? 'current' : 'failed' }]} retry={edit.status === 'error' && edit.canDiscard ? onRetry : undefined} retryLabel={retryLabel} />;
   }
   const reported = edit.keyStatus ? 'key' : accessGroups[edit.phase] || (visible.includes('opening') ? 'opening' : undefined);

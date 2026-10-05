@@ -16,10 +16,11 @@ export function prepareToQuit(): void {
 export function showLauncher(action?: string): void {
   if (!app.isReady()) return;
   if (!window || window.isDestroyed()) {
+    const linuxWindow = process.platform === 'linux';
     window = new BrowserWindow({
-      width: process.platform === 'linux' ? 480 : 380,
-      height: 720,
-      useContentSize: true,
+      width: linuxWindow ? 448 : 404,
+      height: linuxWindow ? 756 : 676,
+      useContentSize: !linuxWindow,
       show: false,
       resizable: false,
       maximizable: false,

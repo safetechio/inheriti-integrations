@@ -1,14 +1,25 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { InboxComposer } from './InboxComposer.jsx';
+import { InboxParentMessage } from './InboxParentMessage.jsx';
 import { getInboxMessageState, useInboxMessageState } from '../hooks/useInboxMessageState.js';
 import { InboxSkeleton } from './InboxSkeleton.jsx';
 import { InboxRevealProgress } from './InboxRevealProgress.jsx';
 import { InboxProgressSteps } from './InboxProgressSteps.jsx';
-import { INBOX_MESSAGE_EXPIRY_DAYS, INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
+import { INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
 
 const sendSteps = ['Checking members', 'Sealing on this device', 'Sending protected message'];
 
-function MessageCard({ message, name, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onHide, onRetryAck, onCancelTransfer }) {
+function NormalMessageCard({ message, name, own }) {
+  const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return <article className={`inbox-thread-message ${own ? 'is-own' : ''}`}>
+    {!own && <span className="inbox-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
+    <div className="inbox-thread-message-content"><small>{own ? 'You' : name} · {time}</small>
+      <div className="inbox-message-bubble"><div className="inbox-message-heading"><span className="inbox-parent-pill">Normal</span><small>Message</small></div>
+        <p className="inbox-revealed">{message.text}</p></div></div>
+  </article>;
+}
+
+function MessageCard({ message, name, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
   const [confirm, setConfirm] = useState(false);
   const state = useInboxMessageState(message, own);
   const isFile = message.contentKind === 'FILE';
@@ -19,7 +30,7 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
     : hasOpenedContent ? { kind: 'revealed', label: isFile ? 'Saved' : 'Revealed' } : state;
   const action = isFile ? onSaveFile : onView;
   const label = isFile ? 'Save file once' : 'View once';
-  const time = new Date(message.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+  const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return <article className={`inbox-thread-message ${own ? 'is-own' : ''} ${opening ? 'is-opening' : ''}`}>
     {!own && <span className="inbox-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
     <div className="inbox-thread-message-content"><small>{own ? 'You' : name} · {time}</small>
@@ -28,6 +39,7 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
         {visible ? <div className="inbox-reveal">
           {revealed.fileName && <p className="inbox-revealed">Saved {revealed.fileName} to your chosen location.</p>}
           {revealed.text && <><p className="inbox-revealed">{revealed.text}</p><div className="inbox-reveal-timer" role="timer" aria-label={`Message hides in ${revealSeconds} ${revealSeconds === 1 ? 'second' : 'seconds'}`}><span className="inbox-progress-track"><span style={{ width: `${revealSeconds / INBOX_REVEAL_SECONDS * 100}%` }} /></span><span>Hides in {revealSeconds}s</span></div></>}
+          {revealed.text && revealed.suggestion && onCreatePlanFromSecret && <button type="button" className="button-secondary" onClick={() => { onCreatePlanFromSecret(revealed.suggestion); onHide(); }}>Create plan from secret</button>}
           {!revealed.text && !revealed.fileName && <p className="inbox-sealed-copy">Message hidden. Confirm the read to finish.</p>}
           {revealed.acknowledgement === 'PENDING' && <><p className="inbox-ack-pending" role="status">Read acknowledgement pending. Keep this window open and retry.</p><button type="button" className="button-secondary" disabled={!!busy} onClick={onRetryAck}>Retry acknowledgement</button></>}
           {(revealed.text || revealed.fileName) && <button type="button" className="button-secondary" onClick={onHide}>Hide now</button>}</div>
@@ -46,10 +58,18 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
   </article>;
 }
 
-export function InboxMessageList({ conversationId, messages, names, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile, onSend, onSendFile, onCancelTransfer, transfer, draft, setDraft, busy }) {
+export function InboxMessageList({ conversationId, messages, normalMessages = [], normalUnreadCount = 0, parentMessages = [], parentUnreadCount = 0, unitReveals,
+  mode = 'PROTECTED', setMode = () => {}, marks = [], onMark = () => {}, onUnmark = () => {},
+  names, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile,
+  onSend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, transfer, draft, setDraft, sendError, busy }) {
   const scroll = useRef(null);
   const previous = useRef({ conversationId: '', newestMessageId: '' });
-  const newestMessageId = messages[0]?.id || '';
+  const parentIds = new Set(parentMessages.map(message => message.parentId));
+  const ordered = messages.map(message => ({ kind: 'PROTECTED', id: message.id, message }))
+    .concat(normalMessages.filter(message => !parentIds.has(message.parentId)).map(message => ({ kind: 'NORMAL', id: message.parentId, message })))
+    .concat(parentMessages.map(message => ({ kind: 'PARENT', id: message.parentId, message })))
+    .sort((a, b) => new Date(a.message.createdAt) - new Date(b.message.createdAt) || a.id.localeCompare(b.id));
+  const newestMessageId = ordered.at(-1)?.id || '';
   useLayoutEffect(() => {
     const panel = scroll.current;
     if (!panel || !newestMessageId) {
@@ -61,30 +81,32 @@ export function InboxMessageList({ conversationId, messages, names, ownMemberId,
     panel.scrollTo({ top: panel.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
     previous.current = { conversationId, newestMessageId };
   }, [conversationId, newestMessageId]);
-  const unread = messages.filter((message) => getInboxMessageState(message, message.senderMemberId === ownMemberId).kind === 'unread').length;
+  const unread = parentUnreadCount + normalUnreadCount + messages.filter((message) => getInboxMessageState(message, message.senderMemberId === ownMemberId).kind === 'unread').length;
   const shareProgress = transfer && (transfer.stage === 'UPLOADING' || transfer.stage === 'DOWNLOADING');
   const transferLabel = transfer?.stage === 'UPLOADING' ? 'Uploading encrypted shares' : transfer?.stage === 'DOWNLOADING' ? 'Downloading encrypted shares'
     : transfer?.stage === 'SPLITTING' ? 'Sealing file on this device' : transfer?.stage === 'RECONSTRUCTING' ? 'Opening file on this device'
       : busy === 'sending-file' ? 'Preparing protected file' : 'Opening protected file';
   return <section className="inbox-thread">
+    <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
     <div ref={scroll} className="tray-scroll inbox-thread-scroll">
-      <div className="inbox-thread-notice"><LockIcon /><span>Messages are encrypted on your device. Each member can reveal a message once, then it’s gone.</span></div>
-      <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
       {busy === 'loading' && <InboxSkeleton label="Loading messages…" kind="messages" />}
-      {busy !== 'loading' && !messages.length && <p className="inbox-empty">No protected messages yet. Send the first one below.</p>}
-      {messages.toReversed().map((message) => <MessageCard key={message.id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} />)}
+      {busy !== 'loading' && !ordered.length && <p className="inbox-empty">No messages yet. Send the first one below.</p>}
+      {ordered.map(({ kind, id, message }) => kind === 'PARENT'
+        ? <InboxParentMessage key={id} message={message} name={names[message.senderMemberId] || 'Member'} own={message.senderMemberId === ownMemberId}
+            units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''}
+            summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} />
+        : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} own={message.senderMemberId === ownMemberId} />
+        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
     </div>
     {busy === 'sending' && <div className="inbox-send-status"><InboxProgressSteps label="Sending protected message" steps={sendSteps} /></div>}
+    {busy === 'sending-normal' && <div className="inbox-send-status" role="status">Sending encrypted message…</div>}
     {busy === 'sending-file' && transfer && <div className="inbox-send-status" role="status">
       <span className="inbox-setup-spinner" aria-hidden="true" />
       <span>{transferLabel}{shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}</span>
       <button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel</button>
       <span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span>
     </div>}
-    <form className="inbox-thread-composer" onSubmit={onSend}>
-      <label htmlFor="inbox-draft" className="sr-only">Write a protected message</label>
-      <div><button type="button" className="button-secondary inbox-attach" aria-label="Attach a file up to 10 MB" title="Attach a file up to 10 MB" disabled={!!busy} onClick={onSendFile}><PlusIcon /></button><textarea id="inbox-draft" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10000} rows={2} placeholder="Write a protected message" disabled={!!busy} /><button type="submit" disabled={!draft.trim() || !!busy}>Send</button></div>
-      <small>Each member can reveal once. Unopened messages and files expire in {INBOX_MESSAGE_EXPIRY_DAYS} {INBOX_MESSAGE_EXPIRY_DAYS === 1 ? 'day' : 'days'}.</small>
-    </form>
+    <InboxComposer mode={mode} setMode={setMode} draft={draft} setDraft={setDraft} marks={marks} onMark={onMark} onUnmark={onUnmark} sendError={sendError}
+      onSend={onSend} onSendFile={onSendFile} onCreatePlanFromSecret={onCreatePlanFromSecret} busy={busy} />
   </section>;
 }

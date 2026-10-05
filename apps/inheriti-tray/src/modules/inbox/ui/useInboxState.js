@@ -7,7 +7,12 @@ export function useInboxState(autoPrepare = false) {
   const prepare = useCallback(async () => {
     setError('');
     try { setState(await window.inheritiTray.inboxPrepare()); }
-    catch { setError('Could not prepare Secure Inbox. Sign in and try again.'); }
+    catch { setError('Could not prepare Secure Chat. Sign in and try again.'); }
+  }, []);
+  const replace = useCallback(async () => {
+    setError('');
+    try { setState(await window.inheritiTray.inboxReplaceDevice()); }
+    catch { setError('Could not replace this Secure Chat device. Try again.'); }
   }, []);
 
   useEffect(() => {
@@ -15,9 +20,9 @@ export function useInboxState(autoPrepare = false) {
     void window.inheritiTray.inboxState().then((current) => {
       setState(current);
       if (autoPrepare && current.status !== 'ready') void prepare();
-    }).catch(() => setError('Could not load Secure Inbox status.'));
+    }).catch(() => setError('Could not load Secure Chat status.'));
     return stop;
   }, [autoPrepare, prepare]);
 
-  return { state, error, prepare };
+  return { state, error, prepare, replace };
 }

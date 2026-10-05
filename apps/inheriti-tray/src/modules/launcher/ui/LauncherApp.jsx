@@ -33,7 +33,13 @@ export function LauncherApp({ messages }) {
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
     canHandleAction: !editFlow.editing,
     onEditAction: () => { if (state?.edit?.available && !editFlow.busy) void editFlow.open(); },
+    onReturnToInbox: () => setInboxOpen(true),
   });
+  const createPlanFromSecret = (suggestion) => {
+    if (!flow.openInboxSuggestion(suggestion)) return;
+    setInboxOpen(false);
+    setInboxHasNew(false);
+  };
 
   if (!state) {
     return <main className="tray-screen"><p id="status" role="status">{session.error}</p></main>;
@@ -53,7 +59,8 @@ export function LauncherApp({ messages }) {
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
-  if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox} organizationSelected={!!state.selectedId} />;
+  if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
+    organizationSelected={!!state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
@@ -83,9 +90,10 @@ export function LauncherApp({ messages }) {
       onCancelRequest={() => void flow.cancelKeyRequest()}
     />}
     {flow.step === 'ready' && <ReadyPlan
-      messages={messages} state={state} readySummary={flow.readySummary} onOpenApp={() => void session.openApp(state.creation?.planId)}
+      messages={messages} state={state} readySummary={flow.readySummary} returnToInbox={flow.fromInbox}
+      onOpenApp={() => void session.openApp(state.creation?.planId)}
       onNew={() => { flow.clearDraft(); flow.openCapture(); }}
-      onHome={flow.clearDraft}
+      onHome={() => flow.clearDraft(true)}
     />}
   </main>;
 }

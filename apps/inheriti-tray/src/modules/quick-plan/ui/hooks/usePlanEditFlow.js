@@ -6,12 +6,14 @@ import { usePlanEditForm } from './usePlanEditForm.js';
 export function usePlanEditFlow({ state, setState, messages }) {
   const [editing, setEditing] = useState(false);
   const [planId, setPlanId] = useState('');
+  const [stage, setStage] = useState('pick');
   const [action, setAction] = useState('');
   const [assetId, setAssetId] = useState('');
   const [query, setQuery] = useState('');
   const { form, setForm, resetForm, loadAsset } = usePlanEditForm();
   const [busy, setBusy] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const generation = useRef(0);
   const loadedPlanId = useRef('');
@@ -20,6 +22,7 @@ export function usePlanEditFlow({ state, setState, messages }) {
   session.current = { status: state?.status, organizationId: state?.selectedId };
 
   function close() {
+    setConfirmation('');
     generation.current += 1;
     loadedPlanId.current = '';
     activeOrganization.current = null;
@@ -27,6 +30,7 @@ export function usePlanEditFlow({ state, setState, messages }) {
     setAssetId('');
     setAction('');
     setPlanId('');
+    setStage('pick');
     setQuery('');
     setError('');
     setBusy(false);
@@ -37,6 +41,7 @@ export function usePlanEditFlow({ state, setState, messages }) {
     generation.current += 1;
     loadedPlanId.current = '';
     setEditing(false);
+    setStage('pick');
     setAssetId('');
     setQuery('');
     setAction('');
@@ -48,12 +53,17 @@ export function usePlanEditFlow({ state, setState, messages }) {
     if (activeOrganization.current && (state?.status !== 'signed-in' || state?.selectedId !== activeOrganization.current)) close();
   }, [state?.status, state?.selectedId]);
 
+  useEffect(() => {
+    if ((confirmation === 'cancel' || confirmation === 'back') && (state?.edit?.status !== 'loading' || !busy)) setConfirmation('');
+  }, [confirmation, state?.edit?.status, busy]);
+
   async function open() {
     const currentGeneration = ++generation.current;
     loadedPlanId.current = '';
     activeOrganization.current = state?.selectedId;
     setEditing(true);
     setPlanId('');
+    setStage('pick');
     setAction('');
     setAssetId('');
     resetForm();
@@ -61,14 +71,17 @@ export function usePlanEditFlow({ state, setState, messages }) {
     setError('');
     try {
       const next = await window.inheritiTray.editablePlans();
-      if (currentGeneration === generation.current) setState(next);
+      if (currentGeneration === generation.current) {
+        setState(next);
+        if (next.edit?.status === 'recovery-required' || next.edit?.status === 'error') setStage('access');
+      }
     } catch { if (currentGeneration === generation.current) setError(messages.editUnavailable); }
-    finally { setBusy(false); }
+    finally { if (currentGeneration === generation.current) setBusy(false); }
   }
 
   async function submit(event) {
     event.preventDefault();
-    if (!planId || busy) return;
+    if (!planId || busy || canceling) return;
     setBusy(true);
     setError('');
     try {
@@ -84,25 +97,17 @@ export function usePlanEditFlow({ state, setState, messages }) {
   }
 
   async function chooseAction(next, selectedPlanId = planId) {
-    if (busy) return;
+    if (busy || canceling) return;
     const currentGeneration = ++generation.current;
     setAction(next);
     setAssetId('');
     resetForm();
     setError('');
     if (!selectedPlanId) return;
-    const changingPlan = state.edit?.planId && state.edit.planId !== selectedPlanId;
-    const needsAssets = next === 'replace' && (changingPlan || loadedPlanId.current !== selectedPlanId);
-    if (!changingPlan && !needsAssets) return;
+    const needsAssets = next === 'replace' && loadedPlanId.current !== selectedPlanId;
+    if (!needsAssets) return;
     setBusy(true);
     try {
-      if (changingPlan) {
-        loadedPlanId.current = '';
-        const cleared = await window.inheritiTray.discardPlanEdit();
-        if (currentGeneration !== generation.current) return;
-        setState(cleared);
-      }
-      if (!needsAssets) return;
       const nextState = await window.inheritiTray.listPlanAssets(selectedPlanId);
       if (currentGeneration === generation.current) {
         if (nextState.edit?.status === 'idle' && nextState.edit.planId === selectedPlanId) loadedPlanId.current = selectedPlanId;
@@ -112,7 +117,27 @@ export function usePlanEditFlow({ state, setState, messages }) {
     finally { if (currentGeneration === generation.current) setBusy(false); }
   }
 
+  async function continueToAssets() {
+    if (!planId || busy || canceling || stage !== 'pick') return;
+    const currentGeneration = ++generation.current;
+    setStage('access');
+    setBusy(true);
+    setError('');
+    try {
+      const next = await window.inheritiTray.listPlanAssets(planId);
+      if (currentGeneration !== generation.current) return;
+      setState(next);
+      if (next.edit?.status === 'idle' && next.edit.planId === planId) {
+        loadedPlanId.current = planId;
+        setStage('manage');
+        setAction('replace');
+      }
+    } catch { if (currentGeneration === generation.current) setError(messages.editUnavailable); }
+    finally { if (currentGeneration === generation.current) setBusy(false); }
+  }
+
   async function chooseAsset(id) {
+    if (busy || canceling) return;
     const currentGeneration = ++generation.current;
     setAssetId(id);
     setBusy(true);
@@ -133,19 +158,35 @@ export function usePlanEditFlow({ state, setState, messages }) {
   }
 
   async function retryAccess() {
-    if (!planId || busy) return;
+    if (!planId || busy || canceling) return;
     setBusy(true);
     setError('');
     try {
       const next = await window.inheritiTray.listPlanAssets(planId);
-      if (next.edit?.status === 'idle' && next.edit.planId === planId) loadedPlanId.current = planId;
+      if (next.edit?.status === 'idle' && next.edit.planId === planId) {
+        loadedPlanId.current = planId;
+        setStage('manage');
+        setAction('replace');
+      }
       setState(next);
     } catch { setError(messages.editUnavailable); }
     finally { setBusy(false); }
   }
 
   async function discard() {
-    if (!window.confirm(messages.discardEditWarning)) return;
+    setConfirmation('discard');
+  }
+
+  async function confirm() {
+    const actionToConfirm = confirmation;
+    setConfirmation('');
+    if (actionToConfirm === 'cancel' || actionToConfirm === 'back') {
+      if (state.edit?.status === 'saving' || state.edit?.status === 'recovery-required') return;
+      await cancelNow(actionToConfirm === 'cancel');
+      return;
+    }
+    if (actionToConfirm !== 'discard') return;
+    if (state.edit?.status === 'saving') return;
     setBusy(true);
     try { setState(await window.inheritiTray.discardPlanEdit()); setError(''); close(); }
     catch { setError(messages.editDiscardFailed); }
@@ -153,26 +194,51 @@ export function usePlanEditFlow({ state, setState, messages }) {
   }
 
   async function cancel() {
-    if (canceling) return;
-    if (!busy || state.edit?.status !== 'loading') {
-      const hasSelectedPlan = Boolean(planId || state.edit?.planId);
-      close();
-      if (hasSelectedPlan) void window.inheritiTray.cancelPlanEdit().catch(() => {});
+    if (canceling || state.edit?.status === 'saving') return;
+    if (stage !== 'pick' && busy && state.edit?.status === 'loading') {
+      setConfirmation('cancel');
       return;
     }
-    if ((planId || state.edit?.planId) && !window.confirm(messages.cancelEditWarning)) return;
+    await cancelNow(true);
+  }
+
+  async function back() {
+    if (canceling || state.edit?.status === 'saving' || state.edit?.status === 'recovery-required') return;
+    if (stage === 'pick') { close(); return; }
+    if (busy && state.edit?.status === 'loading') { setConfirmation('back'); return; }
+    await cancelNow(false);
+  }
+
+  async function cancelNow(closeAfter) {
+    if (state.edit?.status === 'saving' || state.edit?.status === 'recovery-required') return;
+    if (stage === 'pick') {
+      close();
+      return;
+    }
     generation.current += 1;
     setCanceling(true);
     setError('');
     try {
-      setState(await window.inheritiTray.cancelPlanEdit());
-      close();
+      const next = await window.inheritiTray.cancelPlanEdit();
+      setState(next);
+      if (closeAfter) close();
+      else {
+        loadedPlanId.current = '';
+        setPlanId('');
+        setAction('');
+        setAssetId('');
+        setQuery('');
+        setStage('pick');
+        setBusy(false);
+        resetForm();
+      }
     } catch {
       setError(messages.cancelEditFailed);
+      setBusy(false);
     } finally {
       setCanceling(false);
     }
   }
 
-  return { editing, close, cancel, canceling, planId, setPlanId: (id) => { generation.current += 1; setPlanId(id); setAction(''); setAssetId(''); resetForm(); if (id) void chooseAction('replace', id); }, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, retryAccess, recover, discard };
+  return { editing, close, back, cancel, canceling, confirmation, confirm, dismissConfirmation: () => setConfirmation(''), planId, stage, setPlanId: (id) => { setPlanId(id); setAction(''); setAssetId(''); resetForm(); }, continueToAssets, action, assetId, query, setQuery, chooseAction, chooseAsset, form, setForm, busy, error, open, submit, retryAccess, recover, discard };
 }

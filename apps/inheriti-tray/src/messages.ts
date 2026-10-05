@@ -1,7 +1,7 @@
 export const trayMessages = Object.freeze({
-  appName: 'Inheriti® Tray',
+  appName: 'Inheriti® Go',
   openLauncher: 'Open launcher',
-  openSecureInbox: 'Open Secure Inbox',
+  openSecureInbox: 'Open Secure Chat',
   createPrivatePlanMenu: 'Create new private plan',
   createTeamPlanMenu: 'Share new plan with a team',
   editPlanAssetMenu: 'Add or edit an asset from a plan',
@@ -219,8 +219,8 @@ export const trayMessages = Object.freeze({
   signInCanceled: 'Sign-in canceled',
   signInTimedOut: 'Sign-in timed out',
   invalidSignInCallback: 'Invalid sign-in callback',
-  signInBrowserFailed: 'Sign-in failed. Return to Inheriti® Tray.',
-  signInBrowserDone: 'Signed in. Return to Inheriti® Tray.',
+  signInBrowserFailed: 'Sign-in failed. Return to Inheriti® Go.',
+  signInBrowserDone: 'Signed in. Return to Inheriti® Go.',
   appUrlError: 'Set INHERITI_APP_URL to open Inheriti® Business.',
   comingLater: (action: string) => `${action} is coming in the next release.`,
 });

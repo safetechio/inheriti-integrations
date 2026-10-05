@@ -118,14 +118,12 @@ body { padding: 0; background: #fff; }
 .tray-link { flex: none !important; min-height: 0; padding: 0; display: inline-flex; align-items: center; gap: 4px; color: #2962ff; border: 0; background: transparent; font-size: 13px; }
 .tray-link svg { width: 14px; height: 14px; display: block; }
 .tray-link:hover:not(:disabled) { color: #1642ba; border: 0; background: transparent; }
-.tray-home-header { flex: none; min-height: 60px; padding: 8px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid #eaecf0; }
-.tray-home-header > img { width: 28px; height: 28px; }
-.tray-home-header > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
-.tray-home-header > strong span { font-weight: 400; }
-.tray-home-header em { font-style: normal; font-weight: 400; color: #2962ff; }
-.tray-organization-picker { flex: 0 1 155px; min-width: 0; max-width: 100%; }
+.tray-home-header { flex: none; min-height: 62px; padding: 8px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eaecf0; }
+.tray-home-header > span { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.tray-organization-picker { flex: 0 1 200px; min-width: 0; max-width: 100%; }
 .tray-organization-picker select { width: 100%; height: 34px; padding: 0 24px 0 10px; color: #2962ff; border-color: #2962ff; font-size: 14px; }
-.tray-home-content { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+@media (max-width: 360px) { .tray-home-header > span { font-size: 12px; } .tray-organization-picker { flex-basis: 150px; } }
+.tray-home-content { display: flex; flex-direction: column; gap: 14px; padding: 14px 18px; background: #f6f7fb; }
 .tray-home-notice { padding: 8px 12px; border-radius: 8px; background: #fef3f2; font-size: 13px; }
 .tray-home-content section { padding: 20px; }
 .tray-hero { position: relative; flex: none; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 0; border: 0; border-radius: 12px; color: #fff; background: #2962ff; }
@@ -220,8 +218,9 @@ body { padding: 0; background: #fff; }
 .inbox-transfer button { min-height: 30px; padding: 3px 10px; }
 
 /* Secure Inbox */
-.inbox-panel { position: relative; color: #101828; }
-.inbox-header { min-height: 57px; }
+.inbox-panel { position: relative; color: #1c2333; }
+.inbox-header { min-height: 66px; padding: 11px 18px; }
+.inbox-header .tray-back { width: 34px; height: 34px; min-height: 0; border-radius: 10px; }
 .inbox-header > small { color: #667085; font-size: 12px; }
 .inbox-header .tray-back svg { width: 18px; height: 18px; }
 .inbox-new-button { min-height: 32px; padding: 0 12px; font-size: 13px; }
@@ -258,6 +257,7 @@ body { padding: 0; background: #fff; }
 .inbox-row-arrow { color: #98a2b3; font-size: 20px; }
 .inbox-unread-badge { flex: none; min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: var(--primary); font-size: 11px; font-weight: 700; }
 .inbox-new-screen, .inbox-thread { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.inbox-thread { gap: 0; }
 .inbox-new-content { display: flex; flex-direction: column; gap: 12px; }
 .inbox-title-field { display: grid; gap: 6px; }
 .inbox-title-field label { font-size: 14px; font-weight: 600; }
@@ -276,14 +276,14 @@ body { padding: 0; background: #fff; }
 .inbox-picked .inbox-avatar { width: 18px; height: 18px; color: #fff; background: #2962ff; font-size: 9px; }
 .inbox-new-footer { flex: none; display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eaecf0; }
 .inbox-new-footer button:first-child { flex: 1; }.inbox-new-footer button:last-child { flex: 2; }
-.inbox-thread-title { min-width: 0; flex: 1; display: grid; padding: 2px 6px; border: 0; background: transparent; color: #101828; text-align: left; line-height: 1.35; }
+.inbox-thread-title { min-width: 0; flex: 1; display: grid; justify-items: center; padding: 2px 6px; border: 0; background: transparent; color: #101828; text-align: center; line-height: 1.35; }
 .inbox-thread-title:hover:not(:disabled) { border: 0; background: #f9fafb; }
-.inbox-thread-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.inbox-thread-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .inbox-thread-title small { color: #667085; font-size: 12px; }
-.inbox-thread-scroll { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 18px; background: #f9fafb; }
+.inbox-thread-scroll { display: flex; flex-direction: column; gap: 11px; padding: 6px 18px 16px; background: #f6f7fb; }
 .inbox-thread-notice { align-self: center; max-width: 300px; display: flex; gap: 8px; padding: 8px 12px; border: 1px solid #dbe4ff; border-radius: 10px; color: #1642ba; background: #f5f8ff; font-size: 12px; line-height: 1.45; }
 .inbox-thread-notice svg { width: 16px; height: 16px; flex: none; }
-.inbox-thread-tools { display: flex; align-items: center; justify-content: space-between; color: #667085; font-size: 11px; }
+.inbox-thread-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: #667085; font-size: 11px; }
 .inbox-empty { margin: 0; padding: 16px; border: 1px dashed #d0d5dd; border-radius: 8px; color: #475467; background: #fff; font-size: 13px; text-align: center; }
 .inbox-conversations > .inbox-empty { padding: 24px 20px; border: 0; background: transparent; line-height: 1.5; }
 .inbox-skeleton { display: grid; overflow: hidden; }
@@ -302,20 +302,21 @@ body { padding: 0; background: #fff; }
 @keyframes inbox-skeleton-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .inbox-skeleton-avatar, .inbox-skeleton-lines > span { animation: none; } }
 .inbox-thread-message { max-width: 88%; align-self: flex-start; display: flex; align-items: flex-end; gap: 8px; }
+.inbox-thread-message > .inbox-avatar { display: none; }
 .inbox-thread-message.is-own { align-self: flex-end; justify-content: flex-end; }
 .inbox-thread-message-content { min-width: 0; display: grid; gap: 4px; }
 .inbox-thread-message-content > small { color: #667085; font-size: 11px; }
 .is-own .inbox-thread-message-content { justify-items: end; }
-.inbox-message-bubble { position: relative; overflow: hidden; display: grid; gap: 10px; padding: 12px; border: 1px solid #dbe4ff; border-radius: 12px 12px 12px 4px; background: #fff; }
+.inbox-message-bubble { position: relative; overflow: hidden; display: grid; gap: 10px; padding: 9px 14px; border: 1px solid #dbe4ff; border-radius: 12px 12px 12px 4px; background: #fff; }
 .is-opening .inbox-message-bubble { background: #f5f8ff; }
-.is-own .inbox-message-bubble { border-color: #2962ff; border-radius: 12px 12px 4px 12px; background: #2962ff; color: #fff; }
+.is-own .inbox-message-bubble { border-color: #2f55f0; border-radius: 12px 12px 4px 12px; background: #2f55f0; color: #fff; }
 .inbox-message-bubble > * { position: relative; z-index: 1; }
 .inbox-message-heading { display: flex; gap: 8px; justify-content: flex-start; align-items: center; }
-.inbox-message-heading small { color: #667085; font-size: 11px; }.is-own .inbox-message-heading small { color: #dbe4ff; }
+.inbox-message-heading small { color: #667085; font-size: 11px; }.is-own .inbox-message-heading small { color: #fff; }
 .inbox-message-bubble > button { justify-self: start; min-height: 30px; padding: 3px 10px; font-size: 12px; }
 .inbox-sealed-copy { margin: 0; color: #667085; font-size: 13px; }.is-own .inbox-sealed-copy { color: #fff; }
 .inbox-reveal { display: grid; gap: 8px; }.inbox-reveal > button { justify-self: start; min-height: 30px; padding: 3px 10px; font-size: 12px; }
-.inbox-revealed { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; animation: inbox-text-reveal .65s ease-out both; }
+.inbox-revealed { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; animation: inbox-text-reveal .65s ease-out both; }
 .inbox-step-progress { display: grid; gap: 10px; min-width: 220px; }
 .inbox-step-progress ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .inbox-step-progress li { display: flex; align-items: center; gap: 8px; color: #475467; font-size: 12px; line-height: 1.4; animation: inbox-reveal-step 2.4s ease-in-out infinite; }
@@ -361,6 +362,8 @@ body { padding: 0; background: #fff; }
 .inbox-reveal-confirm p { margin: 0; color: #475467; font-size: 12px; }.inbox-reveal-confirm > div { display: flex; gap: 8px; }.inbox-reveal-confirm button { flex: 1; min-height: 30px; padding: 3px 8px; font-size: 12px; }
 .inbox-thread-composer { flex: none; display: grid; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid #eaecf0; background: #fff; }
 .inbox-thread-composer > div { display: flex; align-items: center; gap: 8px; }.inbox-thread-composer textarea { min-width: 0; flex: 1; resize: none; font-size: 14px; }.inbox-thread-composer button { height: 36px; padding: 6px 10px; font-size: 12px; }.inbox-thread-composer .inbox-attach { width: 36px; padding: 0; display: grid; place-items: center; }.inbox-thread-composer .inbox-attach svg { width: 16px; height: 16px; }.inbox-thread-composer small { color: #667085; font-size: 11px; }
+.inbox-thread-composer .inbox-mode { gap: 4px; }.inbox-mode button { height: 28px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; color: #344054; }.inbox-mode button[aria-pressed="true"] { border-color: #1642ba; background: #edf2ff; color: #1642ba; }
+.inbox-thread-composer > label { font-size: 12px; font-weight: 600; color: #344054; }
 .inbox-sheet { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; justify-content: flex-end; }
 .inbox-sheet-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; background: rgba(16,24,40,.32); }
 .inbox-sheet-body { position: relative; max-height: 80%; overflow: auto; display: grid; gap: 12px; padding: 16px; border-radius: 16px 16px 0 0; background: #fff; }
@@ -394,7 +397,7 @@ body { padding: 0; background: #fff; }
 .inbox-panel :is(.inbox-conversations, .inbox-thread, .inbox-members, .inbox-new-footer, .inbox-search, .inbox-thread-composer) { border: 0; border-radius: 0; padding: 0; }
 .inbox-conversations { display: block; background: transparent; }
 .inbox-thread { overflow: hidden; }
-.inbox-thread-composer { padding: 10px 12px 12px !important; border-top: 1px solid #eaecf0 !important; }
+.inbox-thread-composer { display: block; padding: 0 !important; border-top: 1px solid #e8eaf0 !important; }
 .inbox-new-footer { padding: 12px 16px !important; border-top: 1px solid #eaecf0 !important; }
 .inbox-thread-scroll { overflow: auto; }
 .inbox-lock svg { width: 16px; height: 16px; display: block; }
@@ -407,3 +410,80 @@ body { padding: 0; background: #fff; }
 .tray-empty-state h2 { font-size: 16px; line-height: 1.4; }
 .tray-empty-state p { max-width: 260px; color: #475467; font-size: 13px; line-height: 1.5; }
 .tray-empty-state button { margin-top: 12px; }
+.inbox-thread-composer > .inbox-composer-handle { position: relative; display: flex; justify-content: center; align-items: center; height: 22px; cursor: ns-resize; touch-action: none; }
+.inbox-composer-handle > span { width: 38px; height: 4px; border-radius: 2px; background: #c5cbdb; }
+.inbox-composer-handle > span:focus-visible { outline: 2px solid #2f55f0; outline-offset: 5px; }
+.inbox-composer-handle > button { position: absolute; right: 12px; top: 1px; display: grid; place-items: center; width: 22px; height: 20px; min-height: 0; padding: 0; border: 0; background: transparent; color: #6b738a; line-height: 0; }
+.inbox-composer-handle > button svg { display: block; width: 14px; height: 14px; }
+.inbox-composer-handle > button[aria-expanded="false"] svg { transform: rotate(180deg); }
+.inbox-thread-composer > .inbox-composer-body { display: grid; align-content: start; gap: 9px; min-width: 0; max-height: min(420px, 55vh); overflow: auto; padding: 3px 18px 13px; }
+.inbox-thread-composer > .inbox-composer-body[hidden] { display: none; }
+.inbox-thread-composer > .inbox-composer-body:has(.inbox-composer-menu) { overflow: visible; }
+.inbox-composer-body > .inbox-mode { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: #eef0f7; }
+.inbox-composer-body .inbox-mode button { flex: 1; min-width: 0; height: 33px; min-height: 0; border: 0; border-radius: 8px; background: transparent; color: #5d667c; font-weight: 600; }
+.inbox-composer-body .inbox-mode button[aria-pressed="true"] { background: #fff; color: #2f55f0; box-shadow: 0 1px 3px #d9ddea; }
+.inbox-composer-body > .inbox-composer-input { display: flex; align-items: flex-end; gap: 10px; min-width: 0; }
+.inbox-editor { position: relative; flex: 1; min-width: 0; border: 1px solid #d5d9e4; border-radius: 12px; }
+.inbox-editor-field { position: relative; background: #fff; border-radius: 12px 12px 0 0; }
+.inbox-editor textarea { display: block; width: 100%; min-height: 88px; max-height: 140px; padding: 10px 12px; border: 0; border-radius: 12px 12px 0 0; resize: vertical; line-height: 1.5; }
+.inbox-editor textarea.has-marks { position: relative; background: transparent; color: transparent; caret-color: #1c2333; }
+.inbox-editor textarea.has-marks::selection { background: #b7c7ff; color: #1c2333; }
+.inbox-editor-highlight { position: absolute; inset: 0; padding: 10px 12px; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; line-height: 1.5; pointer-events: none; }
+.inbox-editor-highlight .is-secret { color: #2f55f0; }
+.inbox-composer-actions { display: grid; gap: 8px; width: 75px; }
+.inbox-composer-actions .inbox-attach { width: 75px; height: 36px; min-height: 0; border: 1px dashed #9db0f7; border-radius: 10px; background: #eef2ff; color: #2f55f0; }
+.inbox-composer-actions button[type="submit"] { height: 44px; min-height: 44px; border-radius: 10px; font-size: 14px; font-weight: 700; }
+.inbox-composer-actions button[type="submit"]:disabled { opacity: 1; border-color: #a9b8f8; background: #a9b8f8; }
+.inbox-mark-hint { padding: 6px 12px; border-top: 1px solid #eef0f6; border-radius: 0 0 11px 11px; background: #fafbfe; color: #6b738a; font-size: 11px; line-height: normal; }
+.inbox-composer-menu { position: absolute; z-index: 5; bottom: calc(100% + 6px); display: grid; gap: 2px; width: 196px; padding: 4px; border-radius: 10px; background: #1c2333; box-shadow: 0 8px 24px #141e4659; }
+.inbox-composer-menu button { display: flex; align-items: center; gap: 9px; width: 100%; height: auto; padding: 9px 12px; border: 0; border-radius: 7px; background: transparent; color: #fff; font-size: 12.5px; font-weight: 600; text-align: left; }
+.inbox-composer-menu button:hover, .inbox-composer-menu button:focus-visible { background: #2f55f0; }
+.inbox-composer-menu svg { width: 12px; height: 12px; flex: none; }
+.inbox-mode svg { width: 12px; height: 12px; vertical-align: -2px; }
+.inbox-composer-preview { color: #5d667c; font-size: 12px; overflow-wrap: anywhere; }
+.inbox-composer-preview span { white-space: pre-wrap; }
+.inbox-composer-preview .inbox-preview-secret { padding: 0 4px; border-radius: 4px; background: #dfe5fd; filter: blur(6px); user-select: none; }
+.inbox-composer-body > small { line-height: 1.5; }
+.inbox-thread-tools { flex: none; padding: 8px 18px; border-bottom: 1px solid #eef0f4; background: #f6f7fb; }
+.inbox-thread-tools span { margin-right: auto; }
+.inbox-thread-tools button { min-height: 0; padding: 0; font-size: 11px; }
+.inbox-thread-tools .inbox-link { color: #2f55f0; }
+.inbox-thread-security { display: flex; align-items: center; gap: 4px; color: #5d667c; font-size: 12px; font-weight: 400; }
+.inbox-thread-security svg { width: 12px; height: 12px; flex: none; color: #1f9d55; }
+.inbox-thread-composer :focus-visible { outline: 2px solid #1642ba; outline-offset: 2px; }
+.inbox-parent-bubble { width: min(316px, calc(100vw - 54px)); gap: 8px; padding: 8px 14px; border-color: #dfe3ee; border-radius: 15px 15px 15px 3px; box-shadow: 0 2px 5px #1c23330d; }
+.inbox-parent-pill { padding: 2px 10px; border-radius: 999px; background: #eef0f7; color: #3d4660; font-size: 11px; font-weight: 700; }
+.inbox-parent-text { font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-parent-text .inbox-sealed-trigger { display: inline; min-height: 0; padding: 0 2px; border: 0; background: transparent; color: #334566; font-size: inherit; line-height: inherit; vertical-align: baseline; }
+.inbox-parent-text .inbox-sealed-trigger:hover:not(:disabled) { border: 0; background: transparent; color: #334566; }
+.inbox-sealed-trigger span { filter: blur(4px); }
+.inbox-parent-bubble .inbox-sealed-hint { color: #6b738a; font-size: 11px; }
+.is-own .inbox-parent-bubble .inbox-sealed-hint { color: #fff; }
+.inbox-parent-action { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.inbox-parent-action .inbox-reveal-timer { flex-basis: 100%; }
+.is-own .inbox-parent-action .inbox-reveal-timer { color: #fff; }
+.is-own .inbox-parent-action .inbox-progress-track { background: #ffffff59; }
+.is-own .inbox-parent-action .inbox-progress-track > span { background: #fff; }
+.inbox-parent-action > button { min-height: 30px; padding: 5px 10px; border-radius: 8px; font-size: 12px; line-height: 1.3; }
+.inbox-inline-status { color: #667085; }
+.inbox-inline-status.is-spent { display: inline-block; vertical-align: middle; }
+.inbox-inline-status.is-spent > span { position: relative; display: inline-block; width: 76px; height: 17px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12% 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12% 88%, transparent); }
+.inbox-inline-status.is-spent > span::before { position: absolute; inset: -8px; content: ''; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='32'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='2' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='96' height='32' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); opacity: .7; animation: inbox-read-grain 1.2s steps(6) infinite alternate; }
+.is-own .inbox-inline-status.is-spent > span::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='32'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='2' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 2 0 0 0 -0.7'/%3E%3C/filter%3E%3Crect width='96' height='32' filter='url(%23n)'/%3E%3C/svg%3E"); opacity: .9; }
+@keyframes inbox-read-grain { to { transform: translate(6px, -4px); } }
+@media (prefers-reduced-motion: reduce) { .inbox-inline-status.is-spent > span::before { animation: none; } }
+.is-own .inbox-parent-text, .is-own .inbox-parent-text .inbox-sealed-trigger { color: #fff; }
+.is-own .inbox-parent-text .inbox-sealed-trigger:hover:not(:disabled) { color: #fff; }
+.is-own .inbox-parent-pill { background: #fff; color: #2f55f0; }
+.inbox-opening-overlay { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: #141a2d73; }
+.inbox-opening-card { width: 100%; max-width: 348px; padding: 16px 18px 18px; border: 1px solid #d5ddfb; border-radius: 14px; background: #f1f5ff; box-shadow: 0 20px 50px #141e4659; }
+.inbox-opening-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #5d667c; font-size: 12px; line-height: normal; }
+.inbox-opening-title span { padding: 3px 10px; border-radius: 99px; background: #fdecc0; color: #8a5a00; font-weight: 700; }
+.inbox-opening-card .inbox-step-progress { min-width: 0; gap: 14px; }
+.inbox-opening-card .inbox-step-progress ol { gap: 9px; }
+.inbox-opening-card .inbox-step-progress li { gap: 10px; color: #8a93a8; font-size: 14.5px; animation: none; }
+.inbox-opening-card .inbox-step-progress li:first-child { color: #2f55f0; font-weight: 600; }
+.inbox-opening-card .inbox-step-mark { width: 18px; height: 18px; border-color: #b9bfd0; color: #8a93a8; background: #fff; }
+.inbox-opening-card li:first-child .inbox-step-mark { border-color: #2f55f0; color: #2f55f0; }
+.inbox-opening-card .inbox-progress-track { height: 4px; border-radius: 2px; background: #dbe2f7; }
+.inbox-opening-card .inbox-progress-track > span { width: 33%; background: #2f55f0; animation: none; }

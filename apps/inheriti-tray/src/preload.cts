@@ -15,16 +15,28 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
   inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
+  inboxNormalPreparation: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-normal-preparation', conversationId),
+  inboxNormalMessages: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-normal-messages', conversationId),
+  inboxSendNormal: (conversationId: string, parentId: string, content: string): Promise<unknown> =>
+    ipcRenderer.invoke('tray:inbox-send-normal', conversationId, parentId, content),
+  inboxReplaceDevice: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-replace-device'),
   inboxCancelPreparation: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-preparation'),
   inboxParticipants: (query?: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-participants', query),
   inboxCreateConversation: (title: string, memberIds: string[]): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', title, memberIds),
   inboxChangeParticipants: (conversationId: string, action: 'ADD' | 'REMOVE', memberId: string, expectedRevision: number): Promise<unknown> =>
     ipcRenderer.invoke('tray:inbox-change-participants', conversationId, action, memberId, expectedRevision),
   inboxConversations: (): Promise<unknown> => ipcRenderer.invoke('tray:inbox-conversations'),
+  inboxClearHistory: (conversationId: string): Promise<{ clearedThroughSequence: number }> =>
+    ipcRenderer.invoke('tray:inbox-clear-history', conversationId),
   inboxMessages: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-messages', conversationId),
+  inboxParents: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-parents', conversationId),
+  inboxSendParent: (conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>): Promise<unknown> =>
+    ipcRenderer.invoke('tray:inbox-send-parent', conversationId, parentId, segments),
+  inboxRevealUnit: (conversationId: string, parentId: string, unitId: string): Promise<{ text: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING'; suggestion: unknown }> =>
+    ipcRenderer.invoke('tray:inbox-reveal-unit', conversationId, parentId, unitId),
   inboxSendText: (conversationId: string, text: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-text', conversationId, text, expiresAt),
   inboxSendFile: (conversationId: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-file', conversationId, expiresAt),
-  inboxOpenText: (conversationId: string, messageId: string): Promise<{ text: string; leaseId: string; leaseExpiresAt: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-open-text', conversationId, messageId),
+  inboxOpenText: (conversationId: string, messageId: string): Promise<{ text: string; leaseId: string; leaseExpiresAt: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING'; suggestion: unknown }> => ipcRenderer.invoke('tray:inbox-open-text', conversationId, messageId),
   inboxOpenFile: (conversationId: string, messageId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-open-file', conversationId, messageId),
   inboxCancelTransfer: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-transfer'),
   inboxRetryAck: (conversationId: string, messageId: string): Promise<{ acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-retry-ack', conversationId, messageId),

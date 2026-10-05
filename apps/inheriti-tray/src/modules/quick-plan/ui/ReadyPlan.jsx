@@ -2,7 +2,7 @@ import { ScreenFooter } from '../../_shared/ui/components/ScreenFooter.jsx';
 import { PlanSummary } from './components/PlanSummary.jsx';
 import { ExternalLinkIcon } from '../../_shared/ui/components/Icons.jsx';
 
-export function ReadyPlan({ messages, state, readySummary, onNew, onOpenApp, onHome }) {
+export function ReadyPlan({ messages, state, readySummary, returnToInbox, onNew, onOpenApp, onHome }) {
   const summary = readySummary || {};
   const teamId = summary.teamId || state.creation?.teamId;
   const audience = teamId
@@ -18,7 +18,7 @@ export function ReadyPlan({ messages, state, readySummary, onNew, onOpenApp, onH
     <ScreenFooter><div className="plan-ready-actions">
       <button id="new-capture" type="button" onClick={onNew}>{messages.saveAnother}</button>
       <button className="button-secondary plan-open-business" type="button" onClick={onOpenApp}>{messages.viewInBusiness || 'View in Inheriti® Business'}<ExternalLinkIcon /></button>
-      <button className="plan-home-action" type="button" onClick={onHome}>{messages.backToHome}</button>
+      <button className="plan-home-action" type="button" onClick={onHome}>{returnToInbox ? 'Back to Secure Chat' : messages.backToHome}</button>
     </div></ScreenFooter>
   </section>;
 }

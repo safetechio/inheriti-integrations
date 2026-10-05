@@ -22,6 +22,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear }),
   createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: mock.openInbox, ackText: mock.ackInbox }),
   createNodeInboxEventListener: () => vi.fn(),
+  suggestInboxTextAsset: (text: string) => ({ title: 'Saved message', assetType: 'PLAIN-TEXT', assetName: 'Saved message', fields: { text } }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
   createPlanEditOperations: mock.editOperations,

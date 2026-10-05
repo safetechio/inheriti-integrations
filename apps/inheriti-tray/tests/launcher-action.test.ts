@@ -9,7 +9,7 @@ const chrome = ['google-chrome', 'chromium'].find((binary) => {
   try { execFileSync('which', [binary]); return true; } catch { return false; }
 });
 
-it.skipIf(!chrome)('opens Secure Inbox from a tray action after sign-in and organization selection', () => {
+it.skipIf(!chrome)('opens Secure Chat from a tray action after sign-in and organization selection', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-inbox-action-'));
   try {
     buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
@@ -23,7 +23,7 @@ it.skipIf(!chrome)('opens Secure Inbox from a tray action after sign-in and orga
         select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},
         openApp:async()=>{},version:async()=>'',onInboxStateChanged:()=>()=>{},inboxState:async()=>({status:'error'}),
         inboxPrepare:async()=>({status:'error'}),inboxCancelPreparation:async()=>{}};
-      setTimeout(()=>window.actions.forEach((action)=>action('Open Secure Inbox')),150);
+      setTimeout(()=>window.actions.forEach((action)=>action('Open Secure Chat')),150);
       setTimeout(()=>window.stateChanged(base),250);
       setTimeout(()=>{document.getElementById('root').dataset.beforeSelection=String(!!document.querySelector('.inbox-panel'));const select=document.getElementById('organization');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'org-1');select.dispatchEvent(new Event('change',{bubbles:true}));},350);
       setTimeout(()=>{document.getElementById('root').dataset.afterSelection=String(!!document.querySelector('.inbox-panel'));},550);
@@ -115,8 +115,7 @@ it.skipIf(!chrome)('returns home immediately when an idle edit cleanup is pendin
         listPlanAssets:async()=>({...base,edit:{status:'idle',available:true,planId:'plan-1',plans,assets:[]}}),
         cancelPlanEdit:()=>new Promise(()=>{}),openApp:async()=>{}};
       setTimeout(()=>document.getElementById('add-asset')?.click(),150);
-      setTimeout(()=>document.getElementById('edit-plan')?.click(),300);
-      setTimeout(()=>document.querySelector('[role="option"]')?.click(),400);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),400);
       setTimeout(()=>document.querySelector('.edit-screen .tray-footer .button-secondary')?.click(),550);
       setTimeout(()=>{document.getElementById('root').dataset.home=String(!!document.querySelector('.tray-hero'));},700);
     `);
@@ -135,15 +134,15 @@ it.skipIf(!chrome)('reenables home actions after canceling an active edit', () =
       const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
       const plans=[{id:'plan-1',name:'Plan'}];
       let publish;
-      window.confirm=()=>true;
       window.inheritiTray={state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:(callback)=>{publish=callback;return()=>{}},onHidden:()=>()=>{},onAction:()=>()=>{},
         editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),
         listPlanAssets:()=>{publish({...base,edit:{status:'loading',available:true,planId:'plan-1',plans,assets:[]}});return new Promise(()=>{});},
         cancelPlanEdit:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),openApp:async()=>{}};
       setTimeout(()=>document.getElementById('add-asset')?.click(),150);
-      setTimeout(()=>document.getElementById('edit-plan')?.click(),300);
-      setTimeout(()=>document.querySelector('[role="option"]')?.click(),400);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),400);
+      setTimeout(()=>document.querySelector('.edit-screen .tray-footer button:last-child')?.click(),450);
       setTimeout(()=>document.querySelector('.edit-screen .tray-footer .button-secondary')?.click(),550);
+      setTimeout(()=>document.querySelector('.edit-confirmation button:last-child')?.click(),620);
       setTimeout(()=>{const root=document.getElementById('root');root.dataset.home=String(!!document.querySelector('.tray-hero'));root.dataset.createEnabled=String(!document.getElementById('save-plan')?.disabled);root.dataset.editEnabled=String(!document.getElementById('add-asset')?.disabled);root.dataset.signOutEnabled=String(!document.getElementById('sign-out')?.disabled);},750);
     `);
     const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=900', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -167,8 +166,8 @@ it.skipIf(!chrome)('keeps revealed assets and selection when switching edit tabs
         listPlanAssets:async()=>{window.assetLoads++;return {...base,edit:{status:'idle',available:true,planId:'plan-1',plans,assets}}},
         cancelPlanEdit:async()=>{},openApp:async()=>{}};
       setTimeout(()=>window.action('Add or edit an asset'),150);
-      setTimeout(()=>document.getElementById('edit-plan')?.click(),300);
-      setTimeout(()=>document.querySelector('[role="option"]')?.click(),400);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),400);
+      setTimeout(()=>document.querySelector('.edit-screen .tray-footer button:last-child')?.click(),450);
       setTimeout(()=>document.querySelector('input[value="asset-2"]')?.click(),500);
       setTimeout(()=>document.querySelector('.edit-mode button:first-child')?.click(),600);
       setTimeout(()=>document.querySelector('.edit-mode button:last-child')?.click(),700);
@@ -198,8 +197,8 @@ it.skipIf(!chrome)('keeps a selected image file inside the edit panel', () => {
         listPlanAssets:async()=>({...base,edit:{status:'idle',available:true,planId:'plan-1',plans,assets:[]}}),
         cancelPlanEdit:async()=>{},openApp:async()=>{}};
       setTimeout(()=>document.getElementById('add-asset')?.click(),150);
-      setTimeout(()=>document.getElementById('edit-plan')?.click(),250);
-      setTimeout(()=>document.querySelector('[role="option"]')?.click(),350);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),350);
+      setTimeout(()=>document.querySelector('.edit-screen .tray-footer button:last-child')?.click(),400);
       setTimeout(()=>document.querySelector('.edit-mode button:first-child')?.click(),450);
       setTimeout(()=>{const input=document.getElementById('asset-type');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,'IMAGE');input.dispatchEvent(new Event('change',{bubbles:true}));},550);
       setTimeout(()=>{const input=document.getElementById('asset-file');const transfer=new DataTransfer();transfer.items.add(new File(['png'],'Captura desde 2026-09-25 11-34 con nombre muy largo.png',{type:'image/png'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));},650);
@@ -212,5 +211,58 @@ it.skipIf(!chrome)('keeps a selected image file inside the edit panel', () => {
     expect(html).toContain('data-horizontal-overflow="false"');
     expect(html).toContain('data-file-inside="true"');
     expect(html).toContain('data-buttons-inside="true"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+it.skipIf(!chrome)('keeps plan selection local until Continue and clears it across pages and searches', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-plan-picker-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const plans=Array.from({length:12},(_,index)=>({id:'plan-'+(index+1),name:'Plan '+(index+1)}));
+      window.loads=0;
+      window.inheritiTray={state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
+        editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),
+        listPlanAssets:async(id)=>{window.loads++;return {...base,edit:{status:'idle',available:true,planId:id,plans,assets:[]}}},
+        cancelPlanEdit:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),openApp:async()=>{}};
+      setTimeout(()=>document.getElementById('add-asset')?.click(),100);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),250);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.selectedLoads=String(window.loads);root.dataset.continueEnabled=String(!document.querySelector('.edit-screen .tray-footer button:last-child')?.disabled);document.querySelector('[aria-label="Next plan page"]')?.click();},350);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.pageContinueDisabled=String(document.querySelector('.edit-screen .tray-footer button:last-child')?.disabled);const search=document.getElementById('edit-plan-search');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(search,'Plan 12');search.dispatchEvent(new Event('input',{bubbles:true}));},450);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.filteredCount=String(document.querySelector('.edit-plan-heading')?.textContent.includes('1 of 12'));root.dataset.searchContinueDisabled=String(document.querySelector('.edit-screen .tray-footer button:last-child')?.disabled);document.querySelector('[data-plan-id="plan-12"]')?.click();document.querySelector('.edit-screen .tray-footer button:last-child')?.click();},550);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.loads=String(window.loads);root.dataset.pickerHidden=String(!document.querySelector('.edit-plan-list'));root.dataset.modeVisible=String(!!document.querySelector('.edit-mode'));},700);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=850', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    for (const attribute of ['continue-enabled', 'page-continue-disabled', 'filtered-count', 'search-continue-disabled', 'picker-hidden', 'mode-visible']) expect(html).toContain(`data-${attribute}="true"`);
+    expect(html).toContain('data-selected-loads="0"');
+    expect(html).toContain('data-loads="1"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+it.skipIf(!chrome)('keeps asset management open when Back cannot cancel access', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-edit-back-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const plans=[{id:'plan-1',name:'Plan'}];
+      window.inheritiTray={state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
+        editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),
+        listPlanAssets:async()=>({...base,edit:{status:'idle',available:true,planId:'plan-1',plans,assets:[]}}),
+        cancelPlanEdit:()=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('cancel failed')),180)),openApp:async()=>{}};
+      setTimeout(()=>document.getElementById('add-asset')?.click(),100);
+      setTimeout(()=>document.querySelector('[data-plan-id="plan-1"]')?.click(),250);
+      setTimeout(()=>document.querySelector('.edit-screen .tray-footer button:last-child')?.click(),300);
+      setTimeout(()=>document.querySelector('.edit-screen .tray-back')?.click(),400);
+      setTimeout(()=>{document.getElementById('root').dataset.pendingStage=String(!!document.querySelector('.edit-mode')&&!document.querySelector('.edit-plan-list'));},470);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.failedStage=String(!!document.querySelector('.edit-mode')&&!document.querySelector('.edit-plan-list'));root.dataset.cancelError=String(!!document.querySelector('.edit-screen [role="alert"]'));},700);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=850', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    for (const attribute of ['pending-stage', 'failed-stage', 'cancel-error']) expect(html).toContain(`data-${attribute}="true"`);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

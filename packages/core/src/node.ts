@@ -1,6 +1,7 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node';
-import { createNodeElementsClient, HttpElementsApiPort, NodeInboxFile, NodeInboxText } from '@safetech/inheriti-client-sdk/node';
-import type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/node';
+import { createNodeElementsClient, HttpElementsApiPort, NodeInboxFile, NodeInboxNormal, NodeInboxParent, NodeInboxText } from '@safetech/inheriti-client-sdk/node';
+import type { InboxLocalIdentity, NormalInboxMessagePage, SendNormalInboxTextInput, OpenNormalInboxTextInput,
+  SendInboxFileInput, OpenInboxFileInput, SendInboxParentInput, OpenInboxParentInput } from '@safetech/inheriti-client-sdk/node';
 import { SocketIoSharedPlanEventListener } from '@safetech/inheriti-core-sdk/shared-configuration/vanilla';
 import { io } from 'socket.io-client';
 import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
@@ -79,6 +80,8 @@ export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/node';
 export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-client-sdk/node';
 export { latestIntegrationBuild } from './node-update.js';
 export { createQuickPlanOperations, quickPlanAssetCatalog } from './quick-plan.js';
+export { suggestInboxTextAsset } from './inbox-text-asset-suggestion.js';
+export type { InboxTextAssetSuggestion } from './inbox-text-asset-suggestion.js';
 export { localPlanAssetLimit } from './asset-metadata.js';
 export { LocalPlanAssistant } from './local-plan-assistant.js';
 export { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local-plan-source.js';
@@ -127,6 +130,8 @@ export function createNodeInbox(options: {
     options.fetchImpl ?? globalThis.fetch.bind(globalThis), { organizationId: options.organizationId });
   const text = new NodeInboxText(api);
   const file = new NodeInboxFile(api);
+  const normal = new NodeInboxNormal(api);
+  const parent = new NodeInboxParent(api, text);
   return {
     listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
     createConversation: (title: string, participantMemberIds: string[]) => api.createInboxConversation({ title, participantMemberIds }),
@@ -134,10 +139,21 @@ export function createNodeInbox(options: {
       api.changeInboxParticipants(conversationId, input),
     listConversations: (input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxConversations(input, signal),
     listMessages: (conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMessages(conversationId, input, signal),
+    prepareNormal: (conversationId: string) => api.getNormalInboxSendPreparation(conversationId),
+    listNormal: (conversationId: string, input?: { limit?: number; offset?: number }, signal?: AbortSignal): Promise<NormalInboxMessagePage> => normal.list(conversationId, input, signal),
+    sendNormal: (input: SendNormalInboxTextInput) => normal.send(input),
+    openNormal: (input: OpenNormalInboxTextInput) => normal.open(input),
+    markNormalRead: (input: OpenNormalInboxTextInput) => normal.markRead(input),
+    listParents: (conversationId: string, input?: { limit?: number; offset?: number }, signal?: AbortSignal) =>
+      parent.list(conversationId, input, signal),
+    sendParent: (input: SendInboxParentInput) => parent.send(input),
+    openParent: (input: OpenInboxParentInput) => parent.open(input),
+    revealUnit: (input: OpenInboxParentInput & { unitId: string; tenantKeyHex: string }) => parent.revealUnit(input),
+    clearHistory: (conversationId: string, signal?: AbortSignal) => parent.clearHistory(conversationId, signal),
     sendText: (input: { conversationId: string; text: string; expiresAt: string; identity: InboxLocalIdentity; tenantKeyHex: string }) => text.send(input),
     openText: (input: { conversationId: string; messageId: string; identity: InboxLocalIdentity; tenantKeyHex: string; signal?: AbortSignal }) => text.open(input),
-    sendFile: (input: import('@safetech/inheriti-client-sdk/node').SendInboxFileInput) => file.sendFile(input),
-    openFile: (input: import('@safetech/inheriti-client-sdk/node').OpenInboxFileInput) => file.openFile(input),
+    sendFile: (input: SendInboxFileInput) => file.sendFile(input),
+    openFile: (input: OpenInboxFileInput) => file.openFile(input),
     ackText: (input: { conversationId: string; messageId: string; deviceId: string; leaseId: string; signal?: AbortSignal }) =>
       text.ack(input.conversationId, input.messageId, input.deviceId, input.leaseId, input.signal),
   };

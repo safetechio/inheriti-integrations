@@ -15,18 +15,20 @@ for (const deployment of ['local', 'dev', 'stg', 'prod']) {
     delete require.cache[configPath];
     try {
       const config = require(configPath);
-      const name = deployment === 'prod' ? 'Inheriti® Tray' : `Inheriti® Tray ${deployment.toUpperCase()}`;
-      const metadata = { name: 'inheriti-tray', version: '0.0.2', productName: config.extraMetadata.productName };
+      const name = deployment === 'prod' ? 'Inheriti® Go' : `Inheriti® Go ${deployment.toUpperCase()}`;
+      const metadata = { name: 'inheriti-go', version: '0.0.2', productName: config.extraMetadata.productName };
       for (const platform of ['mac', 'win', 'linux']) {
         const info = new AppInfo({ config, metadata }, undefined, config[platform]);
         assert.equal(info.productName, name);
-        assert.equal(info.productFilename, platform === 'linux' ? 'inheriti-tray' : name);
+        assert.equal(info.productFilename, platform === 'linux' ? 'inheriti-go' : name);
       }
       const svg = readFileSync(config.icon, 'utf8');
       assert.match(svg, /width="1024" height="1024"/);
       const image = svg.match(/data:image\/png;base64,([^"\s]+)/)[1];
       assert.deepEqual(Buffer.from(image, 'base64'), readFileSync(config.linux.icon));
-      assert.equal(config.appId, `com.safetech.inheriti.tray.${deployment}`);
+      assert.equal(config.appId, `com.safetech.inheriti.go.${deployment}`);
+      assert.equal(config.artifactName, 'Inheriti-Go-' + deployment + '-${version}-${os}-${arch}.${ext}');
+      assert.equal(config.linux.executableName, 'inheriti-go');
     } finally {
       if (previous === undefined) delete process.env.INHERITI_BUILD_DEPLOYMENT;
       else process.env.INHERITI_BUILD_DEPLOYMENT = previous;

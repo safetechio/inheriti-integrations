@@ -20,7 +20,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     void session.cancelPlanEdit().catch(() => {});
   }));
   app.whenReady().then(async () => {
-    app.setAppUserModelId(`com.safetech.inheriti.tray.${deployment}`);
+    app.setAppUserModelId(`com.safetech.inheriti.go.${deployment}`);
     session.setPublisher(() => publish(session));
     session.setInboxPublisher((signal) => {
       publishInboxChanged(signal);
@@ -95,10 +95,16 @@ async function notifyNewInboxMessage(session: TraySession, signal: TrayInboxSign
     const page = await session.listInboxMessages(signal.conversationId, { status: 'AVAILABLE' });
     if (session.state().selectedId !== organizationId) return;
     const message = page.items.find((item: { id: string; senderMemberId: string; recipientStatus?: string }) => item.id === signal.messageId);
-    if (!message || message.senderMemberId === memberId || message.recipientStatus !== 'UNREAD') return;
+    if (message && (message.senderMemberId === memberId || message.recipientStatus !== 'UNREAD')) return;
+    if (!message) {
+      const normal = await session.listNormalInboxMetadata(signal.conversationId);
+      const parent = normal.items.find((item: { parentId: string; senderMemberId: string; sequence: number }) =>
+        item.parentId === signal.messageId);
+      if (!parent || parent.senderMemberId === memberId || parent.sequence <= normal.readThroughSequence) return;
+    }
     publishInboxChanged({ kind: 'NEW_MESSAGE' });
     const window = currentWindow();
-    if (!window || window.isDestroyed() || !window.isVisible()) notify('A protected message is ready in Secure Inbox.');
+    if (!window || window.isDestroyed() || !window.isVisible()) notify('A new message is ready in Secure Chat.');
   } catch {
     seen.delete(key);
   }

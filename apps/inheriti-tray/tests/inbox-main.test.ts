@@ -15,6 +15,7 @@ vi.mock('electron', () => ({
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
   createNodeInbox: mock.createNodeInbox,
   createNodeInboxEventListener: mock.createNodeInboxEventListener,
+  suggestInboxTextAsset: (text: string) => ({ type: 'PLAIN-TEXT', text }),
 }));
 
 import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
@@ -30,7 +31,7 @@ const identity = {
   signingPrivateKey: '',
 };
 
-describe('Tray Secure Inbox main process', () => {
+describe('Tray Secure Chat main process', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mock.createNodeInboxEventListener.mockReturnValue(() => {});
@@ -118,5 +119,55 @@ describe('Tray Secure Inbox main process', () => {
     expect(client.ackText).toHaveBeenNthCalledWith(2, {
       conversationId: 'conversation', messageId: 'message', deviceId: 'device-a', leaseId: 'lease-1', signal: expect.any(AbortSignal),
     });
+  });
+
+  it('sends ordered mixed segments and keeps independent unit ACK leases', async () => {
+    const client = {
+      sendParent: vi.fn().mockResolvedValue({ parentId: 'parent-1' }),
+      revealUnit: vi.fn().mockImplementation(async ({ unitId }: { unitId: string }) => ({
+        text: unitId, leaseId: `lease-${unitId}`, acknowledgement: 'PENDING',
+      })),
+      ackText: vi.fn().mockResolvedValue('ACKNOWLEDGED'),
+    };
+    mock.createNodeInbox.mockReturnValue(client);
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const resolveKey = vi.fn().mockResolvedValue('a'.repeat(64));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', resolveKey, () => 'org-a');
+    const segments = [{ text: 'Hello ' }, { protectedText: 'secret', expiresAt: '2030-01-01T00:00:00.000Z' }];
+    await inbox.sendParent('conversation', 'parent-1', segments);
+    expect(client.sendParent).toHaveBeenCalledWith({ conversationId: 'conversation', parentId: 'parent-1',
+      segments, identity, tenantKeyHex: 'a'.repeat(64), signal: expect.any(AbortSignal) });
+    await inbox.revealUnit('conversation', 'parent-1', 'unit-a');
+    await inbox.revealUnit('conversation', 'parent-1', 'unit-b');
+    expect(await inbox.retryAck('conversation', 'unit-a')).toEqual({ acknowledgement: 'ACKNOWLEDGED' });
+    expect(await inbox.retryAck('conversation', 'unit-b')).toEqual({ acknowledgement: 'ACKNOWLEDGED' });
+    expect(resolveKey).toHaveBeenCalledTimes(3);
+  });
+
+  it('opens normal history and retries a normal send without resolving the organization key', async () => {
+    const client = {
+      listNormal: vi.fn().mockResolvedValue({ items: [{ parentId: 'parent-1', sequence: 4,
+        senderMemberId: 'member-a', senderDeviceId: 'device-a', participantRevision: 1,
+        createdAt: '2026-10-05T00:00:00.000Z' }], total: 1, limit: 25, offset: 0,
+        unreadCount: 1, readThroughSequence: 0 }),
+      openNormal: vi.fn().mockResolvedValue({ text: 'hello', parentId: 'parent-1', sequence: 4 }),
+      markNormalRead: vi.fn().mockResolvedValue({ readThroughSequence: 4 }),
+      sendNormal: vi.fn().mockRejectedValueOnce(new Error('network_lost')).mockResolvedValueOnce({ parentId: 'parent-2' }),
+    };
+    mock.createNodeInbox.mockReturnValue(client);
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const resolveKey = vi.fn();
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      resolveKey, () => 'org-a');
+    await expect(inbox.listNormal('conversation')).resolves.toMatchObject({
+      items: [{ parentId: 'parent-1', text: 'hello' }], unreadCount: 0, readThroughSequence: 4,
+    });
+    await expect(inbox.sendNormal('conversation', 'parent-2', 'retry')).rejects.toThrow('network_lost');
+    await expect(inbox.sendNormal('conversation', 'parent-2', 'retry')).resolves.toMatchObject({ parentId: 'parent-2' });
+    expect(mock.createNodeInbox).toHaveBeenCalledOnce();
+    expect(resolveKey).not.toHaveBeenCalled();
+    expect(client.sendNormal).toHaveBeenNthCalledWith(2, { conversationId: 'conversation', parentId: 'parent-2', text: 'retry', identity });
   });
 });

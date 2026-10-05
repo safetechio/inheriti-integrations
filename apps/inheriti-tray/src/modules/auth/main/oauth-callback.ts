@@ -71,10 +71,10 @@ function callbackPage(success: boolean): string {
   return readFileSync(new URL('login-callback.html', resources), 'utf8')
     .replace('{{font}}', readFileSync(new URL('font-app.ttf', resources)).toString('base64'))
     .replace('{{logo}}', readFileSync(new URL('tray.png', resources)).toString('base64'))
-    .replaceAll('{{heading}}', success ? 'Continue in Inheriti® Tray' : 'Sign-in failed')
+    .replaceAll('{{heading}}', success ? 'Continue in Inheriti® Go' : 'Sign-in failed')
     .replace('{{statusLabel}}', success ? 'Browser step complete' : 'Sign-in error')
     .replace('{{statusClass}}', success ? '' : 'failed')
     .replace('{{message}}', success
-      ? 'You can close this tab and return to Inheriti® Tray to finish signing in.'
-      : 'Return to Inheriti® Tray and try signing in again.');
+      ? 'You can close this tab and return to Inheriti® Go to finish signing in.'
+      : 'Return to Inheriti® Go and try signing in again.');
 }

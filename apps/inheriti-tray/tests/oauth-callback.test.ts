@@ -7,7 +7,7 @@ import { waitForCallback } from '../src/modules/auth/main/oauth-callback.js';
 
 describe('OAuth browser callback', () => {
   it.each([
-    { query: 'code=private-code&state=private-state', status: 200, heading: 'Continue in Inheriti® Tray', rejection: null },
+    { query: 'code=private-code&state=private-state', status: 200, heading: 'Continue in Inheriti® Go', rejection: null },
     { query: 'error=access_denied&error_description=private-description', status: 400, heading: 'Sign-in failed', rejection: 'access_denied' },
     { query: 'code=private-code', status: 400, heading: 'Sign-in failed', rejection: 'Invalid sign-in callback' },
   ])('renders a self-contained UTF-8 page for $query', async ({ query, status, heading, rejection }) => {
@@ -28,7 +28,7 @@ describe('OAuth browser callback', () => {
     expect(html).toContain(`<h1 class="${status === 200 ? '' : 'failed'}">${heading}</h1>`);
     expect(html).toContain('data:image/png;base64,');
     expect(html).toContain('data:font/ttf;base64,');
-    expect(html).toContain('Inheriti® Tray');
+    expect(html).toContain('Inheriti® Go');
     expect(html).not.toMatch(/private-|\{\{|Ã|Â|Business/);
     if (rejection) {
       expect(outcome.error).toBeInstanceOf(Error);

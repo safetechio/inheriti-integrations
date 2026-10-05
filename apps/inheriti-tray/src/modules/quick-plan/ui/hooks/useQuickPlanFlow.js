@@ -12,7 +12,7 @@ const blankForm = (teams = []) => ({
   file: null,
 });
 
-export function useQuickPlanFlow({ state, setState, messages, canHandleAction, onEditAction }) {
+export function useQuickPlanFlow({ state, setState, messages, canHandleAction, onEditAction, onReturnToInbox }) {
   const [step, setStep] = useState('actions');
   const [form, setForm] = useState(() => blankForm(state?.teams));
   const [draft, setDraft] = useState(null);
@@ -21,10 +21,15 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
+  const inboxDraft = useRef(false);
 
   useEffect(() => {
     if (state?.status === 'signed-out') clearDraft();
   }, [state?.status]);
+
+  useEffect(() => window.inheritiTray.onHidden(() => {
+    if (inboxDraft.current) clearDraft();
+  }), [state?.teams]);
 
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) return;
@@ -48,8 +53,10 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
     setError(messages.comingLater(action));
   }), [state?.selectedId, state?.status, busy, preparing, step, canHandleAction, onEditAction, messages]);
 
-  function clearDraft() {
+  function clearDraft(returnToInbox = false) {
+    const cameFromInbox = inboxDraft.current;
     generation.current += 1;
+    inboxDraft.current = false;
     setForm(blankForm(state?.teams));
     setDraft(null);
     setReadySummary(null);
@@ -57,12 +64,35 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
     setBusy(false);
     setPreparing(false);
     setError('');
+    if (returnToInbox && cameFromInbox) onReturnToInbox();
   }
 
   function openCapture(audience = state?.teams?.length ? 'team' : 'private') {
     setForm((current) => ({ ...current, audience, teamId: current.teamId || state?.teams?.[0]?.id || '' }));
     setStep('capture');
     setError('');
+  }
+
+  function openInboxSuggestion(suggestion) {
+    if (busy || preparing || state?.status !== 'signed-in' || !state.selectedId ||
+      !suggestion || typeof suggestion !== 'object') return false;
+    const definition = state.assetCatalog.find(({ id }) => id === suggestion.assetType);
+    if (!definition || typeof suggestion.title !== 'string' || typeof suggestion.assetName !== 'string' ||
+      !suggestion.fields || typeof suggestion.fields !== 'object') return false;
+    const fields = {};
+    for (const field of definition.fields) {
+      if (typeof suggestion.fields[field] === 'string') fields[field] = suggestion.fields[field];
+    }
+    if (!Object.keys(fields).length) return false;
+    generation.current += 1;
+    inboxDraft.current = true;
+    setForm({ title: suggestion.title.slice(0, 200), audience: 'private', teamId: '',
+      assetType: definition.id, assetName: suggestion.assetName.slice(0, 200), fields, file: null });
+    setDraft(null);
+    setReadySummary(null);
+    setError('');
+    setStep('capture');
+    return true;
   }
 
   async function abandon() {
@@ -79,7 +109,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   async function cancelCapture() {
     generation.current += 1;
     if (state?.creation?.status === 'error' && !(await abandon())) return;
-    clearDraft();
+    clearDraft(true);
   }
 
   async function reviewCapture(event) {
@@ -169,8 +199,8 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   }
 
   return {
-    step, form, setForm, readySummary, busy, preparing, error,
-    openCapture, clearDraft, cancelCapture, reviewCapture,
+    step, form, setForm, readySummary, busy, preparing, error, fromInbox: inboxDraft.current,
+    openCapture, openInboxSuggestion, clearDraft, cancelCapture, reviewCapture,
     startOver, submitCapture, cancelKeyRequest, signOut, selectOrganization, setStep,
   };
 }

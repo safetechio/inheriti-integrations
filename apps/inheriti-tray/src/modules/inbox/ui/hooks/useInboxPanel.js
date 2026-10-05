@@ -12,7 +12,7 @@ export function useInboxPanel(onClose, identity) {
   const refresh = useRef(null);
   refresh.current = (signal) => {
     if (signal?.kind === 'NEW_MESSAGE') {
-      setToast({ kind: 'info', message: 'A protected message is ready.' });
+      setToast({ kind: 'info', message: 'A new message is ready.' });
     }
     if (signal?.recipientStatus === 'CONSUMED' && signal.senderMemberId === identity?.memberId &&
       signal.memberId !== identity?.memberId) {

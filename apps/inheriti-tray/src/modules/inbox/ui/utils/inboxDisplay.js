@@ -15,7 +15,8 @@ export function conversationTitle(memberNames) {
 
 export function conversationPreview(latest, ownMemberId) {
   if (!latest) return 'No messages yet';
-  const kind = latest.contentKind === 'FILE' ? 'Protected file' : 'Sealed message';
+  const kind = latest.contentKind === 'NORMAL' ? 'Encrypted message'
+    : latest.contentKind === 'FILE' ? 'Protected file' : 'Sealed message';
   return latest.senderMemberId === ownMemberId ? `You: ${kind}` : kind;
 }
 

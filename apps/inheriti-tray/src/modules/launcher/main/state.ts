@@ -230,12 +230,21 @@ export class TraySession {
   inboxState(): InboxIdentityState { return this.inbox.state(); }
   registeredInboxMemberId(): Promise<string | undefined> { return this.inbox.registeredMemberId(); }
   prepareInbox(): Promise<InboxIdentityState> { return this.inbox.prepare(); }
+  replaceInboxDevice(): Promise<InboxIdentityState> { return this.inbox.replace(); }
   cancelInboxPreparation(): void { this.inbox.cancelPreparation(); }
   listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listParticipants(input); }
   createInboxConversation(title: string, participantMemberIds: string[]) { return this.inbox.createConversation(title, participantMemberIds); }
   changeInboxParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) { return this.inbox.changeParticipants(conversationId, input); }
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
+  clearInboxHistory(conversationId: string) { return this.inbox.clearHistory(conversationId); }
+  listInboxParents(conversationId: string) { return this.inbox.listParents(conversationId); }
+  sendInboxParent(conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>) { return this.inbox.sendParent(conversationId, parentId, segments); }
+  revealInboxUnit(conversationId: string, parentId: string, unitId: string) { return this.inbox.revealUnit(conversationId, parentId, unitId); }
   listInboxMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) { return this.inbox.listMessages(conversationId, input); }
+  prepareNormalInbox(conversationId: string) { return this.inbox.prepareNormal(conversationId); }
+  listNormalInboxMetadata(conversationId: string) { return this.inbox.listNormalMetadata(conversationId); }
+  listNormalInboxMessages(conversationId: string) { return this.inbox.listNormal(conversationId); }
+  sendNormalInboxText(conversationId: string, parentId: string, text: string) { return this.inbox.sendNormal(conversationId, parentId, text); }
   sendInboxText(conversationId: string, text: string, expiresAt: string) { return this.inbox.sendText(conversationId, text, expiresAt); }
   sendInboxFile(conversationId: string, expiresAt: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.sendFile(conversationId, expiresAt, progress); }
   openInboxText(conversationId: string, messageId: string) { return this.inbox.openText(conversationId, messageId); }

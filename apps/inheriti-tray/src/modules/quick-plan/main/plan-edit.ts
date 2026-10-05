@@ -19,7 +19,7 @@ const PLAN_EDIT_STATUS: PlanEditStatuses = {
 };
 
 export type PlanEditState = {
-  plans: { id: string; name: string }[];
+  plans: { id: string; name: string; assetCount: number; assetNames: string[] }[];
   assets: { id: string; type: string; name: string; isMedia: boolean }[];
   status: PlanEditStatuses[keyof PlanEditStatuses];
   phase?: EditPhase;
@@ -204,8 +204,10 @@ export class TrayPlanEdit {
       const plans: PlanEditState['plans'] = [];
       let cursor: string | undefined;
       do {
-        const page: { items: { id: string; name: string; status: string }[]; nextCursor: string | null } = await operations.list(cursor);
-        plans.push(...page.items.filter((plan) => plan.status === 'PROTECTED').map(({ id, name }) => ({ id, name })));
+        const page: { items: { id: string; name: string; status: string; assetSummary: { count: number; names: string[] } }[]; nextCursor: string | null } = await operations.list(cursor);
+        plans.push(...page.items.filter((plan) => plan.status === 'PROTECTED').map(({ id, name, assetSummary }) => ({
+          id, name, assetCount: assetSummary.count, assetNames: assetSummary.names,
+        })));
         cursor = page.nextCursor ?? undefined;
       } while (cursor);
       this.plans = plans;

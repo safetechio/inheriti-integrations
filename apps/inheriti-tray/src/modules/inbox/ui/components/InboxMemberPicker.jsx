@@ -9,7 +9,7 @@ export function InboxMemberPicker({ title, setTitle, query, setQuery, onSearch, 
       {memberIds.length > 0 && <div className="inbox-picked" aria-label="Selected members">{memberIds.map((id) => <button type="button" key={id} onClick={() => onToggle(id)} aria-label={`Remove ${names[id] || 'member'} from selection`}><span className="inbox-avatar">{initials(names[id] || 'M')}</span>{names[id] || 'Member'} ×</button>)}</div>}
       <div className="inbox-member-intro">
         <h2 className="inbox-overline">Members</h2>
-        <p className="inbox-member-hint">Active members appear here once they open Secure Inbox in Inheriti® Tray to register their device key.</p>
+        <p className="inbox-member-hint">Active members appear here once they open Secure Chat in Inheriti® Go to register their device key.</p>
       </div>
       <div className="inbox-member-list" role="group" aria-label="Members">
         {searchBusy && <InboxSkeleton label={searchBusy === 'searching' ? 'Searching members…' : 'Loading members…'} kind="members" />}

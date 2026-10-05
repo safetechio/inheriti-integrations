@@ -9,8 +9,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
   return <main className="tray-screen tray-home">
     <p id="status" className="sr-only" role="status">{status}</p>
     <header className="tray-home-header">
-      <img src="tray.png" alt="" />
-      <strong>Inheriti<span>®</span> <em>tray</em></strong>
+      <span>Select organization:</span>
       <label className="tray-organization-picker">
         <span className="sr-only">{messages.organization}</span>
         <select id="organization" value={selectedId || ''} onChange={(event) => onOrganizationChange(event.target.value)} disabled={!organizations.length}>
@@ -25,7 +24,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>
       </section>
       <div className="tray-home-section">
-        <h2>Protection plans</h2>
+        <h2>Plan management</h2>
         <div className="tray-home-actions">
           <button id="save-plan" type="button" disabled={!canCreate} onClick={onCreate}>
             <span className="tray-action-icon"><PlusIcon /></span><span><strong>{messages.savePlan}</strong><small>Protect a secret in a new plan</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
@@ -33,16 +32,23 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
           <button id="add-asset" type="button" disabled={!canEdit} onClick={onEdit}>
             <span className="tray-action-icon"><EditIcon /></span><span><strong>{messages.addOrEditAsset}</strong><small>Update a plan that's already protected</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
           </button>
-          <button id="app" type="button" onClick={onOpenApp}>
-            <img src="tray.png" alt="" /><span><strong>{messages.openApp}</strong><small>Manage plans, teams and members</small></span><span className="tray-external-arrow"><ExternalLinkIcon /></span>
+        </div>
+      </div>
+      <div className="tray-home-section">
+        <h2>Secure Chat</h2>
+        <div className="tray-home-actions">
+          <button id="open-inbox" type="button" onClick={onOpenInbox}>
+            <span className="tray-action-icon"><LockIcon /></span><span><strong>Open Secure Chat</strong><small>Private messages and files</small></span>{inboxHasNew && <span className="inbox-unread-badge" aria-label="New message">•</span>}<span className="tray-action-arrow"><ChevronRightIcon /></span>
           </button>
         </div>
       </div>
       <div className="tray-home-section">
-        <h2>Secure Inbox</h2>
-        <div className="tray-home-actions"><button id="open-inbox" type="button" onClick={onOpenInbox}>
-          <span className="tray-action-icon"><LockIcon /></span><span><strong>Open Secure Inbox</strong><small>Private messages and files</small></span>{inboxHasNew && <span className="inbox-unread-badge" aria-label="New protected message">•</span>}<span className="tray-action-arrow"><ChevronRightIcon /></span>
-        </button></div>
+        <h2>Inheriti® Business</h2>
+        <div className="tray-home-actions">
+          <button id="app" type="button" onClick={onOpenApp}>
+            <img src="tray.png" alt="" /><span><strong>{messages.openApp}</strong><small>Manage plans, teams and members</small></span><span className="tray-external-arrow"><ExternalLinkIcon /></span>
+          </button>
+        </div>
       </div>
     </div>
     <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}{version && <span className="tray-version">· v{version}</span>}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>{messages.signOut}</button></ScreenFooter>

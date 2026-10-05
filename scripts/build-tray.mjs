@@ -8,9 +8,9 @@ import { buildDefines, writeBuildDeployment } from './build-deployment.mjs';
 
 const root = process.cwd();
 const output = resolve(root, 'dist');
-const checked = spawnSync(process.platform === 'win32' ? 'corepack.cmd' : 'corepack',
-  ['pnpm', 'exec', 'tsc', '-p', 'tsconfig.build.json', '--noEmit'],
-  { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+const checked = spawnSync(process.execPath,
+  [resolve(root, '../../node_modules/typescript/bin/tsc'), '-p', 'tsconfig.build.json', '--noEmit'],
+  { cwd: root, stdio: 'inherit' });
 if (checked.status !== 0) process.exit(checked.status ?? 1);
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
