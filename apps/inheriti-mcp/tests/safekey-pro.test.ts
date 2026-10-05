@@ -1,7 +1,4 @@
-import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
-const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
-vi.mock('node:child_process', () => ({ spawn }));
 const { createNodeSafeKeyProDevice } = vi.hoisted(() => ({ createNodeSafeKeyProDevice: vi.fn((options: unknown) => ({ options, write: async () => undefined, read: async () => undefined })) }));
 vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-core-sdk/node')>(), createNodeSafeKeyProDevice }));
 vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({ ...await original<typeof import('@safetech/inheriti-elements-core/node')>(), waitForSafeKeyProDevice: async () => '/dev/hidraw4' }));
@@ -143,16 +140,4 @@ it('cancels a pending PIN when the device operation is aborted independently', a
     await expect(requested).rejects.toThrow('local_delivery_canceled');
     expect(controller.signal.aborted).toBe(false);
   } finally { page.prompt.close(); }
-});
-
-it.skipIf(process.platform === 'win32')('reports unavailable browser when the device choice launcher exits unsuccessfully', async () => {
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const prompt = await openSafeKeyProPrompt('local', undefined, context, new AbortController().signal);
-  try {
-    const choice = prompt.selectCustodianDevice();
-    const rejected = expect(choice).rejects.toThrow('local_browser_unavailable');
-    child.emit('exit', 3, null);
-    await rejected;
-  } finally { prompt.close(); }
 });

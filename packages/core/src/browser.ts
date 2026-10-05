@@ -7,6 +7,7 @@ import { SdkPlanFacade } from './plans.js';
 import { createOperatorAuth } from './auth.js';
 import type { OperatorAuthOptions } from './operator-auth.js';
 import { composeRevealWorkflows } from './workflows.js';
+export { fieldMaxLength, fieldMaxLengths, assetName, fieldName } from './asset-metadata.js';
 
 export type BrowserIntegrationCoreOptions = OperatorAuthOptions & {
   apiUrl: string;

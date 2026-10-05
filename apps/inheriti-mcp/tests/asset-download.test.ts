@@ -83,13 +83,13 @@ it.each(['FIELD', 'ASSET'] as const)('keeps %s delivery pending until local conf
   expect(started.status).toBe('WAITING');
   expect(started.instruction).toContain('check_reveal_status');
   await vi.waitFor(() => expect(deliver).toHaveBeenCalled());
-  expect(await tools.revealStatus(started.jobId)).toMatchObject({ status: 'WAITING', instruction: started.instruction, message: expect.stringContaining('local browser page') });
+  expect(await tools.revealStatus(started.jobId)).toMatchObject({ status: 'WAITING', instruction: started.instruction, message: expect.stringContaining('secure window') });
   confirm();
   await vi.waitFor(async () => expect((await tools.revealStatus(started.jobId)).status).toBe('DELIVERED'));
   expect(await tools.revealStatus(started.jobId)).not.toHaveProperty('instruction');
 });
 
-it.each(['local_browser_unavailable', 'local_delivery_expired', 'local_delivery_canceled'])('reports %s from the delivery callback safely', async code => {
+it.each(['local_window_unavailable', 'local_delivery_expired', 'local_delivery_canceled'])('reports %s from the delivery callback safely', async code => {
   const tools = new MetadataTools() as any;
   deliverAssetInBrowser.mockRejectedValueOnce(new Error(code));
   tools.selected = async () => ({ organizationId: 'org-1', core: {

@@ -19,6 +19,24 @@ import type { Terminal } from './output.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
 import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
+import { createPlan } from './commands/create-plan.js';
+import type { CliConfiguration } from './configuration.js';
+import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node';
+import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node';
+
+export function parsePlanHints(args: readonly string[]): LocalPlanHints | undefined {
+  const hints: { title?: string; description?: string; assetTypes: string[] } = { assetTypes: [] };
+  for (let index = 0; index < args.length; index += 2) {
+    const key = args[index];
+    const value = args[index + 1];
+    if (!value || value.startsWith('--')) return;
+    if (key === '--title' && !hints.title && value.trim().length <= 200) hints.title = value.trim();
+    else if (key === '--description' && !hints.description && value.trim().length <= 1_000) hints.description = value.trim();
+    else if (key === '--asset' && quickPlanAssetCatalog.some(({ id }) => id === value) && !hints.assetTypes.includes(value) && hints.assetTypes.length < localPlanAssetLimit) hints.assetTypes.push(value);
+    else return;
+  }
+  return hints;
+}
 
 function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const configuration = BUILD_DEPLOYMENT
@@ -38,6 +56,8 @@ inheriti <command>
   organizations use [id] Select a Business organization
   plans list [--limit n] [--all] [--cursor c] [--organization id]
                      List plans in the selected context
+  plans create [--title NAME] [--description TEXT] [--asset TYPE ...]
+                     Prefill the desktop assistant with plan metadata and likely asset types
   plans show [id]    Show one plan, its assets and its participants
   plans logs [id] [--limit n] [--offset n] [--json|--table]
                      Show the plan activity log
@@ -72,7 +92,8 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     login: `Usage: inheriti login [--device]\n\nSign in using the system browser. --device uses a device code for headless environments and can continue through the plan's approval process.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organizations or select one for this account.`,
-    plans: `Usage: inheriti plans <list|show|logs|reveal|download|abort>\n\nInspect plan metadata and activity, securely copy selected fields, download a media asset, or abandon an unfinished access request.\nRun inheriti help plans <command> for details.`,
+    plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|abort>\n\nCreate a plan or inspect plan metadata and activity. Run inheriti help plans <command> for details.`,
+    'plans create': `Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n\nPrefill editable, non-secret plan metadata and likely asset types in the desktop window. Repeat --asset for up to ${localPlanAssetLimit} catalog types. Types: ${quickPlanAssetCatalog.map(({ id }) => id).join(', ')}. Enter secret values only in the window. Requires an interactive terminal, a selected Organisation, and sign-in. First use offers a model and runtime download of about 1.1 GB.`,
     'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table]\n\nList non-sensitive plan metadata. --json never includes reconstructed secret values.`,
     'plans show': `Usage: inheriti plans show [PLAN_ID] [--json|--table]\n\nShow one plan's non-sensitive assets, fields, participants, governance, and reveal policy. An interactive terminal can prompt for PLAN_ID.`,
     'plans logs': `Usage: inheriti plans logs [PLAN_ID] [--limit N] [--offset N] [--json|--table]\n\nShow authorized plan activity. The table summarizes events; --json includes all safe log fields and total count. An interactive terminal can prompt for PLAN_ID.`,
@@ -165,7 +186,7 @@ export async function run(
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, parsed.organizationId);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), 'interactive', organization.id);
       scoped.organization = organization;
-      return command === 'plans' ? await plans(scoped, terminal, parsed.argv) : await secrets(scoped, terminal, parsed.argv);
+      return command === 'plans' ? await plans(scoped, terminal, parsed.argv, configuration) : await secrets(scoped, terminal, parsed.argv);
     }
     terminal.writeError(`Unknown command: ${command}`);
     return 1;
@@ -221,8 +242,17 @@ async function plans(
   context: Awaited<ReturnType<typeof createCliContext>>,
   terminal: Terminal,
   argv: readonly string[],
+  configuration?: CliConfiguration,
 ): Promise<number> {
   const [subcommand, ...rest] = argv;
+  if (subcommand === 'create') {
+    const hints = parsePlanHints(rest);
+    if (!hints) { terminal.writeError('Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]'); return 1; }
+    const controller = new AbortController();
+    const unregister = registerCliCancel(controller);
+    try { return await createPlan(context, configuration, terminal, controller.signal, new URL('./assets/font-app.ttf', import.meta.url), hints); }
+    finally { unregister(); }
+  }
   if (subcommand === 'list') {
     const parsed = parseListOptions(rest);
     if ('error' in parsed) {
@@ -483,6 +513,10 @@ export function messageFor(error: unknown, business = false): string {
   if (error instanceof OrganizationChoiceRequired) return error.message;
   if (error instanceof CliConfigurationInvalid) return error.message;
   if (error instanceof UsePlanInvalid) return error.message;
+  const networkCode = (error as { cause?: { code?: unknown } })?.cause?.code;
+  if (networkCode === 'ECONNREFUSED' || networkCode === 'ENOTFOUND' || networkCode === 'ETIMEDOUT' || networkCode === 'UND_ERR_CONNECT_TIMEOUT') {
+    return 'Cannot connect to the Inheriti API.';
+  }
   const name = (error as { name?: unknown })?.name;
   if (name === 'MasterKeyRequired') {
     const system = (error as { ref?: { system?: unknown } }).ref?.system;
@@ -548,6 +582,9 @@ const MESSAGES: Readonly<Record<string, string>> = {
   session_permissions_widened: 'The stored session was readable by others and has been cleared. Sign in again.',
   InteractiveTerminalRequired: 'Signing in needs an interactive terminal.',
   BrowserUnavailable: 'Could not open a browser. Sign in with `inheriti login --device`.',
+  local_window_unavailable: 'Could not open the plan window. Check the CLI installation and try again.',
+  local_plan_canceled: 'Plan creation canceled.',
+  local_plan_expired: 'The plan window expired. Start again when ready.',
   login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',

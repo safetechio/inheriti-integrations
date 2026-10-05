@@ -1,16 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNativeWindowSession, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createQuickPlanOperations, quickPlanAssetCatalog, localPlanAssetLimit, runLocalPlanBrowser, LlamaPlanModel } from '@safetech/inheriti-elements-core/node';
+import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node';
 import type { NodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
 import { planDetail, planSummary } from './metadata.js';
 import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/node';
 import { deliverAssetInBrowser, deliverFieldsInBrowser, deliverSelectionInBrowser, deliverInBrowser } from './local-browser.js';
 import { openSafeKeyProPrompt } from './safekey-pro.js';
+import { ensureLocalAssistant } from './plan-assistant.js';
 
 const configPath = () => resolve(process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config'), 'inheriti-elements', 'config.json');
 const coded = (code: string) => Object.assign(new Error(code), { code });
@@ -52,6 +55,7 @@ export class MetadataTools {
   private selecting: ReturnType<MetadataTools['selectCore']> | undefined;
   private sessions = new MemoryOperatorSessionStore();
   private job?: { id: string; planId: string; organizationId: string; phase: string; progress?: { revealId?: string; expiresAt?: string; dmsExpiresAt?: string; governanceExpiresAt?: string; governanceGate?: string; approvedModerators?: number; requiredModerators?: number; deniedBy?: string; closedReason?: string }; message?: string; code?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
+  private planJob?: { id: string; status: 'WAITING' | 'CREATED' | 'PENDING' | 'FAILED' | 'CANCELED'; phase: string; planId?: string; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
 
@@ -150,8 +154,9 @@ export class MetadataTools {
   private preferences() { return readOrganizationPreferences(this.preferencePath()); }
   private save(value: Record<string, string>) { return saveOrganizationPreferences(this.preferencePath(), value); }
   private async stopLocalAccess() {
-    if (!this.scoped && this.job?.status !== 'WAITING') return;
+    if (!this.scoped && this.job?.status !== 'WAITING' && this.planJob?.status !== 'WAITING') return;
     this.selectionVersion++;
+    await this.cancelPlanJob();
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
     await this.clearScoped();
@@ -176,6 +181,7 @@ export class MetadataTools {
   async selectOrganization(id: string) {
     const generation = this.authGeneration;
     const version = ++this.selectionVersion;
+    await this.cancelPlanJob();
     const active = this.job;
     const canceling = active?.status === 'WAITING';
     if (active?.status === 'WAITING') active.controller.abort();
@@ -222,10 +228,10 @@ export class MetadataTools {
     this.assertGeneration(generation);
     const identity = JSON.stringify([this.config!.issuer, this.config!.environment, session.principal.subject, session.principal.sessionId]);
     if (this.scoped?.identity !== identity || this.scoped.organizationId !== id) {
-      if (this.scoped && this.job?.status === 'WAITING') {
+      if (this.scoped && (this.job?.status === 'WAITING' || this.planJob?.status === 'WAITING')) {
         this.selectionVersion++;
-        this.job.controller.abort();
-        await this.job.done;
+        await this.cancelPlanJob();
+        if (this.job?.status === 'WAITING') { this.job.controller.abort(); await this.job.done; }
         await this.clearScoped();
         throw coded('organization_selection_changed');
       }
@@ -248,6 +254,7 @@ export class MetadataTools {
   async logout() {
     this.selectionVersion++;
     this.authGeneration++;
+    await this.cancelPlanJob();
     this.polling?.abort();
     const retired = this.sessions;
     const retiredScoped = this.scoped;
@@ -293,6 +300,78 @@ export class MetadataTools {
     });
     return { organizationId: selected.organizationId, ...page };
   }
+  private async cancelPlanJob() {
+    const job = this.planJob;
+    if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
+  }
+  async createPlanWithAssistant(hints?: LocalPlanHints) {
+    const version = this.selectionVersion;
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    if (version !== this.selectionVersion) throw coded('organization_selection_changed');
+    if (this.planJob?.status === 'WAITING') throw coded('plan_creation_in_progress');
+    const controller = new AbortController();
+    let windowUnavailable = false;
+    const window = createNativeWindowSession(reason => { windowUnavailable = reason === 'unavailable'; controller.abort(); });
+    const job: NonNullable<typeof this.planJob> = { id: crypto.randomUUID(), status: 'WAITING', phase: 'SETUP', controller, done: Promise.resolve() };
+    this.planJob = job;
+    job.done = (async () => {
+      const installed = await ensureLocalAssistant(controller.signal, url => window.open(url));
+      if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
+      const model = new LlamaPlanModel(installed.executablePath, installed.modelPath);
+      const operations = createQuickPlanOperations({ apiUrl: this.config!.apiUrl, environment: this.config!.environment,
+        organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() });
+      let masterKeySource: { resolve: () => Promise<string> } | undefined;
+      let planContext: Awaited<ReturnType<typeof operations.createContext>> | undefined;
+      let inputFingerprint: string | undefined;
+      let creationFlight: ReturnType<typeof operations.createMany> | undefined;
+      const teams = (await operations.teams()).teams;
+      if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
+      job.phase = 'WINDOW';
+      try {
+        await runLocalPlanBrowser({ model, signal: controller.signal, teams, ...(hints ? { hints } : {}), fontFile: new URL('./assets/font-app.ttf', import.meta.url),
+          open: url => window.open(url),
+          create: async input => {
+            if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
+            const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+            if (inputFingerprint && inputFingerprint !== fingerprint) throw coded('plan_creation_input_changed');
+            inputFingerprint = fingerprint;
+            if (!masterKeySource) {
+              job.phase = 'ACQUIRING_KEY';
+              const key = await operations.acquireKey(controller.signal, () => { job.phase = 'AWAITING_KEY'; });
+              if (!key) throw coded('master_key_required');
+              masterKeySource = { resolve: async () => key };
+            }
+            if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
+            job.phase = 'CREATING';
+            planContext ??= await operations.createContext();
+            if (controller.signal.aborted || version !== this.selectionVersion) {
+              await operations.abandon(planContext.planId);
+              throw coded('local_plan_canceled');
+            }
+            job.planId = planContext.planId;
+            creationFlight = operations.createMany({ context: planContext, ...input, masterKeySource });
+            const created = await creationFlight;
+            job.status = created.status === 'READY' ? 'CREATED' : 'PENDING';
+            return created;
+          },
+        });
+      } catch (error) {
+        if (creationFlight) await creationFlight.catch(() => undefined);
+        if (job.status === 'WAITING') throw error;
+      } finally { model.stop(); }
+      if (job.status === 'WAITING') job.status = 'CREATED';
+      job.phase = 'COMPLETE';
+    })().catch(() => { job.status = windowUnavailable ? 'FAILED' : controller.signal.aborted && !job.planId ? 'CANCELED' : 'FAILED'; job.phase = windowUnavailable ? 'WINDOW_UNAVAILABLE' : job.status; }).finally(() => {
+      if (job.status === 'CREATED' || job.status === 'PENDING') window.complete(); else window.close();
+    });
+    return { jobId: job.id, status: job.status };
+  }
+  async planCreationStatus(jobId: string, cancel = false) {
+    const job = this.planJob;
+    if (!job || job.id !== jobId) throw coded('plan_creation_not_found');
+    if (cancel && job.status === 'WAITING') { job.controller.abort(); await job.done; }
+    return { jobId: job.id, status: job.status, phase: job.phase, ...(job.planId ? { planId: job.planId } : {}) };
+  }
   async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD') {
     return this.startReveal(planId, kind === 'ASSET' ? { kind, asset: selector } : { kind, selectors: [selector], single: true });
   }
@@ -317,6 +396,8 @@ export class MetadataTools {
     if (version !== this.selectionVersion) throw coded('organization_selection_changed');
     if (this.job?.status === 'WAITING') throw coded('reveal_in_progress');
     const controller = new AbortController();
+    let windowUnavailable = false;
+    const window = createNativeWindowSession(reason => { windowUnavailable = reason === 'unavailable'; controller.abort(); });
     const job: NonNullable<typeof this.job> = { id: crypto.randomUUID(), planId, organizationId: selected.organizationId, phase: 'STARTING', status: 'WAITING', controller, done: Promise.resolve() };
     this.job = job;
     job.done = (async () => {
@@ -342,7 +423,8 @@ export class MetadataTools {
       const moderatorNamesById = new Map(moderators.map(participant => [participant.id, participant.displayName]));
       if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('organization_selection_changed');
       const prompt = await openSafeKeyProPrompt(this.config?.deployment, process.env.INHERITI_SAFEKEY_PRO_DEVICE,
-        { organizationId: selected.organizationId, planId, selector, kind: request.kind === 'FIELD' && !request.single ? 'SELECTION' : kind }, controller.signal);
+        { organizationId: selected.organizationId, planId, selector, kind: request.kind === 'FIELD' && !request.single ? 'SELECTION' : kind }, controller.signal,
+        url => window.open(url));
       let completed = false;
       try { await selected.core.withReveal(planId, {
         mode: revealModeOf(plan), signal: controller.signal,
@@ -372,8 +454,8 @@ export class MetadataTools {
         if (kind === 'ASSET') {
           await reveal.exportAsset(selector, async asset => {
             if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('local_delivery_canceled');
-            job.message = 'Open the local browser page and confirm the file download to finish delivery.';
-            await deliverAssetInBrowser(asset.fileName ?? 'asset.bin', asset.bytes, { signal: controller.signal, timeoutMs: deliveryTimeout(), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) });
+            job.message = 'Confirm the file download in the secure window to finish delivery.';
+            await deliverAssetInBrowser(asset.fileName ?? 'asset.bin', asset.bytes, { signal: controller.signal, timeoutMs: deliveryTimeout(), open: url => window.open(url), ...(asset.mimeType ? { mimeType: asset.mimeType } : {}) });
           });
         } else {
           const deliver = async (fields: ReadonlyArray<{ selector: string; value: unknown }>) => {
@@ -391,17 +473,17 @@ export class MetadataTools {
               if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job) throw coded('local_delivery_canceled');
               const timeoutMs = deliveryTimeout();
               job.message = assets.length
-                ? 'Open the local browser page, confirm the selection, and download each file to finish delivery.'
-                : 'Open the local browser page and confirm the selected fields to finish delivery.';
+                ? 'Confirm the selection and download each file in the secure window to finish delivery.'
+                : 'Confirm the selected fields in the secure window to finish delivery.';
               if (assets.length) {
-                await deliverSelectionInBrowser(fields, downloaded, { signal: controller.signal, timeoutMs });
+                await deliverSelectionInBrowser(fields, downloaded, { signal: controller.signal, timeoutMs, open: url => window.open(url) });
                 return;
               }
               if (request.kind === 'FIELD' && request.single) {
-                await deliverInBrowser(selectors[0]!, fields[0]!.value, { signal: controller.signal, timeoutMs });
+                await deliverInBrowser(selectors[0]!, fields[0]!.value, { signal: controller.signal, timeoutMs, open: url => window.open(url) });
                 return;
               }
-              await deliverFieldsInBrowser(fields, { signal: controller.signal, timeoutMs });
+              await deliverFieldsInBrowser(fields, { signal: controller.signal, timeoutMs, open: url => window.open(url) });
             };
             await exportNext(0);
           };
@@ -414,7 +496,9 @@ export class MetadataTools {
         }
       }); completed = true; } finally { prompt.close(completed ? 'complete' : controller.signal.aborted ? 'canceled' : 'failed'); }
     })().then(() => { job.status = 'DELIVERED'; job.message = 'Delivered securely.'; }).catch(error => {
-      const code = safeErrorCode(error);
+      const failureCode = safeErrorCode(error);
+      const code = failureCode === 'reveal_cancellation_failed' || failureCode === 'master_key_relay_cancellation_failed'
+        ? failureCode : windowUnavailable ? 'local_window_unavailable' : failureCode;
       if (code !== 'request_failed') job.code = code;
       if (code === 'reveal_cancellation_failed' || code === 'master_key_relay_cancellation_failed') {
         job.status = 'FAILED';
@@ -423,7 +507,7 @@ export class MetadataTools {
           : 'Server cancellation could not be confirmed. Use abort_plan_access to close the interrupted request before retrying.';
         return;
       }
-      job.status = controller.signal.aborted || code === 'local_delivery_canceled' ? 'CANCELED' : 'FAILED';
+      job.status = !windowUnavailable && (controller.signal.aborted || code === 'local_delivery_canceled') ? 'CANCELED' : 'FAILED';
       if (job.status === 'CANCELED') { job.message = 'Reveal canceled.'; return; }
       if ((error as { message?: unknown } | null)?.message === 'SAFEKEY_NO_SPACE') {
         job.message = 'SafeKey PRO has no free space. Download SafeKey Desktop Tool at https://safekey.be/tools/safekey-desktop/ to free space, then start a new reveal.';
@@ -436,7 +520,7 @@ export class MetadataTools {
       }
       if (lifecycleMessages[code] && !['DENIED', 'STOPPED_BY_DMS', 'EXPIRED', 'PARTICIPANT_REVOKED', 'RECONCILIATION_REQUIRED'].includes(job.phase)) { job.message = lifecycleMessages[code]; return; }
       if (!['DENIED', 'STOPPED_BY_DMS', 'EXPIRED', 'PARTICIPANT_REVOKED', 'RECONCILIATION_REQUIRED'].includes(job.phase)) job.message = 'Reveal could not continue.';
-    });
+    }).finally(() => { if (job.status === 'DELIVERED') window.complete(); else window.close(); });
     const expiry = setTimeout(() => controller.abort(), 10 * 60_000);
     void job.done.finally(() => clearTimeout(expiry));
     return { jobId: job.id, status: job.status, phase: job.phase, ...(job.progress ? { progress: job.progress } : {}), ...(job.message === undefined ? {} : { message: job.message }), ...(job.code ? { code: job.code } : {}), ...(job.status === 'WAITING' ? { instruction: pendingJobInstruction } : {}) };
@@ -453,8 +537,8 @@ export class MetadataTools {
 const pendingJobInstruction = 'While WAITING, call check_reveal_status with this jobId every few seconds until status is DELIVERED, FAILED, or CANCELED. Relay each required user action and the final outcome to the user. This server cannot automatically wake the assistant.';
 
 const lifecycleMessages: Record<string, string> = {
-  local_browser_unavailable: 'The local browser could not open. Check that a desktop browser is available, then start a new reveal.',
-  local_delivery_expired: 'The local delivery page expired before confirmation. Start a new reveal and confirm the browser page in time.',
+  local_window_unavailable: 'The secure window could not open. Check the desktop installation, then start a new reveal.',
+  local_delivery_expired: 'The local delivery page expired before confirmation. Start a new reveal and confirm it in the secure window in time.',
   local_delivery_canceled: 'Local delivery canceled.',
   master_key_required: 'The plan key is not available from SafeKey Mobile for this account.',
   master_key_relay_timed_out: 'Nobody released the organisation key in SafeKey Mobile in time.',
@@ -479,6 +563,8 @@ const safeCodes = new Set([
   'organization_selection_changed', 'plan_not_found', 'operator_reauthentication_required', 'reauthentication_required',
   'plan_request_rate_limited', 'reveal_restart_required', 'reveal_cancellation_failed', 'master_key_relay_cancellation_failed',
   'asset_selector_invalid', 'asset_not_found', 'asset_field_not_found', 'action_not_allowed', 'reveal_in_progress', 'reveal_not_found',
+  'plan_creation_in_progress', 'plan_creation_not_found',
+  'plan_creation_input_changed',
 ]);
 function safeErrorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
@@ -500,8 +586,8 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
 }
 
 export function registerRevealTools(server: McpServer, tools: MetadataTools) {
-  server.registerTool('reveal_plan_secret', { description: 'Deliver authorized plan fields together to a one-time local browser page. Request all needed fields in one call using selector, selectors and assets, or all: true for every field and downloadable file. Never returns values or a URL. ' + pendingJobInstruction, inputSchema: z.object({ planId: z.string().min(1), selector: z.string().min(3).optional(), selectors: z.array(z.string().min(3)).min(1).optional(), assets: z.array(z.string().min(1)).min(1).optional(), all: z.literal(true).optional() }) }, safeResult(({ planId, selector, selectors, assets, all }: { planId: string; selector?: string | undefined; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined }) => tools.revealFields(planId, { selector, selectors, assets, all })));
-  server.registerTool('download_plan_asset', { description: 'Offer one authorized media asset as an attachment in a one-time local browser page. Never returns its bytes or URL. ' + pendingJobInstruction, inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1) }) }, safeResult(({ planId, asset }: { planId: string; asset: string }) => tools.reveal(planId, asset, 'ASSET')));
+  server.registerTool('reveal_plan_secret', { description: 'Open the secure window to reveal selected plan fields and files. Use selector, selectors and assets, or all: true. ' + pendingJobInstruction, inputSchema: z.object({ planId: z.string().min(1), selector: z.string().min(3).optional(), selectors: z.array(z.string().min(3)).min(1).optional(), assets: z.array(z.string().min(1)).min(1).optional(), all: z.literal(true).optional() }) }, safeResult(({ planId, selector, selectors, assets, all }: { planId: string; selector?: string | undefined; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined }) => tools.revealFields(planId, { selector, selectors, assets, all })));
+  server.registerTool('download_plan_asset', { description: 'Open the secure window to download a plan file. ' + pendingJobInstruction, inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1) }) }, safeResult(({ planId, asset }: { planId: string; asset: string }) => tools.reveal(planId, asset, 'ASSET')));
   server.registerTool('check_reveal_status', { description: 'Check or cancel a pending local delivery. ' + pendingJobInstruction, inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.revealStatus(jobId, cancel)));
 }
 
@@ -515,7 +601,14 @@ export function createServer(secureDelivery = false) {
   server.registerTool('get_backup_plan', { description: 'Get safe metadata for one plan in the selected organization.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.getPlan(id)));
   server.registerTool('list_backup_plan_logs', { description: 'List safe plan activity fields and total count in the selected organization.', inputSchema: z.object({ planId: z.string().min(1), limit: z.number().int().min(1).max(100).optional(), offset: z.number().int().nonnegative().safe().optional() }) }, safeResult(({ planId, limit, offset }: { planId: string; limit?: number | undefined; offset?: number | undefined }) => tools.listPlanLogs(planId, limit, offset)));
   server.registerTool('logout', { description: 'Cancel local work, forget held keys, and clear this MCP session.', inputSchema: z.object({}) }, safeResult(() => tools.logout()));
-  server.registerTool('abort_plan_access', { description: 'Cancel an interrupted plan access in the selected organization. Never returns secret data.', inputSchema: z.object({ planId: z.string().min(1), expectedRevealId: z.string().min(1).optional() }) }, safeResult(({ planId, expectedRevealId }: { planId: string; expectedRevealId?: string | undefined }) => tools.abortPlanAccess(planId, expectedRevealId)));
+  server.registerTool('abort_plan_access', { description: 'Cancel an interrupted plan access in the selected organization.', inputSchema: z.object({ planId: z.string().min(1), expectedRevealId: z.string().min(1).optional() }) }, safeResult(({ planId, expectedRevealId }: { planId: string; expectedRevealId?: string | undefined }) => tools.abortPlanAccess(planId, expectedRevealId)));
+  server.registerTool('create_plan_with_assistant', { description: 'Open the secure window to create a plan with suggestions from the local model. Optional title, description, and assetTypes prefill the single editable plan text; derive them from non-secret user context only. The user can edit that text and enter exact secret values in the window. Review before saving, then check_plan_creation_status.', inputSchema: z.object({
+    title: z.string().trim().min(1).max(200).optional(), description: z.string().trim().max(1000).optional(),
+    assetTypes: z.array(z.string().refine(type => quickPlanAssetCatalog.some(({ id }) => id === type), 'Unknown asset type')).max(localPlanAssetLimit).describe(`Possible types: ${quickPlanAssetCatalog.map(({ id }) => id).join(', ')}`).optional(),
+  }) }, safeResult(({ title, description, assetTypes }: { title?: string | undefined; description?: string | undefined; assetTypes?: string[] | undefined }) => tools.createPlanWithAssistant({
+    ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}), ...(assetTypes ? { assetTypes } : {}),
+  })));
+  server.registerTool('check_plan_creation_status', { description: 'Check or cancel local assisted plan creation.', inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.planCreationStatus(jobId, cancel)));
   if (secureDelivery) registerRevealTools(server, tools);
   return server;
 }

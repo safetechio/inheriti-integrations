@@ -14,7 +14,7 @@ const ROOT = candidates(
   ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
 const PLANS = candidates(
-  ['list', 'List plans'], ['show', 'Show plan details'], ['logs', 'Show plan activity'],
+  ['create', 'Create a plan with the local assistant'], ['list', 'List plans'], ['show', 'Show plan details'], ['logs', 'Show plan activity'],
   ['reveal', 'Copy selected fields'], ['download', 'Download a media asset'],
   ['use', 'Run a command with secrets'], ['abort', 'Abandon current access'],
 );
@@ -114,6 +114,7 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
   if (command === 'login') return { kind: 'static', candidates: candidates(['--device', 'Use device login'], ['--help', 'Show help']) };
   if (command !== 'plans' && command !== 'secrets') return { kind: 'none' };
   if (words.length === 2) return { kind: 'static', candidates: command === 'plans' ? PLANS : SECRETS };
+  if (command === 'plans' && subcommand === 'create') return { kind: 'static', candidates: optionCandidates(['--title', '--description', '--asset'], false) };
   if (!subcommand || (command === 'plans' ? !PLAN_ID_COMMANDS.has(subcommand) && subcommand !== 'list' : !['exec', 'resolve'].includes(subcommand))) {
     return { kind: 'none' };
   }

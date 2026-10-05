@@ -43,6 +43,24 @@ it('allows organization selection after a finished cancellation failure without 
   expect(job).toEqual({ status: 'FAILED', code: 'reveal_cancellation_failed' });
 });
 
+it('cancels a plan assistant job on organization switch without a reveal job', async () => {
+  const tools = new MetadataTools() as any;
+  const controller = new AbortController();
+  tools.planJob = { id: 'job', status: 'WAITING', phase: 'WINDOW', controller, done: Promise.resolve() };
+  tools.ready = async () => ({ core: { listOrganizations: async () => [{ id: 'org-1', name: 'Org' }] } });
+  tools.key = async () => 'operator';
+  tools.preferences = async () => ({});
+  tools.save = async () => undefined;
+  expect(await tools.selectOrganization('org-1')).toEqual({ selectedId: 'org-1' });
+  expect(controller.signal.aborted).toBe(true);
+});
+
+it('returns only safe plan creation status fields', async () => {
+  const tools = new MetadataTools() as any;
+  tools.planJob = { id: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1', controller: new AbortController(), done: Promise.resolve(), secret: 'hidden' };
+  expect(await tools.planCreationStatus('job')).toEqual({ jobId: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1' });
+});
+
 it('uses the selected organization core for plan logs and returns the safe page', async () => {
   const tools = new MetadataTools() as any;
   const listPlanLogs = vi.fn().mockResolvedValue({ items: [{ id: 'log-1', event: 'PLAN_UPDATED', details: [] }], total: 1 });

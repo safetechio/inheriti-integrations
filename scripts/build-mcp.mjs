@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { packageDirectory } from './package-directory.mjs';
 import { buildDefines, writeBuildDeployment } from './build-deployment.mjs';
+import { buildNativeWindow } from './build-native-window.mjs';
 
 const root = process.cwd();
 const output = resolve(root, 'dist');
@@ -25,8 +26,11 @@ await build({
 });
 await chmod(resolve(output, 'main.js'), 0o755);
 await cp(resolve(root, 'src', 'assets'), resolve(output, 'assets'), { recursive: true });
+await cp(resolve(root, '../../packages/core/assets/fontawesome6-solid.ttf'), resolve(output, 'assets/font-icons.ttf'));
+await cp(resolve(root, '../../packages/core/assets/FONT-AWESOME-LICENSE.txt'), resolve(output, 'assets/FONT-AWESOME-LICENSE.txt'));
 await cp(resolve(root, 'src', 'templates'), resolve(output, 'templates'), { recursive: true });
 const coreSdk = await packageDirectory(root, '@safetech/inheriti-core-sdk');
 const workers = resolve(coreSdk, 'dist', 'workers');
 if (existsSync(workers)) await cp(workers, resolve(output, 'workers'), { recursive: true });
 await writeBuildDeployment(output);
+await buildNativeWindow(output);

@@ -8,6 +8,7 @@ import { optionalToastPlugin } from './optional-toast-plugin.mjs';
 import { optionalDevtoolsPlugin } from './optional-devtools-plugin.mjs';
 import { packageDirectory } from './package-directory.mjs';
 import { buildDefines, writeBuildDeployment } from './build-deployment.mjs';
+import { buildNativeWindow } from './build-native-window.mjs';
 
 /**
  * Builds the CLI as one self-contained ESM file.
@@ -50,6 +51,8 @@ await build({
 });
 await chmod(entry, 0o755);
 await cp(resolve(root, 'src/assets'), resolve(output, 'assets'), { recursive: true });
+await cp(resolve(root, '../../packages/core/assets/fontawesome6-solid.ttf'), resolve(output, 'assets/font-icons.ttf'));
+await cp(resolve(root, '../../packages/core/assets/FONT-AWESOME-LICENSE.txt'), resolve(output, 'assets/FONT-AWESOME-LICENSE.txt'));
 await cp(resolve(root, 'src/templates'), resolve(output, 'templates'), { recursive: true });
 
 // Core resolves its SSDP worker as `new URL('./workers/…', import.meta.url)`, which now points at the
@@ -65,3 +68,4 @@ const fallbacks = resolve(root, 'fallbacks');
 await rm(fallbacks, { recursive: true, force: true });
 await cp(resolve(clipboardy, 'fallbacks'), fallbacks, { recursive: true });
 await writeBuildDeployment(output);
+await buildNativeWindow(output);

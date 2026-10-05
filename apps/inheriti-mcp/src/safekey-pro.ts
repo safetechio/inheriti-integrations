@@ -4,15 +4,14 @@ import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 import { brandPage, mobile, pro, renderTemplate } from './local-page.js';
-import { openLocalBrowser } from './local-browser.js';
 import { businessDeployment, businessUiRpId, createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node';
 
 const canceled = () => new Error('local_delivery_canceled');
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
-/** Human-only browser side channel. Its token, PIN and URL never enter an MCP result. */
+/** Human-only native window channel. Its token, PIN and URL never enter an MCP result. */
 export async function openSafeKeyProPrompt(deployment: unknown, device: string | undefined,
   context: { organizationId: string; planId: string; selector: string; kind: 'FIELD' | 'ASSET' | 'SELECTION' }, signal: AbortSignal,
-  open?: (url: string) => void) {
+  open: (url: string) => void) {
   if (signal.aborted) throw canceled();
   const channel = businessDeployment(deployment);
   const rpId = channel ? businessUiRpId(channel) : undefined;
@@ -37,7 +36,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'same-origin');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
+    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
     if (request.headers.host !== `127.0.0.1:${port}` || request.url !== path) { response.writeHead(404).end(); return; }
     if (request.method === 'GET') {
       const title = state === 'complete' ? 'Request complete' : state === 'failed' ? 'Request could not finish' : state === 'canceled' ? 'Request canceled'
@@ -89,8 +88,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
     const openPage = () => {
       if (opened) return;
       opened = true;
-      if (open) open(url);
-      else openLocalBrowser(url, error => { clearPin(); rejectChoice?.(error); rejectPin?.(error); });
+      open(url);
     };
     pinSession = createSafeKeyProPinSession(async (operationSignal) => {
       if (closed || signal.aborted || operationSignal?.aborted) throw canceled();

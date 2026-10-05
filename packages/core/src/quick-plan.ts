@@ -2,8 +2,8 @@ import { createMasterKeyResolver, createNodeQuickPlanCreator, HttpElementsApiPor
 import { DataAssetDefinitionService } from '@safetech/inheriti-core-sdk/node';
 import type { QuickPlanCreateContext, QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
 
-export const quickPlanAssetCatalog = (new DataAssetDefinitionService().getCoreDefinitions() as { id: string; category: string; fields: string[] }[])
-  .map(({ id, category, fields }: { id: string; category: string; fields: string[] }) => ({ id, category, fields }));
+export const quickPlanAssetCatalog = (new DataAssetDefinitionService().getCoreDefinitions() as { id: string; category: string; iconName: string; fields: string[] }[])
+  .map(({ id, category, iconName, fields }) => ({ id, category, iconName, fields }));
 
 export function createQuickPlanOperations(options: {
   apiUrl: string;
@@ -37,6 +37,16 @@ export function createQuickPlanOperations(options: {
       planId: input.context.planId,
       title: input.title,
       asset: input.asset,
+      totalShares: input.context.storage.activeDataStorageLayerCount,
+      masterKeySource: input.masterKeySource,
+      ...(input.teamId ? { audience: { teamId: input.teamId } } : {}),
+    }, onProgress),
+    createMany: (input: { context: QuickPlanCreateContext; title: string; description?: string; assets: [QuickPlanInput['asset'], ...QuickPlanInput['asset'][]]; teamId?: string; masterKeySource: NonNullable<QuickPlanInput['masterKeySource']> }, onProgress?: Parameters<typeof creator.createQuickPlan>[1]) => creator.createPlan({
+      organizationId: options.organizationId,
+      planId: input.context.planId,
+      title: input.title,
+      ...(input.description ? { description: input.description } : {}),
+      assets: input.assets,
       totalShares: input.context.storage.activeDataStorageLayerCount,
       masterKeySource: input.masterKeySource,
       ...(input.teamId ? { audience: { teamId: input.teamId } } : {}),

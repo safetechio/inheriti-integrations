@@ -1,8 +1,7 @@
-import { EventEmitter } from 'node:events';
-import { expect, it, vi } from 'vitest';
-const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
-vi.mock('node:child_process', () => ({ spawn }));
-import { deliverAssetInBrowser, deliverFieldsInBrowser, deliverInBrowser, deliverSelectionInBrowser, openLocalBrowser } from '../src/local-browser.js';
+import { expect, it } from 'vitest';
+import { deliverAssetInBrowser, deliverFieldsInBrowser, deliverInBrowser, deliverSelectionInBrowser } from '../src/local-browser.js';
+
+const post = (url: string) => fetch(url, { method: 'POST', headers: { origin: new URL(url).origin } });
 
 it('delivers once to loopback after an explicit click and then closes', async () => {
   let url = '';
@@ -15,7 +14,8 @@ it('delivers once to loopback after an explicit click and then closes', async ()
   expect(prompt).not.toContain(secret);
   expect(prompt).toContain('Inheriti® Business');
   expect(prompt).toContain('Reveal protected field');
-  const revealed = await fetch(url, { method: 'POST' });
+  expect((await fetch(url, { method: 'POST', headers: { origin: 'http://example.test' } })).status).toBe(403);
+  const revealed = await post(url);
   const html = await revealed.text();
   expect(html).toContain('Protected field revealed');
   expect(html).toContain('&lt;private&gt;&amp;');
@@ -61,72 +61,12 @@ it('offers binary bytes only after a local click as a one-time attachment', asyn
   expect(html).toContain('report___.html');
   expect(html).toContain('HTML file');
   expect(html).toContain('&lt;1 KB');
-  const download = await fetch(url, { method: 'POST' });
+  const download = await post(url);
   expect(download.headers.get('content-type')).toBe('application/octet-stream');
   expect(download.headers.get('content-disposition')).toBe('attachment; filename="report___.html"');
   expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes);
   await delivery;
   await expect(fetch(url)).rejects.toThrow();
-});
-
-it.skipIf(process.platform === 'win32').each(['FIELD', 'ASSET'] as const)('fails %s delivery when the browser launcher exits unsuccessfully', async kind => {
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const delivery = kind === 'FIELD'
-    ? deliverInBrowser('account.password', 'private', { timeoutMs: 1000 })
-    : deliverAssetInBrowser('private.bin', Uint8Array.from([255]), { timeoutMs: 1000 });
-  const rejected = expect(delivery).rejects.toThrow('local_browser_unavailable');
-  await vi.waitFor(() => expect(child.unref).toHaveBeenCalledOnce());
-  child.emit('exit', 3, null);
-  await rejected;
-});
-
-it('does not treat a successful browser launcher exit as confirmation', async () => {
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const delivery = deliverInBrowser('account.password', 'private', { timeoutMs: 100 });
-  const rejected = expect(delivery).rejects.toThrow('local_delivery_expired');
-  await vi.waitFor(() => expect(child.unref).toHaveBeenCalledOnce());
-  child.emit('exit', 0, null);
-  await rejected;
-});
-
-it.each(['error', 'signal'])('rejects browser launcher %s safely', async event => {
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const delivery = deliverInBrowser('account.password', 'private', { timeoutMs: 1000 });
-  const rejected = expect(delivery).rejects.toThrow('local_browser_unavailable');
-  await vi.waitFor(() => expect(child.unref).toHaveBeenCalledOnce());
-  if (event === 'error') child.emit('error', new Error('private launch diagnostic'));
-  if (event === 'signal') child.emit('exit', null, 'SIGTERM');
-  await rejected;
-});
-
-it('preserves cancellation when the launcher exits after an abort', async () => {
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const controller = new AbortController();
-  const delivery = deliverInBrowser('account.password', 'private', { signal: controller.signal });
-  const rejected = expect(delivery).rejects.toThrow('local_delivery_canceled');
-  await vi.waitFor(() => expect(child.unref).toHaveBeenCalledOnce());
-  controller.abort();
-  child.emit('exit', 3, null);
-  await rejected;
-});
-
-it('allows a nonzero Windows Explorer exit after shell dispatch', () => {
-  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
-  const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
-  spawn.mockReturnValueOnce(child);
-  const failed = vi.fn();
-  try {
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    openLocalBrowser('http://127.0.0.1/', failed);
-    child.emit('exit', 1, null);
-    expect(failed).not.toHaveBeenCalled();
-    child.emit('error', new Error('private launch diagnostic'));
-    expect(failed).toHaveBeenCalledWith(expect.objectContaining({ message: 'local_browser_unavailable' }));
-  } finally { Object.defineProperty(process, 'platform', platform); }
 });
 
 it('confirms all fields together and escapes selectors and values without exposing values on GET', async () => {
@@ -145,13 +85,13 @@ it('confirms all fields together and escapes selectors and values without exposi
   expect(prompt).toContain('account.token');
   expect(prompt).not.toContain('private');
   expect(prompt).not.toContain('second-secret');
-  const html = await (await fetch(url, { method: 'POST' })).text();
+  const html = await (await post(url)).text();
   expect(html).toContain('Protected fields revealed');
   expect(html).toContain('&lt;private&gt;&amp;');
   expect(html).toContain('second-secret');
   expect(html).not.toContain('account.<password>');
   await delivery;
-  await expect(fetch(url, { method: 'POST' })).rejects.toThrow();
+  await expect(post(url)).rejects.toThrow();
 });
 
 it('delivers mixed fields and files once and waits for every file download', async () => {
@@ -164,9 +104,9 @@ it('delivers mixed fields and files once and waits for every file download', asy
   let settled = false;
   void delivery.then(() => { settled = true; });
   const url = await ready;
-  expect((await fetch(`${url}/0`, { method: 'POST' })).status).toBe(403);
+  expect((await post(`${url}/0`)).status).toBe(403);
   expect((await fetch(`${url}/0`)).status).toBe(405);
-  expect((await fetch(`${url}/2`, { method: 'POST' })).status).toBe(404);
+  expect((await post(`${url}/2`)).status).toBe(404);
   const { get } = await import('node:http');
   const invalidHost = await new Promise<number | undefined>((resolve, reject) => {
     get(url, { headers: { host: 'example.invalid' } }, response => {
@@ -179,18 +119,18 @@ it('delivers mixed fields and files once and waits for every file download', asy
   expect(prompt).toContain('files.&lt;first&gt;');
   expect(prompt).toContain('files.second');
   expect(prompt).not.toContain('private');
-  const result = await (await fetch(url, { method: 'POST' })).text();
+  const result = await (await post(url)).text();
   expect(result).toContain('&lt;private&gt;');
   expect(result).toContain(`action="${new URL(url).pathname}/0"`);
   expect(settled).toBe(false);
-  expect((await fetch(url, { method: 'POST' })).status).toBe(410);
+  expect((await post(url)).status).toBe(410);
   expect((await fetch(url)).status).toBe(410);
-  const first = await fetch(`${url}/0`, { method: 'POST' });
+  const first = await post(`${url}/0`);
   expect(first.headers.get('content-disposition')).toBe('attachment; filename="first___.bin"');
   expect(new Uint8Array(await first.arrayBuffer())).toEqual(Uint8Array.from([0, 255, 1]));
-  expect((await fetch(`${url}/0`, { method: 'POST' })).status).toBe(410);
+  expect((await post(`${url}/0`)).status).toBe(410);
   expect(settled).toBe(false);
-  const second = await fetch(`${url}/1`, { method: 'POST' });
+  const second = await post(`${url}/1`);
   expect(new Uint8Array(await second.arrayBuffer())).toEqual(Uint8Array.from([2, 3]));
   await delivery;
   await expect(fetch(url)).rejects.toThrow();
@@ -205,10 +145,10 @@ it('cancels mixed delivery while files remain and closes the local server', asyn
   ], { signal: controller.signal, open: opened });
   const rejected = expect(delivery).rejects.toThrow('local_delivery_canceled');
   const url = await ready;
-  await (await fetch(url, { method: 'POST' })).text();
+  await (await post(url)).text();
   controller.abort();
   await rejected;
-  await expect(fetch(`${url}/0`, { method: 'POST' })).rejects.toThrow();
+  await expect(post(`${url}/0`)).rejects.toThrow();
 });
 
 it('expires an approved file selection without treating confirmation as delivery', async () => {
@@ -219,7 +159,7 @@ it('expires an approved file selection without treating confirmation as delivery
   ], { timeoutMs: 50, open: opened });
   const rejected = expect(delivery).rejects.toThrow('local_delivery_expired');
   const url = await ready;
-  await (await fetch(url, { method: 'POST' })).text();
+  await (await post(url)).text();
   await rejected;
-  await expect(fetch(`${url}/0`, { method: 'POST' })).rejects.toThrow();
+  await expect(post(`${url}/0`)).rejects.toThrow();
 });

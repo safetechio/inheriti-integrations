@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { login, loginWithDevice } from '../src/commands/login.js';
 import { logout } from '../src/commands/logout.js';
-import { messageFor, run } from '../src/main.js';
+import { messageFor, parsePlanHints, run } from '../src/main.js';
 import { OperatorNotSignedIn, PlanIdRequired, abortPlanAccess, listPlanLogs, listPlans, resolvePlanId, showPlan } from '../src/commands/plans.js';
 import { completeWords, printCompletionScript } from '../src/commands/completion.js';
 import type { Terminal } from '../src/output.js';
@@ -53,6 +53,11 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
 }
 
 describe('help', () => {
+  it('accepts only bounded, catalog-backed plan hints', () => {
+    expect(parsePlanHints(['--title', 'AWS access', '--description', 'Console recovery', '--asset', 'USER-PSWD'])).toEqual({ title: 'AWS access', description: 'Console recovery', assetTypes: ['USER-PSWD'] });
+    expect(parsePlanHints(['--asset', 'UNKNOWN'])).toBeUndefined();
+    expect(parsePlanHints(['--title', 'x'.repeat(201)])).toBeUndefined();
+  });
   it('documents plan activity pagination', async () => {
     const terminal = recordingTerminal(false);
     await expect(run(['plans', 'logs', '--help'], {}, terminal)).resolves.toBe(0);
@@ -466,6 +471,7 @@ describe('completion', () => {
     expect(terminal.lines).toContain('plans\tList and use plans');
     terminal.lines.length = 0;
     await completeWords(context, terminal, ['plans', ''], { XDG_STATE_HOME: temporaryState() });
+    expect(terminal.lines).toContain('create\tCreate a plan with the local assistant');
     expect(terminal.lines).toContain('show\tShow plan details');
     terminal.lines.length = 0;
     await completeWords(
@@ -586,6 +592,11 @@ describe('completion', () => {
 });
 
 describe('choosing a plan', () => {
+  it('explains an unavailable API instead of showing TypeError', () => {
+    const error = new TypeError('fetch failed', { cause: Object.assign(new Error(), { code: 'ECONNREFUSED' }) });
+    expect(messageFor(error, true)).toBe('Cannot connect to the Inheriti API.');
+  });
+
   it('refuses a missing plan id in a pipe, with the message an operator can act on', async () => {
     const terminal = recordingTerminal(false);
     await expect(resolvePlanId(contextWith(), terminal, undefined)).rejects.toBeInstanceOf(PlanIdRequired);

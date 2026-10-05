@@ -1,0 +1,14 @@
+{
+  "productName": "Inheriti",
+  "version": "0.1.0",
+  "identifier": "com.safetech.inheriti.secure-window",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "capabilities": []
+    }
+  },
+  "bundle": { "active": false }
+}

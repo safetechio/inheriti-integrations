@@ -6,5 +6,7 @@ apps/*/dist/
 packages/*/artifacts/
 packages/*/dist/
 dist/
+packages/core/native-window/src-tauri/target/
+packages/core/native-window/src-tauri/gen/schemas/
 npm-debug.log*
 pnpm-debug.log*

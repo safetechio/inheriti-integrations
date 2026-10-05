@@ -56,8 +56,8 @@ it('registers the MCP tools over the real stdio transport', async () => {
     client = await connect(directory, false);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_update', 'get_backup_plan', 'list_backup_plan_logs',
-      'list_backup_plans', 'list_organizations', 'logout', 'select_organization',
+      'abort_plan_access', 'check_plan_creation_status', 'check_update', 'create_plan_with_assistant',
+      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations', 'logout', 'select_organization',
     ]);
     const result = await client.callTool({ name: 'check_update', arguments: {} });
     expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
@@ -74,7 +74,7 @@ it('registers secure delivery tools and returns a safe error over stdio', async 
     client = await connect(directory, true);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_reveal_status', 'check_update', 'download_plan_asset',
+      'abort_plan_access', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_plan_with_assistant', 'download_plan_asset',
       'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
       'logout', 'reveal_plan_secret', 'select_organization',
     ]);

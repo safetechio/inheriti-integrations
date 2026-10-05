@@ -1,22 +1,13 @@
 import cardValidator from 'card-validator';
+import { fieldMaxLength, fieldMaxLengths } from '@safetech/inheriti-elements-core/browser';
 
 export const blockchains = ['Bitcoin', 'Vechain', 'Ethereum', 'Optimism', 'BNB Chain', 'Polygon', 'Base', 'Solana', 'Tron', 'SUI', 'Arbitrum', 'Cardano', 'Injective', 'Avalanche', 'Axelar', 'Other'];
 export const wallets = ['Comet Wallet', 'Venly', 'MetaMask', 'Keplr', 'Phantom Wallet', 'Coinbase Wallet', 'Binance Wallet', 'Trust Wallet', 'Atomic Wallet', 'Ledger', 'Trezor', 'Exodus', 'Enjin Wallet', 'BlockFi Wallet', 'VeWorld Wallet', 'BitPay Wallet', 'Solflare Wallet', 'Other'];
 
 const emailPattern = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 
-export const maxLengths = {
-  appOrWebsite: 100, email: 254, username: 64, deviceOrApp: 100,
-  app: 100, apiKey: 500, publicAddress: 128, privateKey: 256,
-  bank: 64, accountNumber: 40, cardHolderName: 60, clientId: 50, pinCode: 10,
-};
-
-export function fieldMaxLength(field, assetType) {
-  if (field === 'code' && assetType === 'RECOVERY-CODE') return undefined;
-  if (field === 'code' && assetType === 'PIN-CODE') return 10;
-  if (field === 'code' && assetType.startsWith('PAYMENT-')) return 4;
-  return maxLengths[field];
-}
+export { fieldMaxLength };
+export const maxLengths = fieldMaxLengths;
 
 export function fieldRequired(field) {
   return field === 'text' || field === 'words' || field === 'blockchain' || field === 'wallet';

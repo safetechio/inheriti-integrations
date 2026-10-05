@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
@@ -8,27 +7,19 @@ import { brandPage, renderTemplate } from './local-page.js';
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 const display = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value);
 
-export function openLocalBrowser(url: string, onFailure: (error: Error) => void): void {
-  const child = spawn(process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open', [url], { detached: true, stdio: 'ignore' });
-  const fail = () => onFailure(new Error('local_browser_unavailable'));
-  child.once('error', fail);
-  child.once('exit', (code, signal) => { if ((process.platform !== 'win32' && code !== 0) || signal) fail(); });
-  child.unref();
-}
-
 /** No URL or value leaves this process through the MCP transport. Resolves only after local delivery. */
-export async function deliverInBrowser(selector: string, value: unknown, options: { timeoutMs?: number; open?: (url: string) => void; signal?: AbortSignal } = {}): Promise<void> {
+export async function deliverInBrowser(selector: string, value: unknown, options: { timeoutMs?: number; open: (url: string) => void; signal?: AbortSignal }): Promise<void> {
   return deliverFieldsInBrowser([{ selector, value }], options);
 }
 
-export async function deliverFieldsInBrowser(fields: ReadonlyArray<{ selector: string; value: unknown }>, options: { timeoutMs?: number; open?: (url: string) => void; signal?: AbortSignal } = {}): Promise<void> {
+export async function deliverFieldsInBrowser(fields: ReadonlyArray<{ selector: string; value: unknown }>, options: { timeoutMs?: number; open: (url: string) => void; signal?: AbortSignal }): Promise<void> {
   return deliverSelectionInBrowser(fields, [], options);
 }
 
 export async function deliverSelectionInBrowser(
   fields: ReadonlyArray<{ selector: string; value: unknown }>,
   assets: ReadonlyArray<{ selector: string; fileName: string; bytes: Uint8Array; mimeType?: string }>,
-  options: { timeoutMs?: number; open?: (url: string) => void; signal?: AbortSignal } = {},
+  options: { timeoutMs?: number; open: (url: string) => void; signal?: AbortSignal },
 ): Promise<void> {
   if (options.signal?.aborted) throw new Error('local_delivery_canceled');
   const single = fields.length === 1 && assets.length === 0;
@@ -55,10 +46,13 @@ export async function deliverSelectionInBrowser(
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
+    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
     const file = files.find(item => item.path === request.url);
     if (request.headers.host !== `127.0.0.1:${port}` || (request.url !== path && !file)) {
       response.writeHead(404).end(); return;
+    }
+    if (request.method === 'POST' && request.headers.origin !== `http://127.0.0.1:${port}`) {
+      response.writeHead(403).end(); return;
     }
     if (file) {
       if (request.method !== 'POST') { response.writeHead(405).end(); return; }
@@ -104,8 +98,7 @@ export async function deliverSelectionInBrowser(
     if (options.signal?.aborted) throw new Error('local_delivery_canceled');
     port = (server.address() as { port: number }).port;
     const url = `http://127.0.0.1:${port}${path}`;
-    if (options.open) options.open(url);
-    else openLocalBrowser(url, error => fail?.(error));
+    options.open(url);
     const timer = setTimeout(() => { complete = undefined; fail?.(new Error('local_delivery_expired')); }, options.timeoutMs ?? (assets.length ? 300_000 : 45_000));
     try { await consumed; delivered = true; } finally { clearTimeout(timer); }
   } finally {
@@ -117,7 +110,7 @@ export async function deliverSelectionInBrowser(
 }
 
 /** The MCP result contains status only; a person must accept this one-time attachment locally. */
-export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array, options: { timeoutMs?: number; open?: (url: string) => void; signal?: AbortSignal; mimeType?: string } = {}): Promise<void> {
+export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array, options: { timeoutMs?: number; open: (url: string) => void; signal?: AbortSignal; mimeType?: string }): Promise<void> {
   if (options.signal?.aborted) throw new Error('local_delivery_canceled');
   const token = randomBytes(24).toString('hex');
   const path = `/${token}`;
@@ -136,8 +129,9 @@ export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array,
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'");
+    response.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; font-src data:; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
     if (request.headers.host !== `127.0.0.1:${port}` || request.url !== path) { response.writeHead(404).end(); return; }
+    if (request.method === 'POST' && request.headers.origin !== `http://127.0.0.1:${port}`) { response.writeHead(403).end(); return; }
     if (request.method === 'GET') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end(brandPage('Download protected file', renderTemplate('download-confirm', { extension: escapeHtml(extension), name: escapeHtml(safeName), size: escapeHtml(size) }), { eyebrow: 'Protected plan data', footer: 'This file is delivered once to your device. The download link will then close.' }));
@@ -160,8 +154,7 @@ export async function deliverAssetInBrowser(fileName: string, bytes: Uint8Array,
     if (options.signal?.aborted) throw new Error('local_delivery_canceled');
     port = (server.address() as { port: number }).port;
     const url = `http://127.0.0.1:${port}${path}`;
-    if (options.open) options.open(url);
-    else openLocalBrowser(url, error => fail?.(error));
+    options.open(url);
     const timer = setTimeout(() => { complete = undefined; fail?.(new Error('local_delivery_expired')); }, options.timeoutMs ?? 45_000);
     try { await consumed; delivered = true; } finally { clearTimeout(timer); }
   } finally {

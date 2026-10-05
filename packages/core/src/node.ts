@@ -79,6 +79,16 @@ export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/node';
 export type { InternalBuild, InternalBuildDownload } from '@safetech/inheriti-client-sdk/node';
 export { latestIntegrationBuild } from './node-update.js';
 export { createQuickPlanOperations, quickPlanAssetCatalog } from './quick-plan.js';
+export { localPlanAssetLimit } from './asset-metadata.js';
+export { LocalPlanAssistant } from './local-plan-assistant.js';
+export { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local-plan-source.js';
+export { LocalPlanDraftValue, localPlanQuestions, localPlanFieldMaxLength } from './local-plan-draft.js';
+export { runLocalPlanBrowser } from './local-plan-browser.js';
+export { createNativeWindowSession } from './node-native-window.js';
+export { LlamaPlanModel } from './llama-plan-model.js';
+export { localAssistantPaths, getLocalAssistantInstallStatus, installLocalAssistant } from './local-assistant-install.js';
+export type { LocalAssistantInstallStatus, LocalAssistantInstallProgress } from './local-assistant-install.js';
+export type { LocalPlanModel, LocalPlanModelRequest, LocalPlanDraft, LocalPlanClarification, LocalPlanHints, LocalSource, SourceReference } from './local-plan-assistant.js';
 export { createPlanEditOperations } from './plan-edit.js';
 export function createNodePlanEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>) {
   const socket = io(new URL(apiUrl).origin, {
