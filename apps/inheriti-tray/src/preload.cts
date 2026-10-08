@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   inboxSendFile: (conversationId: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-file', conversationId, expiresAt),
   inboxOpenText: (conversationId: string, messageId: string): Promise<{ text: string; leaseId: string; leaseExpiresAt: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING'; suggestion: unknown }> => ipcRenderer.invoke('tray:inbox-open-text', conversationId, messageId),
   inboxOpenFile: (conversationId: string, messageId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-open-file', conversationId, messageId),
+  inboxOpenFileForPlan: (conversationId: string, messageId: string): Promise<{ acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-open-file-for-plan', conversationId, messageId),
+  inboxAcceptFileForPlan: (conversationId: string, messageId: string): Promise<void> => ipcRenderer.invoke('tray:inbox-accept-file-for-plan', conversationId, messageId),
+  onInboxFileForPlan: (callback: (file: { conversationId: string; messageId: string; name: string; mimeType: string; bytes: Uint8Array }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, file: { conversationId: string; messageId: string; name: string; mimeType: string; bytes: Uint8Array }) => callback(file);
+    ipcRenderer.on('tray:inbox-file-for-plan', listener);
+    return () => ipcRenderer.removeListener('tray:inbox-file-for-plan', listener);
+  },
   inboxCancelTransfer: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-transfer'),
   inboxRetryAck: (conversationId: string, messageId: string): Promise<{ acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-retry-ack', conversationId, messageId),
   inboxHideText: (): Promise<void> => ipcRenderer.invoke('tray:inbox-hide-text'),

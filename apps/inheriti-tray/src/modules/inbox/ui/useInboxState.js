@@ -12,7 +12,7 @@ export function useInboxState(autoPrepare = false) {
   const replace = useCallback(async () => {
     setError('');
     try { setState(await window.inheritiTray.inboxReplaceDevice()); }
-    catch { setError('Could not replace this Secure Chat device. Try again.'); }
+    catch { setError('Could not replace Secure Chat access on this computer. Try again.'); }
   }, []);
 
   useEffect(() => {

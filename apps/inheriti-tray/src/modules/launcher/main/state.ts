@@ -238,6 +238,7 @@ export class TraySession {
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
   clearInboxHistory(conversationId: string) { return this.inbox.clearHistory(conversationId); }
   listInboxParents(conversationId: string) { return this.inbox.listParents(conversationId); }
+  listInboxParentMetadata(conversationId: string) { return this.inbox.listParentMetadata(conversationId); }
   sendInboxParent(conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>) { return this.inbox.sendParent(conversationId, parentId, segments); }
   revealInboxUnit(conversationId: string, parentId: string, unitId: string) { return this.inbox.revealUnit(conversationId, parentId, unitId); }
   listInboxMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) { return this.inbox.listMessages(conversationId, input); }
@@ -249,6 +250,8 @@ export class TraySession {
   sendInboxFile(conversationId: string, expiresAt: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.sendFile(conversationId, expiresAt, progress); }
   openInboxText(conversationId: string, messageId: string) { return this.inbox.openText(conversationId, messageId); }
   openInboxFile(conversationId: string, messageId: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.openFile(conversationId, messageId, progress); }
+  openInboxFileForPlan(conversationId: string, messageId: string, deliver: (file: { name: string; mimeType: string; bytes: Uint8Array }) => void, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.openFileForPlan(conversationId, messageId, deliver, progress); }
+  acceptInboxFileForPlan(conversationId: string, messageId: string): void { this.inbox.acceptFileForPlan(conversationId, messageId); }
   cancelInboxTransfer(): void { this.inbox.cancelTransfer(); }
   retryInboxAck(conversationId: string, messageId: string) { return this.inbox.retryAck(conversationId, messageId); }
   hideInboxText(): void { this.inbox.hide(); }

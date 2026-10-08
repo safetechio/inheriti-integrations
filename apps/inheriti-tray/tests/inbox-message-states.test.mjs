@@ -26,7 +26,7 @@ it('does not offer the sender a one-time reveal and shows real recipient status'
 it('shows live transfer progress and a pending read without plaintext', () => {
   const sending = render({ busy: 'sending', draft: 'protected draft' });
   expect(sending).toContain('Checking members');
-  expect(sending).toContain('Sealing on this device');
+  expect(sending).toContain('Sealing on this computer');
   expect(sending).toContain('Sending protected message');
   expect(sending).not.toContain('You · now');
 
@@ -48,6 +48,18 @@ it('shows live transfer progress and a pending read without plaintext', () => {
   expect(pending).toContain('Message hidden. Confirm the read to finish.');
   expect(pending).toContain('Retry acknowledgement');
   expect(pending).not.toContain('Hide now');
+});
+
+it('keeps retry available while a pending file plan blocks another one-time open', () => {
+  const markup = render({ busy: 'plan-pending', messages: [
+    { id: 'file-1', senderMemberId: 'other', status: 'AVAILABLE', recipientStatus: 'LEASED',
+      contentKind: 'FILE', createdAt: '2026-10-02T17:14:00.000Z', expiresAt: '2026-10-09T17:14:00.000Z' },
+    { id: 'file-2', senderMemberId: 'other', status: 'AVAILABLE', recipientStatus: 'UNREAD',
+      contentKind: 'FILE', createdAt: '2026-10-02T17:15:00.000Z', expiresAt: '2026-10-09T17:15:00.000Z' },
+  ], revealed: { messageId: 'file-1', acknowledgement: 'PENDING', planPending: true } });
+  expect(markup).toContain('File ready for Quick Plan. Confirm the read to continue.');
+  expect(markup).toMatch(/<button[^>]*>Retry acknowledgement<\/button>/);
+  expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Open file once<\/button>/);
 });
 
 it('places the newest API message at the bottom of the thread', () => {
@@ -77,7 +89,7 @@ it('shows the one-time reveal steps while opening without displaying plaintext',
   const opening = render({ messages: [{ id: 'message', senderMemberId: 'other', status: 'AVAILABLE',
     recipientStatus: 'UNREAD', contentKind: 'TEXT', createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 60_000).toISOString() }], openingMessageId: 'message', busy: 'opening' });
-  expect(opening).toContain('Checking this device');
+  expect(opening).toContain('Checking this computer');
   expect(opening).toContain('Unlocking your message');
   expect(opening).toContain('Confirming the one-time read');
   expect(opening).toContain('inbox-status-opening');

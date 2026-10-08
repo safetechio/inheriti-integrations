@@ -34,6 +34,7 @@ export function useInboxMessages(onClose) {
   const generation = useRef(0);
   const request = useRef(0);
   const pendingSend = useRef({ parentId: '', expiresAt: '' });
+  const planFile = useRef(null);
   const [conversationId, setConversationId] = useState('');
   const [items, setItems] = useState([]);
   const [normalItems, setNormalItems] = useState([]);
@@ -51,6 +52,7 @@ export function useInboxMessages(onClose) {
   useEffect(() => {
     const stop = window.inheritiTray.onHidden(() => {
       generation.current++;
+      planFile.current = null;
       setRevealed(null);
       setNormalItems([]);
       setParentItems([]);
@@ -63,10 +65,24 @@ export function useInboxMessages(onClose) {
       setTransfer(null);
       onClose();
     });
-    return () => { generation.current++; clearPendingSend(pendingSend.current); stop(); void window.inheritiTray.inboxHideText(); };
+    return () => { generation.current++; planFile.current = null; clearPendingSend(pendingSend.current); stop(); void window.inheritiTray.inboxHideText(); };
   }, [onClose]);
 
   useEffect(() => window.inheritiTray.onInboxTransferProgress(setTransfer), []);
+  useEffect(() => window.inheritiTray.onInboxFileForPlan(async (opened) => {
+    const expected = planFile.current;
+    const bytes = opened.bytes instanceof Uint8Array ? opened.bytes : new Uint8Array(opened.bytes);
+    try {
+      if (!expected || expected.conversationId !== opened.conversationId || expected.messageId !== opened.messageId ||
+        expected.generation !== generation.current || !opened.name || bytes.length > 10_000_000) {
+        void window.inheritiTray.inboxCancelTransfer();
+        return;
+      }
+      expected.file = new File([bytes], opened.name, { type: opened.mimeType || 'application/octet-stream' });
+      await window.inheritiTray.inboxAcceptFileForPlan(opened.conversationId, opened.messageId);
+    } catch { planFile.current = null; void window.inheritiTray.inboxCancelTransfer(); }
+    finally { bytes.fill(0); }
+  }), []);
 
   const { revealed, setRevealed, revealSeconds, setRevealSeconds, openingMessageId, setOpeningMessageId,
     view, retryAck, hide } = useInboxReadActions(conversationId, generation, busy, setBusy, setError, refresh);
@@ -74,6 +90,7 @@ export function useInboxMessages(onClose) {
 
   async function select(id) {
     const current = ++generation.current;
+    planFile.current = null;
     const latest = ++request.current;
     void window.inheritiTray.inboxHideText();
     setConversationId(id);
@@ -142,6 +159,7 @@ export function useInboxMessages(onClose) {
     if (!conversationId || busy || !window.confirm('Clear your history in this conversation? You will lose access to its current messages and files. Other members keep theirs, and new messages will still arrive.')) return;
     const id = conversationId;
     const current = ++generation.current;
+    planFile.current = null;
     setBusy('clearing-history');
     setError('');
     void window.inheritiTray.inboxHideText();
@@ -254,10 +272,68 @@ export function useInboxMessages(onClose) {
     }
   }
 
+  async function saveFileAsPlan(messageId, onCreatePlanFromFile) {
+    if (busy || !conversationId) return;
+    const current = generation.current;
+    setBusy('opening-file');
+    setOpeningMessageId(messageId);
+    setTransfer(null);
+    setError('');
+    planFile.current = { conversationId, messageId, generation: current, onCreatePlanFromFile, file: null };
+    let pendingAck = false;
+    try {
+      const opened = await window.inheritiTray.inboxOpenFileForPlan(conversationId, messageId);
+      if (generation.current !== current) return;
+      if (!planFile.current?.file) throw new Error('File was not accepted');
+      if (opened.acknowledgement === 'PENDING') {
+        pendingAck = true;
+        setRevealed({ messageId, acknowledgement: 'PENDING', planPending: true });
+        return;
+      }
+      if (!onCreatePlanFromFile(planFile.current.file)) throw new Error('Could not create a file plan');
+      planFile.current = null;
+    } catch (failure) {
+      if (generation.current === current && !String(failure).includes('AbortError'))
+        setError(planFile.current?.file ? 'This file was opened, but the plan could not be started.' : 'Could not open this protected file as a plan. Try again while it is available.');
+      planFile.current = null;
+    } finally {
+      if (generation.current === current) { setBusy(pendingAck ? 'plan-pending' : ''); setTransfer(null); setOpeningMessageId(''); }
+    }
+  }
+
+  async function retryPlanAck() {
+    const pending = planFile.current;
+    if (!pending?.file) return retryAck();
+    if (busy !== 'plan-pending' || revealed?.messageId !== pending.messageId || !revealed.planPending) return;
+    setBusy('acknowledging');
+    setError('');
+    try {
+      const result = pending.acknowledged ? { acknowledgement: 'ACKNOWLEDGED' }
+        : await window.inheritiTray.inboxRetryAck(pending.conversationId, pending.messageId);
+      if (planFile.current !== pending || generation.current !== pending.generation) return;
+      if (result.acknowledgement !== 'ACKNOWLEDGED') return;
+      pending.acknowledged = true;
+      setRevealed({ messageId: pending.messageId, acknowledgement: 'PENDING', planPending: true, planAcknowledged: true });
+      if (!pending.onCreatePlanFromFile(pending.file)) throw new Error('Could not create a file plan');
+      planFile.current = null;
+      setRevealed(null);
+    } catch {
+      if (planFile.current === pending) setError('Could not confirm this read. Retry while this window remains open.');
+    } finally { if (planFile.current === pending) setBusy('plan-pending'); else setBusy(''); }
+  }
+
+  function hideWithPlanWarning() {
+    if (planFile.current && !window.confirm('Leave this conversation? The opened file will be lost before it is saved as a plan.')) return false;
+    planFile.current = null;
+    setBusy('');
+    hide();
+    return true;
+  }
+
   function cancelTransfer() { void window.inheritiTray.inboxCancelTransfer(); }
 
   return { conversationId, items, normalItems, normalUnreadCount, parentItems, parentUnreadCount, mode, setMode: updateMode,
     draft, setDraft: updateDraft, marks, markSelection, unmarkSelection, unitReveals,
     segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer,
-    select, refresh, clearHistory, send, sendFile, saveFile, cancelTransfer, view, retryAck, hide };
+    select, refresh, clearHistory, send, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning };
 }

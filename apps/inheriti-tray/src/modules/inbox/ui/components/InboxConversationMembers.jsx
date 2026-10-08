@@ -35,7 +35,7 @@ export function InboxConversationMembers({ conversation, ownMemberId, participan
           <button type="submit" disabled={!!busy || !memberId || conversation.participantMemberIds.length >= 50}>Add</button>
         </div>
       </form>
-      {!available.length && <p className="inbox-member-hint">Active members appear after opening Secure Chat in Inheriti® Go to register their device key.</p>}
+      {!available.length && <p className="inbox-member-hint">Active members appear after opening Secure Chat in Inheriti® Go on their computer.</p>}
     </details>}
   </section>;
 }

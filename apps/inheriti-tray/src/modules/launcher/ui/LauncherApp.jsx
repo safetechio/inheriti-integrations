@@ -40,6 +40,12 @@ export function LauncherApp({ messages }) {
     setInboxOpen(false);
     setInboxHasNew(false);
   };
+  const createPlanFromFile = (file) => {
+    if (!flow.openInboxFile(file)) return false;
+    setInboxOpen(false);
+    setInboxHasNew(false);
+    return true;
+  };
 
   if (!state) {
     return <main className="tray-screen"><p id="status" role="status">{session.error}</p></main>;
@@ -60,7 +66,7 @@ export function LauncherApp({ messages }) {
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
-    organizationSelected={!!state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} />;
+    organizationSelected={!!state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}

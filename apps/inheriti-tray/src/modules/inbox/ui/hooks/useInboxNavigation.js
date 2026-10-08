@@ -14,7 +14,7 @@ export function useInboxNavigation(inbox) {
   }, [showMembers]);
 
   function goBack() {
-    if (screen === 'thread') inbox.messages.hide();
+    if (screen === 'thread' && !inbox.messages.hide()) return;
     setScreen('list');
     setShowMembers(false);
   }
@@ -22,6 +22,7 @@ export function useInboxNavigation(inbox) {
   async function openConversation(id) {
     setScreen('thread');
     await inbox.messages.select(id);
+    await inbox.conversations.refresh();
   }
 
   async function createConversation(event) {

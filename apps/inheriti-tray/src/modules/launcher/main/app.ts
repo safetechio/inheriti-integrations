@@ -24,7 +24,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     session.setPublisher(() => publish(session));
     session.setInboxPublisher((signal) => {
       publishInboxChanged(signal);
-      void notifyNewInboxMessage(session, signal, seenInboxMessages);
+      void notifyInboxEvent(session, signal, seenInboxMessages);
     });
     session.setInboxStatePublisher(() => publishInbox(session));
     registerTrayEvents(appUrl);
@@ -81,30 +81,54 @@ function publishInboxChanged(signal?: TrayInboxSignal): void {
   if (window && !window.isDestroyed()) window.webContents.send('tray:inbox-changed', signal ?? null);
 }
 
-async function notifyNewInboxMessage(session: TraySession, signal: TrayInboxSignal | undefined, seen: Set<string>): Promise<void> {
-  if (!signal || !('messageId' in signal) || signal.status !== 'AVAILABLE' || signal.recipientStatus) return;
+async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | undefined, seen: Set<string>): Promise<void> {
+  if (!signal) return;
   const organizationId = session.state().selectedId;
   if (!organizationId) return;
-  const key = `${organizationId}:${signal.messageId}`;
+  if ('kind' in signal) {
+    if (signal.kind === 'NEW_MESSAGE') return;
+    const key = `${organizationId}:${signal.kind}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    setTimeout(() => seen.delete(key), 2000);
+    notify(signal.kind === 'PARTICIPANTS'
+      ? 'Secure Chat participants changed.' : 'Your Secure Chat conversations changed.');
+    return;
+  }
+  const key = `${organizationId}:${signal.messageId}:${signal.recipientStatus ?? signal.status}:${signal.memberId ?? ''}`;
   if (seen.has(key)) return;
   seen.add(key);
   try {
     const memberId = await session.registeredInboxMemberId();
     if (!memberId || session.state().selectedId !== organizationId) { seen.delete(key); return; }
-    if (signal.senderMemberId === memberId) return;
+    if (signal.recipientStatus === 'CONSUMED' && signal.senderMemberId === memberId && signal.memberId !== memberId) {
+      notify('A member opened your Secure Chat message.');
+      return;
+    }
+    if (signal.status === 'FAILED' && signal.senderMemberId === memberId) {
+      notify('A Secure Chat message could not be sent.');
+      return;
+    }
+    if (signal.status !== 'AVAILABLE' || signal.recipientStatus || signal.senderMemberId === memberId) return;
     const page = await session.listInboxMessages(signal.conversationId, { status: 'AVAILABLE' });
     if (session.state().selectedId !== organizationId) return;
     const message = page.items.find((item: { id: string; senderMemberId: string; recipientStatus?: string }) => item.id === signal.messageId);
     if (message && (message.senderMemberId === memberId || message.recipientStatus !== 'UNREAD')) return;
     if (!message) {
-      const normal = await session.listNormalInboxMetadata(signal.conversationId);
-      const parent = normal.items.find((item: { parentId: string; senderMemberId: string; sequence: number }) =>
+      const parents = await session.listInboxParentMetadata(signal.conversationId);
+      const parent = parents.items.find((item: { parentId: string; senderMemberId: string; sequence: number }) =>
         item.parentId === signal.messageId);
-      if (!parent || parent.senderMemberId === memberId || parent.sequence <= normal.readThroughSequence) return;
+      if (parent) {
+        if (parent.senderMemberId === memberId || parent.sequence <= parents.readThroughSequence) return;
+      } else {
+        const normal = await session.listNormalInboxMetadata(signal.conversationId);
+        const normalParent = normal.items.find((item: { parentId: string; senderMemberId: string; sequence: number }) =>
+          item.parentId === signal.messageId);
+        if (!normalParent || normalParent.senderMemberId === memberId || normalParent.sequence <= normal.readThroughSequence) return;
+      }
     }
     publishInboxChanged({ kind: 'NEW_MESSAGE' });
-    const window = currentWindow();
-    if (!window || window.isDestroyed() || !window.isVisible()) notify('A new message is ready in Secure Chat.');
+    notify('A new message is ready in Secure Chat.');
   } catch {
     seen.delete(key);
   }

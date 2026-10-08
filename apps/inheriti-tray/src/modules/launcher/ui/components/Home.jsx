@@ -32,6 +32,9 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
           <button id="add-asset" type="button" disabled={!canEdit} onClick={onEdit}>
             <span className="tray-action-icon"><EditIcon /></span><span><strong>{messages.addOrEditAsset}</strong><small>Update a plan that's already protected</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
           </button>
+          <button id="app" type="button" onClick={onOpenApp}>
+            <img src="tray.png" alt="" /><span><strong>{messages.openApp}</strong><small>Manage plans, teams and members</small></span><span className="tray-external-arrow"><ExternalLinkIcon /></span>
+          </button>
         </div>
       </div>
       <div className="tray-home-section">
@@ -39,14 +42,6 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         <div className="tray-home-actions">
           <button id="open-inbox" type="button" onClick={onOpenInbox}>
             <span className="tray-action-icon"><LockIcon /></span><span><strong>Open Secure Chat</strong><small>Private messages and files</small></span>{inboxHasNew && <span className="inbox-unread-badge" aria-label="New message">•</span>}<span className="tray-action-arrow"><ChevronRightIcon /></span>
-          </button>
-        </div>
-      </div>
-      <div className="tray-home-section">
-        <h2>Inheriti® Business</h2>
-        <div className="tray-home-actions">
-          <button id="app" type="button" onClick={onOpenApp}>
-            <img src="tray.png" alt="" /><span><strong>{messages.openApp}</strong><small>Manage plans, teams and members</small></span><span className="tray-external-arrow"><ExternalLinkIcon /></span>
           </button>
         </div>
       </div>

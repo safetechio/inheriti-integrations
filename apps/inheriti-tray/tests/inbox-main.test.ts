@@ -121,6 +121,70 @@ describe('Tray Secure Chat main process', () => {
     });
   });
 
+  it('hands a protected file to Quick Plan in memory and retains its ACK lease', async () => {
+    const source = new Uint8Array([1, 2, 3]);
+    const client = {
+      openFile: vi.fn().mockImplementation(async ({ save }) => {
+        await save({ name: 'secret.pdf', mimeType: 'application/pdf', bytes: source });
+        return { leaseId: 'lease-2', acknowledgement: 'PENDING' };
+      }),
+      ackText: vi.fn().mockResolvedValue('ACKNOWLEDGED'),
+    };
+    mock.createNodeInbox.mockReturnValue(client);
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+
+    const opening = inbox.openFileForPlan('conversation', 'message', (file) => {
+      expect(file.name).toBe('secret.pdf');
+      expect(file.bytes).toEqual(source);
+      inbox.acceptFileForPlan('conversation', 'message');
+    });
+    const opened = await opening;
+    source.fill(0);
+    expect(opened).toEqual({ acknowledgement: 'PENDING' });
+    expect(mock.showSaveDialog).not.toHaveBeenCalled();
+    await expect(inbox.retryAck('conversation', 'message')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
+  });
+
+  it('releases a file lease if the renderer closes before accepting it', async () => {
+    const releaseInboxMessage = vi.fn().mockResolvedValue(undefined);
+    mock.createNodeInbox.mockReturnValue({
+      openFile: vi.fn().mockImplementation(async ({ save }) => {
+        try { await save({ name: 'secret.txt', mimeType: 'text/plain', bytes: new Uint8Array([1]) }); }
+        catch (error) { await releaseInboxMessage(); throw error; }
+      }),
+    });
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    const opening = inbox.openFileForPlan('conversation', 'message', () => inbox.hide());
+    await expect(opening).rejects.toBeTruthy();
+    expect(releaseInboxMessage).toHaveBeenCalledOnce();
+  });
+
+  it('times out when the renderer never accepts a file', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = { openFile: vi.fn().mockImplementation(async ({ save }) => {
+        await save({ name: 'secret.txt', mimeType: 'text/plain', bytes: new Uint8Array([1]) });
+      }) };
+      mock.createNodeInbox.mockReturnValue(client);
+      vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+        run(identity, new AbortController().signal));
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+        async () => 'a'.repeat(64), () => 'org-a');
+      const delivered = vi.fn();
+      const opening = inbox.openFileForPlan('conversation', 'message', delivered);
+      await vi.waitFor(() => expect(delivered).toHaveBeenCalledOnce());
+      const rejection = expect(opening).rejects.toThrow('inbox_file_accept_timeout');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejection;
+    } finally { vi.useRealTimers(); }
+  });
+
   it('sends ordered mixed segments and keeps independent unit ACK leases', async () => {
     const client = {
       sendParent: vi.fn().mockResolvedValue({ parentId: 'parent-1' }),

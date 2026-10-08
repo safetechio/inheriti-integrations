@@ -164,7 +164,7 @@ describe('Tray Inbox identity', () => {
     const resolveKey = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
-    expect(await identity.prepare('org-1')).toEqual({ status: 'replacement_required', message: 'This Secure Chat device was revoked. Replace it to continue.' });
+    expect(await identity.prepare('org-1')).toEqual({ status: 'replacement_required', message: 'Secure Chat access on this computer was revoked. Reset it to continue.' });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(resolveKey).not.toHaveBeenCalled();
     expect(stored.size).toBe(0);

@@ -95,6 +95,22 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
     return true;
   }
 
+  function openInboxFile(file) {
+    if (busy || preparing || state?.status !== 'signed-in' || !state.selectedId ||
+      !(file instanceof File) || file.size > 10_000_000) return false;
+    const assetType = file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'DOCUMENT';
+    if (!state.assetCatalog.some(({ id }) => id === assetType)) return false;
+    generation.current += 1;
+    inboxDraft.current = true;
+    setForm({ title: file.name.slice(0, 200), audience: 'private', teamId: '',
+      assetType, assetName: file.name.slice(0, 200), fields: {}, file });
+    setDraft(null);
+    setReadySummary(null);
+    setError('');
+    setStep('capture');
+    return true;
+  }
+
   async function abandon() {
     if (state?.creation?.planId && !window.confirm(messages.abandonWarning)) return false;
     try {
@@ -200,7 +216,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
 
   return {
     step, form, setForm, readySummary, busy, preparing, error, fromInbox: inboxDraft.current,
-    openCapture, openInboxSuggestion, clearDraft, cancelCapture, reviewCapture,
+    openCapture, openInboxSuggestion, openInboxFile, clearDraft, cancelCapture, reviewCapture,
     startOver, submitCapture, cancelKeyRequest, signOut, selectOrganization, setStep,
   };
 }

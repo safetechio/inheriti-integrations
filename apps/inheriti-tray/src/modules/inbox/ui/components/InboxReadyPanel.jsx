@@ -8,7 +8,7 @@ import { InboxConversationMembers } from './InboxConversationMembers.jsx';
 import { ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { conversationMemberNames, conversationTitle } from '../utils/inboxDisplay.js';
 
-export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret }) {
+export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret, onCreatePlanFromFile }) {
   const inbox = useInboxPanel(onClose, identity);
   const navigation = useInboxNavigation(inbox);
   const { screen, showMembers } = navigation;
@@ -29,7 +29,7 @@ export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret }) {
     {inbox.error && <p className="inbox-error error" role="alert">{inbox.error}</p>}
     {inbox.toast && <div className="inbox-toast" role="status"><span aria-hidden="true" className="inbox-toast-dot" />{inbox.toast.message}</div>}
     {screen === 'list' && <div className="tray-scroll inbox-list-screen">
-      <div className="inbox-device-notice"><span className="inbox-lock" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4.5" y="9" width="11" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg></span><div><strong>This device is ready</strong><small>Normal messages remain available. Protected messages open once per member.</small></div></div>
+      <div className="inbox-device-notice"><span className="inbox-lock" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4.5" y="9" width="11" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg></span><div><strong>This computer is ready</strong><small>Normal messages remain available. Protected messages open once per member.</small></div></div>
       <InboxConversationList conversations={inbox.conversations.items} conversationId={inbox.messages.conversationId}
         names={inbox.participants.names} ownMemberId={inbox.identity?.memberId} busy={inbox.conversations.busy}
         onRefresh={inbox.conversations.refresh} onSelect={navigation.openConversation} />
@@ -48,6 +48,7 @@ export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret }) {
       revealed={inbox.messages.revealed} revealSeconds={inbox.messages.revealSeconds} openingMessageId={inbox.messages.openingMessageId}
       onHide={inbox.messages.hide} onRetryAck={inbox.messages.retryAck}
       onCreatePlanFromSecret={onCreatePlanFromSecret}
+      onCreatePlanFromFile={onCreatePlanFromFile} onSaveFileAsPlan={inbox.messages.saveFileAsPlan}
       onRefresh={inbox.messages.select}
       onView={inbox.messages.view} onSend={inbox.messages.send}
       onSendFile={inbox.messages.sendFile} onSaveFile={inbox.messages.saveFile}

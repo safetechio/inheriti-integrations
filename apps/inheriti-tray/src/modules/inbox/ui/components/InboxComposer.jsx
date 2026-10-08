@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { ChevronDownIcon, LockIcon, PlanIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { AttachmentIcon, ChevronDownIcon, LockIcon, PlanIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { draftSegments } from '../hooks/inboxDraft.js';
 import { useComposerDrawer } from '../hooks/useComposerDrawer.js';
 import { useComposerSelection } from '../hooks/useComposerSelection.js';
@@ -36,7 +36,7 @@ export function InboxComposer({ mode, setMode, draft, setDraft, marks = [], onMa
           ? <span key={index}>{segment.text}</span> : <span key={index} className="is-secret">{segment.protectedText}</span>)}</div>}
           <textarea ref={input} id="inbox-draft" className={mixed ? 'has-marks' : undefined} value={draft} onChange={event => { setMenu(null); setDraft(event.target.value); }} onScroll={event => { if (highlight.current) highlight.current.scrollTop = event.currentTarget.scrollTop; }} onContextMenu={openMenu} onKeyDown={editorKeys} maxLength={10000} rows={2} placeholder={mode === 'NORMAL' ? 'Write a message' : 'Write a protected message'} disabled={!!busy} /></div>
         {mode === 'NORMAL' && <div className="inbox-mark-hint">Right-click selected text to make it secret or unmark it</div>}</div>
-        <div className="inbox-composer-actions"><button type="button" className="button-secondary inbox-attach" aria-label="Attach a protected file up to 10 MB" title="Attach a protected file up to 10 MB" disabled={!!busy} onClick={onSendFile}><PlusIcon /></button><button type="submit" disabled={!draft.trim() || !!busy}>Send</button></div></div>
+        <div className="inbox-composer-actions"><button type="button" className="button-secondary inbox-attach" aria-label="Attach a protected file up to 10 MB" title="Attach a protected file up to 10 MB" disabled={!!busy} onClick={onSendFile}><AttachmentIcon /></button><button type="submit" disabled={!draft.trim() || !!busy}>Send</button></div></div>
       <div className="inbox-composer-preview"><strong>Recipients see:</strong> <span>{draft.trim() ? preview.map((segment, index) => 'text' in segment
         ? <span key={index}>{segment.text}</span>
         : <span key={index} className="inbox-preview-secret" aria-label="Protected text">{'•'.repeat(Math.min(20, segment.protectedText.length))}</span>) : 'Your message will appear here'}</span></div>

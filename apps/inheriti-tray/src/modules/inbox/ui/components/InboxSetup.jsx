@@ -5,9 +5,9 @@ export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, 
   const failed = state?.status === 'error' || state?.status === 'unavailable' || !!error;
   const replacementRequired = state?.status === 'replacement_required';
   const message = !organizationSelected ? 'Select an organization on the home screen to set up Secure Chat.'
-    : preparing ? state?.message || 'Setting up this device…'
+    : preparing ? state?.message || 'Setting up this computer…'
     : failed || replacementRequired ? error || state?.message || 'Secure Chat setup could not finish.'
-    : 'Checking this device…';
+    : 'Checking this computer…';
 
   return <main className="tray-screen inbox-panel">
     <header className="tray-screen-header tray-screen-heading inbox-header">
@@ -20,8 +20,8 @@ export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, 
         <h2>Set up Secure Chat</h2>
       </div>
       <div className="inbox-setup-status" role="status">{organizationSelected && !failed && !replacementRequired && <span className="inbox-setup-spinner" aria-hidden="true" />}<p>{message}</p></div>
-      {organizationSelected && replacementRequired && <p>Replacing this device will remove access to protected messages sent to its previous keys. Past Secure Chat history cannot be recovered on this device.</p>}
-      {organizationSelected && replacementRequired && <button type="button" onClick={onReplace}>Replace device</button>}
+      {organizationSelected && replacementRequired && <p>Replacing Secure Chat access on this computer will remove access to protected messages sent to the previous keys. Past Secure Chat history cannot be recovered on this computer.</p>}
+      {organizationSelected && replacementRequired && <button type="button" onClick={onReplace}>Reset Secure Chat on this computer</button>}
       {organizationSelected && failed && !replacementRequired && <button type="button" onClick={onRetry}>Try setup again</button>}
       {!organizationSelected && <button type="button" onClick={onClose}>Choose organization</button>}
     </div>

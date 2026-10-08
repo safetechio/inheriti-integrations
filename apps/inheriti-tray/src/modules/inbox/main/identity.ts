@@ -43,9 +43,9 @@ function preparationError(error: unknown): string {
   if (error instanceof Error && error.name === 'MasterKeyRequired')
     return 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.';
   switch (error instanceof Error ? error.message : '') {
-    case 'inbox_identity_replacement_required': return 'This Secure Chat device was revoked. Replace it to continue.';
-    case 'inbox_identity_recovery_required': return 'This account has a Secure Chat device with different keys. Replace it to continue.';
-    case 'inbox_identity_changed': return 'The current Secure Chat device changed. Check the account before trying again.';
+    case 'inbox_identity_replacement_required': return 'Secure Chat access on this computer was revoked. Reset it to continue.';
+    case 'inbox_identity_recovery_required': return 'This account already has different Secure Chat keys. Reset access on this computer to continue.';
+    case 'inbox_identity_changed': return 'Secure Chat access on this computer changed. Check the account before trying again.';
     default: return 'Could not prepare Secure Chat. Sign in and try again.';
   }
 }
@@ -165,7 +165,7 @@ export class TrayInboxIdentity {
     const abort = new AbortController();
     this.requestAbort = abort;
     this.pendingOrganization = organizationId;
-    this.set({ status: 'preparing', message: 'Securing this device…' }, generation);
+    this.set({ status: 'preparing', message: 'Securing this computer…' }, generation);
     const pending = this.runPrepare(organizationId, generation, abort.signal, replace);
     const tracked = pending.finally(() => {
       if (this.pending === tracked) {

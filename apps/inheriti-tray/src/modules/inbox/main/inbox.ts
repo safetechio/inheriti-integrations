@@ -23,6 +23,7 @@ export class TrayInbox {
   private readonly read: InboxReadAck;
   private stopSignals: (() => void) | undefined;
   private transfer: AbortController | undefined;
+  private planFileAccept: { conversationId: string; messageId: string; accept: () => void } | undefined;
   private cachedClient: { organizationId: string; client: ReturnType<typeof createNodeInbox> } | undefined;
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE',
@@ -120,6 +121,7 @@ export class TrayInbox {
   }
   prepareNormal(conversationId: string) { return this.client().client.prepareNormal(conversationId); }
   listNormalMetadata(conversationId: string) { return this.client().client.listNormal(conversationId, { limit: 25 }); }
+  listParentMetadata(conversationId: string) { return this.client().client.listParents(conversationId, { limit: 25 }); }
   listParents(conversationId: string) {
     const { organizationId, client } = this.client();
     return this.identity.withIdentity(organizationId, async (identity, signal) => {
@@ -135,10 +137,17 @@ export class TrayInbox {
           segments: opened.segments };
       }));
       signal.throwIfAborted();
-      const newestNormal = items.filter((item) => item.mode !== 'PROTECTED')
-        .reduce((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, undefined as typeof items[number] | undefined);
-      const read = newestNormal ? await client.markNormalRead({ conversationId, parentId: newestNormal.parentId, identity, signal }).catch(() => null) : null;
-      const unreadCount = read ? (await client.listParents(conversationId, { limit: 25 }, signal)).unreadCount : page.unreadCount;
+      const newestParent = page.items.reduce((latest: typeof page.items[number] | undefined, item: typeof page.items[number]) => !latest || item.sequence > latest.sequence ? item : latest,
+        undefined as typeof page.items[number] | undefined);
+      const standalone = await client.listMessages(conversationId, { status: 'AVAILABLE', limit: 25 }, signal);
+      const latestStandalone = standalone.items[0];
+      let marked = false;
+      for (const messageId of [newestParent?.parentId, latestStandalone?.id]) {
+        if (!messageId) continue;
+        const read = await client.markNormalRead({ conversationId, parentId: messageId, identity, signal }).catch(() => null);
+        if (read) marked = true;
+      }
+      const unreadCount = marked ? (await client.listParents(conversationId, { limit: 25 }, signal)).unreadCount : page.unreadCount;
       return { items, total: page.total, unreadCount };
     });
   }
@@ -232,6 +241,45 @@ export class TrayInbox {
         result.opened.leaseId, result.opened.acknowledgement);
       return result.opened;
     } finally { this.transfer = undefined; }
+  }
+  acceptFileForPlan(conversationId: string, messageId: string): void {
+    if (this.planFileAccept?.conversationId !== conversationId || this.planFileAccept.messageId !== messageId)
+      throw new Error('inbox_file_not_pending');
+    this.planFileAccept.accept();
+  }
+  async openFileForPlan(conversationId: string, messageId: string,
+    deliver: (file: { name: string; mimeType: string; bytes: Uint8Array }) => void,
+    progress?: (completed: number, total: number, stage?: string) => void) {
+    const operation = this.startTransfer();
+    try {
+      const { organizationId, client } = this.client();
+      const result = await this.identity.withIdentity(organizationId, (identity, signal) =>
+        this.withTransferAbort(signal, operation, async () => {
+          const tenantKeyHex = await this.resolveKey(organizationId, operation.signal);
+          const opened = await client.openFile({ conversationId, messageId, identity, tenantKeyHex, signal: operation.signal,
+            onProgress: progress, save: async (openedFile: { name: string; mimeType: string; bytes: Uint8Array }) => {
+              operation.signal.throwIfAborted();
+              if (openedFile.bytes.length > MAX_FILE_BYTES) throw new Error('inbox_file_too_large');
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => { operation.signal.removeEventListener('abort', abort); this.planFileAccept = undefined; reject(new Error('inbox_file_accept_timeout')); }, 15_000);
+                const abort = () => { clearTimeout(timeout); this.planFileAccept = undefined; reject(operation.signal.reason); };
+                operation.signal.addEventListener('abort', abort, { once: true });
+                this.planFileAccept = { conversationId, messageId, accept: () => {
+                  clearTimeout(timeout);
+                  operation.signal.removeEventListener('abort', abort);
+                  this.planFileAccept = undefined;
+                  resolve();
+                } };
+                try { deliver(openedFile); }
+                catch (error) { clearTimeout(timeout); operation.signal.removeEventListener('abort', abort); this.planFileAccept = undefined; reject(error); }
+              });
+            } });
+          return { opened, deviceId: identity.deviceId };
+        }));
+      this.read.remember(organizationId, conversationId, messageId, result.deviceId,
+        result.opened.leaseId, result.opened.acknowledgement);
+      return { acknowledgement: result.opened.acknowledgement };
+    } finally { this.planFileAccept = undefined; this.transfer = undefined; }
   }
   async openText(conversationId: string, messageId: string) {
     const opened = await this.read.open(conversationId, messageId);

@@ -118,6 +118,24 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
     return session.openInboxFile(inboxId(conversationId), inboxId(messageId),
       (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
   });
+  ipcMain.handle('tray:inbox-open-file-for-plan', async (event, conversationId: unknown, messageId: unknown) => {
+    trusted(event);
+    const conversation = inboxId(conversationId);
+    const message = inboxId(messageId);
+    const destroyed = () => session.cancelInboxTransfer();
+    event.sender.once('destroyed', destroyed);
+    try {
+      return await session.openInboxFileForPlan(conversation, message,
+        (file) => { if (event.sender.isDestroyed()) throw new Error('inbox_renderer_unavailable');
+          event.sender.send('tray:inbox-file-for-plan', { conversationId: conversation, messageId: message,
+            name: file.name, mimeType: file.mimeType, bytes: file.bytes }); },
+        (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
+    } finally { event.sender.removeListener('destroyed', destroyed); }
+  });
+  ipcMain.handle('tray:inbox-accept-file-for-plan', (event, conversationId: unknown, messageId: unknown) => {
+    trusted(event);
+    session.acceptInboxFileForPlan(inboxId(conversationId), inboxId(messageId));
+  });
   ipcMain.handle('tray:inbox-cancel-transfer', (event) => { trusted(event); session.cancelInboxTransfer(); });
   ipcMain.handle('tray:inbox-retry-ack', (event, conversationId: unknown, messageId: unknown) => {
     trusted(event);
