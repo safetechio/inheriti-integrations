@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import type { ElementsEnvironment } from '@safetech/inheriti-elements-core';
 import { assertEnvironmentAllowed } from '@safetech/inheriti-elements-core';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from '@safetech/inheriti-elements-core/node-base';
 
 export interface CliConfiguration {
   apiUrl: string;

@@ -13,10 +13,11 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
-  createNodeInbox: mock.createNodeInbox,
   createNodeInboxEventListener: mock.createNodeInboxEventListener,
   suggestInboxTextAsset: (text: string) => ({ type: 'PLAIN-TEXT', text }),
 }));
+
+vi.mock('@safetech/inheriti-elements-core/inbox', () => ({ createNodeInbox: mock.createNodeInbox }));
 
 import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';

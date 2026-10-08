@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { createNativeWindowSession, createQuickPlanOperations, getLocalAssistantInstallStatus, installLocalAssistant, LlamaPlanModel, runLocalPlanBrowser } from '@safetech/inheriti-elements-core/node';
+import { createNativeWindowSession, createQuickPlanOperations, getLocalAssistantInstallStatus, installLocalAssistant, LlamaPlanModel, runLocalPlanBrowser } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from '../configuration.js';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { createLocalAssistantInstallPresenter } from '../render/local-assistant-install.js';
-import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node';
+import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
 
 export async function createPlan(context: CliContext, configuration: CliConfiguration | undefined, terminal: Terminal, signal: AbortSignal, fontFile?: URL, hints?: LocalPlanHints): Promise<number> {
   if (!configuration?.business || !context.organization) {

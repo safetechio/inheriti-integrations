@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 import { brandPage, mobile, pro, renderTemplate } from './local-page.js';
-import { businessDeployment, businessUiRpId, createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node';
+import { businessDeployment, businessUiRpId, createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node-base';
 
 const canceled = () => new Error('local_delivery_canceled');
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);

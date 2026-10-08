@@ -67,8 +67,8 @@ export interface BusinessOrganizationFacade {
 }
 
 export interface InternalBuildFacade {
-  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuild[]>;
-  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuildDownload>;
+  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node-base').InternalBuild[]>;
+  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node-base').InternalBuildDownload>;
 }
 
 export interface ScopedRevealHandle {
@@ -205,11 +205,11 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   }
 
   getAccessToken(): Promise<string | undefined> { return this.auth.getAccessToken(); }
-  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuild[]> {
+  listInternalBuilds(): Promise<import('@safetech/inheriti-client-sdk/node-base').InternalBuild[]> {
     if (!this.internalBuilds) throw new Error('business_context_required');
     return this.internalBuilds.listInternalBuilds();
   }
-  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node').InternalBuildDownload> {
+  requestInternalBuildDownload(id: string): Promise<import('@safetech/inheriti-client-sdk/node-base').InternalBuildDownload> {
     if (!this.internalBuilds) throw new Error('business_context_required');
     return this.internalBuilds.requestInternalBuildDownload(id);
   }

@@ -28,6 +28,17 @@ beforeEach(() => {
 });
 
 describe('secret command options', () => {
+  it('requires an explicit complete automation opt-in and preserves human child arguments', async () => {
+    const args = ['secrets', 'exec', 'plan-1', '--env', 'TOKEN=service.token', '--', 'fixture', '--automation'];
+    expect(await run(args, {}, output())).toBe(0);
+    expect(use).toHaveBeenCalledWith({}, expect.anything(), 'plan-1', expect.objectContaining({ command: ['fixture', '--automation'] }));
+    use.mockClear();
+    const workloadEnv = { INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1', INHERITI_AUTOMATION_AUDIENCE: 'audience-1' };
+    expect(await run(args, workloadEnv, output())).toBe(1);
+    expect(await run(['secrets', 'exec', 'plan-1', '--automation', '--env', 'TOKEN=service.token', '--', 'fixture'], {}, output())).toBe(1);
+    expect(use).not.toHaveBeenCalled();
+    expect(makeContext).toHaveBeenCalledTimes(1);
+  });
   it.each([
     ['--field', 'asset.password'],
     ['--field', 'asset.password', '--allow-plaintext-output', '--allow-plaintext-output'],

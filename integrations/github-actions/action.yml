@@ -1,5 +1,6 @@
 name: Inheriti® secrets
 description: Run a command with fields released through the Inheriti® reveal protocol
+# The calling workflow must grant `permissions: { id-token: write }`; composite actions cannot grant it.
 inputs:
   plan:
     description: Inheriti® plan id
@@ -7,6 +8,12 @@ inputs:
   env:
     description: Newline-separated NAME=asset.field mappings
     required: true
+  connection-id:
+    description: Business automation connection id
+    required: false
+  audience:
+    description: GitHub OIDC audience configured for this connection
+    required: false
   run:
     description: Trusted command string to run on the GitHub runner
     required: true
@@ -26,6 +33,8 @@ runs:
       env:
         INHERITI_SECRETS_PLAN: ${{ inputs.plan }}
         INHERITI_SECRETS_ENV: ${{ inputs.env }}
+        INHERITI_AUTOMATION_CONNECTION_ID: ${{ inputs.connection-id }}
+        INHERITI_AUTOMATION_AUDIENCE: ${{ inputs.audience }}
         INHERITI_SECRETS_OUTPUT: ${{ inputs.output }}
         INHERITI_SECRETS_COMMAND: ${{ inputs.run }}
         INHERITI_CLI_VERSION: ${{ inputs.cli-version }}

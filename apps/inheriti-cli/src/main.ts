@@ -21,8 +21,10 @@ import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
 import { createPlan } from './commands/create-plan.js';
 import type { CliConfiguration } from './configuration.js';
-import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node';
-import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node';
+import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node-base';
+import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
+import { automationSecretsRequested, withAutomationSecrets } from './automation-secrets.js';
+import type { SecretRevealContext } from './session.js';
 
 export function parsePlanHints(args: readonly string[]): LocalPlanHints | undefined {
   const hints: { title?: string; description?: string; assetTypes: string[] } = { assetTypes: [] };
@@ -139,6 +141,23 @@ export async function run(
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
   let business = Boolean(BUILD_DEPLOYMENT);
   try {
+    const secretDelivery = command === 'secrets' && (rest[0] === 'exec' || rest[0] === 'resolve');
+    const separator = rest.indexOf('--');
+    const markerIndex = secretDelivery ? rest.slice(0, separator < 0 ? undefined : separator).indexOf('--automation') : -1;
+    const automation = markerIndex >= 0;
+    if (automation) rest.splice(markerIndex, 1);
+    if (secretDelivery && (automation || automationSecretsRequested(environmentVariables))) {
+      const google = environmentVariables.INHERITI_AUTOMATION_PROVIDER === 'GOOGLE_CLOUD';
+      const portable = environmentVariables.INHERITI_AUTOMATION_PROVIDER === 'PORTABLE';
+      const aws = environmentVariables.INHERITI_AUTOMATION_PROVIDER === 'AWS';
+      if (!automation || !environmentVariables.INHERITI_AUTOMATION_CONNECTION_ID ||
+          (!portable && !aws && !environmentVariables.INHERITI_AUTOMATION_AUDIENCE) ||
+          (aws && !environmentVariables.AWS_REGION && !environmentVariables.AWS_DEFAULT_REGION) ||
+          (portable && (!environmentVariables.INHERITI_AUTOMATION_PRIVATE_KEY_FILE || !environmentVariables.INHERITI_AUTOMATION_KEY_ID ||
+              !environmentVariables.INHERITI_AUTOMATION_RUNNER_SUBJECT || !environmentVariables.INHERITI_AUTOMATION_ENVIRONMENT)) ||
+          (!google && !portable && !aws && (!environmentVariables.ACTIONS_ID_TOKEN_REQUEST_URL || !environmentVariables.ACTIONS_ID_TOKEN_REQUEST_TOKEN)))
+        throw new Error('automation_configuration_required');
+    }
     if (command === 'secrets' && rest[0] === 'resolve') {
       const extracted = extractOrganization(rest);
       if ('error' in extracted) { terminal.writeError(extracted.error); return 1; }
@@ -149,6 +168,14 @@ export async function run(
     }
     const configuration = resolveConfiguration(environmentVariables, environmentVariables.INHERITI_ELEMENTS_CONFIRM_LIVE);
     business = configuration.business === true;
+    if (secretDelivery && automation) {
+      if (!configuration.business) throw new Error('automation_business_required');
+      const separator = rest.indexOf('--');
+      if ((separator < 0 ? rest : rest.slice(0, separator)).includes('--organization'))
+        throw new Error('automation_organization_option_forbidden');
+      return await withAutomationSecrets(configuration.apiUrl, environmentVariables,
+        (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true));
+    }
     // The device grant is a different OAuth client, so the choice has to be made before the context
     // exists — and every later command reads whichever session that login wrote.
     const headless = command === 'login' && rest.includes('--device');
@@ -180,13 +207,13 @@ export async function run(
     if (command === 'login') return await (headless ? loginWithDevice(context, terminal) : login(context, terminal));
     if (command === 'logout') return await logout(context, terminal);
     if (command === 'plans' || command === 'secrets') {
-      if (!configuration.business) return command === 'plans' ? await plans(context, terminal, rest) : await secrets(context, terminal, rest);
+      if (!configuration.business) return command === 'plans' ? await plans(context, terminal, rest) : await secrets(context, terminal, rest, (id) => resolvePlanId(context, terminal, id));
       const parsed = extractOrganization(rest);
       if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, parsed.organizationId);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), 'interactive', organization.id);
       scoped.organization = organization;
-      return command === 'plans' ? await plans(scoped, terminal, parsed.argv, configuration) : await secrets(scoped, terminal, parsed.argv);
+      return command === 'plans' ? await plans(scoped, terminal, parsed.argv, configuration) : await secrets(scoped, terminal, parsed.argv, (id) => resolvePlanId(scoped, terminal, id));
     }
     terminal.writeError(`Unknown command: ${command}`);
     return 1;
@@ -209,9 +236,11 @@ function extractOrganization(argv: readonly string[]): { argv: string[]; organiz
 }
 
 async function secrets(
-  context: Awaited<ReturnType<typeof createCliContext>>,
+  context: SecretRevealContext,
   terminal: Terminal,
   argv: readonly string[],
+  resolveId: (planId: string | undefined) => Promise<string>,
+  workload = false,
 ): Promise<number> {
   const [subcommand, ...rest] = argv;
   const hasPlanId = rest[0] !== undefined && rest[0] !== '--' && !rest[0].startsWith('--');
@@ -219,16 +248,16 @@ async function secrets(
   if (subcommand === 'exec') {
     const parsed = parseUseOptions(hasPlanId ? rest.slice(1) : rest, 'secrets exec');
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
-    const resolved = await resolvePlanId(context, terminal, planId);
+    const resolved = await resolveId(planId);
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
-    try { return await usePlan(context, terminal, resolved, { ...parsed, signal: controller.signal }); }
+    try { return await usePlan(context, terminal, resolved, { ...parsed, signal: controller.signal, workload }); }
     finally { unregister(); }
   }
   if (subcommand === 'resolve') {
     const parsed = parseResolveOptions(hasPlanId ? rest.slice(1) : rest);
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
-    const resolved = await resolvePlanId(context, terminal, planId);
+    const resolved = await resolveId(planId);
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
     try { return await resolvePlanField(context, terminal, resolved, parsed.field, { allowPlaintextOutput: parsed.allowPlaintextOutput, signal: controller.signal }); }
@@ -236,6 +265,11 @@ async function secrets(
   }
   terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets resolve <id> --field asset.field --allow-plaintext-output');
   return 1;
+}
+
+function requiredAutomationPlanId(planId: string | undefined): string {
+  if (!planId) throw new Error('automation_plan_id_required');
+  return planId;
 }
 
 async function plans(

@@ -1,9 +1,9 @@
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
-import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node';
+import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
+import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from './configuration.js';
 import { FileOperatorSessionStore } from './session-store.js';
 import { createCliMasterKeySource } from './master-keys.js';
-import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node';
+import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node-base';
 import { createCliSafeKeyPro } from './safekey-pro.js';
 import type { Terminal } from './output.js';
 import { selectCliCustodianDevice } from './safekey-pro.js';
@@ -18,6 +18,11 @@ export interface CliContext {
   keyVault?: CliKeyVault;
   safeKeyPro?: ReturnType<typeof createCliSafeKeyPro>;
 }
+
+/** The two secret destinations need only this reveal capability. */
+export type SecretRevealContext = Pick<CliContext, 'keyOwner' | 'safeKeyPro' | 'keyVault'> & {
+  core: Pick<NodeIntegrationCore, 'getAccessToken' | 'getPlan' | 'withReveal'>;
+};
 
 /**
  * One composition point, so no command builds its own client or re-solves refresh.
@@ -60,7 +65,7 @@ export function createCliContext(
     ...(safeKeyPro ? { safeKeyPro } : {}) };
 }
 
-export function cliCustodianOptions(context: CliContext, terminal: Terminal, signal?: AbortSignal) {
+export function cliCustodianOptions(context: SecretRevealContext, terminal: Terminal, signal?: AbortSignal) {
   return context.safeKeyPro && terminal.interactive ? {
     proDevice: context.safeKeyPro,
     selectCustodianDevice: () => selectCliCustodianDevice(terminal, signal),

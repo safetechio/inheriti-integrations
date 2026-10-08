@@ -1,4 +1,4 @@
-import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
+import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node-base';
 
 import { quickPlanAssetCatalog } from './quick-plan.js';
 import { LocalPlanSource, LocalPlanSources } from './local-plan-source.js';

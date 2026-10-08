@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import os
 from typing import Any
 
 from ansible.errors import AnsibleError
@@ -24,7 +25,8 @@ class LookupModule(LookupBase):
         for selector in terms:
             try:
                 value = subprocess.check_output(
-                    ["inheriti", "secrets", "resolve", plan, "--field", selector, "--allow-plaintext-output"],
+                    ["inheriti", "secrets", "resolve", plan, "--field", selector, "--allow-plaintext-output"]
+                    + (["--automation"] if os.environ.get("INHERITI_AUTOMATION_PROVIDER") else []),
                     text=True,
                     stderr=subprocess.PIPE,
                 )

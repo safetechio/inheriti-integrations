@@ -6,7 +6,7 @@ import { mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node';
+import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
 import { lockedDeployment, MetadataTools, runServer } from './server.js';
 
 function npmCommand(file: string): { command: string; args: string[] } {

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const clients = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock('@safetech/inheriti-client-sdk/node', () => ({ createNodeElementsClient: clients.create }));
+vi.mock('@safetech/inheriti-client-sdk/node-base', () => ({ createNodeElementsClient: clients.create }));
 
 import { createOrganizationKeys } from '../src/organization-keys.js';
 

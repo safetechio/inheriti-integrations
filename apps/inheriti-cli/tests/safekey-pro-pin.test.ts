@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
 vi.mock('@safetech/inheriti-core-sdk/node', () => ({}));
-vi.mock('@safetech/inheriti-elements-core/node', () => ({}));
+vi.mock('@safetech/inheriti-elements-core/node-base', () => ({}));
 import { readHiddenPin } from '../src/safekey-pro.js';
 import { registerCliCancel } from '../src/cancellation.js';
 

@@ -113,6 +113,28 @@ describe('plans use', () => {
     expect(output.lines.join('\n')).not.toContain('fixture-secret-never-print');
   });
 
+  it('keeps workload identity configuration out of the child environment', async () => {
+    const names = [
+      'INHERITI_AUTOMATION_PROVIDER', 'INHERITI_AUTOMATION_CONNECTION_ID',
+      'INHERITI_AUTOMATION_AUDIENCE', 'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+      'INHERITI_AUTOMATION_PRIVATE_KEY_FILE', 'INHERITI_AUTOMATION_KEY_ID',
+      'INHERITI_AUTOMATION_RUNNER_SUBJECT', 'INHERITI_AUTOMATION_ENVIRONMENT',
+    ] as const;
+    const previous = names.map((name) => process.env[name]);
+    try {
+      for (const name of names) process.env[name] = 'fixture-identity';
+      await usePlan(context() as never, terminal(), 'plan-1', {
+        workload: true, envs: [], tempFiles: [], sockets: [], fds: [],
+        command: [process.execPath, '-e', `process.exit(${JSON.stringify(names)}.some(name => process.env[name]) ? 9 : 0)`],
+      });
+    } finally {
+      names.forEach((name, index) => {
+        if (previous[index] === undefined) delete process.env[name];
+        else process.env[name] = previous[index];
+      });
+    }
+  });
+
   it('uses a restricted temporary file and removes it after the child exits', async () => {
     const output = terminal();
     await usePlan(context() as never, output, 'plan-1', {

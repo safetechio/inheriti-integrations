@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node';
+import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 

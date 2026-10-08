@@ -2,7 +2,7 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import { hostname } from 'node:os';
 import { app } from 'electron';
 import { ProtectedCheckpoint } from '../../launcher/main/protected-checkpoint.js';
-import type { InboxLocalIdentity } from '@safetech/inheriti-elements-core/node';
+import type { InboxLocalIdentity } from '@safetech/inheriti-elements-core/inbox';
 
 type StoredIdentity = {
   encryptionPrivateKey: string;

@@ -1,4 +1,4 @@
-import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node';
+import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node-base';
 
 /** Public setup copy only. The capability path and CSRF value stay in the local HTTP response. */
 export function planAssistantSetupPage(path: string, csrf: string, state: 'consent' | 'installing' | 'failed', progress?: LocalAssistantInstallProgress): string {

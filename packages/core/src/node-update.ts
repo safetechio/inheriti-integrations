@@ -1,4 +1,4 @@
-import type { InternalBuild } from '@safetech/inheriti-client-sdk/node';
+import type { InternalBuild } from '@safetech/inheriti-client-sdk/node-base';
 
 /** Select only a newer build for the installed channel and platform. */
 export function latestIntegrationBuild(builds: readonly InternalBuild[], integration: string, version: string, platform: string): InternalBuild | undefined {

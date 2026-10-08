@@ -1,4 +1,4 @@
-import type { createNodeInbox } from '@safetech/inheriti-elements-core/node';
+import type { createNodeInbox } from '@safetech/inheriti-elements-core/inbox';
 import type { TrayInboxIdentity } from './identity.js';
 
 type InboxClient = ReturnType<typeof createNodeInbox>;

@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path';
-import { readOrganizationPreferences, saveOrganizationPreferences } from '@safetech/inheriti-elements-core/node';
-import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node';
+import { readOrganizationPreferences, saveOrganizationPreferences } from '@safetech/inheriti-elements-core/node-base';
+import type { BusinessOrganization } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from './configuration.js';
 import type { CliContext } from './session.js';
 import type { Terminal } from './output.js';

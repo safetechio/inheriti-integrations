@@ -134,12 +134,15 @@ function escapeHtml(value: string): string {
 }
 
 /** Best effort: a browser that will not open is a printed URL, not a failed login. */
-function openBrowser(url: string): void {
+export function openBrowser(url: string, platform = process.platform): void {
   // Set where no browser should ever be launched — a test, or a shell that only wants the URL.
   if (process.env.INHERITI_ELEMENTS_NO_BROWSER) return;
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
+  const command = platform === 'darwin' ? 'open' : platform === 'win32' ? 'powershell.exe' : 'xdg-open';
+  const args = platform === 'win32'
+    ? ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${url.replaceAll("'", "''")}'`]
+    : [url];
   try {
-    const browser = spawn(command, [url], { stdio: 'ignore', detached: true });
+    const browser = spawn(command, args, { stdio: 'ignore', detached: true });
     browser.once('error', () => undefined);
     browser.unref();
   } catch {

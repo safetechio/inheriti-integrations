@@ -5,7 +5,7 @@ const mock = vi.hoisted(() => ({
   discard: vi.fn(),
 }));
 
-vi.mock('@safetech/inheriti-client-sdk/node', () => ({
+vi.mock('@safetech/inheriti-client-sdk/node-base', () => ({
   HttpPlanEditPort: class {},
   createNodeQuickPlanEditor: mock.createEditor,
 }));

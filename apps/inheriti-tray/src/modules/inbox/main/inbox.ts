@@ -1,4 +1,5 @@
-import { createNodeInbox, createNodeInboxEventListener, suggestInboxTextAsset } from '@safetech/inheriti-elements-core/node';
+import { createNodeInboxEventListener, suggestInboxTextAsset } from '@safetech/inheriti-elements-core/node';
+import { createNodeInbox } from '@safetech/inheriti-elements-core/inbox';
 import { dialog } from 'electron';
 import { open, readFile, stat, unlink } from 'node:fs/promises';
 import { extname, basename } from 'node:path';

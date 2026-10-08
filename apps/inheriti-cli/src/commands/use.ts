@@ -6,7 +6,7 @@ import type { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Writable } from 'node:stream';
-import type { CliContext } from '../session.js';
+import type { SecretRevealContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { consumePlanFields, loadRevealPlan, renderRequestedValue } from './reveal.js';
 
@@ -21,6 +21,7 @@ export interface UsePlanOptions {
   /** Keep the child's normal output visible. Secret values are still never printed by the CLI itself. */
   output?: 'suppress' | 'inherit';
   signal?: AbortSignal;
+  workload?: boolean;
 }
 
 export class UsePlanInvalid extends Error {
@@ -29,7 +30,7 @@ export class UsePlanInvalid extends Error {
 }
 
 export async function usePlan(
-  context: CliContext,
+  context: SecretRevealContext,
   terminal: Terminal,
   planId: string,
   options: UsePlanOptions,
@@ -117,6 +118,17 @@ async function executeWithSecrets(
   stdio[2] = options.output === 'inherit' ? 'inherit' : 'ignore';
   for (const { fd } of options.fds) stdio[fd] = 'pipe';
   const childEnvironment: NodeJS.ProcessEnv = { ...process.env };
+  if (options.workload) {
+    delete childEnvironment.ACTIONS_ID_TOKEN_REQUEST_URL;
+    delete childEnvironment.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+    delete childEnvironment.INHERITI_AUTOMATION_CONNECTION_ID;
+    delete childEnvironment.INHERITI_AUTOMATION_AUDIENCE;
+    delete childEnvironment.INHERITI_AUTOMATION_PROVIDER;
+    delete childEnvironment.INHERITI_AUTOMATION_PRIVATE_KEY_FILE;
+    delete childEnvironment.INHERITI_AUTOMATION_KEY_ID;
+    delete childEnvironment.INHERITI_AUTOMATION_RUNNER_SUBJECT;
+    delete childEnvironment.INHERITI_AUTOMATION_ENVIRONMENT;
+  }
   for (const { name, selector } of options.envs) childEnvironment[name] = requiredValue(values, selector);
 
   let privateDirectory: string | undefined;

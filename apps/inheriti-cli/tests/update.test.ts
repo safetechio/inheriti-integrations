@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { notifyCliUpdate } from '../src/commands/update.js';
 import type { CliContext } from '../src/session.js';
 import type { Terminal } from '../src/output.js';
-import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node';
-import type { InternalBuild } from '@safetech/inheriti-elements-core/node';
+import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
+import type { InternalBuild } from '@safetech/inheriti-elements-core/node-base';
 
 const build = (version: string, platform = 'linux-x64'): InternalBuild => ({
   id: version, integration: 'cli', platform, version, fileName: 'cli.tgz', size: 1,

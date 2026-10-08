@@ -12,6 +12,14 @@
       "types": "./dist/node.d.ts",
       "import": "./dist/node.js"
     },
+    "./node-base": {
+      "types": "./dist/node-base.d.ts",
+      "import": "./dist/node-base.js"
+    },
+    "./inbox": {
+      "types": "./dist/inbox.d.ts",
+      "import": "./dist/inbox.js"
+    },
     "./auth": {
       "types": "./dist/auth.d.ts",
       "import": "./dist/auth.js"

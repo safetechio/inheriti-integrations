@@ -1,5 +1,5 @@
-import { createNodeQuickPlanEditor, HttpPlanEditPort } from '@safetech/inheriti-client-sdk/node';
-import type { DataAsset, PlanEditAssetReference, PlanEditCandidatePage, PlanEditContext } from '@safetech/inheriti-client-sdk/node';
+import { createNodeQuickPlanEditor, HttpPlanEditPort } from '@safetech/inheriti-client-sdk/node-base';
+import type { DataAsset, PlanEditAssetReference, PlanEditCandidatePage, PlanEditContext } from '@safetech/inheriti-client-sdk/node-base';
 
 export function createPlanEditOperations(options: {
   apiUrl: string;

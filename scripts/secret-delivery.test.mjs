@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -59,6 +59,150 @@ process.exit(child.status);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('GitHub Actions keeps human invocations and requires OIDC for automation opt-in', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'inheriti-github-action-'));
+  try {
+    const capture = join(directory, 'args.json');
+    writeFileSync(join(directory, 'npm'), `#!${process.execPath}\n` + `
+const fs = require('node:fs');
+fs.writeFileSync(process.env.CAPTURE, JSON.stringify({
+  args: process.argv.slice(2),
+  oidcUrl: process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
+  oidcToken: process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN,
+}));
+`, { mode: 0o700 });
+    const baseEnv = {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      CAPTURE: capture,
+      INHERITI_SECRETS_PLAN: 'fixture-plan',
+      INHERITI_SECRETS_ENV: 'TOKEN=service.token',
+      INHERITI_SECRETS_COMMAND: './deploy.sh',
+    };
+    const wrapper = join(root, 'integrations/github-actions/entrypoint.sh');
+    const expectedArgs = [
+      'exec', '--yes', '--package=@safetech/inheriti-cli@latest', '--', 'inheriti',
+      'secrets', 'exec', 'fixture-plan', '--output', 'suppress', '--env',
+      'TOKEN=service.token', '--', 'bash', '-c', './deploy.sh',
+    ];
+
+    const human = spawnSync('bash', [wrapper], { env: baseEnv, encoding: 'utf8' });
+    assert.equal(human.status, 0, human.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(capture, 'utf8')).args, expectedArgs);
+
+    rmSync(capture);
+    const missingOidcEnv = {
+      ...baseEnv,
+      INHERITI_AUTOMATION_CONNECTION_ID: 'connection-fixture',
+      INHERITI_AUTOMATION_AUDIENCE: 'audience-fixture',
+    };
+    delete missingOidcEnv.ACTIONS_ID_TOKEN_REQUEST_URL;
+    delete missingOidcEnv.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+    const missingOidc = spawnSync('bash', [wrapper], { env: missingOidcEnv, encoding: 'utf8' });
+    assert.notEqual(missingOidc.status, 0);
+    assert.equal(existsSync(capture), false);
+
+    const oidcEnv = {
+      ...missingOidcEnv,
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.example/request',
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'token-fixture',
+    };
+    const withOidc = spawnSync('bash', [wrapper], { env: oidcEnv, encoding: 'utf8' });
+    assert.equal(withOidc.status, 0, withOidc.stderr);
+    const captured = JSON.parse(readFileSync(capture, 'utf8'));
+    assert.deepEqual(captured.args, [...expectedArgs.slice(0, 10), '--automation', ...expectedArgs.slice(10)]);
+    assert.equal(captured.oidcUrl, oidcEnv.ACTIONS_ID_TOKEN_REQUEST_URL);
+    assert.equal(captured.oidcToken, oidcEnv.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
+    assert.equal(withOidc.stdout, '');
+    assert.equal(withOidc.stderr.includes(oidcEnv.ACTIONS_ID_TOKEN_REQUEST_URL), false);
+    assert.equal(withOidc.stderr.includes(oidcEnv.ACTIONS_ID_TOKEN_REQUEST_TOKEN), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('Google wrappers opt in to automation only with connection configuration', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'inheriti-google-wrapper-'));
+  try {
+    const capture = join(directory, 'args.json');
+    writeFileSync(join(directory, 'inheriti'), `#!${process.execPath}\n` + `
+require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
+  args: process.argv.slice(2), provider: process.env.INHERITI_AUTOMATION_PROVIDER,
+}));
+`, { mode: 0o700 });
+    const env = {
+      ...process.env, PATH: `${directory}:${process.env.PATH}`, CAPTURE: capture,
+      INHERITI_SECRETS_PLAN: 'fixture-plan', INHERITI_SECRETS_ENV: 'TOKEN=service.token',
+    };
+    delete env.INHERITI_AUTOMATION_PROVIDER;
+    delete env.INHERITI_AUTOMATION_CONNECTION_ID;
+    delete env.INHERITI_AUTOMATION_AUDIENCE;
+    for (const wrapper of ['cloud-run/entrypoint.sh', 'gke/entrypoint.sh', 'compute-engine/startup.sh']) {
+      const script = join(root, 'integrations/google-cloud', wrapper);
+      const human = spawnSync('bash', [script, './deploy.sh'], { env, encoding: 'utf8' });
+      assert.equal(human.status, 0, human.stderr);
+      assert.equal(JSON.parse(readFileSync(capture, 'utf8')).args.includes('--automation'), false);
+      rmSync(capture);
+
+      const partial = spawnSync('bash', [script, './deploy.sh'], {
+        env: { ...env, INHERITI_AUTOMATION_CONNECTION_ID: 'connection-fixture' }, encoding: 'utf8',
+      });
+      assert.notEqual(partial.status, 0);
+      assert.equal(existsSync(capture), false);
+
+      const automated = spawnSync('bash', [script, './deploy.sh'], {
+        env: { ...env, INHERITI_AUTOMATION_CONNECTION_ID: 'connection-fixture', INHERITI_AUTOMATION_AUDIENCE: 'https://business.example/connection-fixture' },
+        encoding: 'utf8',
+      });
+      assert.equal(automated.status, 0, automated.stderr);
+      const captured = JSON.parse(readFileSync(capture, 'utf8'));
+      assert.equal(captured.provider, 'GOOGLE_CLOUD');
+      assert.equal(captured.args.includes('--automation'), true);
+      rmSync(capture);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('AWS wrappers opt in to automation only with connection and region', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'inheriti-aws-wrapper-'));
+  try {
+    const capture = join(directory, 'args.json');
+    writeFileSync(join(directory, 'inheriti'), `#!${process.execPath}\n` + `
+require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
+  args: process.argv.slice(2), provider: process.env.INHERITI_AUTOMATION_PROVIDER,
+}));
+`, { mode: 0o700 });
+    const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, CAPTURE: capture,
+      INHERITI_SECRETS_PLAN: 'fixture-plan', INHERITI_SECRETS_ENV: 'TOKEN=service.token' };
+    delete env.INHERITI_AUTOMATION_PROVIDER;
+    delete env.INHERITI_AUTOMATION_CONNECTION_ID;
+    delete env.AWS_REGION;
+    delete env.AWS_DEFAULT_REGION;
+    for (const wrapper of ['ecs/entrypoint.sh', 'ec2-ssm/run-command.sh']) {
+      const script = join(root, 'integrations/aws', wrapper);
+      const human = spawnSync('bash', [script, './deploy.sh'], { env, encoding: 'utf8' });
+      assert.equal(human.status, 0, human.stderr);
+      assert.equal(JSON.parse(readFileSync(capture, 'utf8')).args.includes('--automation'), false);
+      rmSync(capture);
+      const partial = spawnSync('bash', [script, './deploy.sh'], {
+        env: { ...env, INHERITI_AUTOMATION_CONNECTION_ID: 'connection-fixture' }, encoding: 'utf8',
+      });
+      assert.notEqual(partial.status, 0);
+      assert.equal(existsSync(capture), false);
+      const automated = spawnSync('bash', [script, './deploy.sh'], {
+        env: { ...env, INHERITI_AUTOMATION_CONNECTION_ID: 'connection-fixture', AWS_REGION: 'us-east-1' }, encoding: 'utf8',
+      });
+      assert.equal(automated.status, 0, automated.stderr);
+      const args = JSON.parse(readFileSync(capture, 'utf8'));
+      assert.equal(args.provider, 'AWS');
+      assert.equal(args.args.includes('--automation'), true);
+      rmSync(capture);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('Ansible acknowledges plaintext and suppresses secret-bearing exception chains', () => {

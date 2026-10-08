@@ -7,8 +7,8 @@ import { completeWords, printCompletionScript } from '../src/commands/completion
 import type { Terminal } from '../src/output.js';
 import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
-import type { NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node';
+import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
+import type { NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 

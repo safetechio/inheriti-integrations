@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node';
+import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node-base';
 import type { Terminal } from '../output.js';
 import { renderFrame } from './ink.js';
 

@@ -1,7 +1,7 @@
 import { custodianShareCopy, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
 import type { RevealProgress } from '@safetech/inheriti-elements-core';
 import clipboard from 'clipboardy';
-import type { CliContext } from '../session.js';
+import type { SecretRevealContext } from '../session.js';
 import { cliCustodianOptions } from '../session.js';
 import type { Terminal } from '../output.js';
 import { OperatorNotSignedIn } from './plans.js';
@@ -16,7 +16,7 @@ export interface RevealCommandOptions {
 }
 
 export async function resolvePlanField(
-  context: CliContext,
+  context: SecretRevealContext,
   terminal: Terminal,
   planId: string,
   selector: string,
@@ -64,7 +64,7 @@ export class RevealStoppedByDeadManSwitch extends Error {
 }
 
 export async function revealPlan(
-  context: CliContext,
+  context: SecretRevealContext,
   terminal: Terminal,
   planId: string,
   options: RevealCommandOptions,
@@ -141,14 +141,14 @@ async function expireClipboard(content: string, ttlMs: number, terminal: Termina
   }
 }
 
-export async function loadRevealPlan(context: CliContext, planId: string): Promise<CliRevealPlan> {
+export async function loadRevealPlan(context: SecretRevealContext, planId: string): Promise<CliRevealPlan> {
   if (!(await context.core.getAccessToken())) throw new OperatorNotSignedIn();
   return await context.core.getPlan(planId) as CliRevealPlan;
 }
 
 /** One CLI reveal lifecycle. Destinations vary; governance, reconstruction and auditing never do. */
 export async function consumePlanFields(
-  context: CliContext,
+  context: SecretRevealContext,
   terminal: Terminal,
   planId: string,
   plan: CliRevealPlan,

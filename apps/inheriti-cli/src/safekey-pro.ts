@@ -1,5 +1,5 @@
 import { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
-import { createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node';
+import { createSafeKeyProPinSession, custodianShareCopy, waitForSafeKeyProDevice } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from './configuration.js';
 import type { Terminal } from './output.js';
 import { promptSelect } from './render/select.jsx';

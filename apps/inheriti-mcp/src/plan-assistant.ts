@@ -3,8 +3,8 @@ import { once } from 'node:events';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import type { Socket } from 'node:net';
-import { getLocalAssistantInstallStatus, installLocalAssistant } from '@safetech/inheriti-elements-core/node';
-import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node';
+import { getLocalAssistantInstallStatus, installLocalAssistant } from '@safetech/inheriti-elements-core/node-base';
+import type { LocalAssistantInstallProgress } from '@safetech/inheriti-elements-core/node-base';
 import { planAssistantSetupPage } from './plan-assistant-page.js';
 
 function secureResponse(response: ServerResponse) {

@@ -3,7 +3,7 @@ import { createCliContext } from '../src/session.js';
 import type { CliConfiguration } from '../src/configuration.js';
 
 const composed = vi.hoisted(() => vi.fn((_options: { configuration: unknown }) => ({})));
-vi.mock('@safetech/inheriti-elements-core/node', () => ({ createNodeIntegrationCore: composed }));
+vi.mock('@safetech/inheriti-elements-core/node-base', () => ({ createNodeIntegrationCore: composed }));
 
 it('confirms the environment when composing the shared core', () => {
   const context = createCliContext({

@@ -10,6 +10,8 @@ ECS task -> entrypoint.sh -> inheriti secrets exec -> application
 
 Set `INHERITI_SECRETS_PLAN` and newline-separated `INHERITI_SECRETS_ENV` in the task configuration.
 Keep the values as selectors, never as plaintext secrets.
+For automation, also set `INHERITI_AUTOMATION_CONNECTION_ID` and `AWS_REGION`. The wrapper then
+uses the ECS task role to sign a fresh Inheriti challenge. Configure the task role, not static AWS keys.
 
 Child stdout and stderr are suppressed by default. For explicit inherited logs, set
 `INHERITI_SECRETS_OUTPUT=inherit`; recipient output may contain credentials. See the

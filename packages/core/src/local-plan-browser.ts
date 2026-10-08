@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer, type ServerResponse, type IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import type { Socket } from 'node:net';
-import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node';
+import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node-base';
 import { renderLocalPlanCanceledPage, renderLocalPlanPage, renderLocalPlanResultPage } from './local-plan-page.js';
 import { LocalPlanAssistant, localPlanSuggestionTimeoutMs } from './local-plan-assistant.js';
 import { LocalPlanDraftValue } from './local-plan-draft.js';

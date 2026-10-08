@@ -1,4 +1,4 @@
-import type { PlanDetail, PlanSummary } from '@safetech/inheriti-elements-core/node';
+import type { PlanDetail, PlanSummary } from '@safetech/inheriti-elements-core/node-base';
 
 export function planSummary(plan: PlanSummary) {
   return {

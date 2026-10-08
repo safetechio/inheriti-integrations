@@ -1,4 +1,4 @@
-import { createNodeElementsClient } from '@safetech/inheriti-client-sdk/node';
+import { createNodeElementsClient } from '@safetech/inheriti-client-sdk/node-base';
 
 export function createOrganizationKeys(options: {
   apiUrl: string;

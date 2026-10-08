@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
 
 const { waitForSafeKeyProDevice } = vi.hoisted(() => ({ waitForSafeKeyProDevice: vi.fn(async (_path?: string, _signal?: AbortSignal) => '/dev/hidraw4') }));
-vi.mock('@safetech/inheriti-elements-core/node', async (original) => ({
-  ...await original<typeof import('@safetech/inheriti-elements-core/node')>(),
+vi.mock('@safetech/inheriti-elements-core/node-base', async (original) => ({
+  ...await original<typeof import('@safetech/inheriti-elements-core/node-base')>(),
   waitForSafeKeyProDevice,
 }));
 vi.mock('@safetech/inheriti-core-sdk/node', async (original) => ({
