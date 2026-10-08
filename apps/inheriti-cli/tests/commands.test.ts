@@ -7,7 +7,7 @@ import { completeWords, printCompletionScript } from '../src/commands/completion
 import type { Terminal } from '../src/output.js';
 import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
+import { createNodeIntegrationCore, MemoryOperatorSessionStore } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -128,6 +128,14 @@ describe('plan logs', () => {
 });
 
 describe('login', () => {
+  it('does not report success when the device login did not leave a readable session', async () => {
+    const terminal = recordingTerminal(true);
+    const context = contextWith();
+    (context as { sessions: { load: () => Promise<undefined> } }).sessions.load = async () => undefined;
+    await expect(loginWithDevice(context, terminal)).rejects.toMatchObject({ code: 'session_file_unreadable' });
+    expect(terminal.lines).not.toContain('Signed in.');
+  });
+
   it('signs in through the browser and hands the whole callback back to the SDK', async () => {
     process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
     const occupied = createServer();
@@ -172,6 +180,7 @@ describe('login', () => {
       expect(html).toContain('font-family: AppFont');
       expect(html).toContain('--primary: #2962ff');
       expect(html).toContain('Inheriti® CLI');
+      expect(html).toContain('Sign-in is complete only when your terminal says Signed in.');
 
       await expect(signingIn).resolves.toBe(0);
       expect(completed).toContain('code=authorization-code');
@@ -196,8 +205,10 @@ describe('login', () => {
       };
       let nonce = '';
       let exchanged: URLSearchParams | undefined;
+      const sessions = new MemoryOperatorSessionStore();
       const core = createNodeIntegrationCore({
         apiUrl: 'https://business.test/integrations/', environment: 'TEST', business: true, configuration,
+        sessions,
         tokenValidator: {
           validateAccessToken: async () => principal,
           validateIdToken: async () => Object.assign({}, principal, { audience: configuration.clientId, nonce }),
@@ -218,7 +229,7 @@ describe('login', () => {
         terminal.lines.push(line);
         if (line.startsWith('Waiting for the browser')) published(new URL(line.split('\n  ')[1]!));
       };
-      const context = { core, authConfiguration: configuration, sessions: { load: async () => null } } as unknown as Parameters<typeof login>[0];
+      const context = { core, authConfiguration: configuration, sessions } as unknown as Parameters<typeof login>[0];
       const signingIn = login(context, terminal);
       const authorization = await ready;
       expect(authorization.searchParams.get('redirect_uri')).toBe(configuration.redirectUri);

@@ -210,7 +210,7 @@ export function useInboxMessages(onClose) {
       if (String(failure).toLowerCase().includes('inbox_parent_failed')) clearPendingSend(pendingSend.current);
       if (generation.current === current) setSendError(!protectedSend
         ? 'Could not send the message. Your text is still here.' : String(failure).includes('INBOX_UNAVAILABLE')
-        ? 'This organization needs two active message storage locations before you can send. Ask an owner or manager to add one. Your text is still here.'
+        ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM. Your text is still here.'
         : 'Could not send the message. Your text is still here.');
     } finally {
       if (generation.current === current) setBusy('');
@@ -244,7 +244,7 @@ export function useInboxMessages(onClose) {
       await refresh();
     } catch (failure) {
       if (generation.current === current && !String(failure).includes('AbortError')) setError(String(failure).includes('INBOX_UNAVAILABLE')
-        ? 'This organization needs two active message storage locations before you can send. Ask an owner or manager to add one.'
+        ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM.'
         : 'Could not send the file. Check the 10 MB limit and try again.');
     } finally {
       if (generation.current === current) { setBusy(''); setTransfer(null); }

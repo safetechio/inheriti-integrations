@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { DeviceTransaction } from '@safetech/inheriti-elements-core';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
+import { SessionStoreUnreadable } from '../session-store.js';
 
 export class InteractiveTerminalRequired extends Error {
   constructor() {
@@ -31,6 +32,7 @@ export async function login(context: CliContext, terminal: Terminal): Promise<nu
   if (await context.sessions.load()) await context.keyVault?.clear();
   const callbackUrl = await waitForCallback(context, terminal);
   await context.core.auth.completeAuthorizationCode(callbackUrl);
+  if (!(await context.sessions.load())) throw new SessionStoreUnreadable('session_file_unreadable');
   terminal.write('Signed in.');
   return 0;
 }
@@ -48,6 +50,7 @@ export async function loginWithDevice(context: CliContext, terminal: Terminal): 
   terminal.write(`Open ${started.verificationUri} and enter the code: ${started.userCode}`);
   terminal.write('Waiting for approval…');
   await context.core.auth.pollDeviceAuthorization();
+  if (!(await context.sessions.load())) throw new SessionStoreUnreadable('session_file_unreadable');
   terminal.write('Signed in.');
   return 0;
 }
@@ -121,10 +124,10 @@ function callbackPage(failure: string | null): string {
   return readFileSync(new URL('templates/login-callback.html', resources), 'utf8')
     .replace('{{font}}', font)
     .replace('{{logo}}', logo)
-    .replaceAll('{{heading}}', signedIn ? 'Signed in' : 'Sign-in failed')
-    .replace('{{statusLabel}}', signedIn ? 'Sign-in complete' : 'Sign-in error')
+    .replaceAll('{{heading}}', signedIn ? 'Return to your terminal' : 'Sign-in failed')
+    .replace('{{statusLabel}}', signedIn ? 'Finalizing sign-in' : 'Sign-in error')
     .replace('{{statusClass}}', signedIn ? '' : 'failed')
-    .replace('{{message}}', signedIn ? 'You can close this tab and go back to your terminal.' : escapeHtml(failure));
+    .replace('{{message}}', signedIn ? 'Sign-in is complete only when your terminal says Signed in.' : escapeHtml(failure));
 }
 
 function escapeHtml(value: string): string {
@@ -142,9 +145,9 @@ export function openBrowser(url: string, platform = process.platform): void {
     ? ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${url.replaceAll("'", "''")}'`]
     : [url];
   try {
-    const browser = spawn(command, args, { stdio: 'ignore', detached: true });
+    const browser = spawn(command, args, platform === 'win32' ? { stdio: 'ignore' } : { stdio: 'ignore', detached: true });
     browser.once('error', () => undefined);
-    browser.unref();
+    if (platform !== 'win32') browser.unref();
   } catch {
     // The URL is already on screen; the operator can open it themselves.
   }

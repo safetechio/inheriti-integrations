@@ -134,7 +134,7 @@ async function executeWithSecrets(
   let privateDirectory: string | undefined;
   const socketDeliveries: SocketDelivery[] = [];
   if (options.tempFiles.length > 0 || options.sockets.length > 0) {
-    privateDirectory = await mkdtemp(join(tmpdir(), 'inheriti-elements-use-'));
+    privateDirectory = await mkdtemp(join(tmpdir(), 'inheriti-use-'));
     try {
       if (process.platform !== 'win32') await chmod(privateDirectory, 0o700);
       assertActive(signal);

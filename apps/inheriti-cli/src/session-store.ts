@@ -1,4 +1,5 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
@@ -9,9 +10,11 @@ export class SessionStoreUnreadable extends Error {
 }
 
 export function defaultSessionPath(environmentVariables: Readonly<Record<string, string | undefined>>): string {
-  const base = environmentVariables.INHERITI_ELEMENTS_STATE_DIR
-    ?? resolve(environmentVariables.XDG_STATE_HOME ?? resolve(homedir(), '.local', 'state'), 'inheriti-elements');
-  return resolve(base, 'session.json');
+  if (environmentVariables.INHERITI_ELEMENTS_STATE_DIR) return resolve(environmentVariables.INHERITI_ELEMENTS_STATE_DIR, 'session.json');
+  const stateHome = environmentVariables.XDG_STATE_HOME ?? resolve(homedir(), '.local', 'state');
+  const current = resolve(stateHome, 'inheriti', 'session.json');
+  const legacy = resolve(stateHome, 'inheriti-elements', 'session.json');
+  return existsSync(current) || !existsSync(legacy) ? current : legacy;
 }
 
 /**
@@ -27,8 +30,9 @@ export class FileOperatorSessionStore implements OperatorSessionStore {
     let raw: string;
     try {
       raw = await readFile(this.path, 'utf8');
-    } catch {
-      return undefined;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw new SessionStoreUnreadable('session_file_unreadable');
     }
     if (!(await this.isOwnerOnly())) {
       await this.clear();
@@ -57,7 +61,9 @@ export class FileOperatorSessionStore implements OperatorSessionStore {
 
   private async isOwnerOnly(): Promise<boolean> {
     try {
-      return ((await stat(this.path)).mode & 0o077) === 0;
+      const file = await stat(this.path);
+      // Windows mode bits cannot express its ACLs; the session lives in the user's profile.
+      return process.platform === 'win32' || (file.mode & 0o077) === 0;
     } catch {
       return false;
     }

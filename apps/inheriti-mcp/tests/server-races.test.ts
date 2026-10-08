@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { MetadataTools } from '../src/server.js';
+import { MetadataTools, safeResult } from '../src/server.js';
 
 vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
 
@@ -71,8 +71,9 @@ it('uses the selected organization core for plan logs and returns the safe page'
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(done => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 it('starts a fresh device challenge after successful login and later session loss', async () => {
@@ -88,6 +89,25 @@ it('starts a fresh device challenge after successful login and later session los
   expect((await tools.authorized()).login.userCode).toBe('second');
   expect(begin).toHaveBeenCalledTimes(2);
   poll.resolve(undefined);
+});
+
+it('reports a failed device login before offering another code', async () => {
+  const tools = new MetadataTools() as any;
+  const poll = deferred<void>();
+  const begin = vi.fn().mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'first' })
+    .mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'second' });
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {
+    beginDeviceAuthorization: begin, pollDeviceAuthorization: () => poll.promise,
+  } });
+
+  expect((await tools.authorized()).login.userCode).toBe('first');
+  poll.reject(Object.assign(new Error('private token details'), { code: 'operator_token_expired' }));
+  await vi.waitFor(() => expect(tools.loginFailure).toBe('operator_token_expired'));
+  expect(await safeResult(() => tools.listOrganizations())({})).toEqual({
+    isError: true, content: [{ type: 'text', text: 'operator_token_expired' }],
+  });
+  expect(begin).toHaveBeenCalledTimes(1);
+  expect((await tools.authorized()).login.userCode).toBe('second');
 });
 
 it('reserves a reveal before plan detail and blocks delivery after organization switch', async () => {
@@ -274,12 +294,15 @@ it('reuses the selected SDK client and auth until the operator session changes',
 });
 
 
-it.each(['LIVE', 'prod'])('rejects development configuration %s', async environment => {
+it.each([
+  ['LIVE', 'inheriti'], ['prod', 'inheriti'],
+  ['LIVE', 'inheriti-elements'], ['prod', 'inheriti-elements'],
+])('rejects development configuration %s from %s', async (environment, folder) => {
   const directory = await mkdtemp(join(tmpdir(), 'mcp-config-'));
   vi.stubEnv('XDG_CONFIG_HOME', directory);
   try {
-    await mkdir(join(directory, 'inheriti-elements'));
-    await writeFile(join(directory, 'inheriti-elements', 'config.json'), JSON.stringify(environment === 'prod'
+    await mkdir(join(directory, folder));
+    await writeFile(join(directory, folder, 'config.json'), JSON.stringify(environment === 'prod'
       ? { deployment: 'prod', business: true }
       : { apiUrl: 'https://api.test', issuer: 'https://issuer.test', clientId: 'client', environment }));
     await expect((new MetadataTools() as any).client()).rejects.toMatchObject({ code: 'live_environment_unavailable_in_development_build' });

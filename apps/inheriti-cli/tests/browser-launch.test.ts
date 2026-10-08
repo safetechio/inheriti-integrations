@@ -12,5 +12,6 @@ it('opens the complete OAuth URL with the Windows default browser', () => {
   expect(spawn).toHaveBeenCalledWith('powershell.exe', [
     '-NoProfile', '-NonInteractive', '-Command',
     "Start-Process -FilePath 'https://issuer.test/auth?client_id=inheriti&redirect_uri=http%3A%2F%2F127.0.0.1&state=O''Neil'",
-  ], { stdio: 'ignore', detached: true });
+  ], { stdio: 'ignore' });
+  expect(vi.mocked(spawn).mock.results[0]?.value.unref).not.toHaveBeenCalled();
 });

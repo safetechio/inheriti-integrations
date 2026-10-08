@@ -49,15 +49,16 @@ async function connect(directory: string, secureDelivery: boolean) {
   return client;
 }
 
-it('registers the MCP tools over the real stdio transport', async () => {
+it('registers secure delivery tools by default over the real stdio transport', async () => {
   const directory = await bundleMcp();
   let client: Client | undefined;
   try {
     client = await connect(directory, false);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_plan_creation_status', 'check_update', 'create_plan_with_assistant',
-      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations', 'logout', 'select_organization',
+      'abort_plan_access', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_plan_with_assistant', 'download_plan_asset',
+      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
+      'logout', 'reveal_plan_secret', 'select_organization',
     ]);
     const result = await client.callTool({ name: 'check_update', arguments: {} });
     expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
@@ -67,7 +68,7 @@ it('registers the MCP tools over the real stdio transport', async () => {
   }
 });
 
-it('registers secure delivery tools and returns a safe error over stdio', async () => {
+it('keeps the old flag working and returns a safe error over stdio', async () => {
   const directory = await bundleMcp();
   let client: Client | undefined;
   try {
@@ -93,13 +94,13 @@ it('registers secure delivery tools and returns a safe error over stdio', async 
   }
 });
 
-it('rejects the removed delivery flag and advertises only the secure delivery flag', async () => {
+it('rejects the removed delivery flag', async () => {
   const directory = await bundleMcp();
   try {
     await expect(promisify(execFile)(process.execPath,
       [join(directory, 'dist', 'main.js'), '--local-delivery'],
       { cwd: directory, env: testEnvironment(directory) },
-    )).rejects.toMatchObject({ code: 1, stdout: '', stderr: 'Usage: inheriti-mcp [--enable-secure-delivery] | --version | update [--install]\n' });
+    )).rejects.toMatchObject({ code: 1, stdout: '', stderr: 'Usage: inheriti-mcp | --version | update [--install]\n' });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

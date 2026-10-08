@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import type { ElementsEnvironment } from '@safetech/inheriti-elements-core';
@@ -48,7 +48,9 @@ export function defaultConfigurationPath(
   if (environmentVariables.INHERITI_ELEMENTS_CONFIG) return environmentVariables.INHERITI_ELEMENTS_CONFIG;
   const home = environmentVariables.HOME ?? homedir();
   const base = environmentVariables.XDG_CONFIG_HOME ?? resolve(home, '.config');
-  return resolve(base, 'inheriti-elements', 'config.json');
+  const current = resolve(base, 'inheriti', 'config.json');
+  const legacy = resolve(base, 'inheriti-elements', 'config.json');
+  return existsSync(current) || !existsSync(legacy) ? current : legacy;
 }
 
 const FILE_KEYS: Readonly<Record<string, string>> = {

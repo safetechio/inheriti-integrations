@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import { registerWindowEvents } from './window.js';
 
@@ -37,6 +37,8 @@ export function showLauncher(action?: string): void {
     window.setMenu(null);
     registerWindowEvents(window, action, () => quitting);
     void window.loadFile(join(import.meta.dirname, 'launcher.html'));
+    const { x, y, width } = screen.getPrimaryDisplay().workArea;
+    window.setPosition(x + width - window.getBounds().width, y);
   }
   window.show();
   window.focus();

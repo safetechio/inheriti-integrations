@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -15,7 +15,12 @@ import { deliverAssetInBrowser, deliverFieldsInBrowser, deliverSelectionInBrowse
 import { openSafeKeyProPrompt } from './safekey-pro.js';
 import { ensureLocalAssistant } from './plan-assistant.js';
 
-const configPath = () => resolve(process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config'), 'inheriti-elements', 'config.json');
+const configPath = () => {
+  const base = process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config');
+  const current = resolve(base, 'inheriti', 'config.json');
+  const legacy = resolve(base, 'inheriti-elements', 'config.json');
+  return existsSync(current) || !existsSync(legacy) ? current : legacy;
+};
 const coded = (code: string) => Object.assign(new Error(code), { code });
 declare const __INHERITI_PRODUCTION_BUILD__: boolean;
 declare const __INHERITI_DEPLOYMENT__: string;
@@ -58,6 +63,7 @@ export class MetadataTools {
   private planJob?: { id: string; status: 'WAITING' | 'CREATED' | 'PENDING' | 'FAILED' | 'CANCELED'; phase: string; planId?: string; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
+  private loginFailure: string | undefined;
 
   async updateAccess(onChallenge: (uri: string, code: string) => void): Promise<NodeIntegrationCore> {
     const initial = await this.ready();
@@ -124,16 +130,28 @@ export class MetadataTools {
       throw error;
     }
     this.assertGeneration(generation);
-    if (accessToken) { this.login = undefined; return core; }
+    if (accessToken) { this.login = undefined; this.loginFailure = undefined; return core; }
     await this.stopLocalAccess();
     this.assertGeneration(generation);
+    if (this.loginFailure) {
+      const code = this.loginFailure;
+      this.loginFailure = undefined;
+      throw coded(code);
+    }
     if (!this.login) {
       const challenge = await core.auth.beginDeviceAuthorization() as { verificationUri: string; userCode: string; verificationUriComplete?: string };
       this.assertGeneration(generation);
       this.login = { verificationUri: challenge.verificationUri, userCode: challenge.userCode, ...(challenge.verificationUriComplete ? { verificationUriComplete: challenge.verificationUriComplete } : {}) };
       const challengeShown = this.login;
       this.polling = new AbortController();
-      void core.auth.pollDeviceAuthorization(this.polling.signal).finally(() => { if (this.login === challengeShown) this.login = undefined; }).catch(() => undefined);
+      void core.auth.pollDeviceAuthorization(this.polling.signal).then(
+        () => { if (this.login === challengeShown) this.login = undefined; },
+        error => {
+          if (this.login !== challengeShown) return;
+          this.loginFailure = safeErrorCode(error);
+          this.login = undefined;
+        },
+      );
     }
     return { login: this.login };
   }
@@ -266,6 +284,7 @@ export class MetadataTools {
     this.authorizing = undefined;
     this.selecting = undefined;
     this.login = undefined;
+    this.loginFailure = undefined;
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
     if (retiredScoped) await retiredScoped.core.forgetMasterKey();
@@ -561,6 +580,7 @@ const namedCodes: Record<string, string> = { MasterKeyRequired: 'master_key_requ
 const safeCodes = new Set([
   'organization_required', 'organization_selection_required', 'organization_access_denied', 'organization_preference_invalid',
   'organization_selection_changed', 'plan_not_found', 'operator_reauthentication_required', 'reauthentication_required',
+  'operator_token_expired', 'expired_token', 'access_denied', 'invalid_client', 'unauthorized_client',
   'plan_request_rate_limited', 'reveal_restart_required', 'reveal_cancellation_failed', 'master_key_relay_cancellation_failed',
   'asset_selector_invalid', 'asset_not_found', 'asset_field_not_found', 'action_not_allowed', 'reveal_in_progress', 'reveal_not_found',
   'plan_creation_in_progress', 'plan_creation_not_found',
@@ -591,7 +611,7 @@ export function registerRevealTools(server: McpServer, tools: MetadataTools) {
   server.registerTool('check_reveal_status', { description: 'Check or cancel a pending local delivery. ' + pendingJobInstruction, inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.revealStatus(jobId, cancel)));
 }
 
-export function createServer(secureDelivery = false) {
+export function createServer() {
   const server = new McpServer({ name: 'inheriti-mcp', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version });
   const tools = new MetadataTools();
   server.registerTool('list_organizations', { description: 'List available organizations and the current selection. May return a sign-in code.', inputSchema: z.object({}) }, safeResult(() => tools.listOrganizations()));
@@ -609,10 +629,10 @@ export function createServer(secureDelivery = false) {
     ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}), ...(assetTypes ? { assetTypes } : {}),
   })));
   server.registerTool('check_plan_creation_status', { description: 'Check or cancel local assisted plan creation.', inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.planCreationStatus(jobId, cancel)));
-  if (secureDelivery) registerRevealTools(server, tools);
+  registerRevealTools(server, tools);
   return server;
 }
 
-export async function runServer(secureDelivery = false) {
-  await createServer(secureDelivery).connect(new StdioServerTransport());
+export async function runServer() {
+  await createServer().connect(new StdioServerTransport());
 }

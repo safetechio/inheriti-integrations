@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -45,6 +45,12 @@ describe('FileOperatorSessionStore', () => {
     await expect(store.load()).resolves.toBeUndefined();
   });
 
+  it('reports an unreadable session instead of treating it as signed out', async () => {
+    const { path } = await storeInTemporaryDirectory();
+    await expect(new FileOperatorSessionStore(resolve(path, '..')).load())
+      .rejects.toMatchObject({ code: 'session_file_unreadable' });
+  });
+
   it('round-trips a session and writes it owner-only', async () => {
     const { store, path } = await storeInTemporaryDirectory();
     await store.save(session);
@@ -68,6 +74,20 @@ describe('FileOperatorSessionStore', () => {
     await expect(store.load()).resolves.toBeUndefined();
   });
 
+  it('does not mistake Windows mode bits for POSIX owner permissions', async () => {
+    const { store, path } = await storeInTemporaryDirectory();
+    await store.save(session);
+    await chmod(path, 0o644);
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    try {
+      Object.defineProperty(process, 'platform', { ...descriptor, value: 'win32' });
+      await expect(store.load()).resolves.toMatchObject({ principal: { subject: 'operator-1' } });
+      await expect(readFile(path)).resolves.toBeTruthy();
+    } finally {
+      Object.defineProperty(process, 'platform', descriptor);
+    }
+  });
+
   it('leaves nothing behind on logout', async () => {
     const { store, path } = await storeInTemporaryDirectory();
     await store.save(session);
@@ -76,9 +96,21 @@ describe('FileOperatorSessionStore', () => {
     await expect(store.clear()).resolves.toBeUndefined();
   });
 
-  it('keeps state out of the working directory, under the operator’s own state home', () => {
-    expect(defaultSessionPath({ XDG_STATE_HOME: '/home/op/.local/state' }))
-      .toBe('/home/op/.local/state/inheriti-elements/session.json');
+  it('uses Inheriti state while preserving an existing login in the previous location', async () => {
+    const home = await mkdtemp(resolve(tmpdir(), 'inheriti-state-'));
+    const current = resolve(home, 'inheriti', 'session.json');
+    const legacy = resolve(home, 'inheriti-elements', 'session.json');
+    try {
+      expect(defaultSessionPath({ XDG_STATE_HOME: home })).toBe(current);
+      await mkdir(resolve(home, 'inheriti-elements'));
+      await writeFile(legacy, '{}');
+      expect(defaultSessionPath({ XDG_STATE_HOME: home })).toBe(legacy);
+      await mkdir(resolve(home, 'inheriti'));
+      await writeFile(current, '{}');
+      expect(defaultSessionPath({ XDG_STATE_HOME: home })).toBe(current);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
     expect(defaultSessionPath({ INHERITI_ELEMENTS_STATE_DIR: '/tmp/elements' }))
       .toBe('/tmp/elements/session.json');
   });

@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { homedir } from 'node:os';
 import type { Candidate } from './candidates.js';
+import { defaultSessionPath } from '../session-store.js';
 
 /**
  * Completion candidates, kept briefly on disk.
@@ -19,10 +19,7 @@ interface CacheFile {
 export function completionCachePath(
   environmentVariables: Readonly<Record<string, string | undefined>>,
 ): string {
-  const home = environmentVariables.HOME ?? homedir();
-  const base = environmentVariables.INHERITI_ELEMENTS_STATE_DIR
-    ?? resolve(environmentVariables.XDG_STATE_HOME ?? resolve(home, '.local', 'state'), 'inheriti-elements');
-  return resolve(base, 'completion-cache.json');
+  return resolve(dirname(defaultSessionPath(environmentVariables)), 'completion-cache.json');
 }
 
 export async function cached(

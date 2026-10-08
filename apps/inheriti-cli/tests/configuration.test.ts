@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -149,8 +149,12 @@ describe('CLI configuration', () => {
   });
 
   it('resolves the configuration path from the operator’s own configuration home', () => {
-    expect(defaultConfigurationPath(base)).toBe(resolve(configurationHome, 'inheriti-elements', 'config.json'));
+    expect(defaultConfigurationPath(base)).toBe(resolve(configurationHome, 'inheriti', 'config.json'));
     expect(defaultConfigurationPath({ HOME: '/home/operator' }))
-      .toBe('/home/operator/.config/inheriti-elements/config.json');
+      .toBe('/home/operator/.config/inheriti/config.json');
+    const legacy = resolve(configurationHome, 'inheriti-elements', 'config.json');
+    mkdirSync(resolve(configurationHome, 'inheriti-elements'));
+    writeFileSync(legacy, '{}');
+    expect(defaultConfigurationPath(base)).toBe(legacy);
   });
 });

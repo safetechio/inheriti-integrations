@@ -613,6 +613,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   elements_api_unavailable: 'The plan service is unavailable. Try again shortly.',
   plan_request_failed: 'Could not reach the plan service.',
   session_file_corrupt: 'The stored session was unreadable and has been cleared. Sign in again.',
+  session_file_unreadable: 'The stored session could not be read. Check access to the CLI state folder, then retry.',
   session_permissions_widened: 'The stored session was readable by others and has been cleared. Sign in again.',
   InteractiveTerminalRequired: 'Signing in needs an interactive terminal.',
   BrowserUnavailable: 'Could not open a browser. Sign in with `inheriti login --device`.',
