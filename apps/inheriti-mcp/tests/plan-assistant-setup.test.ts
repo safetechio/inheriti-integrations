@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({ status: vi.fn(), install: vi.fn(), open: vi.fn() }));
-vi.mock('@safetech/inheriti-elements-core/node', async importOriginal => ({
-  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node')>(),
+vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
+  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
   getLocalAssistantInstallStatus: mock.status,
   installLocalAssistant: mock.install,
 }));

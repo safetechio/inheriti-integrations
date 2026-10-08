@@ -4,8 +4,8 @@ const mock = vi.hoisted(() => ({
   createContext: vi.fn(), acquireKey: vi.fn(), createMany: vi.fn(), runBrowser: vi.fn(),
   nativeClose: vi.fn(), nativeSession: { open: vi.fn(), close: vi.fn(), complete: vi.fn() },
 }));
-vi.mock('@safetech/inheriti-elements-core/node', async importOriginal => ({
-  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node')>(),
+vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
+  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
   createQuickPlanOperations: () => ({
     teams: async () => ({ teams: [] }), createContext: mock.createContext,
     acquireKey: mock.acquireKey, createMany: mock.createMany, abandon: vi.fn(),

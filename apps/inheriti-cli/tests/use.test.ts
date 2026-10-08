@@ -124,7 +124,9 @@ describe('plans use', () => {
     try {
       for (const name of names) process.env[name] = 'fixture-identity';
       await usePlan(context() as never, terminal(), 'plan-1', {
-        workload: true, envs: [], tempFiles: [], sockets: [], fds: [],
+        workload: true,
+        envs: [{ name: 'INHERITI_USE_TEST_VALUE', selector: 'service.token' }],
+        tempFiles: [], sockets: [], fds: [],
         command: [process.execPath, '-e', `process.exit(${JSON.stringify(names)}.some(name => process.env[name]) ? 9 : 0)`],
       });
     } finally {
