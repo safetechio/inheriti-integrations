@@ -6,10 +6,9 @@ import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, createNativeWindowSession, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createQuickPlanOperations, quickPlanAssetCatalog, localPlanAssetLimit, runLocalPlanBrowser, LlamaPlanModel } from '@safetech/inheriti-elements-core/node-base';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, businessDeployment, createNativeWindowSession, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createQuickPlanOperations, quickPlanAssetCatalog, localPlanAssetLimit, runLocalPlanBrowser, LlamaPlanModel } from '@safetech/inheriti-elements-core/node-base';
 import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
-import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
-import { beginBrowserLogin } from './browser-login.js';
+import type { NodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
 import { planDetail, planSummary } from './metadata.js';
 import { revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core/node-base';
 import { deliverAssetInBrowser, deliverFieldsInBrowser, deliverSelectionInBrowser, deliverInBrowser } from './local-browser.js';
@@ -32,7 +31,7 @@ export const lockedDeployment = typeof __INHERITI_DEPLOYMENT__ === 'string'
 type Configuration = { apiUrl: string; issuer: string; clientId: string; environment: 'TEST' | 'LIVE'; redirectUri: string; deployment?: string };
 async function configuration(): Promise<Configuration> {
   if (lockedDeployment) {
-    return { ...BUSINESS_DEPLOYMENTS[lockedDeployment], deployment: lockedDeployment, clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
+    return { ...BUSINESS_DEPLOYMENTS[lockedDeployment], deployment: lockedDeployment, clientId: BUSINESS_DEVICE_CLIENT_ID,
       redirectUri: 'http://127.0.0.1:53682/oauth/callback' };
   }
   const raw: unknown = JSON.parse(await readFile(configPath(), 'utf8'));
@@ -42,7 +41,7 @@ async function configuration(): Promise<Configuration> {
     const deployment = businessDeployment(value.deployment);
     if (!deployment || value.business !== true) throw coded('configuration_invalid');
     if (deployment === 'prod' && developmentBuild) throw coded('live_environment_unavailable_in_development_build');
-    return { ...BUSINESS_DEPLOYMENTS[deployment], deployment, clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
+    return { ...BUSINESS_DEPLOYMENTS[deployment], deployment, clientId: BUSINESS_DEVICE_CLIENT_ID,
       redirectUri: typeof value.redirectUri === 'string' ? value.redirectUri : 'http://127.0.0.1:53682/oauth/callback' };
   }
   if (typeof value.apiUrl !== 'string' || typeof value.issuer !== 'string' || typeof value.clientId !== 'string' || !['TEST', 'LIVE'].includes(String(value.environment))) throw coded('configuration_invalid');
@@ -54,23 +53,22 @@ export class MetadataTools {
   private core: NodeIntegrationCore | undefined;
   private authGeneration = 0;
   private config: Configuration | undefined;
-  private authConfiguration: NodeIntegrationCoreOptions['configuration'] | undefined;
   private initializing: Promise<NodeIntegrationCore> | undefined;
   private authorizing: ReturnType<MetadataTools['authorize']> | undefined;
-  private browserLogin: { cancel: () => void } | undefined;
+  private polling?: AbortController;
   private scoped: { identity: string; organizationId: string; core: NodeIntegrationCore } | undefined;
   private selecting: ReturnType<MetadataTools['selectCore']> | undefined;
   private sessions = new MemoryOperatorSessionStore();
   private job?: { id: string; planId: string; organizationId: string; phase: string; progress?: { revealId?: string; expiresAt?: string; dmsExpiresAt?: string; governanceExpiresAt?: string; governanceGate?: string; approvedModerators?: number; requiredModerators?: number; deniedBy?: string; closedReason?: string }; message?: string; code?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
   private planJob?: { id: string; status: 'WAITING' | 'CREATED' | 'PENDING' | 'FAILED' | 'CANCELED'; phase: string; planId?: string; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
-  private login: { authorizationUrl: string } | undefined;
+  private login: { verificationUri: string; userCode: string; verificationUriComplete?: string } | undefined;
   private loginFailure: string | undefined;
 
-  async updateAccess(onChallenge: (url: string) => void): Promise<NodeIntegrationCore> {
+  async updateAccess(onChallenge: (uri: string, code: string) => void): Promise<NodeIntegrationCore> {
     const initial = await this.ready();
     if ('core' in initial) return initial.core;
-    onChallenge(initial.login.authorizationUrl);
+    onChallenge(initial.login.verificationUri, initial.login.userCode);
     const core = await this.client();
     for (let attempt = 0; attempt < 120; attempt++) {
       if (await core.getAccessToken()) return core;
@@ -102,12 +100,10 @@ export class MetadataTools {
       const config = await configuration();
       this.assertGeneration(generation);
       this.config = config;
-      this.authConfiguration = { issuer: config.issuer, clientId: config.clientId, audience: 'inheriti-integrations-api',
-        environment: config.environment, redirectUri: config.redirectUri, scopes: ['openid'] };
       this.core = createNodeIntegrationCore({
         apiUrl: this.config.apiUrl, business: true, environment: this.config.environment,
         liveConfirmation: this.config.environment,
-        configuration: this.authConfiguration,
+        configuration: { issuer: this.config.issuer, clientId: this.config.clientId, audience: 'inheriti-integrations-api', environment: this.config.environment, redirectUri: this.config.redirectUri, scopes: ['openid'] },
         sessions: this.sessions,
       });
     }
@@ -122,7 +118,7 @@ export class MetadataTools {
     return this.authorizing;
   }
 
-  private async authorize(): Promise<NodeIntegrationCore | { login: { authorizationUrl: string } }> {
+  private async authorize(): Promise<NodeIntegrationCore | { login: { verificationUri: string; userCode: string; verificationUriComplete?: string } }> {
     const generation = this.authGeneration;
     const core = await this.client();
     this.assertGeneration(generation);
@@ -134,13 +130,7 @@ export class MetadataTools {
       throw error;
     }
     this.assertGeneration(generation);
-    if (accessToken) {
-      this.browserLogin?.cancel();
-      this.browserLogin = undefined;
-      this.login = undefined;
-      this.loginFailure = undefined;
-      return core;
-    }
+    if (accessToken) { this.login = undefined; this.loginFailure = undefined; return core; }
     await this.stopLocalAccess();
     this.assertGeneration(generation);
     if (this.loginFailure) {
@@ -149,19 +139,17 @@ export class MetadataTools {
       throw coded(code);
     }
     if (!this.login) {
-      const started = await beginBrowserLogin(core.auth, this.authConfiguration!);
-      try { this.assertGeneration(generation); }
-      catch (error) { started.cancel(); throw error; }
-      this.login = { authorizationUrl: started.authorizationUrl };
+      const challenge = await core.auth.beginDeviceAuthorization() as { verificationUri: string; userCode: string; verificationUriComplete?: string };
+      this.assertGeneration(generation);
+      this.login = { verificationUri: challenge.verificationUri, userCode: challenge.userCode, ...(challenge.verificationUriComplete ? { verificationUriComplete: challenge.verificationUriComplete } : {}) };
       const challengeShown = this.login;
-      this.browserLogin = started;
-      void started.completed.then(
-        () => { if (this.login === challengeShown) { this.login = undefined; this.browserLogin = undefined; } },
+      this.polling = new AbortController();
+      void core.auth.pollDeviceAuthorization(this.polling.signal).then(
+        () => { if (this.login === challengeShown) this.login = undefined; },
         error => {
           if (this.login !== challengeShown) return;
           this.loginFailure = safeErrorCode(error);
           this.login = undefined;
-          this.browserLogin = undefined;
         },
       );
     }
@@ -285,19 +273,17 @@ export class MetadataTools {
     this.selectionVersion++;
     this.authGeneration++;
     await this.cancelPlanJob();
-    this.browserLogin?.cancel();
+    this.polling?.abort();
     const retired = this.sessions;
     const retiredScoped = this.scoped;
     this.scoped = undefined;
     this.sessions = new MemoryOperatorSessionStore();
     this.core = undefined;
     this.config = undefined;
-    this.authConfiguration = undefined;
     this.initializing = undefined;
     this.authorizing = undefined;
     this.selecting = undefined;
     this.login = undefined;
-    this.browserLogin = undefined;
     this.loginFailure = undefined;
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
@@ -628,10 +614,10 @@ export function registerRevealTools(server: McpServer, tools: MetadataTools) {
 export function createServer() {
   const server = new McpServer({ name: 'inheriti-mcp', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version });
   const tools = new MetadataTools();
-  server.registerTool('list_organizations', { description: 'List available organizations and the current selection. May return a browser sign-in URL.', inputSchema: z.object({}) }, safeResult(() => tools.listOrganizations()));
+  server.registerTool('list_organizations', { description: 'List available organizations and the current selection. May return a sign-in code.', inputSchema: z.object({}) }, safeResult(() => tools.listOrganizations()));
   server.registerTool('check_update', { description: 'Check this MCP server version and whether an update exists in its locked channel. Does not expose a download URL.', inputSchema: z.object({}) }, safeResult(() => tools.checkUpdate()));
   server.registerTool('select_organization', { description: 'Select an organization by ID from list_organizations.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.selectOrganization(id)));
-  server.registerTool('list_backup_plans', { description: 'List plan metadata in the selected organization. May return a browser sign-in URL.', inputSchema: z.object({ cursor: z.string().optional() }) }, safeResult(({ cursor }: { cursor?: string | undefined }) => tools.listPlans(cursor)));
+  server.registerTool('list_backup_plans', { description: 'List plan metadata in the selected organization. May return a sign-in code.', inputSchema: z.object({ cursor: z.string().optional() }) }, safeResult(({ cursor }: { cursor?: string | undefined }) => tools.listPlans(cursor)));
   server.registerTool('get_backup_plan', { description: 'Get safe metadata for one plan in the selected organization.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.getPlan(id)));
   server.registerTool('list_backup_plan_logs', { description: 'List safe plan activity fields and total count in the selected organization.', inputSchema: z.object({ planId: z.string().min(1), limit: z.number().int().min(1).max(100).optional(), offset: z.number().int().nonnegative().safe().optional() }) }, safeResult(({ planId, limit, offset }: { planId: string; limit?: number | undefined; offset?: number | undefined }) => tools.listPlanLogs(planId, limit, offset)));
   server.registerTool('logout', { description: 'Cancel local work, forget held keys, and clear this MCP session.', inputSchema: z.object({}) }, safeResult(() => tools.logout()));

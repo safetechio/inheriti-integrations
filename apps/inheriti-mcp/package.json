@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-mcp",
-  "version": "0.0.10",
+  "version": "0.0.9",
   "private": true,
   "type": "module",
   "bin": {
