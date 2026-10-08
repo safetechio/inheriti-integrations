@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { MetadataTools, safeResult } from '../src/server.js';
+import { beginBrowserLogin } from '../src/browser-login.js';
 
 vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
+vi.mock('../src/browser-login.js', () => ({ beginBrowserLogin: vi.fn() }));
 
 it.each([{ operator: 'revoked-org' }, {}])('forgets held keys when organization membership is revoked with preferences %j', async preferences => {
   const preferenceCount = Object.keys(preferences).length;
@@ -76,38 +78,40 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-it('starts a fresh device challenge after successful login and later session loss', async () => {
+it('starts a fresh browser login after successful login and later session loss', async () => {
   const tools = new MetadataTools() as any;
   let authenticated = false;
-  const poll = deferred<void>();
-  const begin = vi.fn().mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'first' }).mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'second' });
-  tools.client = async () => ({ getAccessToken: async () => authenticated ? 'token' : undefined, auth: { beginDeviceAuthorization: begin, pollDeviceAuthorization: () => poll.promise } });
-  expect((await tools.authorized()).login.userCode).toBe('first');
+  const first = deferred<void>();
+  const second = deferred<void>();
+  const begin = vi.mocked(beginBrowserLogin).mockReset().mockResolvedValueOnce({ authorizationUrl: 'https://login/first', completed: first.promise, cancel: vi.fn() })
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/second', completed: second.promise, cancel: vi.fn() });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => authenticated ? 'token' : undefined, auth: {} });
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/first');
   authenticated = true;
   expect(await tools.authorized()).toHaveProperty('auth');
   authenticated = false;
-  expect((await tools.authorized()).login.userCode).toBe('second');
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/second');
   expect(begin).toHaveBeenCalledTimes(2);
-  poll.resolve(undefined);
+  first.resolve(); second.resolve();
 });
 
-it('reports a failed device login before offering another code', async () => {
+it('reports a failed browser login before offering another URL', async () => {
   const tools = new MetadataTools() as any;
-  const poll = deferred<void>();
-  const begin = vi.fn().mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'first' })
-    .mockResolvedValueOnce({ verificationUri: 'https://login', userCode: 'second' });
-  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {
-    beginDeviceAuthorization: begin, pollDeviceAuthorization: () => poll.promise,
-  } });
+  const completed = deferred<void>();
+  const begin = vi.mocked(beginBrowserLogin).mockReset().mockResolvedValueOnce({ authorizationUrl: 'https://login/first', completed: completed.promise, cancel: vi.fn() })
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/second', completed: new Promise(() => undefined), cancel: vi.fn() });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
 
-  expect((await tools.authorized()).login.userCode).toBe('first');
-  poll.reject(Object.assign(new Error('private token details'), { code: 'operator_token_expired' }));
-  await vi.waitFor(() => expect(tools.loginFailure).toBe('operator_token_expired'));
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/first');
+  completed.reject(Object.assign(new Error('private token details'), { code: 'access_denied' }));
+  await vi.waitFor(() => expect(tools.loginFailure).toBe('access_denied'));
   expect(await safeResult(() => tools.listOrganizations())({})).toEqual({
-    isError: true, content: [{ type: 'text', text: 'operator_token_expired' }],
+    isError: true, content: [{ type: 'text', text: 'access_denied' }],
   });
   expect(begin).toHaveBeenCalledTimes(1);
-  expect((await tools.authorized()).login.userCode).toBe('second');
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/second');
 });
 
 it('reserves a reveal before plan detail and blocks delivery after organization switch', async () => {
@@ -256,22 +260,26 @@ it('does not let retired authorization clear a fresh single-flight challenge', a
   const tools = new MetadataTools() as any;
   const oldChallenge = deferred<any>();
   const newChallenge = deferred<any>();
-  const oldBegin = vi.fn(() => oldChallenge.promise);
-  const newBegin = vi.fn(() => newChallenge.promise);
-  tools.client = async () => ({ getAccessToken: async () => undefined, auth: { beginDeviceAuthorization: oldBegin, pollDeviceAuthorization: vi.fn() } });
+  const begin = vi.mocked(beginBrowserLogin).mockReset().mockImplementationOnce(() => oldChallenge.promise)
+    .mockImplementationOnce(() => newChallenge.promise);
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
   const old = tools.authorized();
-  await vi.waitFor(() => expect(oldBegin).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(begin).toHaveBeenCalledOnce());
   await tools.logout();
-  tools.client = async () => ({ getAccessToken: async () => undefined, auth: { beginDeviceAuthorization: newBegin, pollDeviceAuthorization: async () => new Promise(() => undefined) } });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
   const current = tools.authorized();
-  await vi.waitFor(() => expect(newBegin).toHaveBeenCalledOnce());
-  oldChallenge.resolve({ verificationUri: 'old', userCode: 'old' });
+  await vi.waitFor(() => expect(begin).toHaveBeenCalledTimes(2));
+  const cancelOld = vi.fn();
+  oldChallenge.resolve({ authorizationUrl: 'old', completed: new Promise(() => undefined), cancel: cancelOld });
   await expect(old).rejects.toMatchObject({ code: 'operator_reauthentication_required' });
+  expect(cancelOld).toHaveBeenCalledOnce();
   const concurrent = tools.authorized();
   expect(concurrent).toBe(current);
-  newChallenge.resolve({ verificationUri: 'new', userCode: 'new' });
-  expect((await current).login.userCode).toBe('new');
-  expect(newBegin).toHaveBeenCalledOnce();
+  newChallenge.resolve({ authorizationUrl: 'new', completed: new Promise(() => undefined), cancel: vi.fn() });
+  expect((await current).login.authorizationUrl).toBe('new');
+  expect(begin).toHaveBeenCalledTimes(2);
 });
 
 it('reuses the selected SDK client and auth until the operator session changes', async () => {
