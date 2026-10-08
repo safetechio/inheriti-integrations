@@ -8,7 +8,7 @@ const mock = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/inheriti-tray-test' },
+  app: { getPath: () => '/tmp/inheriti-go-test' },
   dialog: { showOpenDialog: mock.showOpenDialog, showSaveDialog: mock.showSaveDialog },
 }));
 

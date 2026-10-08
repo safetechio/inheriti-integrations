@@ -11,7 +11,7 @@ const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'
 const electron = JSON.parse(await readFile(resolve(await packageDirectory(root, 'electron'), 'package.json'), 'utf8'));
 const version = packageVersionForDeployment(manifest.version, deployment);
 const artifactsDirectory = process.argv.find((argument) => argument.startsWith('--artifacts-dir='))?.slice(16);
-const stage = await mkdtemp(join(tmpdir(), 'inheriti-tray-'));
+const stage = await mkdtemp(join(tmpdir(), 'inheriti-go-'));
 await cp(resolve(root, 'dist'), resolve(stage, 'dist'), { recursive: true });
 await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   name: 'inheriti-go', version, type: 'module', main: 'dist/main.js', desktopName: 'inheriti-go',

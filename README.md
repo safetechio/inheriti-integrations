@@ -2,7 +2,7 @@
 
 Inheriti Integrations brings Inheriti Business protection plans into the tools people already use. This repository contains desktop, browser, and developer tools for signing in, working with organizations, and protecting or accessing plan data.
 
-- **[Inheriti® Go](apps/inheriti-tray/README.md)** — a desktop companion for creating and editing plans.
+- **[Inheriti® Go](apps/inheriti-go/README.md)** — a desktop companion for creating and editing plans.
 - **[Inheriti CLI](apps/inheriti-cli/README.md)** — plan workflows from the terminal.
 - **[Inheriti MCP](apps/inheriti-mcp/README.md)** — plan tools for MCP-compatible clients.
 - **[Inheriti IDE](apps/inheriti-ide/README.md)** — a VS Code extension for working with plans while coding.

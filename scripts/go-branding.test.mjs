@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const configPath = require.resolve('../apps/inheriti-tray/electron-builder.config.cjs');
-const builderRequire = createRequire(require.resolve('../apps/inheriti-tray/node_modules/electron-builder'));
+const configPath = require.resolve('../apps/inheriti-go/electron-builder.config.cjs');
+const builderRequire = createRequire(require.resolve('../apps/inheriti-go/node_modules/electron-builder'));
 const { AppInfo } = builderRequire('app-builder-lib/out/appInfo.js');
 
 for (const deployment of ['local', 'dev', 'stg', 'prod']) {
