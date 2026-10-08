@@ -20,7 +20,7 @@ function npmCommand(file: string): { command: string; args: string[] } {
 async function update(install: boolean): Promise<void> {
   if (!lockedDeployment) throw new Error('Updates require a channel-locked Business build.');
   const version = (JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
-  const core = await new MetadataTools().updateAccess((uri, code) => process.stderr.write(`Sign in at ${uri} with code ${code}\n`));
+  const core = await new MetadataTools().updateAccess((url) => process.stderr.write(`Sign in at ${url}\n`));
   const build = latestIntegrationBuild(await core.listInternalBuilds(), 'mcp', version, `${process.platform}-${process.arch}`);
   if (!build) { process.stderr.write(`Inheriti MCP ${version} is up to date.\n`); return; }
   process.stderr.write(`Inheriti MCP ${version} → ${build.version}\n`);
