@@ -54,6 +54,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 dl { background: #f9fafb; border-radius: var(--radius-s); padding: var(--space-s); }
 dt { color: var(--gray-text); }
 #creation-status:not(:empty) { padding: var(--space-s); border-radius: var(--radius-s); background: #e3f2fd; color: #1642ba; }
+#creation-status.plan-status.error { background: #fff3f1; color: var(--danger); }
 .plan-steps { margin: 0; display: grid; gap: var(--space-xs); }
 .plan-steps [data-state="waiting"] { opacity: .6; }
 .plan-steps [data-state="done"]::after { content: ' ✓'; }
@@ -109,6 +110,12 @@ body { padding: 0; background: #fff; }
 .tray-signed-out::before { content: ''; position: absolute; right: -20px; top: -20px; width: 180px; height: 140px; background: radial-gradient(#d6e0ff 1.2px, transparent 1.2px) 0 0 / 9px 9px; pointer-events: none; }
 .tray-sign-in-center { position: relative; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: safe center; align-items: center; gap: 20px; padding: 32px; text-align: center; }
 .tray-sign-in-logo { width: 64px; height: 64px; }
+.tray-restoring { align-items: center; justify-content: center; }
+.tray-restoring-content { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--gray-text); font-size: 13px; }
+.tray-restoring-track { width: 140px; height: 3px; overflow: hidden; border-radius: 999px; background: #e0e7ff; }
+.tray-restoring-track > span { display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--primary); animation: tray-loading 1.3s ease-in-out infinite alternate; }
+@keyframes tray-loading { from { transform: translateX(0); } to { transform: translateX(150%); } }
+@media (prefers-reduced-motion: reduce) { .tray-restoring-track > span { animation: none; width: 100%; } }
 .tray-sign-in-center h1 { font-size: 22px; line-height: 1.4; }
 .tray-sign-in-center p { color: #475467; font-size: 14px; }
 .tray-sign-in-actions { display: grid; gap: 10px; width: 100%; margin-top: 8px; }
@@ -277,6 +284,7 @@ body { padding: 0; background: #fff; }
 .inbox-member-intro .inbox-overline { margin: 0 4px; }
 .inbox-member-hint { margin: 0 4px; color: #667085; font-size: 12px; line-height: 1.5; }
 .inbox-member-list > .inbox-member-empty { margin: 0; padding: 16px; color: #475467; font-size: 13px; }
+.inbox-member-empty .inbox-link { display: inline; min-height: 0; padding: 0 0 0 4px; vertical-align: baseline; }
 .inbox-new-content .inbox-member-row { min-height: 52px; padding: 8px 14px; }
 .inbox-new-content .inbox-member-row > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
 .inbox-new-content .inbox-member-row input { width: 18px; height: 18px; }

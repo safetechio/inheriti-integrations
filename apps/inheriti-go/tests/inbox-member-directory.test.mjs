@@ -18,6 +18,17 @@ it('shows why a member cannot be selected yet', () => {
   expect(markup).toMatch(/type="checkbox"[^>]*disabled=""/);
 });
 
+it('offers one retry instead of an empty state when members fail to load', () => {
+  const markup = renderToStaticMarkup(createElement(InboxMemberPicker, {
+    title: '', setTitle() {}, query: '', setQuery() {}, onSearch() {},
+    participants: [], ownMemberId: 'ada', memberIds: [], onToggle() {}, onClear() {}, onCreate() {},
+    loadError: 'Could not load members.', onRetry() {}, names: {},
+  }));
+  expect(markup).toContain('Members unavailable.');
+  expect(markup).toContain('Retry');
+  expect(markup).not.toContain('No members');
+});
+
 it('shows compact presence dots with accessible labels only for known states', () => {
   const render = (status) => renderToStaticMarkup(createElement(InboxPresenceDot, { status }));
   expect(render('Online')).toContain('aria-label="Online"');

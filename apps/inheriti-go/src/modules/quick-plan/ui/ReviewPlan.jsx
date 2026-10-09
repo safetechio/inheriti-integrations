@@ -19,7 +19,7 @@ export function ReviewPlan({ messages, state, form, busy, error, onEdit, onStart
     <div className="tray-scroll">
       <h2 id="review-heading" className="visually-hidden">{messages.reviewPlan}</h2>
       <PlanSummary title={form.title} assetName={form.assetName} assetType={messages.assetTypes[form.assetType] || form.assetType} audience={audience} messages={messages} />
-      {(keyWaiting || creation?.status === 'error') && <div className="plan-key-banner" role={problem ? 'alert' : 'status'} aria-live={problem ? 'assertive' : 'polite'}><strong>{messages.releaseKey || 'Release the Organisation Key'}</strong><span>{keyWaiting ? messages.waitingSafeKey || 'Open SafeKey Mobile and confirm the release. Waiting for confirmation…' : problem}</span></div>}
+      {keyWaiting && <div className="plan-key-banner" role="status" aria-live="polite"><strong>{messages.releaseKey || 'Release the Organisation Key'}</strong><span>{messages.waitingSafeKey || 'Open SafeKey Mobile and confirm the release. Waiting for confirmation…'}</span></div>}
       {status && <p id="creation-status" className={problem ? 'plan-status error' : 'plan-status'} role={problem ? 'alert' : 'status'} aria-live="polite">{status}</p>}
       <ProtectionChecklist messages={messages} creation={creation} busy={busy} />
     </div>

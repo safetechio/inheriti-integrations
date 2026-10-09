@@ -11,8 +11,10 @@ export function creationErrorMessage(error: unknown): string {
       return messages.reconciliationRequired;
     case message === 'plan_declaration_invalid' || message.startsWith('plan_asset_'):
       return messages.invalidAsset;
-    case message === 'plan_storage_context_changed' || message === 'plan_share_count_invalid':
+    case message === 'plan_storage_context_changed':
       return messages.storageChanged;
+    case message === 'plan_share_count_invalid':
+      return messages.storageSharesInvalid;
     case message === 'operator_reauthentication_required' || status === 401:
       return messages.sessionExpired;
     case message.startsWith('master_key_') || message === 'invalid_master_key_context':

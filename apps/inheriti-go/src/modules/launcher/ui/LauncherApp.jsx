@@ -83,7 +83,7 @@ export function LauncherApp({ messages }) {
   if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
-  if (state.status === 'restoring') return <main className="tray-screen"><p id="status" role="status">Checking session…</p></main>;
+  if (state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
   const status = flow.error || session.error || state.message || ({

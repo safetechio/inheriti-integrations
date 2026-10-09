@@ -2,7 +2,7 @@ import { InboxSkeleton } from './InboxSkeleton.jsx';
 import { InboxAvatar } from './InboxAvatar.jsx';
 import { InboxPresenceDot } from './InboxPresenceDot.jsx';
 
-export function InboxMemberPicker({ title, setTitle, query, setQuery, onSearch, participants, ownMemberId, memberIds, onToggle, onClear, onCreate, busy, searchBusy, names, avatars = {}, presenceStatus = () => 'Unknown' }) {
+export function InboxMemberPicker({ title, setTitle, query, setQuery, onSearch, participants, ownMemberId, memberIds, onToggle, onClear, onCreate, busy, searchBusy, loadError, onRetry, names, avatars = {}, presenceStatus = () => 'Unknown' }) {
   const visible = participants.filter(({ memberId }) => memberId !== ownMemberId);
   return <div className="inbox-new-screen">
     <div className="tray-scroll inbox-new-content">
@@ -14,7 +14,8 @@ export function InboxMemberPicker({ title, setTitle, query, setQuery, onSearch, 
       </div>
       <div className="inbox-member-list" role="group" aria-label="Members">
         {searchBusy && <InboxSkeleton label={searchBusy === 'searching' ? 'Searching members…' : 'Loading members…'} kind="members" />}
-        {!searchBusy && visible.length === 0 && <p className="inbox-member-empty">No members found.</p>}
+        {!searchBusy && loadError && <p className="inbox-member-empty" role="alert">Members unavailable. <button type="button" className="inbox-link" onClick={onRetry}>Retry</button></p>}
+        {!searchBusy && !loadError && visible.length === 0 && <p className="inbox-member-empty">{query.trim() ? 'No matching members.' : 'No members yet.'}</p>}
         {!searchBusy && visible.map(({ memberId, name, ready }) => {
           const presence = presenceStatus(memberId);
           return <label className={`inbox-member-row${ready ? '' : ' is-unready'}`} key={memberId}

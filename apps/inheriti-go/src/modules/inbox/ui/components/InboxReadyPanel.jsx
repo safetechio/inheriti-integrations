@@ -22,6 +22,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
   const conversation = inbox.conversations.items.find((item) => item.id === inbox.messages.conversationId);
   const memberNames = conversationMemberNames(conversation, inbox.participants.names, inbox.identity?.memberId);
   const title = conversation?.title || conversationTitle(memberNames);
+  const panelError = screen === 'new' ? inbox.messages.error || inbox.conversations.error : inbox.error;
 
   return <main className="tray-screen inbox-panel">
     <header className="tray-screen-header tray-screen-heading inbox-header">
@@ -33,7 +34,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
       {screen === 'new' && <small>{inbox.participants.memberIds.length + 1} of 50</small>}
       {screen === 'thread' && <button type="button" className="tray-back" aria-label="Show participants" onClick={navigation.openMembers}><ChevronRightIcon /></button>}
     </header>
-    {inbox.error && <p className="inbox-error error" role="alert">{inbox.error}</p>}
+    {panelError && <p className="inbox-error error" role="alert">{panelError}</p>}
     {inbox.toast && <div className="inbox-toast" role="status"><span aria-hidden="true" className="inbox-toast-dot" />{inbox.toast.message}</div>}
     {screen === 'list' && <div className="tray-scroll inbox-list-screen">
       <div className="inbox-device-notice"><span className="inbox-lock" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4.5" y="9" width="11" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg></span><div><strong>This computer is ready</strong><small>Normal messages remain available. Protected messages open once per member.</small></div></div>
@@ -45,6 +46,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
       onSearch={inbox.participants.search} participants={inbox.participants.items} ownMemberId={identity.memberId}
       memberIds={inbox.participants.memberIds} onToggle={inbox.participants.toggleMemberId}
       onClear={() => inbox.participants.setMemberIds([])} searchBusy={inbox.participants.busy}
+      loadError={inbox.participants.error} onRetry={inbox.participants.refresh}
       onCreate={navigation.createConversation} busy={inbox.busy} names={inbox.participants.names} avatars={inbox.participants.avatars} presenceStatus={inbox.presenceStatus} />}
     {screen === 'thread' && <InboxMessageList conversationId={inbox.messages.conversationId}
       messages={inbox.messages.items} normalMessages={inbox.messages.normalItems}
