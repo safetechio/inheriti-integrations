@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useInboxPanel } from '../hooks/useInboxPanel.js';
 import { useInboxNavigation } from '../hooks/useInboxNavigation.js';
 import { InboxMemberPicker } from './InboxMemberPicker.jsx';
@@ -8,9 +9,15 @@ import { ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon } from '../../../
 import { conversationMemberNames, conversationTitle } from '../utils/inboxDisplay.js';
 import { INBOX_MESSAGE_EXPIRY_DAYS } from '../inboxSettings.js';
 
-export function InboxReadyPanel({ onClose, identity, organizationId, onCreatePlanFromSecret, onCreatePlanFromFile }) {
+export function InboxReadyPanel({ onClose, identity, organizationId, targetConversation, onCreatePlanFromSecret, onCreatePlanFromFile }) {
   const inbox = useInboxPanel(onClose, identity, organizationId);
   const navigation = useInboxNavigation(inbox);
+  const openedTarget = useRef(null);
+  useEffect(() => {
+    if (!targetConversation?.conversationId || inbox.conversations.busy || openedTarget.current === targetConversation) return;
+    openedTarget.current = targetConversation;
+    if (inbox.conversations.items.some(({ id }) => id === targetConversation.conversationId)) void navigation.openConversation(targetConversation.conversationId);
+  }, [targetConversation, inbox.conversations.busy, inbox.conversations.items, navigation]);
   const { screen, showMembers } = navigation;
   const conversation = inbox.conversations.items.find((item) => item.id === inbox.messages.conversationId);
   const memberNames = conversationMemberNames(conversation, inbox.participants.names, inbox.identity?.memberId);

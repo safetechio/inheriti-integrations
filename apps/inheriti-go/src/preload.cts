@@ -3,7 +3,25 @@ const { contextBridge, ipcRenderer } = electron;
 import type { TrayState } from './modules/launcher/main/state.js';
 import type { InboxIdentityState } from './modules/inbox/main/identity.js';
 import type { TrayInboxSignal } from './modules/inbox/main/inbox.js';
+import type { TrayAction } from './modules/launcher/main/launcher-window.js';
 import type { CreateQuickPlanInput } from './modules/quick-plan/main/quick-plan-input.js' with { 'resolution-mode': 'import' };
+
+const pendingActions: TrayAction[] = [];
+const actionListeners = new Set<(action: TrayAction) => void>();
+let actionFlushScheduled = false;
+function flushPendingActions(): void {
+  if (actionFlushScheduled || !pendingActions.length) return;
+  actionFlushScheduled = true;
+  queueMicrotask(() => {
+    actionFlushScheduled = false;
+    if (!actionListeners.size) return;
+    for (const action of pendingActions.splice(0)) actionListeners.forEach((listener) => listener(action));
+  });
+}
+ipcRenderer.on('tray:action', (_event, action: TrayAction) => {
+  if (actionListeners.size) actionListeners.forEach((listener) => listener(action));
+  else { pendingActions.push(action); flushPendingActions(); }
+});
 
 contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
@@ -62,10 +80,10 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   recoverPlanEdit: (): Promise<TrayState> => ipcRenderer.invoke('tray:recover-plan-edit'),
   openApp: (planId?: string): Promise<void> => ipcRenderer.invoke('tray:open-app', planId),
   openSafeKeyDesktopTool: (): Promise<void> => ipcRenderer.invoke('tray:open-safekey-desktop-tool'),
-  onAction: (callback: (action: string) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
-    ipcRenderer.on('tray:action', listener);
-    return () => ipcRenderer.removeListener('tray:action', listener);
+  onAction: (callback: (action: TrayAction) => void): (() => void) => {
+    actionListeners.add(callback);
+    flushPendingActions();
+    return () => actionListeners.delete(callback);
   },
   onStateChanged: (callback: (state: TrayState) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: TrayState) => callback(state);

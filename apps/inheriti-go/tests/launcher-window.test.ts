@@ -18,7 +18,7 @@ const mock = vi.hoisted(() => ({
 vi.mock('electron', () => mock);
 vi.mock('../src/modules/launcher/main/window.js', () => ({ registerWindowEvents: vi.fn() }));
 
-import { showLauncher } from '../src/modules/launcher/main/launcher-window.js';
+import { currentWindow, showLauncher } from '../src/modules/launcher/main/launcher-window.js';
 
 it('creates the Linux launcher at the design content size', () => {
   showLauncher();
@@ -38,4 +38,14 @@ it('creates the Linux launcher at the design content size', () => {
   showLauncher();
   expect(window.setPosition).not.toHaveBeenCalled();
   expect(mock.BrowserWindow).toHaveBeenCalledTimes(1);
+});
+
+it('passes only bounded Secure Chat identifiers to the launcher', () => {
+  const launcher = currentWindow()!;
+  const action = { kind: 'OPEN_INBOX' as const, organizationId: 'org-1', conversationId: 'chat-1' };
+  showLauncher(action);
+  expect(launcher.webContents.send).toHaveBeenCalledWith('tray:action', action);
+  vi.mocked(launcher.webContents.send).mockClear();
+  showLauncher({ ...action, conversationId: 'x'.repeat(201) });
+  expect(launcher.webContents.send).not.toHaveBeenCalled();
 });

@@ -14,6 +14,7 @@ import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { OrganizationKeyVault } from './organization-key-vault.js';
+import { ProtectedOperatorSessionStore } from './operator-session-store.js';
 
 export type Deployment = keyof typeof BUSINESS_DEPLOYMENTS;
 export type TrayState = {
@@ -32,6 +33,7 @@ export type TrayState = {
 export class TraySession {
   private readonly core: NodeIntegrationCore;
   private readonly configuration: NodeIntegrationCoreOptions['configuration'];
+  private readonly operatorSessions: ProtectedOperatorSessionStore;
   private organizations: BusinessOrganization[] = [];
   private selectedId: string | undefined;
   private accountName: string | undefined;
@@ -62,6 +64,7 @@ export class TraySession {
       redirectUri: 'http://127.0.0.1/oauth/callback',
       scopes: ['openid', 'profile'],
     };
+    this.operatorSessions = new ProtectedOperatorSessionStore(deployment, issuer);
     this.core = createNodeIntegrationCore({
       apiUrl,
       business: true,
@@ -69,6 +72,7 @@ export class TraySession {
       liveConfirmation: config.environment,
       masterKey: {},
       configuration: this.configuration,
+      sessions: this.operatorSessions,
     });
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken(),
       keyVault: new OrganizationKeyVault(deployment, () => this.core.auth.getAccessToken()) });
@@ -161,6 +165,7 @@ export class TraySession {
     this.proDevice?.clearPin();
     try {
       if (await this.core.auth.getAccessToken()) {
+        this.accountName = accountNameFromIdToken((await this.operatorSessions.load())?.idToken);
         await this.discover();
         return;
       }
@@ -189,6 +194,7 @@ export class TraySession {
       await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
       this.selectedId = id;
+      try { this.operatorSessions.saveSelectedOrganization(id); } catch { /* Organisation selection still works without a saved preference. */ }
     } finally {
       this.pendingSelections -= 1;
     }
@@ -294,11 +300,17 @@ export class TraySession {
     const organizations = await this.core.listOrganizations();
     if (signal?.aborted) return;
     this.organizations = organizations;
+    if (!this.selectedId) {
+      try { this.selectedId = this.operatorSessions.selectedOrganization(); } catch { /* Use the organisation picker if secure storage is unavailable. */ }
+    }
     if (!this.organizations.some(({ id }) => id === this.selectedId)) {
       this.quickPlans.clear();
       this.inbox.clear();
       this.planEdit.reset();
       this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;
+    }
+    if (this.selectedId) {
+      try { this.operatorSessions.saveSelectedOrganization(this.selectedId); } catch { /* The active organisation remains usable. */ }
     }
     this.status = 'signed-in';
     this.message = this.organizations.length === 0 ? messages.noOrganizations : undefined;

@@ -32,6 +32,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   }), [state?.teams]);
 
   useEffect(() => window.inheritiTray.onAction((action) => {
+    if (typeof action !== 'string') return;
     if (action === messages.openSecureInbox) return;
     if (!canHandleAction || step !== 'actions' || !state?.selectedId || state.status !== 'signed-in' || busy || preparing) return;
     if (action === messages.addOrEditAsset) {
@@ -203,14 +204,16 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
   }
 
   async function selectOrganization(id) {
-    if (!id) return;
+    if (!id) return false;
     generation.current += 1;
-    if (state?.creation?.planId && !(await abandon())) return;
+    if (state?.creation?.planId && !(await abandon())) return false;
     try {
       setState(await window.inheritiTray.select(id));
       clearDraft();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : messages.retryError);
+      return false;
     }
   }
 

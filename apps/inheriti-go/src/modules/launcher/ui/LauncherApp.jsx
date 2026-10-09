@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignedOut } from './components/SignedOut.jsx';
 import { Home } from './components/Home.jsx';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
@@ -20,11 +20,18 @@ export function LauncherApp({ messages }) {
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inboxRequested, setInboxRequested] = useState(false);
   const [inboxHasNew, setInboxHasNew] = useState(false);
-  const closeInbox = useCallback(() => setInboxOpen(false), []);
+  const [inboxTarget, setInboxTarget] = useState(null);
+  const [pendingInboxAction, setPendingInboxAction] = useState(null);
+  const switchingOrganization = useRef(false);
+  const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
   useEffect(() => { clearInboxPresence(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
+    if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
+      (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
+      setPendingInboxAction(action);
+    }
   }), [messages]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
     rememberInboxPresence(signal);
@@ -41,6 +48,25 @@ export function LauncherApp({ messages }) {
     onEditAction: () => { if (state?.edit?.available && !editFlow.busy) void editFlow.open(); },
     onReturnToInbox: () => setInboxOpen(true),
   });
+  useEffect(() => {
+    if (!pendingInboxAction || state?.status !== 'signed-in' || switchingOrganization.current) return;
+    const belongsToAccount = state.organizations?.some(({ id }) => id === pendingInboxAction.organizationId);
+    if (belongsToAccount && state.selectedId !== pendingInboxAction.organizationId) {
+      if (flow.busy || flow.preparing || editFlow.busy) return;
+      switchingOrganization.current = true;
+      void flow.selectOrganization(pendingInboxAction.organizationId).then((selected) => {
+        setInboxTarget(selected && pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
+        if (selected) { setInboxOpen(true); setInboxHasNew(false); }
+        setPendingInboxAction(null);
+      }).finally(() => { switchingOrganization.current = false; });
+      return;
+    }
+    if (!state.selectedId) { setPendingInboxAction(null); return; }
+    setInboxTarget(belongsToAccount && pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
+    setInboxOpen(true);
+    setInboxHasNew(false);
+    setPendingInboxAction(null);
+  }, [pendingInboxAction, state, flow, editFlow.busy]);
   const createPlanFromSecret = (suggestion) => {
     if (!flow.openInboxSuggestion(suggestion)) return;
     setInboxOpen(false);
@@ -72,7 +98,8 @@ export function LauncherApp({ messages }) {
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
-    organizationSelected={!!state.selectedId} organizationId={state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
+    organizationSelected={!!state.selectedId} organizationId={state.selectedId} targetConversation={inboxTarget}
+    onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}

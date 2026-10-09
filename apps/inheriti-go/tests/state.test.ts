@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
-  getItem() { return null; }
-  setItem() {}
-  removeItem() {}
+  getItem(path: string) { return mock.checkpoint.get(path) ?? null; }
+  setItem(path: string, value: unknown) { mock.checkpoint.set(path, value); }
+  removeItem(path: string) { mock.checkpoint.delete(path); }
+  multiRemove(_root: string, paths: string[]) { for (const path of paths) mock.checkpoint.delete(path); }
 } }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
@@ -41,12 +42,22 @@ const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'N
 describe('TraySession', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mock.checkpoint.clear();
     mock.core.mockImplementation(() => ({ auth: { beginAuthorizationCode: mock.begin, clear: mock.clear, completeAuthorizationCode: mock.complete, getAccessToken: mock.token }, listOrganizations: mock.organizations }));
     mock.organizations.mockResolvedValue([]);
     mock.teams.mockResolvedValue({ teams: [] });
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
     mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+
+  it('uses a protected operator session store scoped to its issuer', async () => {
+    new TraySession('local', { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://local-issuer.test/' });
+    const options = mock.core.mock.calls[0]?.[0];
+    expect(options.sessions).toEqual(expect.objectContaining({ load: expect.any(Function), save: expect.any(Function), clear: expect.any(Function) }));
+    await options.sessions.save({ accessToken: 'token', tokenType: 'Bearer', expiresAt: Date.now() + 1000,
+      principal: { issuer: 'https://local-issuer.test/', subject: 'member' } });
+    await expect(options.sessions.load()).resolves.toMatchObject({ accessToken: 'token' });
   });
 
   it('retains a pending lease for retry after hiding', async () => {
@@ -168,6 +179,24 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     await expect(session.select('unlisted')).rejects.toThrow('organization_access_denied');
     expect(session.state().selectedId).toBeUndefined();
+  });
+
+  it('restores the last authorised organisation for a multi-organisation session', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const first = new TraySession('dev');
+    const issuer = mock.core.mock.calls[0]![0].configuration.issuer;
+    await mock.core.mock.calls[0]![0].sessions.save({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer, subject: 'member' } });
+    await first.restore();
+    await first.select('org-b');
+    const restarted = new TraySession('dev');
+    await restarted.restore();
+    expect(restarted.state().selectedId).toBe('org-b');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const revoked = new TraySession('dev');
+    await revoked.restore();
+    expect(revoked.state().selectedId).toBe('org-a');
   });
 
   it('discovers authorized organizations and recovers an expired session as signed out', async () => {

@@ -34,6 +34,31 @@ it.skipIf(!chrome)('opens Secure Chat from a tray action after sign-in and organ
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+it.skipIf(!chrome)('keeps a Secure Chat notification pending through sign-in and selects its organisation', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-notification-action-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
+      window.inheritiTray={state:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),
+        onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},
+        onAction:(callback)=>{(window.actions??=[]).push(callback);return()=>{}},signIn:async()=>{},signOut:async()=>{},
+        select:async(id)=>{document.getElementById('root').dataset.selected=id;return {...base,selectedId:id}},abandonCreation:async()=>{},createQuickPlan:async()=>{},
+        openApp:async()=>{},version:async()=>'',onInboxStateChanged:()=>()=>{},inboxState:async()=>({status:'error'}),
+        inboxPrepare:async()=>({status:'error'}),inboxCancelPreparation:async()=>{}};
+      setTimeout(()=>window.actions.forEach((callback)=>callback({kind:'OPEN_INBOX',organizationId:'org-b',conversationId:'chat-1'})),100);
+      setTimeout(()=>{document.getElementById('root').dataset.before=String(!!document.querySelector('.inbox-panel'));window.stateChanged(base)},200);
+      setTimeout(()=>{document.getElementById('root').dataset.after=String(!!document.querySelector('.tray-screen-heading'));},600);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=800', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-before="false"');
+    expect(html).toContain('data-selected="org-b"');
+    expect(html).toContain('data-after="true"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('opens private and team capture for their tray actions', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-react-'));
   try {

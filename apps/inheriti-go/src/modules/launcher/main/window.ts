@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron';
+import type { TrayAction } from './launcher-window.js';
 
-export function registerWindowEvents(window: BrowserWindow, action: string | undefined, isQuitting: () => boolean): void {
+export function registerWindowEvents(window: BrowserWindow, action: TrayAction | undefined, isQuitting: () => boolean): void {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.on('did-finish-load', () => {
