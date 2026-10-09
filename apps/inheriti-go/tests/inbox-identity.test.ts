@@ -19,6 +19,12 @@ const envelope = (result?: unknown) => ({ ok: true, result });
 describe('Tray Inbox identity', () => {
   beforeEach(() => { stored.clear(); vi.restoreAllMocks(); });
 
+  it('passes authentication expiry through preparation for session cleanup', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    await expect(identity.prepare('org-1')).rejects.toThrow('inbox_identity_http_401');
+  });
+
   it('restores the same device keys across logins and never sends private material', async () => {
     let registered: { signingPublicKey: string; encryptionPublicKey: string } | undefined;
     const fetcher = vi.fn().mockImplementation(async (_url, init: RequestInit) => {
@@ -30,16 +36,14 @@ describe('Tray Inbox identity', () => {
       return { ok: true, json: async () => envelope({ memberId: 'member-1' }) };
     });
     vi.stubGlobal('fetch', fetcher);
-    const resolveKey = vi.fn().mockResolvedValue('organization-key');
-    const first = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
+    const first = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
     expect(await first.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(registered).toEqual({ encryptionPublicKey: expect.any(String), signingPublicKey: expect.any(String) });
     expect(JSON.stringify(registered)).not.toContain('Private');
-    const second = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'), resolveKey);
+    const second = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'));
     expect(await second.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(stored.size).toBe(1);
-    expect(resolveKey).toHaveBeenCalledTimes(2);
   });
 
   it('finds an existing member after restart without requesting the organization key', async () => {
@@ -55,13 +59,10 @@ describe('Tray Inbox identity', () => {
       } : null) };
     });
     vi.stubGlobal('fetch', fetcher);
-    const resolveKey = vi.fn().mockResolvedValue('organization-key');
-    await new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey).prepare('org-1');
-    resolveKey.mockClear();
-    const restarted = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'), resolveKey);
+    await new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a')).prepare('org-1');
+    const restarted = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'));
     expect(await restarted.registeredMemberId('org-1')).toBe('member-1');
     expect(restarted.state()).toEqual({ status: 'missing' });
-    expect(resolveKey).not.toHaveBeenCalled();
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
@@ -159,14 +160,12 @@ describe('Tray Inbox identity', () => {
     expect(stored.size).toBe(0);
   });
 
-  it('does not register or access the organization key after revocation', async () => {
+  it('does not register after revocation', async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => envelope({ status: 'REVOKED', signingKeyFingerprint: 'other' }) });
-    const resolveKey = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
-    expect(await identity.prepare('org-1')).toEqual({ status: 'replacement_required', message: 'Secure Chat access on this computer was revoked. Reset it to continue.' });
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    expect(await identity.prepare('org-1')).toEqual({ status: 'replacement_required', message: 'Secure Chat access was revoked on this computer.' });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(resolveKey).not.toHaveBeenCalled();
     expect(stored.size).toBe(0);
   });
 
@@ -224,7 +223,7 @@ describe('Tray Inbox identity', () => {
     expect(stored.size).toBe(1);
   });
 
-  it('retries organization-key setup without another replacement after server success', async () => {
+  it('finishes replacement without requesting an Organisation Key', async () => {
     let current = { status: 'REVOKED', memberId: 'member-1', signingKeyFingerprint: 'c'.repeat(64) };
     let posts = 0;
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => {
@@ -235,74 +234,39 @@ describe('Tray Inbox identity', () => {
         .createHash('sha256').update(Buffer.from(submitted.signingPublicKey, 'base64')).digest('hex') };
       return { ok: true, json: async () => envelope(current) };
     }));
-    const resolveKey = vi.fn().mockRejectedValueOnce(new Error('relay unavailable')).mockResolvedValue('organization-key');
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
     expect(await identity.prepare('org-1')).toMatchObject({ status: 'replacement_required' });
-    expect(await identity.replace('org-1')).toMatchObject({ status: 'error' });
-    expect(await identity.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
+    expect(await identity.replace('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(posts).toBe(1);
   });
 
-  it('explains when this member has not claimed the organization key', async () => {
+  it('allows an unclaimed Organisation Key during device registration', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => ({
       ok: true, json: async () => envelope(init.method === 'GET' ? null : { memberId: 'member-1' }),
     })));
-    const missingKey = Object.assign(new Error('master_key_required:INHERITI_BUSINESS:org-1'), { name: 'MasterKeyRequired' });
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'),
-      vi.fn().mockRejectedValue(missingKey));
-    expect(await identity.prepare('org-1')).toEqual({
-      status: 'error',
-      message: 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.',
-    });
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    expect(await identity.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
+    expect(stored.size).toBe(1);
   });
 
-  it('does not resolve the organization key when a pending lookup finishes after clear', async () => {
+  it('does not register when a pending lookup finishes after clear', async () => {
     let finishLookup!: (response: { ok: boolean; json: () => Promise<unknown> }) => void;
     const fetcher = vi.fn().mockReturnValue(new Promise((resolve) => { finishLookup = resolve; }));
-    const resolveKey = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
     const preparing = identity.prepare('org-1');
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     identity.clear();
     finishLookup({ ok: true, json: async () => envelope({ status: 'ACTIVE', signingKeyFingerprint: 'other' }) });
     expect(await preparing).toEqual({ status: 'missing' });
-    expect(resolveKey).not.toHaveBeenCalled();
     expect(fetcher).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports the SafeKey request only after relay creation and cancels preparation on back', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => ({
-      ok: true, json: async () => envelope(init.method === 'GET' ? null : { memberId: 'member-1' }),
-    })));
-    let reportSent!: () => void;
-    let keySignal!: AbortSignal;
-    const resolveKey = vi.fn((_organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => {
-      keySignal = signal;
-      reportSent = onRelaySession!;
-      return new Promise<string>((_resolve, reject) => signal.addEventListener('abort',
-        () => reject(new DOMException('The operation was aborted', 'AbortError')), { once: true }));
-    });
-    const states: string[] = [];
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'),
-      resolveKey, () => states.push(identity.state().message ?? identity.state().status));
-    const pending = identity.prepare('org-1');
-    await vi.waitFor(() => expect(reportSent).toBeTypeOf('function'));
-    expect(identity.state().message).toBe('Contacting SafeKey Mobile for your organization key…');
-    reportSent();
-    expect(identity.state().message).toBe('Organization key request sent to SafeKey Mobile. Approve it there to continue.');
-    identity.cancelPreparation();
-    expect(keySignal.aborted).toBe(true);
-    expect(await pending).toEqual({ status: 'missing' });
-    expect(states.at(-1)).toBe('missing');
   });
 
   it('allows an immediate new-organization request without old cleanup clearing it', async () => {
     const finish: Array<(response: { ok: boolean; json: () => Promise<unknown> }) => void> = [];
     const fetcher = vi.fn().mockImplementation(() => new Promise((resolve) => { finish.push(resolve); }));
-    const resolveKey = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), resolveKey);
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
     const oldRequest = identity.prepare('org-1');
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     identity.clear();
@@ -315,7 +279,5 @@ describe('Tray Inbox identity', () => {
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
     finish[2]!({ ok: true, json: async () => envelope({ memberId: 'member-1' }) });
     expect(await newRequest).toEqual({ status: 'ready', memberId: 'member-1' });
-    expect(resolveKey).toHaveBeenCalledTimes(1);
-    expect(resolveKey).toHaveBeenCalledWith('org-2', expect.any(AbortSignal), expect.any(Function));
   });
 });

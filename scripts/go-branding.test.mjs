@@ -26,6 +26,7 @@ for (const deployment of ['local', 'dev', 'stg', 'prod']) {
       assert.match(svg, /width="1024" height="1024"/);
       const image = svg.match(/data:image\/png;base64,([^"\s]+)/)[1];
       assert.deepEqual(Buffer.from(image, 'base64'), readFileSync(config.linux.icon));
+      if (deployment === 'prod') assert.equal(config.linux.icon, require.resolve('../apps/inheriti-go/src/tray.png'));
       assert.equal(config.appId, `com.safetech.inheriti.go.${deployment}`);
       assert.equal(config.artifactName, 'Inheriti-Go-' + deployment + '-${version}-${os}-${arch}.${ext}');
       assert.equal(config.linux.executableName, 'inheriti-go');

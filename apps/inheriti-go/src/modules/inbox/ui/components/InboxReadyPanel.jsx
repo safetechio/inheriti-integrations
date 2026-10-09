@@ -3,13 +3,13 @@ import { useInboxNavigation } from '../hooks/useInboxNavigation.js';
 import { InboxMemberPicker } from './InboxMemberPicker.jsx';
 import { InboxConversationList } from './InboxConversationList.jsx';
 import { InboxMessageList } from './InboxMessageList.jsx';
-import { InboxRevealProgress } from './InboxRevealProgress.jsx';
 import { InboxConversationMembers } from './InboxConversationMembers.jsx';
 import { ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { conversationMemberNames, conversationTitle } from '../utils/inboxDisplay.js';
+import { INBOX_MESSAGE_EXPIRY_DAYS } from '../inboxSettings.js';
 
-export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret, onCreatePlanFromFile }) {
-  const inbox = useInboxPanel(onClose, identity);
+export function InboxReadyPanel({ onClose, identity, organizationId, onCreatePlanFromSecret, onCreatePlanFromFile }) {
+  const inbox = useInboxPanel(onClose, identity, organizationId);
   const navigation = useInboxNavigation(inbox);
   const { screen, showMembers } = navigation;
   const conversation = inbox.conversations.items.find((item) => item.id === inbox.messages.conversationId);
@@ -19,9 +19,9 @@ export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret, onC
   return <main className="tray-screen inbox-panel">
     <header className="tray-screen-header tray-screen-heading inbox-header">
       <button className="tray-back" type="button" aria-label={screen === 'list' ? 'Close Secure Chat' : 'Back to conversations'} onClick={screen === 'list' ? onClose : navigation.goBack}><ChevronLeftIcon /></button>
-      {screen === 'thread' ? <button type="button" className="inbox-thread-title" onClick={navigation.openMembers} aria-label={`Participants in ${title}`}>
+      {screen === 'thread' ? <div className="inbox-thread-heading"><button type="button" className="inbox-thread-title" onClick={navigation.openMembers} aria-label={`Participants in ${title}`}>
         <strong>{title}</strong><small className="inbox-thread-security"><LockIcon />{conversation?.participantMemberIds.length || 0} members · End-to-end encrypted</small>
-      </button> : <h1>{screen === 'new' ? 'New conversation' : 'Secure Chat'}</h1>}
+      </button><small className="inbox-thread-expiry">Unopened messages and files expire in {INBOX_MESSAGE_EXPIRY_DAYS} days.</small></div> : <h1>{screen === 'new' ? 'New conversation' : 'Secure Chat'}</h1>}
       {screen === 'list' && <button type="button" className="inbox-new-button" onClick={navigation.startConversation}><PlusIcon /> New</button>}
       {screen === 'new' && <small>{inbox.participants.memberIds.length + 1} of 50</small>}
       {screen === 'thread' && <button type="button" className="tray-back" aria-label="Show participants" onClick={navigation.openMembers}><ChevronRightIcon /></button>}
@@ -31,20 +31,20 @@ export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret, onC
     {screen === 'list' && <div className="tray-scroll inbox-list-screen">
       <div className="inbox-device-notice"><span className="inbox-lock" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4.5" y="9" width="11" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg></span><div><strong>This computer is ready</strong><small>Normal messages remain available. Protected messages open once per member.</small></div></div>
       <InboxConversationList conversations={inbox.conversations.items} conversationId={inbox.messages.conversationId}
-        names={inbox.participants.names} ownMemberId={inbox.identity?.memberId} busy={inbox.conversations.busy}
+        names={inbox.participants.names} avatars={inbox.participants.avatars} ownMemberId={inbox.identity?.memberId} busy={inbox.conversations.busy}
         onRefresh={inbox.conversations.refresh} onSelect={navigation.openConversation} />
     </div>}
     {screen === 'new' && <InboxMemberPicker title={inbox.title} setTitle={inbox.setTitle} query={inbox.participants.query} setQuery={inbox.participants.setQuery}
-      onSearch={inbox.participants.search} participants={inbox.participants.items}
+      onSearch={inbox.participants.search} participants={inbox.participants.items} ownMemberId={identity.memberId}
       memberIds={inbox.participants.memberIds} onToggle={inbox.participants.toggleMemberId}
       onClear={() => inbox.participants.setMemberIds([])} searchBusy={inbox.participants.busy}
-      onCreate={navigation.createConversation} busy={inbox.busy} names={inbox.participants.names} />}
+      onCreate={navigation.createConversation} busy={inbox.busy} names={inbox.participants.names} avatars={inbox.participants.avatars} presenceStatus={inbox.presenceStatus} />}
     {screen === 'thread' && <InboxMessageList conversationId={inbox.messages.conversationId}
       messages={inbox.messages.items} normalMessages={inbox.messages.normalItems}
       parentMessages={inbox.messages.parentItems} parentUnreadCount={inbox.messages.parentUnreadCount} unitReveals={inbox.messages.unitReveals}
       normalUnreadCount={inbox.messages.normalUnreadCount} mode={inbox.messages.mode} setMode={inbox.messages.setMode}
       marks={inbox.messages.marks} onMark={inbox.messages.markSelection} onUnmark={inbox.messages.unmarkSelection}
-      names={inbox.participants.names} ownMemberId={inbox.identity?.memberId}
+      names={inbox.participants.names} avatars={inbox.participants.avatars} ownMemberId={inbox.identity?.memberId}
       revealed={inbox.messages.revealed} revealSeconds={inbox.messages.revealSeconds} openingMessageId={inbox.messages.openingMessageId}
       onHide={inbox.messages.hide} onRetryAck={inbox.messages.retryAck}
       onCreatePlanFromSecret={onCreatePlanFromSecret}
@@ -52,18 +52,15 @@ export function InboxReadyPanel({ onClose, identity, onCreatePlanFromSecret, onC
       onRefresh={inbox.messages.select}
       onView={inbox.messages.view} onSend={inbox.messages.send}
       onSendFile={inbox.messages.sendFile} onSaveFile={inbox.messages.saveFile}
-      onCancelTransfer={inbox.messages.cancelTransfer} transfer={inbox.messages.transfer}
+      onCancelTransfer={inbox.messages.cancelTransfer} transfer={inbox.messages.transfer} pendingMessage={inbox.messages.pendingMessage} acceptedMessages={inbox.messages.acceptedMessages}
       draft={inbox.messages.draft} setDraft={inbox.messages.setDraft} sendError={inbox.messages.sendError} busy={inbox.messages.busy} />}
     {screen === 'thread' && showMembers && conversation && <div className="inbox-sheet" role="dialog" aria-modal="true" aria-label="Participants">
       <button type="button" className="inbox-sheet-backdrop" aria-label="Close participants" onClick={navigation.closeMembers} />
       <div className="inbox-sheet-body"><div className="inbox-sheet-header"><h2>Participants</h2><button ref={navigation.sheetDone} type="button" className="inbox-link" onClick={navigation.closeMembers}>Done</button></div>
         <InboxConversationMembers conversation={conversation} ownMemberId={inbox.identity?.memberId}
-          participants={inbox.participants} names={inbox.participants.names} busy={inbox.busy} onChange={inbox.conversations.change} />
+          participants={inbox.participants} names={inbox.participants.names} avatars={inbox.participants.avatars} busy={inbox.busy} onChange={inbox.conversations.change} presenceStatus={inbox.presenceStatus} />
         <button type="button" className="inbox-link inbox-clear-history" disabled={!!inbox.messages.busy} onClick={() => { navigation.closeMembers(); inbox.messages.clearHistory(); }}>Clear my history</button>
       </div>
-    </div>}
-    {screen === 'thread' && inbox.messages.unitReveals.openingUnitId && <div className="inbox-opening-overlay">
-      <div className="inbox-opening-card"><div className="inbox-opening-title"><span>Opening</span>Contains protected text</div><InboxRevealProgress /></div>
     </div>}
   </main>;
 }

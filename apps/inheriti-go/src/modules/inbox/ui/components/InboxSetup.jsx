@@ -4,7 +4,7 @@ export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, 
   const preparing = state?.status === 'preparing';
   const failed = state?.status === 'error' || state?.status === 'unavailable' || !!error;
   const replacementRequired = state?.status === 'replacement_required';
-  const message = !organizationSelected ? 'Select an organization on the home screen to set up Secure Chat.'
+  const message = !organizationSelected ? 'Select an organisation on the home screen to set up Secure Chat.'
     : preparing ? state?.message || 'Setting up this computer…'
     : failed || replacementRequired ? error || state?.message || 'Secure Chat setup could not finish.'
     : 'Checking this computer…';
@@ -17,13 +17,13 @@ export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, 
     <div className="tray-scroll inbox-setup">
       <div className="inbox-setup-heading">
         <span className="inbox-setup-icon" aria-hidden="true"><LockIcon /></span>
-        <h2>Set up Secure Chat</h2>
+        <h2>{replacementRequired ? 'Reset access' : 'Set up Secure Chat'}</h2>
       </div>
       <div className="inbox-setup-status" role="status">{organizationSelected && !failed && !replacementRequired && <span className="inbox-setup-spinner" aria-hidden="true" />}<p>{message}</p></div>
-      {organizationSelected && replacementRequired && <p>Replacing Secure Chat access on this computer will remove access to protected messages sent to the previous keys. Past Secure Chat history cannot be recovered on this computer.</p>}
-      {organizationSelected && replacementRequired && <button type="button" onClick={onReplace}>Reset Secure Chat on this computer</button>}
+      {organizationSelected && replacementRequired && <p className="inbox-setup-warning">Earlier protected messages and chat history cannot be recovered here after a reset.</p>}
+      {organizationSelected && replacementRequired && <button type="button" onClick={onReplace}>Reset on this computer</button>}
       {organizationSelected && failed && !replacementRequired && <button type="button" onClick={onRetry}>Try setup again</button>}
-      {!organizationSelected && <button type="button" onClick={onClose}>Choose organization</button>}
+      {!organizationSelected && <button type="button" onClick={onClose}>Choose organisation</button>}
     </div>
   </main>;
 }

@@ -81,10 +81,28 @@ it('returns Inbox plaintext only through a trusted explicit open', async () => {
   const openInboxText = vi.fn(async () => ({ text: 'secret', leaseId: 'lease', leaseExpiresAt: 'later' }));
   registerTrayIpc({ openInboxText } as never, () => ({ webContents }) as never, vi.fn());
   const open = mock.handlers.get('tray:inbox-open-text')!;
-  expect(() => open({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).toThrow();
+  await expect(open({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).rejects.toThrow();
   expect(openInboxText).not.toHaveBeenCalled();
   expect(await open(event, 'conversation', 'message')).toEqual({ text: 'secret', leaseId: 'lease', leaseExpiresAt: 'later' });
   expect(openInboxText).toHaveBeenCalledWith('conversation', 'message');
+});
+
+it('refreshes unread state only after a successful Inbox read', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  const refreshBadge = vi.fn();
+  const listNormalInboxMessages = vi.fn(async () => ({ items: [], unreadCount: 0 }));
+  registerTrayIpc({ listNormalInboxMessages } as never, () => ({ webContents }) as never,
+    vi.fn(), undefined, undefined, undefined, refreshBadge);
+  const read = mock.handlers.get('tray:inbox-normal-messages')!;
+  await expect(read({ sender: webContents, senderFrame: {} }, 'conversation')).rejects.toThrow();
+  expect(refreshBadge).not.toHaveBeenCalled();
+  await read(event, 'conversation');
+  expect(refreshBadge).toHaveBeenCalledOnce();
+  listNormalInboxMessages.mockRejectedValueOnce(new Error('read failed'));
+  await expect(read(event, 'conversation')).rejects.toThrow('read failed');
+  expect(refreshBadge).toHaveBeenCalledOnce();
 });
 
 it('passes a bounded Inbox member search to the selected session', async () => {
@@ -96,7 +114,7 @@ it('passes a bounded Inbox member search to the selected session', async () => {
   const search = mock.handlers.get('tray:inbox-participants')!;
   await search(event, 'Ada');
   expect(listInboxParticipants).toHaveBeenCalledWith({ q: 'Ada' });
-  expect(() => search(event, 'x'.repeat(101))).toThrow('Invalid Secure Chat search');
+  await expect(search(event, 'x'.repeat(101))).rejects.toThrow('Invalid Secure Chat search');
 });
 
 it('creates an Inbox conversation with a bounded, unique member selection', async () => {
@@ -106,12 +124,12 @@ it('creates an Inbox conversation with a bounded, unique member selection', asyn
   const createInboxConversation = vi.fn(async () => ({ id: 'conversation' }));
   registerTrayIpc({ createInboxConversation } as never, () => ({ webContents }) as never, vi.fn());
   const create = mock.handlers.get('tray:inbox-create-conversation')!;
-  expect(() => create({ sender: webContents, senderFrame: {} }, 'Test', ['a'])).toThrow();
-  expect(() => create(event, '', ['a'])).toThrow('Invalid Secure Chat title');
-  expect(() => create(event, 'Test', [])).toThrow('Invalid Secure Chat participants');
-  expect(() => create(event, 'Test', ['a', 'a'])).toThrow('Invalid Secure Chat participants');
-  expect(() => create(event, 'Test', Array.from({ length: 50 }, (_, index) => String(index)))).toThrow('Invalid Secure Chat participants');
-  expect(() => create(event, 'Test', ['a', ''])).toThrow('Invalid Secure Chat identifier');
+  await expect(create({ sender: webContents, senderFrame: {} }, 'Test', ['a'])).rejects.toThrow();
+  await expect(create(event, '', ['a'])).rejects.toThrow('Invalid Secure Chat title');
+  await expect(create(event, 'Test', [])).rejects.toThrow('Invalid Secure Chat participants');
+  await expect(create(event, 'Test', ['a', 'a'])).rejects.toThrow('Invalid Secure Chat participants');
+  await expect(create(event, 'Test', Array.from({ length: 50 }, (_, index) => String(index)))).rejects.toThrow('Invalid Secure Chat participants');
+  await expect(create(event, 'Test', ['a', ''])).rejects.toThrow('Invalid Secure Chat identifier');
   await expect(create(event, ' Test ', ['a', 'b'])).resolves.toEqual({ id: 'conversation' });
   expect(createInboxConversation).toHaveBeenCalledWith('Test', ['a', 'b']);
 });
@@ -124,10 +142,10 @@ it('retries a pending Inbox ACK only for a trusted renderer', async () => {
   const hideInboxText = vi.fn();
   registerTrayIpc({ retryInboxAck, hideInboxText } as never, () => ({ webContents }) as never, vi.fn());
   const retry = mock.handlers.get('tray:inbox-retry-ack')!;
-  expect(() => retry({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).toThrow();
+  await expect(retry({ sender: webContents, senderFrame: {} }, 'conversation', 'message')).rejects.toThrow();
   await expect(retry(event, 'conversation', 'message')).resolves.toEqual({ acknowledgement: 'PENDING' });
   expect(retryInboxAck).toHaveBeenCalledWith('conversation', 'message');
-  expect(() => retry(event, '', 'message')).toThrow('Invalid Secure Chat identifier');
+  await expect(retry(event, '', 'message')).rejects.toThrow('Invalid Secure Chat identifier');
   await mock.handlers.get('tray:inbox-hide-text')!(event);
   expect(hideInboxText).toHaveBeenCalledOnce();
 });
@@ -139,8 +157,8 @@ it('clears only the selected conversation for a trusted renderer', async () => {
   const clearInboxHistory = vi.fn(async () => ({ clearedThroughSequence: 7 }));
   registerTrayIpc({ clearInboxHistory } as never, () => ({ webContents }) as never, vi.fn());
   const clear = mock.handlers.get('tray:inbox-clear-history')!;
-  expect(() => clear({ sender: webContents, senderFrame: {} }, 'conversation')).toThrow();
-  expect(() => clear(event, '')).toThrow('Invalid Secure Chat identifier');
+  await expect(clear({ sender: webContents, senderFrame: {} }, 'conversation')).rejects.toThrow();
+  await expect(clear(event, '')).rejects.toThrow('Invalid Secure Chat identifier');
   await expect(clear(event, 'conversation')).resolves.toEqual({ clearedThroughSequence: 7 });
   expect(clearInboxHistory).toHaveBeenCalledWith('conversation');
 });
@@ -158,7 +176,7 @@ it('requires the trusted renderer for explicit Secure Chat device replacement', 
   expect(replaceInboxDevice).toHaveBeenCalledOnce();
 });
 
-it('validates ordered parent segments and unit reveal at the trusted IPC boundary', () => {
+it('validates ordered parent segments and unit reveal at the trusted IPC boundary', async () => {
   const frame = {};
   const webContents = { mainFrame: frame };
   const event = { sender: webContents, senderFrame: frame };
@@ -168,12 +186,12 @@ it('validates ordered parent segments and unit reveal at the trusted IPC boundar
   const send = mock.handlers.get('tray:inbox-send-parent')!;
   const reveal = mock.handlers.get('tray:inbox-reveal-unit')!;
   const segments = [{ text: 'Hello ' }, { protectedText: 'secret', expiresAt: '2030-01-01T00:00:00.000Z' }];
-  expect(() => send({ sender: webContents, senderFrame: {} }, 'conversation', 'parent', segments)).toThrow('Untrusted renderer');
-  expect(() => send(event, 'conversation', 'parent', [{ text: 'plain', protectedText: 'secret', expiresAt: '2030-01-01T00:00:00.000Z' }])).toThrow('Invalid Secure Chat segment');
-  expect(() => send(event, 'conversation', 'parent', Array(5).fill(segments[1]))).toThrow('Invalid Secure Chat segments');
-  send(event, 'conversation', 'parent', segments);
-  expect(sendInboxParent).toHaveBeenCalledWith('conversation', 'parent', segments);
-  expect(() => reveal({ sender: webContents, senderFrame: {} }, 'conversation', 'parent', 'unit')).toThrow('Untrusted renderer');
-  reveal(event, 'conversation', 'parent', 'unit');
+  await expect(send({ sender: webContents, senderFrame: {} }, 'conversation', 'parent', segments)).rejects.toThrow('Untrusted renderer');
+  await expect(send(event, 'conversation', 'parent', [{ text: 'plain', protectedText: 'secret', expiresAt: '2030-01-01T00:00:00.000Z' }])).rejects.toThrow('Invalid Secure Chat segment');
+  await expect(send(event, 'conversation', 'parent', Array(5).fill(segments[1]))).rejects.toThrow('Invalid Secure Chat segments');
+  await send(event, 'conversation', 'parent', segments);
+  expect(sendInboxParent).toHaveBeenCalledWith('conversation', 'parent', segments, expect.any(Function));
+  await expect(reveal({ sender: webContents, senderFrame: {} }, 'conversation', 'parent', 'unit')).rejects.toThrow('Untrusted renderer');
+  await reveal(event, 'conversation', 'parent', 'unit');
   expect(revealInboxUnit).toHaveBeenCalledWith('conversation', 'parent', 'unit');
 });

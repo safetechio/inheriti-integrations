@@ -40,11 +40,9 @@ function generateIdentity(): StoredIdentity {
 }
 
 function preparationError(error: unknown): string {
-  if (error instanceof Error && error.name === 'MasterKeyRequired')
-    return 'This account cannot open the organization key yet. Ask an owner or manager to share it, then claim it in SafeKey Mobile.';
   switch (error instanceof Error ? error.message : '') {
-    case 'inbox_identity_replacement_required': return 'Secure Chat access on this computer was revoked. Reset it to continue.';
-    case 'inbox_identity_recovery_required': return 'This account already has different Secure Chat keys. Reset access on this computer to continue.';
+    case 'inbox_identity_replacement_required': return 'Secure Chat access was revoked on this computer.';
+    case 'inbox_identity_recovery_required': return "This computer's keys don't match this account.";
     case 'inbox_identity_changed': return 'Secure Chat access on this computer changed. Check the account before trying again.';
     default: return 'Could not prepare Secure Chat. Sign in and try again.';
   }
@@ -60,7 +58,7 @@ export class TrayInboxIdentity {
   private operationTail: Promise<void> = Promise.resolve();
   private operationOrganization: string | undefined;
 
-  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly resolveOrganizationKey?: (organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly onStateChange?: () => void) {}
+  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly onStateChange?: () => void) {}
 
   state(): InboxIdentityState { return this.status; }
   async registeredMemberId(organizationId: string): Promise<string | undefined> {
@@ -203,8 +201,6 @@ export class TrayInboxIdentity {
       }
       if (replace && replacementRegistered && staged) {
         if (!('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId) throw new Error('invalid_inbox_identity_response');
-        await this.requestOrganizationKey(organizationId, generation, signal);
-        signal.throwIfAborted();
         return this.set({ status: 'ready', memberId: current.memberId }, generation);
       }
       if (replace) {
@@ -230,15 +226,11 @@ export class TrayInboxIdentity {
         this.checkpoint.setItem(path, replacement.identity);
         this.checkpoint.removeItem(stagedPath);
         replacementCompleted = true;
-        await this.requestOrganizationKey(organizationId, generation, signal);
-        signal.throwIfAborted();
         return this.set({ status: 'ready', memberId: registered.memberId }, generation);
       }
       if (current !== null) {
         this.assertCurrentIdentity(current, identity);
         if (!current || typeof current !== 'object' || !('memberId' in current) || typeof current.memberId !== 'string' || !current.memberId) throw new Error('invalid_inbox_identity_response');
-        signal.throwIfAborted();
-        await this.requestOrganizationKey(organizationId, generation, signal);
         signal.throwIfAborted();
         return this.set({ status: 'ready', memberId: current.memberId }, generation);
       }
@@ -255,21 +247,16 @@ export class TrayInboxIdentity {
       });
       if (!registered || typeof registered !== 'object' || !('memberId' in registered) || typeof registered.memberId !== 'string' || !registered.memberId) throw new Error('invalid_inbox_identity_response');
       signal.throwIfAborted();
-      await this.requestOrganizationKey(organizationId, generation, signal);
-      signal.throwIfAborted();
       return this.set({ status: 'ready', memberId: registered.memberId }, generation);
     } catch (error) {
       const reason = error instanceof Error ? error.message : '';
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+      const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+      if (status === 401 || code === 'operator_token_expired' || code === 'reauthentication_required' ||
+        reason === 'inbox_identity_http_401' || reason === 'operator_token_expired' || reason === 'reauthentication_required') throw error;
       const replacementRequired = (replace && !replacementCompleted) || reason === 'inbox_identity_replacement_required' || reason === 'inbox_identity_recovery_required';
       return this.set({ status: replacementRequired ? 'replacement_required' : 'error', message: preparationError(error) }, generation);
     }
-  }
-
-  private async requestOrganizationKey(organizationId: string, generation: number, signal: AbortSignal): Promise<void> {
-    this.set({ status: 'preparing', message: 'Contacting SafeKey Mobile for your organization key…' }, generation);
-    await this.resolveOrganizationKey?.(organizationId, signal, () => {
-      this.set({ status: 'preparing', message: 'Organization key request sent to SafeKey Mobile. Approve it there to continue.' }, generation);
-    });
   }
 
   private identityPath(bearer: string, organizationId: string): string {

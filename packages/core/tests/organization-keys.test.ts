@@ -26,3 +26,34 @@ it('reuses an SDK client for each organization until the session is cleared', as
   expect(await keys.resolve('org-a')).toBe('key-org-a');
   expect(clients.create).toHaveBeenCalledTimes(3);
 });
+
+it('keeps stored keys across organization switches and purges them explicitly', async () => {
+  const held = new Map<string, Uint8Array>();
+  const vault = {
+    store: vi.fn(async (ref: { contextId: string }, key: Uint8Array) => { held.set(ref.contextId, key.slice()); }),
+    load: vi.fn(async (ref: { contextId: string }) => held.get(ref.contextId)?.slice()),
+    remove: vi.fn(async (ref: { contextId: string }) => { held.delete(ref.contextId); }),
+    clearMemory: vi.fn(),
+    forgetAccount: vi.fn(async () => { held.clear(); }),
+    withScope: async <T>(run: () => Promise<T>) => run(),
+  };
+  const relay = vi.fn(async (id: string) => new Uint8Array(32).fill(id === 'org-a' ? 1 : 2));
+  clients.create.mockImplementation(({ organizationId, keyVault }: { organizationId: string; keyVault: typeof vault }) => ({
+    organizationMasterKey: async () => {
+      const ref = { contextId: organizationId };
+      let key = await keyVault.load(ref);
+      if (!key) { key = await relay(organizationId); await keyVault.store(ref, key); }
+      return Buffer.from(key).toString('hex');
+    },
+  }));
+  const keys = createOrganizationKeys({ apiUrl: 'https://example.test/', environment: 'TEST', getBearerToken: async () => 'token', keyVault: vault });
+  await keys.resolve('org-a');
+  await keys.clear();
+  await keys.resolve('org-b');
+  await keys.clear();
+  await keys.resolve('org-a');
+  expect(relay).toHaveBeenCalledTimes(2);
+  expect(relay.mock.calls.map(([id]) => id)).toEqual(['org-a', 'org-b']);
+  await keys.forget();
+  expect(held.size).toBe(0);
+});

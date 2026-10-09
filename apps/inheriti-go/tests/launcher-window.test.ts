@@ -27,6 +27,7 @@ it('creates the Linux launcher at the design content size', () => {
     width: process.platform === 'linux' ? 448 : 404,
     height: process.platform === 'linux' ? 756 : 676,
     useContentSize: process.platform !== 'linux',
+    title: 'Inheriti Go · DEV',
   }));
   const window = mock.BrowserWindow.mock.results[0]!.value;
 

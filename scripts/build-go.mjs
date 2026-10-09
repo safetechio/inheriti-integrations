@@ -41,10 +41,13 @@ await build({
   format: 'iife',
   jsx: 'automatic',
   minify: true,
-  define: { 'process.env.NODE_ENV': '"production"' },
+  define: { 'process.env.NODE_ENV': '"production"', ...buildDefines() },
 });
 for (const file of ['login-callback.html', 'launcher.html', 'launcher.css', 'plan-screens.css', 'font-app.ttf', 'tray.png']) {
   await cp(resolve(root, 'src', file), resolve(output, file));
+}
+for (const deployment of ['local', 'dev', 'stg']) {
+  await cp(resolve(root, 'build', `tray-${deployment}.png`), resolve(output, `tray-${deployment}.png`));
 }
 for (const file of ['safekey-mobile.png', 'safekey-pro.png']) {
   await cp(resolve(root, '../inheriti-guard/src/side-panel/assets', file), resolve(output, file));

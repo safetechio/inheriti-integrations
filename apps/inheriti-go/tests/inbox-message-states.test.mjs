@@ -2,9 +2,17 @@ import React, { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { InboxMessageList } from '../src/modules/inbox/ui/components/InboxMessageList.jsx';
-import { clearPendingSend, finishAcknowledgement, protectedSegmentsForSend } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
+import { InboxRevealProgress } from '../src/modules/inbox/ui/components/InboxRevealProgress.jsx';
+import { clearPendingSend, finishAcknowledgement, isOrganisationKeyUnavailable, protectedSegmentsForSend } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
 
 globalThis.React = React;
+
+it('recognises missing Organisation Key errors without treating unrelated failures as key errors', () => {
+  expect(isOrganisationKeyUnavailable(new Error('MasterKeyRequired: master_key_required'))).toBe(true);
+  expect(isOrganisationKeyUnavailable(new Error('master_key_required'))).toBe(true);
+  expect(isOrganisationKeyUnavailable(new Error('INBOX_UNAVAILABLE'))).toBe(false);
+  expect(isOrganisationKeyUnavailable(new Error('inbox_file_too_large'))).toBe(false);
+});
 
 function render(props) {
   return renderToStaticMarkup(createElement(InboxMessageList, {
@@ -23,12 +31,37 @@ it('does not offer the sender a one-time reveal and shows real recipient status'
   expect(markup).not.toContain('1 unread');
 });
 
-it('shows live transfer progress and a pending read without plaintext', () => {
-  const sending = render({ busy: 'sending', draft: 'protected draft' });
-  expect(sending).toContain('Checking members');
-  expect(sending).toContain('Sealing on this computer');
-  expect(sending).toContain('Sending protected message');
-  expect(sending).not.toContain('You · now');
+it('shows actual protected send progress and a pending read without plaintext', () => {
+  const preparing = render({ pendingMessage: { conversationId: 'conversation', parentId: 'parent',
+    protectedSend: true, completed: 0, total: 3, status: 'sending', text: '' } });
+  expect(preparing).toContain('Sealing 3 protected parts…');
+  expect(preparing).not.toContain('1/3');
+  expect(preparing).toContain('<circle cx="10" cy="10" r="7"></circle>');
+  expect(preparing).not.toContain('Delivered');
+  const sending = render({ busy: 'sending', draft: 'protected draft', pendingMessage: {
+    conversationId: 'conversation', parentId: 'parent', protectedSend: true, completed: 1, total: 3, status: 'sending', text: '',
+  } });
+  expect(sending).toContain('Sealing protected text 2/3');
+  expect(sending).toContain('class="inbox-pending-footer" role="status"');
+  expect(sending).toMatch(/inbox-pending-footer[\s\S]*Sealing protected text 2\/3[\s\S]*inbox-progress-track/);
+  expect(sending.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0]).not.toContain('protected draft');
+  expect(sending).toContain('You · Sending');
+
+  const failed = render({ draft: 'editable', pendingMessage: { conversationId: 'conversation', parentId: 'parent',
+    protectedSend: false, completed: 0, total: 0, status: 'failed', text: 'editable' } });
+  expect(failed).toContain('Not sent');
+  expect(failed).toContain('Retry');
+
+  const sent = { conversationId: 'conversation', parentId: 'parent', protectedSend: false,
+    completed: 0, total: 0, status: 'sent', text: 'accepted text' };
+  expect(render({ acceptedMessages: [sent], draft: 'next draft' })).toContain('Syncing…');
+  const second = { ...sent, parentId: 'parent-2', text: 'second accepted' };
+  const awaiting = render({ acceptedMessages: [sent, second], draft: 'next draft' });
+  expect(awaiting.match(/Syncing…/g)).toHaveLength(2);
+  const loaded = render({ acceptedMessages: [sent, second], normalMessages: [{ parentId: 'parent', senderMemberId: 'me',
+    text: 'accepted text', createdAt: new Date().toISOString() }] });
+  expect(loaded.match(/Syncing…/g)).toHaveLength(1);
+  expect(loaded.match(/accepted text/g)).toHaveLength(1);
 
   const choosing = render({ busy: 'sending-file', transfer: null });
   expect(choosing).not.toContain('inbox-send-status');
@@ -53,9 +86,9 @@ it('shows live transfer progress and a pending read without plaintext', () => {
 it('keeps retry available while a pending file plan blocks another one-time open', () => {
   const markup = render({ busy: 'plan-pending', messages: [
     { id: 'file-1', senderMemberId: 'other', status: 'AVAILABLE', recipientStatus: 'LEASED',
-      contentKind: 'FILE', createdAt: '2026-10-02T17:14:00.000Z', expiresAt: '2026-10-09T17:14:00.000Z' },
+      contentKind: 'FILE', createdAt: '2026-10-02T17:14:00.000Z', expiresAt: new Date(Date.now() + 60_000).toISOString() },
     { id: 'file-2', senderMemberId: 'other', status: 'AVAILABLE', recipientStatus: 'UNREAD',
-      contentKind: 'FILE', createdAt: '2026-10-02T17:15:00.000Z', expiresAt: '2026-10-09T17:15:00.000Z' },
+      contentKind: 'FILE', createdAt: '2026-10-02T17:15:00.000Z', expiresAt: new Date(Date.now() + 60_000).toISOString() },
   ], revealed: { messageId: 'file-1', acknowledgement: 'PENDING', planPending: true } });
   expect(markup).toContain('File ready for Quick Plan. Confirm the read to continue.');
   expect(markup).toMatch(/<button[^>]*>Retry acknowledgement<\/button>/);
@@ -85,13 +118,11 @@ it('shows repeatable normal text alongside protected messages without offering a
   expect(markup).not.toContain('View once');
 });
 
-it('shows the one-time reveal steps while opening without displaying plaintext', () => {
+it('shows one-time reveal activity without displaying plaintext', () => {
   const opening = render({ messages: [{ id: 'message', senderMemberId: 'other', status: 'AVAILABLE',
     recipientStatus: 'UNREAD', contentKind: 'TEXT', createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 60_000).toISOString() }], openingMessageId: 'message', busy: 'opening' });
-  expect(opening).toContain('Checking this computer');
-  expect(opening).toContain('Unlocking your message');
-  expect(opening).toContain('Confirming the one-time read');
+  expect(opening).toContain('Opening protected message…');
   expect(opening).toContain('inbox-status-opening');
   expect(opening).not.toContain('Sample protected message');
 });
@@ -112,6 +143,10 @@ it('masks marked text in the normal preview and keeps keyboard controls availabl
   expect(markup).toContain('Right-click selected text to make it secret or unmark it');
   expect(markup).toContain('aria-label="Resize composer"');
   expect(markup).toContain('aria-expanded="true"');
+  expect(markup).toContain('aria-label="Attach a protected file up to 10 MB"');
+  expect(markup).toContain('aria-label="Send message"');
+  expect(markup).toContain('aria-label="Message mode"');
+  expect(markup).toContain('rows="1"');
 });
 
 it('renders ordered parent segments without protected plaintext before reveal', () => {
@@ -120,10 +155,87 @@ it('renders ordered parent segments without protected plaintext before reveal', 
     segments: [{ text: 'Hello ' }, { unitId: 'unit-1', position: 1, status: 'UNREAD' }, { text: ' today' }] };
   const markup = render({ parentMessages: [parent], unitReveals: { units: new Map(), now: Date.now(), reveal() {}, revealAll() {}, retry() {}, hide() {} } });
   expect(markup).toContain('Hello ');
-  expect(markup).toContain('aria-label="Reveal protected part 2"');
+  expect(markup).toContain('aria-label="Reveal protected part 1"');
   expect(markup).toContain('Tap the blurred text to reveal.');
   expect(markup).toContain(' today');
   expect(markup).not.toContain('secret value');
+});
+
+it('shows one compact progress row inside a mixed message while opening one of several secrets', () => {
+  const parent = { parentId: 'parent-3', sequence: 5, mode: 'MIXED', status: 'AVAILABLE',
+    senderMemberId: 'other', createdAt: '2026-10-02T17:16:00.000Z', segments: [
+      { unitId: 'unit-1', position: 0, status: 'UNREAD' }, { text: ' and ' },
+      { unitId: 'unit-2', position: 2, status: 'UNREAD' }, { text: ' then ' },
+      { unitId: 'unit-3', position: 4, status: 'UNREAD' },
+    ] };
+  const markup = render({ parentMessages: [parent], busy: 'opening-unit', unitReveals: {
+    units: new Map(), now: Date.now(), openingUnitId: 'unit-2',
+    openingProgress: { current: 2, total: 3, remaining: true }, reveal() {}, revealAll() {}, retry() {}, hide() {},
+  } });
+  expect(markup).toContain('Opening remaining secret 2 of 3');
+  expect(markup.match(/class="inbox-unit-progress"/g)).toHaveLength(1);
+  expect(markup).not.toContain('inbox-opening-overlay');
+  expect(markup).not.toContain('secret value');
+});
+
+it('counts protected parts independently of normal text and shows one active reveal', () => {
+  const parent = { parentId: 'parent-3', sequence: 5, mode: 'MIXED', status: 'AVAILABLE',
+    senderMemberId: 'other', createdAt: '2026-10-02T17:16:00.000Z',
+    segments: [{ text: 'A' }, { unitId: 'unit-1', position: 1, status: 'UNREAD' },
+      { text: 'B' }, { unitId: 'unit-2', position: 3, status: 'UNREAD' },
+      { text: 'C' }, { unitId: 'unit-3', position: 5, status: 'UNREAD' }] };
+  const markup = render({ parentMessages: [parent], unitReveals: { units: new Map(), now: Date.now(), reveal() {}, revealAll() {}, retry() {}, hide() {} } });
+  expect(markup).toContain('Reveal protected part 1');
+  expect(markup).toContain('Reveal protected part 2');
+  expect(markup).toContain('Reveal protected part 3');
+  expect(markup).not.toContain('Reveal protected part 4');
+
+  const progress = renderToStaticMarkup(createElement(InboxRevealProgress, { progress: { current: 2, total: 3 } }));
+  expect(progress).toContain('Opening secret 2 of 3');
+  expect(progress).not.toContain('<ol>');
+  expect(progress).not.toContain('Checking this computer');
+});
+
+it('shows one bar and keeps reveal actions together while another part opens', () => {
+  const now = Date.now();
+  const parent = { parentId: 'parent-4', sequence: 6, mode: 'MIXED', status: 'AVAILABLE',
+    senderMemberId: 'other', createdAt: '2026-10-02T17:16:00.000Z',
+    segments: [{ text: 'Before ' }, { unitId: 'unit-1', position: 1, status: 'UNREAD' },
+      { text: ' and ' }, { unitId: 'unit-2', position: 3, status: 'UNREAD' },
+      { text: ' after ' }, { unitId: 'unit-3', position: 5, status: 'UNREAD' }] };
+  const markup = render({ parentMessages: [parent], busy: 'opening-unit', unitReveals: {
+    units: new Map([['unit-1', { text: 'visible', hideAt: now + 28000, acknowledgement: 'ACKNOWLEDGED' }]]),
+    now, openingUnitId: 'unit-2', openingProgress: { current: 2, total: 3, remaining: true },
+    reveal() {}, revealAll() {}, retry() {}, hide() {},
+  } });
+  expect(markup).toContain('Opening remaining secret 2 of 3');
+  expect(markup.match(/class="inbox-progress-track/g)).toHaveLength(1);
+  expect(markup).toMatch(/class="inbox-parent-actions"[\s\S]*Hide now[\s\S]*Reveal all/);
+  expect(markup).toContain('Before ');
+  expect(markup).toContain(' after ');
+});
+
+it('uses one countdown for the next of several visible protected parts', () => {
+  const now = Date.now();
+  const parent = { parentId: 'parent-5', sequence: 7, mode: 'PROTECTED', status: 'AVAILABLE',
+    senderMemberId: 'other', createdAt: '2026-10-02T17:16:00.000Z',
+    segments: [{ unitId: 'unit-1', position: 0, status: 'UNREAD' }, { unitId: 'unit-2', position: 1, status: 'UNREAD' }] };
+  const markup = render({ parentMessages: [parent], unitReveals: {
+    units: new Map([['unit-1', { text: 'first', hideAt: now + 20000 }], ['unit-2', { text: 'second', hideAt: now + 10000 }]]),
+    now, reveal() {}, revealAll() {}, retry() {}, hide() {},
+  } });
+  expect(markup.match(/class="inbox-progress-track/g)).toHaveLength(1);
+  expect(markup).toContain('Next hides in 10s');
+  expect(markup).toContain('Hide all');
+  expect(markup).toMatch(/class="inbox-parent-action-row"[^>]*>.*Hide all.*Options/);
+  expect(markup).toContain('aria-expanded="false"');
+  expect(markup).toContain('class="inbox-parent-options" hidden=""');
+  expect(markup).toContain('class="inbox-action-link"');
+  expect(markup).toContain('Secret 1 of 2');
+  expect(markup).toContain('Previous visible secret');
+  expect(markup).toContain('Next visible secret');
+  expect(markup).toContain('Hide protected part 1 now');
+  expect(markup).not.toContain('Hide protected part 2 now');
 });
 
 it('keeps consumed and expired parent units sealed while a revealed unit has a timer', () => {

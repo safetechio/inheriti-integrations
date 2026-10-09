@@ -3,14 +3,46 @@ import { useInboxParticipants } from './useInboxParticipants.js';
 import { useInboxConversations } from './useInboxConversations.js';
 import { useInboxMessages } from './useInboxMessages.js';
 
-export function useInboxPanel(onClose, identity) {
+let latestPresence = null;
+
+export function rememberInboxPresence(signal) {
+  if (signal?.kind !== 'PRESENCE') return null;
+  latestPresence = { ...signal, receivedAt: performance.now() };
+  return latestPresence;
+}
+
+export function currentInboxPresence() { return latestPresence; }
+export function clearInboxPresence() { latestPresence = null; }
+
+export function inboxPresenceStatus(presence, memberId, organizationId, elapsedMs) {
+  if (!presence || presence.tenantId !== organizationId || !presence.connected ||
+    !Array.isArray(presence.memberIds) || elapsedMs - presence.receivedAt > 45_000) return 'Unknown';
+  return presence.memberIds.includes(memberId) ? 'Online' : 'Offline';
+}
+
+export function useInboxPanel(onClose, identity, organizationId) {
   const participants = useInboxParticipants();
   const conversations = useInboxConversations();
   const messages = useInboxMessages(onClose);
   const [toast, setToast] = useState(null);
   const [title, setTitle] = useState('');
+  const [presence, setPresence] = useState(currentInboxPresence);
+  const [now, setNow] = useState(() => performance.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(performance.now()), 5000);
+    return () => clearInterval(timer);
+  }, []);
+  const presenceStatus = (memberId) => inboxPresenceStatus(presence, memberId, organizationId, now);
   const refresh = useRef(null);
   refresh.current = (signal) => {
+    if (signal?.kind === 'PRESENCE') {
+      if (signal.tenantId === organizationId) {
+        const current = rememberInboxPresence(signal);
+        setPresence(current);
+        setNow(current.receivedAt);
+      }
+      return;
+    }
     if (signal?.kind === 'NEW_MESSAGE') {
       setToast({ kind: 'info', message: 'A new message is ready.' });
     }
@@ -43,5 +75,5 @@ export function useInboxPanel(onClose, identity) {
     return conversation;
   }
 
-  return { participants, conversations, messages, identity, busy, error, toast, title, setTitle, createConversation };
+  return { participants, conversations, messages, identity, busy, error, toast, title, setTitle, createConversation, presenceStatus };
 }

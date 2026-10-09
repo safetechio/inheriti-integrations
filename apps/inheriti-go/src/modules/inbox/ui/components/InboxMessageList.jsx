@@ -1,25 +1,25 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { InboxComposer } from './InboxComposer.jsx';
+import { ClockIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { InboxParentMessage } from './InboxParentMessage.jsx';
 import { useInboxMessageState } from '../hooks/useInboxMessageState.js';
 import { InboxSkeleton } from './InboxSkeleton.jsx';
 import { InboxRevealProgress } from './InboxRevealProgress.jsx';
-import { InboxProgressSteps } from './InboxProgressSteps.jsx';
+import { InboxAvatar } from './InboxAvatar.jsx';
 import { INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
 
-const sendSteps = ['Checking members', 'Sealing on this computer', 'Sending protected message'];
 
-function NormalMessageCard({ message, name, own }) {
+function NormalMessageCard({ message, name, avatarUrl, own }) {
   const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return <article className={`inbox-thread-message ${own ? 'is-own' : ''}`}>
-    {!own && <span className="inbox-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
+    {!own && <InboxAvatar name={name} url={avatarUrl} />}
     <div className="inbox-thread-message-content"><small>{own ? 'You' : name} · {time}</small>
       <div className="inbox-message-bubble"><div className="inbox-message-heading"><span className="inbox-parent-pill">Normal</span><small>Message</small></div>
         <p className="inbox-revealed">{message.text}</p></div></div>
   </article>;
 }
 
-function MessageCard({ message, name, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
+function MessageCard({ message, name, avatarUrl, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
   const [confirm, setConfirm] = useState(false);
   const state = useInboxMessageState(message, own);
   const isFile = message.contentKind === 'FILE';
@@ -32,7 +32,7 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
   const label = isFile ? 'Open file once' : 'View once';
   const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return <article className={`inbox-thread-message ${own ? 'is-own' : ''} ${opening ? 'is-opening' : ''}`}>
-    {!own && <span className="inbox-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}
+    {!own && <InboxAvatar name={name} url={avatarUrl} />}
     <div className="inbox-thread-message-content"><small>{own ? 'You' : name} · {time}</small>
       <div className="inbox-message-bubble">
         <div className="inbox-message-heading"><span className={`inbox-status inbox-status-${displayState.kind}`}>{displayState.label}</span><small>{isFile ? 'Protected file' : 'Protected message'}</small></div>
@@ -60,8 +60,8 @@ function MessageCard({ message, name, own, names, revealed, revealSeconds, openi
 
 export function InboxMessageList({ conversationId, messages, normalMessages = [], normalUnreadCount = 0, parentMessages = [], parentUnreadCount = 0, unitReveals,
   mode = 'PROTECTED', setMode = () => {}, marks = [], onMark = () => {}, onUnmark = () => {},
-  names, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile,
-  onSend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, onCreatePlanFromFile, onSaveFileAsPlan, transfer, draft, setDraft, sendError, busy }) {
+  names, avatars = {}, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile,
+  onSend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, onCreatePlanFromFile, onSaveFileAsPlan, transfer, draft, setDraft, sendError, busy, pendingMessage, acceptedMessages = [] }) {
   const scroll = useRef(null);
   const previous = useRef({ conversationId: '', newestMessageId: '' });
   const parentIds = new Set(parentMessages.map(message => message.parentId));
@@ -69,7 +69,9 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
     .concat(normalMessages.filter(message => !parentIds.has(message.parentId)).map(message => ({ kind: 'NORMAL', id: message.parentId, message })))
     .concat(parentMessages.map(message => ({ kind: 'PARENT', id: message.parentId, message })))
     .sort((a, b) => new Date(a.message.createdAt) - new Date(b.message.createdAt) || a.id.localeCompare(b.id));
-  const newestMessageId = ordered.at(-1)?.id || '';
+  const pendingMessages = [...acceptedMessages, ...(pendingMessage ? [pendingMessage] : [])]
+    .filter(message => message.conversationId === conversationId && !ordered.some(item => item.id === message.parentId));
+  const newestMessageId = pendingMessages.at(-1)?.parentId || ordered.at(-1)?.id || '';
   useLayoutEffect(() => {
     const panel = scroll.current;
     if (!panel || !newestMessageId) {
@@ -90,16 +92,29 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
     <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
     <div ref={scroll} className="tray-scroll inbox-thread-scroll">
       {busy === 'loading' && <InboxSkeleton label="Loading messages…" kind="messages" />}
-      {busy !== 'loading' && !ordered.length && <p className="inbox-empty">No messages yet. Send the first one below.</p>}
+      {busy !== 'loading' && !ordered.length && !pendingMessages.length && <p className="inbox-empty">No messages yet. Send the first one below.</p>}
       {ordered.map(({ kind, id, message }) => kind === 'PARENT'
-        ? <InboxParentMessage key={id} message={message} name={names[message.senderMemberId] || 'Member'} own={message.senderMemberId === ownMemberId}
-            units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''}
+        ? <InboxParentMessage key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId}
+            units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''} openingProgress={unitReveals?.openingProgress}
             summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} />
-        : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} own={message.senderMemberId === ownMemberId} />
-        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
+        : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId} />
+        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
+      {pendingMessages.map(pendingMessage =>
+        <article key={pendingMessage.parentId || 'pending'} className="inbox-thread-message is-own inbox-pending-message" aria-live="polite">
+          <div className="inbox-thread-message-content"><small>You · {pendingMessage.status === 'failed' ? 'Failed' : pendingMessage.status === 'sent' ? 'Sent' : 'Sending'}</small>
+            <div className="inbox-message-bubble"><div className="inbox-message-heading"><span className="inbox-parent-pill">{pendingMessage.protectedSend ? 'Protected' : 'Normal'}</span><small className="inbox-pending-status">{pendingMessage.status === 'sending' && <ClockIcon />}{pendingMessage.status === 'failed' ? 'Not sent' : pendingMessage.status === 'sent' ? 'Syncing…' : 'Sending…'}</small></div>
+              <p className="inbox-revealed">{pendingMessage.protectedSend ? 'Protected message' : pendingMessage.text}</p>
+              {pendingMessage.protectedSend && pendingMessage.status === 'sending' && <div className="inbox-pending-footer" role="status">
+                <small>{pendingMessage.completed === 0
+                  ? `Sealing ${pendingMessage.total} protected ${pendingMessage.total === 1 ? 'part' : 'parts'}…`
+                  : pendingMessage.completed < pendingMessage.total
+                    ? `Sealing protected text ${pendingMessage.completed + 1}/${pendingMessage.total}` : 'Publishing protected message…'}</small>
+                <span className="inbox-progress-track is-indeterminate" aria-hidden="true"><span /></span>
+              </div>}
+              {pendingMessage.status === 'failed' && <button type="button" className="button-secondary" disabled={!!busy} onClick={onSend}>Retry</button>}
+            </div></div>
+        </article>)}
     </div>
-    {busy === 'sending' && <div className="inbox-send-status"><InboxProgressSteps label="Sending protected message" steps={sendSteps} /></div>}
-    {busy === 'sending-normal' && <div className="inbox-send-status" role="status">Sending encrypted message…</div>}
     {busy === 'sending-file' && transfer && <div className="inbox-send-status" role="status">
       <span className="inbox-setup-spinner" aria-hidden="true" />
       <span>{transferLabel}{shareProgress ? ` · ${transfer.completed} of ${transfer.total} shares` : ''}</span>

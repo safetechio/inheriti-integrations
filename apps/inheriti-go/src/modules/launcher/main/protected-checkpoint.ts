@@ -7,6 +7,8 @@ import { trayMessages as messages } from '../../../messages.js';
 export class ProtectedCheckpoint {
   private readonly file = join(app.getPath('userData'), 'protected-checkpoint');
 
+  hasFile(): boolean { return existsSync(this.file); }
+
   isAvailable(): boolean {
     return safeStorage.isEncryptionAvailable() && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text');
   }

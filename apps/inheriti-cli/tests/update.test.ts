@@ -25,6 +25,9 @@ describe('CLI update selection', () => {
     expect(latestIntegrationBuild([older, newer], 'cli', '1.2.0-stg.1', 'linux-x64')?.version).toBe('1.2.0-stg.3');
     expect(latestIntegrationBuild([older], 'cli', '1.2.0-stg.3', 'linux-x64')).toBeUndefined();
   });
+  it('keeps local builds separate from production', () => {
+    expect(latestIntegrationBuild([build('1.2.1'), build('1.2.0-local.2')], 'cli', '1.2.0-local.1', 'linux-x64')?.version).toBe('1.2.0-local.2');
+  });
   it('notifies interactive signed-in users once per day without printing download details', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'inheriti-update-test-'));
     try {

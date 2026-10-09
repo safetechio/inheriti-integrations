@@ -1,9 +1,8 @@
-import { useRef } from 'react';
-import { AttachmentIcon, ChevronDownIcon, LockIcon, PlanIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { useLayoutEffect, useRef } from 'react';
+import { ChevronDownIcon, LockIcon, PlanIcon, PlusIcon, SendIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { draftSegments } from '../hooks/inboxDraft.js';
 import { useComposerDrawer } from '../hooks/useComposerDrawer.js';
 import { useComposerSelection } from '../hooks/useComposerSelection.js';
-import { INBOX_MESSAGE_EXPIRY_DAYS } from '../inboxSettings.js';
 
 export function InboxComposer({ mode, setMode, draft, setDraft, marks = [], onMark = () => {}, onUnmark = () => {}, onSend, onSendFile, onCreatePlanFromSecret, sendError, busy }) {
   const { collapsed, setCollapsed, height, startDrag, moveDrag, stopDrag, resizeWithKeys } = useComposerDrawer();
@@ -11,6 +10,13 @@ export function InboxComposer({ mode, setMode, draft, setDraft, marks = [], onMa
   const highlight = useRef(null);
   const mixed = mode === 'NORMAL' && marks.length > 0;
   const preview = draftSegments(draft, marks, mode);
+  useLayoutEffect(() => {
+    const textarea = input.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.max(44, Math.min(textarea.scrollHeight, 200, window.innerHeight * .3))}px`;
+    if (highlight.current) highlight.current.scrollTop = textarea.scrollTop;
+  }, [draft, collapsed, input]);
   const editorKeys = event => {
     if (event.key === 'Escape') setMenu(null);
     if (event.shiftKey && event.key === 'F10') openMenu(event);
@@ -26,7 +32,7 @@ export function InboxComposer({ mode, setMode, draft, setDraft, marks = [], onMa
     <div id="inbox-composer-body" className="inbox-composer-body" hidden={collapsed} style={height && !collapsed ? { height } : undefined}>
       <div className="inbox-mode" role="group" aria-label="Message mode"><button type="button" aria-pressed={mode === 'NORMAL'} onClick={() => { setMenu(null); setMode('NORMAL'); }}>Normal message</button><button type="button" aria-pressed={mode === 'PROTECTED'} onClick={() => { setMenu(null); setMode('PROTECTED'); }}><LockIcon /> Protected message</button></div>
       <label className="sr-only" htmlFor="inbox-draft">{mode === 'PROTECTED' ? 'Protected message' : mixed ? 'Mixed message' : 'Normal message'}</label>
-      <div className="inbox-composer-input"><div className="inbox-editor" ref={editor}>
+      <div className="inbox-composer-input"><button type="button" className="button-secondary inbox-attach" aria-label="Attach a protected file up to 10 MB" title="Attach a protected file up to 10 MB" disabled={!!busy} onClick={onSendFile}><PlusIcon /></button><div className="inbox-editor" ref={editor}>
         {menu && <div className="inbox-composer-menu" role="menu" style={{ left: menu.x }} onKeyDown={event => { if (event.key === 'Escape') { setMenu(null); input.current.focus(); } }}>
           {menu.start < menu.end && <button type="button" role="menuitem" onMouseDown={event => event.preventDefault()} onClick={() => actOnSelection(onMark)}><LockIcon /> Make this secret</button>}
           {menu.canUnmark && <button type="button" role="menuitem" onMouseDown={event => event.preventDefault()} onClick={() => actOnSelection(onUnmark)}>Unmark secret</button>}
@@ -34,14 +40,13 @@ export function InboxComposer({ mode, setMode, draft, setDraft, marks = [], onMa
         </div>}
         <div className="inbox-editor-field">{mixed && <div ref={highlight} className="inbox-editor-highlight" aria-hidden="true">{preview.map((segment, index) => 'text' in segment
           ? <span key={index}>{segment.text}</span> : <span key={index} className="is-secret">{segment.protectedText}</span>)}</div>}
-          <textarea ref={input} id="inbox-draft" className={mixed ? 'has-marks' : undefined} value={draft} onChange={event => { setMenu(null); setDraft(event.target.value); }} onScroll={event => { if (highlight.current) highlight.current.scrollTop = event.currentTarget.scrollTop; }} onContextMenu={openMenu} onKeyDown={editorKeys} maxLength={10000} rows={2} placeholder={mode === 'NORMAL' ? 'Write a message' : 'Write a protected message'} disabled={!!busy} /></div>
+          <textarea ref={input} id="inbox-draft" className={mixed ? 'has-marks' : undefined} value={draft} onChange={event => { setMenu(null); setDraft(event.target.value); }} onScroll={event => { if (highlight.current) highlight.current.scrollTop = event.currentTarget.scrollTop; }} onContextMenu={openMenu} onKeyDown={editorKeys} maxLength={10000} rows={1} placeholder={mode === 'NORMAL' ? 'Write a message' : 'Write a protected message'} disabled={!!busy} /></div>
         {mode === 'NORMAL' && <div className="inbox-mark-hint">Right-click selected text to make it secret or unmark it</div>}</div>
-        <div className="inbox-composer-actions"><button type="button" className="button-secondary inbox-attach" aria-label="Attach a protected file up to 10 MB" title="Attach a protected file up to 10 MB" disabled={!!busy} onClick={onSendFile}><AttachmentIcon /></button><button type="submit" disabled={!draft.trim() || !!busy}>Send</button></div></div>
-      <div className="inbox-composer-preview"><strong>Recipients see:</strong> <span>{draft.trim() ? preview.map((segment, index) => 'text' in segment
+        <button type="submit" className="inbox-send" aria-label="Send message" disabled={!draft.trim() || !!busy}><SendIcon /></button></div>
+      {draft.trim() && <div className="inbox-composer-preview"><strong>Recipients see:</strong> <span>{preview.map((segment, index) => 'text' in segment
         ? <span key={index}>{segment.text}</span>
-        : <span key={index} className="inbox-preview-secret" aria-label="Protected text">{'•'.repeat(Math.min(20, segment.protectedText.length))}</span>) : 'Your message will appear here'}</span></div>
+        : <span key={index} className="inbox-preview-secret" aria-label="Protected text">{'•'.repeat(Math.min(20, segment.protectedText.length))}</span>)}</span></div>}
       {sendError && <p className="inbox-error error" role="alert">{sendError}</p>}
-      <small>Unopened messages and files expire in {INBOX_MESSAGE_EXPIRY_DAYS} days.</small>
     </div>
   </form>;
 }

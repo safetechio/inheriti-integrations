@@ -18,7 +18,8 @@ const appUrls: Record<Deployment, string | undefined> = {
   local: undefined,
 };
 const appUrl = process.env.INHERITI_APP_URL ?? process.env.INHERITI_BUSINESS_URL ?? appUrls[deployment as Deployment];
-if (appUrl && !/^https:\/\//u.test(appUrl) && !/^http:\/\/localhost(?::\d+)?$/u.test(appUrl)) {
+if (appUrl && !/^https:\/\//u.test(appUrl) && !/^http:\/\/localhost(?::\d+)?$/u.test(appUrl) &&
+  !(deployment === 'local' && /^http:\/\/[a-z0-9-]+\.localhost(?::\d+)?$/u.test(appUrl))) {
   throw new Error(messages.invalidAppUrl);
 }
 registerAppEvents(new TraySession(deployment as Deployment, {

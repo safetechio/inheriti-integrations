@@ -4,6 +4,8 @@ import { registerWindowEvents } from './window.js';
 
 let window: BrowserWindow | undefined;
 let quitting = false;
+declare const __INHERITI_DEPLOYMENT__: string | undefined;
+const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
 
 export function currentWindow(): BrowserWindow | undefined {
   return window;
@@ -25,8 +27,8 @@ export function showLauncher(action?: string): void {
       resizable: false,
       maximizable: false,
       fullscreenable: false,
-      title: app.getName(),
-      icon: join(import.meta.dirname, 'tray.png'),
+      title: deployment === 'prod' ? app.getName() : `${app.getName()} · ${deployment.toUpperCase()}`,
+      icon: join(import.meta.dirname, deployment === 'prod' ? 'tray.png' : `tray-${deployment}.png`),
       webPreferences: {
         preload: join(import.meta.dirname, 'preload.cjs'),
         contextIsolation: true,

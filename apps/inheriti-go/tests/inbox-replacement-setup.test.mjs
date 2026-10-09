@@ -9,7 +9,7 @@ it('shows forward-only history loss and the explicit replacement action', () => 
     onClose() {}, onRetry() {}, onReplace() {}, organizationSelected: true,
     state: { status: 'replacement_required', message: 'Replace this device.' },
   }));
-  expect(markup).toContain('Past Secure Chat history cannot be recovered');
-  expect(markup).toContain('Reset Secure Chat on this computer');
+  expect(markup).toContain('Earlier protected messages and chat history cannot be recovered');
+  expect(markup).toContain('Reset on this computer');
   expect(markup).not.toContain('Try setup again');
 });

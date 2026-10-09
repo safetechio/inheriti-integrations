@@ -132,7 +132,7 @@ it('shows each named moderator decision and threshold count without exposing ide
       ],
     } },
   }));
-  for (const text of ['Ada', 'Grace', 'Linus', 'Alex', 'Approved', 'Pending', 'Denied', 'Canceled', 'Waiting', 'Moderator', '1 of 2 required approvals received']) expect(markup).toContain(text);
+  for (const text of ['Ada', 'Grace', 'Linus', 'Alex', 'Approved', 'Pending', 'Denied', 'Cancelled', 'Waiting', 'Moderator', '1 of 2 required approvals received']) expect(markup).toContain(text);
   expect(markup).not.toContain('private-id');
   expect(markup).toContain('role="list"');
 });

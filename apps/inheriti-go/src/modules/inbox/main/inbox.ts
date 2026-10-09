@@ -7,7 +7,9 @@ import { TrayInboxIdentity } from './identity.js';
 import type { InboxIdentityState } from './identity.js';
 import { InboxReadAck } from './read-ack.js';
 
-export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'CONVERSATIONS' | 'NEW_MESSAGE' }
+export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'NEW_MESSAGE' }
+  | { kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }
+  | { kind: 'PRESENCE'; tenantId: string; memberIds?: string[]; checkedAt?: string; connected: boolean }
   | { conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string };
 
 const MAX_FILE_BYTES = 10_000_000;
@@ -33,7 +35,7 @@ export class TrayInbox {
     private readonly selectedOrganization: () => string,
     private readonly onSignal?: (signal?: TrayInboxSignal) => void,
     onIdentityState?: () => void) {
-    this.identity = new TrayInboxIdentity(apiUrl, environment, token, resolveKey, onIdentityState);
+    this.identity = new TrayInboxIdentity(apiUrl, environment, token, onIdentityState);
     this.read = new InboxReadAck(this.identity, () => this.client(), resolveKey);
   }
 
@@ -83,6 +85,9 @@ export class TrayInbox {
   listParticipants(input?: { q?: string; limit?: number; offset?: number }) {
     return this.client().client.listParticipants(input);
   }
+  listMembers(input?: { q?: string; limit?: number; offset?: number }) {
+    return this.client().client.listMembers(input);
+  }
   async createConversation(title: string, participantMemberIds: string[]) {
     const memberId = await this.registeredMemberId();
     if (!memberId) throw new Error('inbox_identity_not_ready');
@@ -97,16 +102,30 @@ export class TrayInbox {
   }
   listen(): void {
     if (!this.stopSignals && this.onSignal) {
+      const tenantId = this.selectedOrganization();
       this.stopSignals = createNodeInboxEventListener(this.apiUrl, async () => (await this.token()) ?? null,
         (signal) => {
           if (signal.tenantId !== this.selectedOrganization()) return;
-          if ('kind' in signal) { this.onSignal?.({ kind: signal.kind }); return; }
+          if ('kind' in signal) {
+            if (signal.kind === 'CONVERSATIONS') {
+              this.onSignal?.({ kind: 'CONVERSATIONS', ...(signal.conversationId ? { conversationId: signal.conversationId } : {}),
+                ...(signal.action ? { action: signal.action } : {}), ...(signal.memberId ? { memberId: signal.memberId } : {}),
+                ...(signal.memberName ? { memberName: signal.memberName } : {}),
+                ...(signal.participantRevision !== undefined ? { participantRevision: signal.participantRevision } : {}) });
+            } else this.onSignal?.({ kind: signal.kind });
+            return;
+          }
           const update: TrayInboxSignal = { conversationId: signal.conversationId, messageId: signal.messageId, status: signal.status };
           if (signal.recipientStatus) update.recipientStatus = signal.recipientStatus;
           if (signal.senderMemberId) update.senderMemberId = signal.senderMemberId;
           if (signal.memberId) update.memberId = signal.memberId;
           this.onSignal?.(update);
-        }, () => this.onSignal?.());
+        }, () => this.onSignal?.(), tenantId, (snapshot) => {
+          if (tenantId !== this.selectedOrganization()) return;
+          this.onSignal?.(snapshot
+            ? { kind: 'PRESENCE', tenantId, memberIds: snapshot.memberIds, checkedAt: snapshot.checkedAt, connected: true }
+            : { kind: 'PRESENCE', tenantId, connected: false });
+        });
     }
   }
   listMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) {
@@ -152,13 +171,13 @@ export class TrayInbox {
       return { items, total: page.total, unreadCount };
     });
   }
-  sendParent(conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>) {
+  sendParent(conversationId: string, parentId: string, segments: Array<{ text: string } | { protectedText: string; expiresAt: string }>, progress?: (completed: number, total: number) => void) {
     const { organizationId, client } = this.client();
     return this.identity.withIdentity(organizationId, async (identity, signal) => {
       const tenantKeyHex = segments.some((segment) => 'protectedText' in segment)
         ? await this.resolveKey(organizationId, signal) : undefined;
       signal.throwIfAborted();
-      return client.sendParent({ conversationId, parentId, segments, identity, tenantKeyHex, signal });
+      return client.sendParent({ conversationId, parentId, segments, identity, tenantKeyHex, signal, onProgress: progress });
     });
   }
   async revealUnit(conversationId: string, parentId: string, unitId: string) {

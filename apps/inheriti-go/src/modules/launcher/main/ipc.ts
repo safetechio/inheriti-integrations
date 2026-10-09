@@ -5,7 +5,7 @@ import { trayMessages as messages } from '../../../messages.js';
 import { registerQuickPlanIpc } from '../../quick-plan/main/ipc.js';
 import { registerInboxIpc } from '../../inbox/main/ipc.js';
 
-export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void): void {
+export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void, refreshBadge?: () => void): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
     const window = currentWindow();
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
@@ -32,7 +32,7 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); publishInbox?.(); return session.state(); });
-  registerInboxIpc(session, trusted, publishInbox);
+  registerInboxIpc(session, trusted, publishInbox, publish, refreshBadge);
   registerQuickPlanIpc(session, trusted, publish, notify);
   ipcMain.handle('tray:open-app', (event, planId?: unknown) => {
     trusted(event);

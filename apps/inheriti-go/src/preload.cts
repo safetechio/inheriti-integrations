@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   inboxReplaceDevice: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-replace-device'),
   inboxCancelPreparation: (): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-preparation'),
   inboxParticipants: (query?: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-participants', query),
+  inboxMembers: (query?: string, offset?: number): Promise<unknown> => ipcRenderer.invoke('tray:inbox-members', query, offset),
   inboxCreateConversation: (title: string, memberIds: string[]): Promise<unknown> => ipcRenderer.invoke('tray:inbox-create-conversation', title, memberIds),
   inboxChangeParticipants: (conversationId: string, action: 'ADD' | 'REMOVE', memberId: string, expectedRevision: number): Promise<unknown> =>
     ipcRenderer.invoke('tray:inbox-change-participants', conversationId, action, memberId, expectedRevision),
@@ -85,6 +86,11 @@ contextBridge.exposeInMainWorld('inheritiTray', {
     const listener = (_event: Electron.IpcRendererEvent, progress: { completed: number; total: number; stage?: string }) => callback(progress);
     ipcRenderer.on('tray:inbox-transfer-progress', listener);
     return () => ipcRenderer.removeListener('tray:inbox-transfer-progress', listener);
+  },
+  onInboxParentSendProgress: (callback: (progress: { parentId: string; completed: number; total: number }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: { parentId: string; completed: number; total: number }) => callback(progress);
+    ipcRenderer.on('tray:inbox-parent-send-progress', listener);
+    return () => ipcRenderer.removeListener('tray:inbox-parent-send-progress', listener);
   },
   onHidden: (callback: () => void): (() => void) => {
     const listener = () => callback();

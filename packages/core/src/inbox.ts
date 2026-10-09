@@ -16,6 +16,7 @@ export function createNodeInbox(options: {
   const normal = new NodeInboxNormal(api);
   const parent = new NodeInboxParent(api, text);
   return {
+    listMembers: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMembers(input, signal),
     listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
     createConversation: (title: string, participantMemberIds: string[]) => api.createInboxConversation({ title, participantMemberIds }),
     changeParticipants: (conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) =>

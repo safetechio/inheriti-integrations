@@ -6,6 +6,11 @@ import { draftSegments, markDraft, unmarkDraft, updateMarkedDraft } from './inbo
 export { finishAcknowledgement } from './useInboxReadActions.js';
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const ORGANISATION_KEY_UNAVAILABLE = 'Organisation Key unavailable. Claim it in SafeKey Mobile, or ask an owner to finish setup, then try again.';
+
+export function isOrganisationKeyUnavailable(failure) {
+  return /master_key_required|MasterKeyRequired/i.test(String(failure));
+}
 
 export function clearPendingSend(pending) {
   pending.parentId = '';
@@ -24,10 +29,11 @@ async function settled(operation) {
 }
 
 async function loadMessagePages(id) {
-  const protectedPage = await settled(() => window.inheritiTray.inboxMessages(id));
-  const normalPage = await settled(() => window.inheritiTray.inboxNormalMessages(id));
-  const parentPage = await settled(() => window.inheritiTray.inboxParents(id));
-  return [protectedPage, normalPage, parentPage];
+  return Promise.all([
+    settled(() => window.inheritiTray.inboxMessages(id)),
+    settled(() => window.inheritiTray.inboxNormalMessages(id)),
+    settled(() => window.inheritiTray.inboxParents(id)),
+  ]);
 }
 
 export function useInboxMessages(onClose) {
@@ -48,6 +54,8 @@ export function useInboxMessages(onClose) {
   const [error, setError] = useState('');
   const [sendError, setSendError] = useState('');
   const [transfer, setTransfer] = useState(null);
+  const [pendingMessage, setPendingMessage] = useState(null);
+  const [acceptedMessages, setAcceptedMessages] = useState([]);
 
   useEffect(() => {
     const stop = window.inheritiTray.onHidden(() => {
@@ -63,12 +71,19 @@ export function useInboxMessages(onClose) {
       clearPendingSend(pendingSend.current);
       setRevealSeconds(0);
       setTransfer(null);
+      setPendingMessage(null);
+      setAcceptedMessages([]);
       onClose();
     });
     return () => { generation.current++; planFile.current = null; clearPendingSend(pendingSend.current); stop(); void window.inheritiTray.inboxHideText(); };
   }, [onClose]);
 
   useEffect(() => window.inheritiTray.onInboxTransferProgress(setTransfer), []);
+  useEffect(() => window.inheritiTray.onInboxParentSendProgress(progress => {
+    if (progress.parentId !== pendingSend.current.parentId) return;
+    setPendingMessage(current => current?.parentId === progress.parentId
+      ? { ...current, completed: progress.completed, total: progress.total } : current);
+  }), []);
   useEffect(() => window.inheritiTray.onInboxFileForPlan(async (opened) => {
     const expected = planFile.current;
     const bytes = opened.bytes instanceof Uint8Array ? opened.bytes : new Uint8Array(opened.bytes);
@@ -105,6 +120,8 @@ export function useInboxMessages(onClose) {
     setItems([]);
     setError('');
     setSendError('');
+    setPendingMessage(null);
+    if (id !== conversationId) setAcceptedMessages([]);
     setBusy('loading');
     try {
       const [protectedPage, normalPage, parentPage] = await loadMessagePages(id);
@@ -119,6 +136,9 @@ export function useInboxMessages(onClose) {
           setParentUnreadCount(parentPage.value.unreadCount);
           setNormalUnreadCount(0);
         }
+        setAcceptedMessages(messages => messages.filter(message =>
+          !((normalPage.status === 'fulfilled' && normalPage.value.items.some(item => item.parentId === message.parentId)) ||
+            (parentPage.status === 'fulfilled' && parentPage.value.items.some(item => item.parentId === message.parentId)))));
         if (protectedPage.status === 'rejected' || (normalPage.status === 'rejected' && parentPage.status === 'rejected'))
           setError('Could not load all messages. Try again.');
       }
@@ -147,6 +167,9 @@ export function useInboxMessages(onClose) {
           setParentUnreadCount(parentPage.value.unreadCount);
           setNormalUnreadCount(0);
         }
+        setAcceptedMessages(messages => messages.filter(message =>
+          !((normalPage.status === 'fulfilled' && normalPage.value.items.some(item => item.parentId === message.parentId)) ||
+            (parentPage.status === 'fulfilled' && parentPage.value.items.some(item => item.parentId === message.parentId)))));
         if (protectedPage.status === 'rejected' || (normalPage.status === 'rejected' && parentPage.status === 'rejected'))
           setError('Could not refresh all messages. Try again.');
       }
@@ -188,13 +211,17 @@ export function useInboxMessages(onClose) {
     const current = generation.current;
     const segments = draftSegments(draft, marks, mode);
     const protectedSend = segments.some(segment => 'protectedText' in segment);
+    const protectedCount = segments.filter(segment => 'protectedText' in segment).length;
     setBusy(protectedSend ? 'sending' : 'sending-normal');
     setError('');
     setSendError('');
+    setPendingMessage({ conversationId: id, parentId: pendingSend.current.parentId, protectedSend,
+      text: protectedSend ? '' : draft, completed: 0, total: protectedCount, status: 'sending' });
     try {
       if (!pendingSend.current.parentId) {
         const preparation = await window.inheritiTray.inboxNormalPreparation(id);
         pendingSend.current.parentId = preparation.parentId;
+        setPendingMessage(current => current ? { ...current, parentId: preparation.parentId } : current);
       }
       if (!protectedSend) {
         await window.inheritiTray.inboxSendNormal(id, pendingSend.current.parentId, draft);
@@ -202,16 +229,22 @@ export function useInboxMessages(onClose) {
         await window.inheritiTray.inboxSendParent(id, pendingSend.current.parentId, protectedSegmentsForSend(segments, pendingSend.current));
       }
       if (generation.current !== current) return;
+      const sentParentId = pendingSend.current.parentId;
       clearPendingSend(pendingSend.current);
       setDraft('');
       setMarks([]);
+      setAcceptedMessages(messages => [...messages, { conversationId: id, parentId: sentParentId,
+        protectedSend, text: protectedSend ? '' : draft, status: 'sent' }]);
+      setPendingMessage(null);
       await refresh();
     } catch (failure) {
       if (String(failure).toLowerCase().includes('inbox_parent_failed')) clearPendingSend(pendingSend.current);
       if (generation.current === current) setSendError(!protectedSend
-        ? 'Could not send the message. Your text is still here.' : String(failure).includes('INBOX_UNAVAILABLE')
+        ? 'Could not send the message. Your text is still here.' : isOrganisationKeyUnavailable(failure)
+        ? `${ORGANISATION_KEY_UNAVAILABLE} Your text is still here.` : String(failure).includes('INBOX_UNAVAILABLE')
         ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM. Your text is still here.'
         : 'Could not send the message. Your text is still here.');
+      if (generation.current === current) setPendingMessage(message => message ? { ...message, status: 'failed' } : null);
     } finally {
       if (generation.current === current) setBusy('');
     }
@@ -220,16 +253,18 @@ export function useInboxMessages(onClose) {
   function updateDraft(value) {
     clearPendingSend(pendingSend.current);
     setSendError('');
+    setPendingMessage(null);
     setMarks(current => updateMarkedDraft(draft, current, value));
     setDraft(value);
   }
-  function updateMode(value) { clearPendingSend(pendingSend.current); setSendError(''); setMode(value); }
+  function updateMode(value) { clearPendingSend(pendingSend.current); setSendError(''); setPendingMessage(null); setMode(value); }
   function markSelection(start, end) {
     clearPendingSend(pendingSend.current);
     setSendError('');
+    setPendingMessage(null);
     setMarks(current => draft.slice(start, end).trim() ? markDraft(current, start, end) : current);
   }
-  function unmarkSelection(start, end) { clearPendingSend(pendingSend.current); setSendError(''); setMarks(current => unmarkDraft(current, start, end)); }
+  function unmarkSelection(start, end) { clearPendingSend(pendingSend.current); setSendError(''); setPendingMessage(null); setMarks(current => unmarkDraft(current, start, end)); }
 
   async function sendFile() {
     if (!conversationId || busy) return;
@@ -243,7 +278,8 @@ export function useInboxMessages(onClose) {
       if (generation.current !== current || result?.cancelled) return;
       await refresh();
     } catch (failure) {
-      if (generation.current === current && !String(failure).includes('AbortError')) setError(String(failure).includes('INBOX_UNAVAILABLE')
+      if (generation.current === current && !String(failure).includes('AbortError')) setError(isOrganisationKeyUnavailable(failure)
+        ? ORGANISATION_KEY_UNAVAILABLE : String(failure).includes('INBOX_UNAVAILABLE')
         ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM.'
         : 'Could not send the file. Check the 10 MB limit and try again.');
     } finally {
@@ -266,7 +302,7 @@ export function useInboxMessages(onClose) {
       }
     } catch (failure) {
       if (generation.current === current && !String(failure).includes('inbox_file_save_cancelled') && !String(failure).includes('AbortError'))
-        setError('Could not save this protected file. Try again while it is available.');
+        setError(isOrganisationKeyUnavailable(failure) ? ORGANISATION_KEY_UNAVAILABLE : 'Could not save this protected file. Try again while it is available.');
     } finally {
       if (generation.current === current) { setBusy(''); setTransfer(null); setOpeningMessageId(''); }
     }
@@ -294,7 +330,8 @@ export function useInboxMessages(onClose) {
       planFile.current = null;
     } catch (failure) {
       if (generation.current === current && !String(failure).includes('AbortError'))
-        setError(planFile.current?.file ? 'This file was opened, but the plan could not be started.' : 'Could not open this protected file as a plan. Try again while it is available.');
+        setError(planFile.current?.file ? 'This file was opened, but the plan could not be started.' : isOrganisationKeyUnavailable(failure)
+          ? ORGANISATION_KEY_UNAVAILABLE : 'Could not open this protected file as a plan. Try again while it is available.');
       planFile.current = null;
     } finally {
       if (generation.current === current) { setBusy(pendingAck ? 'plan-pending' : ''); setTransfer(null); setOpeningMessageId(''); }
@@ -334,6 +371,6 @@ export function useInboxMessages(onClose) {
 
   return { conversationId, items, normalItems, normalUnreadCount, parentItems, parentUnreadCount, mode, setMode: updateMode,
     draft, setDraft: updateDraft, marks, markSelection, unmarkSelection, unitReveals,
-    segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer,
+    segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer, pendingMessage, acceptedMessages,
     select, refresh, clearHistory, send, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning };
 }

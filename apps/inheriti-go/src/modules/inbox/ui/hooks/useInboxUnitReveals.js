@@ -5,6 +5,7 @@ import { finishAcknowledgement } from './useInboxReadActions.js';
 export function useInboxUnitReveals(conversationId, generation, setBusy, setError, refresh) {
   const [units, setUnits] = useState(() => new Map());
   const [openingUnitId, setOpeningUnitId] = useState('');
+  const [openingProgress, setOpeningProgress] = useState(null);
   const [summary, setSummary] = useState(null);
   const [now, setNow] = useState(Date.now());
 
@@ -26,9 +27,10 @@ export function useInboxUnitReveals(conversationId, generation, setBusy, setErro
     return () => clearInterval(timer);
   }, [units]);
 
-  async function reveal(parentId, unitId) {
+  async function reveal(parentId, unitId, progress, keepProgress = false) {
     const current = generation.current;
     setOpeningUnitId(unitId);
+    setOpeningProgress(progress);
     setBusy('opening-unit');
     setError('');
     try {
@@ -44,20 +46,25 @@ export function useInboxUnitReveals(conversationId, generation, setBusy, setErro
       if (generation.current === current) setError('Could not reveal this protected part. Other parts remain available.');
       return false;
     } finally {
-      if (generation.current === current) { setOpeningUnitId(''); setBusy(''); }
+      if (generation.current === current && !keepProgress) { setOpeningUnitId(''); setOpeningProgress(null); setBusy(''); }
     }
   }
 
   async function revealAll(parentId, unitIds) {
     const current = generation.current;
+    setSummary(null);
     let succeeded = 0;
     let failed = 0;
-    for (const unitId of unitIds) {
-      if (generation.current !== current) return;
-      if (await reveal(parentId, unitId)) succeeded += 1;
-      else failed += 1;
+    try {
+      for (const [index, unitId] of unitIds.entries()) {
+        if (generation.current !== current) return;
+        if (await reveal(parentId, unitId, { current: index + 1, total: unitIds.length, remaining: true }, true)) succeeded += 1;
+        else failed += 1;
+      }
+      if (generation.current === current) setSummary({ parentId, succeeded, failed });
+    } finally {
+      if (generation.current === current) { setOpeningUnitId(''); setOpeningProgress(null); setBusy(''); }
     }
-    if (generation.current === current) setSummary({ parentId, succeeded, failed });
   }
 
   async function retry(unitId) {
@@ -90,6 +97,6 @@ export function useInboxUnitReveals(conversationId, generation, setBusy, setErro
     void window.inheritiTray.inboxHideText();
   }
 
-  function clear() { setUnits(new Map()); setSummary(null); }
-  return { units, openingUnitId, summary, now, reveal, revealAll, retry, hide, clear };
+  function clear() { setUnits(new Map()); setSummary(null); setOpeningProgress(null); }
+  return { units, openingUnitId, openingProgress, summary, now, reveal, revealAll, retry, hide, clear };
 }

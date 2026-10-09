@@ -102,8 +102,9 @@ export function createNodePlanEventListener(apiUrl: string, getBearerToken: () =
   return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
 }
 export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>,
-  onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string } | { tenantId: string; kind: 'PARTICIPANTS' | 'CONVERSATIONS' }) => void,
-  onConnect: () => void) {
+  onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string } | { tenantId: string; kind: 'PARTICIPANTS' } | { tenantId: string; kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }) => void,
+  onConnect: () => void, tenantId: string,
+  onPresence: (snapshot: { tenantId: string; memberIds: string[]; checkedAt: string } | null) => void) {
   const socket = io(new URL(apiUrl).origin, {
     autoConnect: false,
     auth: (callback) => {
@@ -111,9 +112,19 @@ export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () 
     },
   });
   socket.on('inbox:changed', onChange);
-  socket.on('connect', onConnect);
+  const heartbeat = () => socket.emit('inbox:presence:heartbeat', { tenantId });
+  let interval: ReturnType<typeof setInterval> | undefined;
+  socket.on('connect', () => {
+    onConnect();
+    heartbeat();
+    interval = setInterval(heartbeat, 20_000);
+  });
+  socket.on('inbox:presence', (snapshot: { tenantId: string; memberIds: string[]; checkedAt: string }) => {
+    if (snapshot?.tenantId === tenantId && Array.isArray(snapshot.memberIds) && !Number.isNaN(Date.parse(snapshot.checkedAt))) onPresence(snapshot);
+  });
+  socket.on('disconnect', () => { clearInterval(interval); interval = undefined; onPresence(null); });
   socket.connect();
-  return () => { socket.removeAllListeners(); socket.disconnect(); };
+  return () => { clearInterval(interval); socket.removeAllListeners(); socket.disconnect(); };
 }
 export { createOrganizationKeys } from './organization-keys.js';
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node-base';

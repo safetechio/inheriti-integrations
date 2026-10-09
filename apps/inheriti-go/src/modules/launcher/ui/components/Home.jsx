@@ -9,7 +9,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
   return <main className="tray-screen tray-home">
     <p id="status" className="sr-only" role="status">{status}</p>
     <header className="tray-home-header">
-      <span>Select organization:</span>
+      <span>Select organisation:</span>
       <label className="tray-organization-picker">
         <span className="sr-only">{messages.organization}</span>
         <select id="organization" value={selectedId || ''} onChange={(event) => onOrganizationChange(event.target.value)} disabled={!organizations.length}>

@@ -10,18 +10,24 @@ import { ReadyPlan } from '../../quick-plan/ui/ReadyPlan.jsx';
 import { useQuickPlanFlow } from '../../quick-plan/ui/hooks/useQuickPlanFlow.js';
 import { useTraySession } from './hooks/useTraySession.js';
 import { InboxPanel } from '../../inbox/ui/InboxPanel.jsx';
+import { clearInboxPresence, rememberInboxPresence } from '../../inbox/ui/hooks/useInboxPanel.js';
+
+const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
 
 export function LauncherApp({ messages }) {
+  useEffect(() => { document.title = deployment === 'prod' ? messages.appName : `${messages.appName} · ${deployment.toUpperCase()}`; }, [messages]);
   const session = useTraySession(messages);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inboxRequested, setInboxRequested] = useState(false);
   const [inboxHasNew, setInboxHasNew] = useState(false);
   const closeInbox = useCallback(() => setInboxOpen(false), []);
   const { state } = session;
+  useEffect(() => { clearInboxPresence(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
   }), [messages]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
+    rememberInboxPresence(signal);
     if (signal?.kind === 'NEW_MESSAGE' && !inboxOpen) setInboxHasNew(true);
   }), [inboxOpen]);
   useEffect(() => {
@@ -47,11 +53,11 @@ export function LauncherApp({ messages }) {
     return true;
   };
 
-  if (!state) {
-    return <main className="tray-screen"><p id="status" role="status">{session.error}</p></main>;
-  }
+  const screen = !state ? <main className="tray-screen"><p id="status" role="status">{session.error}</p></main> : null;
+  if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
+  if (state.status === 'restoring') return <main className="tray-screen"><p id="status" role="status">Checking session…</p></main>;
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
   const status = flow.error || session.error || state.message || ({
@@ -66,7 +72,7 @@ export function LauncherApp({ messages }) {
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
-    organizationSelected={!!state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
+    organizationSelected={!!state.selectedId} organizationId={state.selectedId} onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}

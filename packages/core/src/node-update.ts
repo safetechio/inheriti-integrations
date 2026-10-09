@@ -2,7 +2,7 @@ import type { InternalBuild } from '@safetech/inheriti-client-sdk/node-base';
 
 /** Select only a newer build for the installed channel and platform. */
 export function latestIntegrationBuild(builds: readonly InternalBuild[], integration: string, version: string, platform: string): InternalBuild | undefined {
-  const parsed = (value: string) => /^(\d+)\.(\d+)\.(\d+)(?:-(dev|stg)\.(\d+))?$/u.exec(value);
+  const parsed = (value: string) => /^(\d+)\.(\d+)\.(\d+)(?:-(local|dev|stg)\.(\d+))?$/u.exec(value);
   const current = parsed(version);
   if (!current) return undefined;
   const channel = current[4] ?? 'prod';

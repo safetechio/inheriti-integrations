@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
 
 const mock = vi.hoisted(() => ({
   createNodeInbox: vi.fn(),
@@ -51,6 +52,24 @@ describe('Tray Secure Chat main process', () => {
     expect(onSignal).toHaveBeenCalledExactlyOnceWith({ kind: 'PARTICIPANTS' });
   });
 
+  it('scopes presence snapshots and disconnects to the selected organization', () => {
+    const onSignal = vi.fn();
+    let organizationId = 'org-a';
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => organizationId, onSignal);
+    inbox.listen();
+    expect(mock.createNodeInboxEventListener.mock.calls[0]![4]).toBe('org-a');
+    const onPresence = mock.createNodeInboxEventListener.mock.calls[0]![5];
+    onPresence({ tenantId: 'org-a', memberIds: ['member-b'], checkedAt: '2026-10-09T00:00:00.000Z' });
+    onPresence(null);
+    expect(onSignal).toHaveBeenNthCalledWith(1, { kind: 'PRESENCE', tenantId: 'org-a',
+      memberIds: ['member-b'], checkedAt: '2026-10-09T00:00:00.000Z', connected: true });
+    expect(onSignal).toHaveBeenNthCalledWith(2, { kind: 'PRESENCE', tenantId: 'org-a', connected: false });
+    organizationId = 'org-b';
+    onPresence({ tenantId: 'org-a', memberIds: ['member-b'], checkedAt: '2026-10-09T00:00:00.000Z' });
+    expect(onSignal).toHaveBeenCalledTimes(2);
+  });
+
   it('includes the creator when starting a conversation from the member picker', async () => {
     const createConversation = vi.fn().mockResolvedValue({ id: 'conversation-a' });
     mock.createNodeInbox.mockReturnValue({ createConversation });
@@ -94,6 +113,25 @@ describe('Tray Secure Chat main process', () => {
 
     await expect(sending).rejects.toMatchObject({ name: 'AbortError' });
     expect(client.sendFile).not.toHaveBeenCalled();
+  });
+
+  it('keeps protected file send and open behind Organisation Key acquisition', async () => {
+    const client = { sendFile: vi.fn(), openFile: vi.fn() };
+    mock.createNodeInbox.mockReturnValue(client);
+    mock.showOpenDialog.mockResolvedValue({ canceled: false,
+      filePaths: [fileURLToPath(new URL('../package.json', import.meta.url))] });
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const resolveKey = vi.fn().mockRejectedValue(new Error('organization_key_unavailable'));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      resolveKey, () => 'org-a');
+
+    await expect(inbox.sendFile('conversation', '2030-01-01T00:00:00.000Z'))
+      .rejects.toThrow('organization_key_unavailable');
+    await expect(inbox.openFile('conversation', 'message')).rejects.toThrow('organization_key_unavailable');
+    expect(resolveKey).toHaveBeenCalledTimes(2);
+    expect(client.sendFile).not.toHaveBeenCalled();
+    expect(client.openFile).not.toHaveBeenCalled();
   });
 
   it('retains a file lease when ACK is pending and retries it from the cached lease', async () => {

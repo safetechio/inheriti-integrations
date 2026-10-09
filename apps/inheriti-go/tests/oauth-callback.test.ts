@@ -139,7 +139,7 @@ describe('OAuth browser callback', () => {
       if (mode === 'cancel') { controller.abort(); return 'https://issuer.test/authorize'; }
       throw new Error('authorization_failed');
     }, async () => {}, controller.signal);
-    await expect(outcome).rejects.toThrow(mode === 'cancel' ? 'Sign-in canceled' : 'authorization_failed');
+    await expect(outcome).rejects.toThrow(mode === 'cancel' ? 'Sign-in cancelled' : 'authorization_failed');
     await closed;
     await expect(fetch(redirectUri)).rejects.toThrow();
     expect(socket?.destroyed).toBe(true);

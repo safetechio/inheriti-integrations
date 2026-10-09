@@ -7,7 +7,7 @@ export function useInboxConversationMembers({ conversation, ownMemberId, partici
 
   async function add(event) {
     event.preventDefault();
-    if (!memberId || busy) return;
+    if (!memberId || busy || !available.some((item) => item.memberId === memberId && item.ready)) return;
     if (await onChange(conversation, 'ADD', memberId)) setMemberId('');
   }
 

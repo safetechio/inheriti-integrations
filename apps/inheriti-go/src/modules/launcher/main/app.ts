@@ -1,15 +1,39 @@
-import { app, globalShortcut, Notification, powerMonitor } from 'electron';
+import { app, dialog, globalShortcut, Notification, powerMonitor } from 'electron';
+import { basename, join } from 'node:path';
 import { currentWindow, prepareToQuit, showLauncher } from './launcher-window.js';
 import type { TraySession } from './state.js';
 import type { TrayInboxSignal } from '../../inbox/main/inbox.js';
 import { trayMessages as messages } from '../../../messages.js';
-import { registerTrayEvents } from './tray.js';
+import { registerTrayEvents, setTrayUnread } from './tray.js';
 import { registerTrayIpc } from './ipc.js';
 import { watchLinuxLock } from './linux-lock.js';
+import { downloadGoUpdate } from './update.js';
 
 export function registerAppEvents(session: TraySession, appUrl: string | undefined, deployment: string): void {
   let stopLinuxLock: (() => void) | undefined;
   const seenInboxMessages = new Set<string>();
+  let badgeOrganization: string | undefined;
+  let badgeRequest = 0;
+  const refreshBadge = async () => {
+    const organization = session.state().selectedId;
+    const request = ++badgeRequest;
+    if (organization !== badgeOrganization) {
+      badgeOrganization = organization;
+      setTrayUnread(false);
+    }
+    if (!organization) return;
+    try {
+      let offset = 0;
+      let unread = false;
+      do {
+        const page = await session.listInboxConversations({ limit: 100, offset });
+        unread = page.items.some((item: { unreadCount: number }) => item.unreadCount > 0);
+        offset += page.items.length;
+        if (unread || !page.items.length || offset >= page.total) break;
+      } while (true);
+      if (request === badgeRequest && session.state().selectedId === organization) setTrayUnread(unread);
+    } catch { /* Keep the last confirmed unread state until the next refresh. */ }
+  };
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
@@ -21,20 +45,25 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   }));
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.go.${deployment}`);
-    session.setPublisher(() => publish(session));
+    session.setPublisher(() => { publish(session); void refreshBadge(); });
     session.setInboxPublisher((signal) => {
       publishInboxChanged(signal);
+      if (signal && 'kind' in signal && signal.kind === 'PRESENCE') return;
       void notifyInboxEvent(session, signal, seenInboxMessages);
+      void refreshBadge();
     });
     session.setInboxStatePublisher(() => publishInbox(session));
-    registerTrayEvents(appUrl);
-    registerTrayIpc(session, currentWindow, () => publish(session), appUrl, notify, () => publishInbox(session));
+    registerTrayEvents(appUrl, deployment, () => { void checkForUpdates(session); });
+    registerTrayIpc(session, currentWindow, () => { publish(session); void refreshBadge(); }, appUrl, notify,
+      () => publishInbox(session), () => { void refreshBadge(); });
     powerMonitor.on('lock-screen', () => hideForLock(session));
     powerMonitor.on('suspend', () => hideForLock(session));
     if (process.platform === 'linux') stopLinuxLock = watchLinuxLock(() => hideForLock(session));
     registerShortcut();
-    await session.restore();
     showLauncher();
+    await session.restore();
+    publish(session);
+    void refreshBadge();
   });
   app.on('window-all-closed', () => {});
   app.on('before-quit', () => {
@@ -43,6 +72,32 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     prepareToQuit();
     globalShortcut.unregisterAll();
   });
+}
+
+async function checkForUpdates(session: TraySession): Promise<void> {
+  if (session.state().status !== 'signed-in') {
+    await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: 'Sign in to check for updates.' });
+    return;
+  }
+  try {
+    const build = await session.availableUpdate(app.getVersion());
+    if (!build) {
+      await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: `Version ${app.getVersion()} is up to date.` });
+      return;
+    }
+    const extension = ({ linux: '.AppImage', darwin: '.dmg', win32: '.exe' } as Record<string, string>)[process.platform];
+    if (!extension || basename(build.fileName) !== build.fileName || !build.fileName.endsWith(extension)) throw new Error('Invalid update artifact.');
+    const answer = await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update',
+      message: `Version ${build.version} is available.`, detail: 'Download the installer now?', buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1 });
+    if (answer.response !== 0) return;
+    const selected = await dialog.showSaveDialog({ title: 'Download Inheriti Go', defaultPath: join(app.getPath('downloads'), build.fileName), buttonLabel: 'Download' });
+    if (selected.canceled || !selected.filePath) return;
+    const { url } = await session.requestUpdateDownload(build.id);
+    await downloadGoUpdate(build, url, selected.filePath);
+    await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update', message: `Version ${build.version} downloaded.`, detail: selected.filePath });
+  } catch {
+    await dialog.showMessageBox({ type: 'error', title: 'Inheriti Go updates', message: 'The update could not be checked or downloaded. Please try again.' });
+  }
 }
 
 function hideForLock(session: TraySession): void {
@@ -86,13 +141,22 @@ async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | 
   const organizationId = session.state().selectedId;
   if (!organizationId) return;
   if ('kind' in signal) {
-    if (signal.kind === 'NEW_MESSAGE') return;
-    const key = `${organizationId}:${signal.kind}`;
+    if (signal.kind !== 'CONVERSATIONS' || !signal.conversationId || !signal.action ||
+      !signal.memberId || !Number.isSafeInteger(signal.participantRevision)) return;
+    const key = `${organizationId}:${signal.conversationId}:${signal.action}:${signal.memberId}:${signal.participantRevision}`;
     if (seen.has(key)) return;
     seen.add(key);
-    setTimeout(() => seen.delete(key), 2000);
-    notify(signal.kind === 'PARTICIPANTS'
-      ? 'Secure Chat participants changed.' : 'Your Secure Chat conversations changed.');
+    if (seen.size > 500) seen.delete(seen.values().next().value!);
+    let ownId: string | undefined;
+    try { ownId = await session.registeredInboxMemberId(); }
+    catch { seen.delete(key); return; }
+    if (session.state().selectedId !== organizationId) return;
+    if (signal.action === 'CREATED' && signal.memberId === ownId) return;
+    const name = signal.memberId === ownId ? 'You' : /^[\p{L}\p{M}][\p{L}\p{M} .'-]{0,59}$/u.test(signal.memberName ?? '')
+      ? signal.memberName : 'A member';
+    if (signal.action === 'ADD') notify(`${name} ${name === 'You' ? 'were' : 'was'} added.`);
+    else if (signal.action === 'REMOVE') notify(`${name} ${name === 'You' ? 'were' : 'was'} removed.`);
+    else if (signal.action === 'CREATED') notify(`${name} started a conversation.`);
     return;
   }
   const key = `${organizationId}:${signal.messageId}:${signal.recipientStatus ?? signal.status}:${signal.memberId ?? ''}`;
