@@ -2,9 +2,11 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { matchingBuildDeployment, packageVersionForDeployment } from './build-deployment.mjs';
+import { requireNativeWindow } from './require-native-window.mjs';
 
 const root = process.cwd();
 const deployment = await matchingBuildDeployment(root);
+await requireNativeWindow(resolve(root, 'dist'));
 const artifacts = resolve(root, process.argv.find((value) => value.startsWith('--artifacts-dir='))?.slice(16) ?? 'artifacts');
 const stage = resolve(artifacts, 'stage');
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
