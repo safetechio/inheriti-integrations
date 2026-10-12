@@ -51,6 +51,8 @@ export class TraySession {
   private readonly inbox: TrayInbox;
   private inboxPublisher: ((signal?: TrayInboxSignal) => void) | undefined;
   private inboxStatePublisher: (() => void) | undefined;
+  private inboxAccess: { organizationId: string; requestId: number; controller: AbortController; promise: Promise<void> } | undefined;
+  private validatedInboxOrganization: string | undefined;
 
   constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
@@ -162,6 +164,8 @@ export class TraySession {
   }
 
   async restore(): Promise<void> {
+    this.cancelInboxAccess();
+    this.validatedInboxOrganization = undefined;
     this.custodianPrompt.cancel();
     this.proDevice?.clearPin();
     try {
@@ -189,6 +193,8 @@ export class TraySession {
     try {
       this.quickPlans.assertCanSelectOrganization(id);
       if (this.selectedId !== id) {
+        this.cancelInboxAccess();
+        this.validatedInboxOrganization = undefined;
         this.inbox.clear();
         await this.organizationKeys.clear();
       }
@@ -247,6 +253,25 @@ export class TraySession {
   inboxState(): InboxIdentityState { return this.inbox.state(); }
   registeredInboxMemberId(): Promise<string | undefined> { return this.inbox.registeredMemberId(); }
   prepareInbox(): Promise<InboxIdentityState> { return this.inbox.prepare(); }
+  prepareInboxAccess(requestId: number): Promise<void> {
+    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    const organizationId = this.selectedId;
+    if (this.validatedInboxOrganization === organizationId) return Promise.resolve();
+    if (this.inboxAccess?.organizationId === organizationId && this.inboxAccess.requestId === requestId) return this.inboxAccess.promise;
+    this.cancelInboxAccess();
+    const controller = new AbortController();
+    const promise = this.organizationKeys.resolve(organizationId, controller.signal).then(() => {
+      if (controller.signal.aborted || this.selectedId !== organizationId || this.status !== 'signed-in') throw new Error('inbox_access_canceled');
+      this.validatedInboxOrganization = organizationId;
+    }).finally(() => { if (this.inboxAccess?.controller === controller) this.inboxAccess = undefined; });
+    this.inboxAccess = { organizationId, requestId, controller, promise };
+    return promise;
+  }
+  cancelInboxAccess(requestId?: number): void {
+    if (requestId !== undefined && this.inboxAccess?.requestId !== requestId) return;
+    this.inboxAccess?.controller.abort();
+    this.inboxAccess = undefined;
+  }
   replaceInboxDevice(): Promise<InboxIdentityState> { return this.inbox.replace(); }
   cancelInboxPreparation(): void { this.inbox.cancelPreparation(); }
   listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listParticipants(input); }
@@ -274,9 +299,11 @@ export class TraySession {
   retryInboxAck(conversationId: string, messageId: string) { return this.inbox.retryAck(conversationId, messageId); }
   hideInboxText(): void { this.inbox.hide(); }
   clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); this.inbox.hide(); }
-  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); void this.organizationKeys.clear(); }
+  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.cancelInboxAccess(); this.validatedInboxOrganization = undefined; void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
+    this.cancelInboxAccess();
+    this.validatedInboxOrganization = undefined;
     this.custodianPrompt.cancel();
     this.proDevice?.clearPin();
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
@@ -306,6 +333,8 @@ export class TraySession {
     }
     if (!this.organizations.some(({ id }) => id === this.selectedId)) {
       this.quickPlans.clear();
+      this.cancelInboxAccess();
+      this.validatedInboxOrganization = undefined;
       this.inbox.clear();
       this.planEdit.reset();
       this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;

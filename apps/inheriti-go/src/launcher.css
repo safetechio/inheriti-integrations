@@ -295,9 +295,10 @@ body { padding: 0; background: #fff; }
 .inbox-new-footer { flex: none; display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eaecf0; }
 .inbox-new-footer button:first-child { flex: 1; }.inbox-new-footer button:last-child { flex: 2; }
 .inbox-thread-heading { min-width: 0; flex: 1; display: grid; justify-items: center; }
+.inbox-header > .tray-back { flex: none; }
 .inbox-thread-title { min-width: 0; width: 100%; display: grid; justify-items: center; padding: 2px 6px; border: 0; background: transparent; color: #101828; text-align: center; line-height: 1.35; }
 .inbox-thread-title:hover:not(:disabled) { border: 0; background: #f9fafb; }
-.inbox-thread-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.inbox-thread-title strong { min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .inbox-thread-title small { color: #667085; font-size: 12px; }
 .inbox-thread-scroll { display: flex; flex-direction: column; gap: 11px; padding: 6px 18px 16px; background: #f6f7fb; }
 .inbox-thread-notice { align-self: center; max-width: 300px; display: flex; gap: 8px; padding: 8px 12px; border: 1px solid #dbe4ff; border-radius: 10px; color: #1642ba; background: #f5f8ff; font-size: 12px; line-height: 1.45; }

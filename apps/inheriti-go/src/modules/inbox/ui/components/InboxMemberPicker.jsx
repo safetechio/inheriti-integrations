@@ -6,7 +6,7 @@ export function InboxMemberPicker({ title, setTitle, query, setQuery, onSearch, 
   const visible = participants.filter(({ memberId }) => memberId !== ownMemberId);
   return <div className="inbox-new-screen">
     <div className="tray-scroll inbox-new-content">
-      <div className="inbox-title-field"><label htmlFor="inbox-conversation-title">Conversation title</label><input id="inbox-conversation-title" form="inbox-create-form" type="text" placeholder="e.g. Project handover" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={80} required disabled={!!busy} /></div>
+      <div className="inbox-title-field"><label htmlFor="inbox-conversation-title">Conversation title</label><input id="inbox-conversation-title" form="inbox-create-form" type="text" placeholder="e.g. Project handover" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={40} required disabled={!!busy} /></div>
       <form className="inbox-search" onSubmit={onSearch}><label htmlFor="inbox-search">Search members</label><div className="inbox-search-row"><input id="inbox-search" type="search" placeholder="Name or email" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} /></div></form>
       {memberIds.length > 0 && <div className="inbox-picked" aria-label="Selected members">{memberIds.map((id) => <button type="button" key={id} onClick={() => onToggle(id)} aria-label={`Remove ${names[id] || 'member'} from selection`}><InboxAvatar name={names[id]} url={avatars[id]} />{names[id] || 'Member'} ×</button>)}</div>}
       <div className="inbox-member-intro">

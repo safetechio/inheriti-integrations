@@ -37,6 +37,8 @@ vi.mock('react', () => ({ useState: hooks.useState, useRef: hooks.useRef, useCal
 
 // @ts-expect-error The React hook is JavaScript and has no declaration file.
 import { useInboxState } from '../src/modules/inbox/ui/useInboxState.js';
+// @ts-expect-error The React hook is JavaScript and has no declaration file.
+import { useInboxAccess } from '../src/modules/inbox/ui/useInboxAccess.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -137,5 +139,58 @@ describe('background Secure Chat preparation', () => {
     void failed.prepare();
     expect(prepareCalls).toBe(2);
     expect(render('org-a').error).toBe('');
+  });
+});
+
+describe('Secure Chat organisation-key gate', () => {
+  beforeEach(() => { hooks.reset(); });
+
+  it('checks access only when Chat mounts and retains it across reopening', async () => {
+    const access = vi.fn().mockResolvedValue(undefined);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    (globalThis as any).window = { inheritiTray: { inboxAccess: access, inboxCancelAccess: cancel } };
+    expect(access).not.toHaveBeenCalled();
+    hooks.begin(); useInboxAccess('org-a'); hooks.commit();
+    await tick();
+    hooks.begin(); expect(useInboxAccess('org-a').status).toBe('ready'); hooks.commit();
+    expect(access).toHaveBeenCalledTimes(1);
+    hooks.reset();
+    expect(cancel).toHaveBeenCalledTimes(1);
+    hooks.begin(); useInboxAccess('org-a'); hooks.commit();
+    expect(access).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for device identity before requesting the organisation key', async () => {
+    const access = vi.fn().mockResolvedValue(undefined);
+    (globalThis as any).window = { inheritiTray: { inboxAccess: access, inboxCancelAccess: vi.fn() } };
+    hooks.begin(); useInboxAccess(undefined); hooks.commit();
+    expect(access).not.toHaveBeenCalled();
+    hooks.begin(); useInboxAccess('org-a'); hooks.commit();
+    expect(access).toHaveBeenCalledTimes(1);
+  });
+
+  it('withholds access until success and allows retry after failure', async () => {
+    const pending = deferred<void>();
+    const access = vi.fn().mockImplementationOnce(() => pending.promise).mockResolvedValue(undefined);
+    (globalThis as any).window = { inheritiTray: { inboxAccess: access, inboxCancelAccess: vi.fn() } };
+    hooks.begin(); useInboxAccess('org-a'); hooks.commit();
+    hooks.begin(); expect(useInboxAccess('org-a').status).toBe('checking'); hooks.commit();
+    pending.reject(new Error('denied'));
+    await tick();
+    hooks.begin(); const failed = useInboxAccess('org-a'); hooks.commit();
+    expect(failed.status).toBe('error');
+    await failed.retry();
+    hooks.begin(); expect(useInboxAccess('org-a').status).toBe('ready'); hooks.commit();
+  });
+
+  it('ignores a late access result after leaving Chat', async () => {
+    const pending = deferred<void>();
+    const cancel = vi.fn();
+    (globalThis as any).window = { inheritiTray: { inboxAccess: () => pending.promise, inboxCancelAccess: cancel } };
+    hooks.begin(); useInboxAccess('org-a'); hooks.commit();
+    hooks.reset();
+    pending.resolve();
+    await tick();
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });

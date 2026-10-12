@@ -48,6 +48,7 @@ it('shows the shared conversation title and requires it when starting a conversa
   }));
   expect(list).toContain('Project handover');
   expect(picker).toContain('id="inbox-conversation-title"');
+  expect(picker).toContain('maxLength="40"');
   expect(picker).toContain('required=""');
   expect(picker).toContain('Start conversation</button>');
 });

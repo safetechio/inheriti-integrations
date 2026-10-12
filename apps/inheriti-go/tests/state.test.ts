@@ -51,6 +51,53 @@ describe('TraySession', () => {
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
   });
 
+  it('validates Chat access on entry, caches it, and cancels it on organization switch', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }, { id: 'org-2', name: 'Two' }]);
+    const session = new TraySession('local');
+    await session.restore();
+    await session.select('org-1');
+    expect(mock.acquireKey).not.toHaveBeenCalled();
+    await session.prepareInboxAccess(1);
+    await session.prepareInboxAccess(2);
+    expect(mock.acquireKey).toHaveBeenCalledTimes(1);
+    await session.select('org-2');
+    mock.acquireKey.mockImplementationOnce((_id: string, signal: AbortSignal) => new Promise<string>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
+    const pending = session.prepareInboxAccess(3);
+    const signal = mock.acquireKey.mock.calls[1]?.[1] as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    session.cancelInboxAccess(2);
+    expect(signal.aborted).toBe(false);
+    session.cancelInboxAccess(3);
+    expect(signal.aborted).toBe(true);
+    await expect(pending).rejects.toThrow('aborted');
+  });
+
+  it('cancels pending Chat access when switching organizations or signing out', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }, { id: 'org-2', name: 'Two' }]);
+    const session = new TraySession('local');
+    await session.restore();
+    await session.select('org-1');
+    mock.acquireKey.mockImplementation((_id: string, signal: AbortSignal) => new Promise<string>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
+    const first = session.prepareInboxAccess(10);
+    const firstCanceled = expect(first).rejects.toThrow('aborted');
+    const firstSignal = mock.acquireKey.mock.calls.at(-1)?.[1] as AbortSignal;
+    await session.select('org-2');
+    expect(firstSignal.aborted).toBe(true);
+    await firstCanceled;
+    const second = session.prepareInboxAccess(11);
+    const secondCanceled = expect(second).rejects.toThrow('aborted');
+    const secondSignal = mock.acquireKey.mock.calls.at(-1)?.[1] as AbortSignal;
+    await session.signOut();
+    expect(secondSignal.aborted).toBe(true);
+    await secondCanceled;
+  });
+
   it('uses a protected operator session store scoped to its issuer', async () => {
     new TraySession('local', { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://local-issuer.test/' });
     const options = mock.core.mock.calls[0]?.[0];

@@ -18,6 +18,12 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
     }
   });
   handle('tray:inbox-state', (event) => { trusted(event); return session.inboxState(); });
+  const accessRequestId = (value: unknown) => {
+    if (!Number.isSafeInteger(value) || (value as number) < 1) throw new Error('Invalid Secure Chat access request');
+    return value as number;
+  };
+  handle('tray:inbox-access', (event, requestId) => { trusted(event); return session.prepareInboxAccess(accessRequestId(requestId)); });
+  handle('tray:inbox-cancel-access', (event, requestId) => { trusted(event); session.cancelInboxAccess(accessRequestId(requestId)); });
   handle('tray:inbox-prepare', async (event) => {
     trusted(event);
     const pending = session.prepareInbox();

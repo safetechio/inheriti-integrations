@@ -27,7 +27,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
   return <main className="tray-screen inbox-panel">
     <header className="tray-screen-header tray-screen-heading inbox-header">
       <button className="tray-back" type="button" aria-label={screen === 'list' ? 'Close Secure Chat' : 'Back to conversations'} onClick={screen === 'list' ? onClose : navigation.goBack}><ChevronLeftIcon /></button>
-      {screen === 'thread' ? <div className="inbox-thread-heading"><button type="button" className="inbox-thread-title" onClick={navigation.openMembers} aria-label={`Participants in ${title}`}>
+      {screen === 'thread' ? <div className="inbox-thread-heading"><button type="button" className="inbox-thread-title" onClick={navigation.openMembers} aria-label={`Participants in ${title}`} title={title}>
         <strong>{title}</strong><small className="inbox-thread-security"><LockIcon />{conversation?.participantMemberIds.length || 0} members · End-to-end encrypted</small>
       </button><small className="inbox-thread-expiry">Unopened messages and files expire in {INBOX_MESSAGE_EXPIRY_DAYS} days.</small></div> : <h1>{screen === 'new' ? 'New conversation' : 'Secure Chat'}</h1>}
       {screen === 'list' && <button type="button" className="inbox-new-button" onClick={navigation.startConversation}><PlusIcon /> New</button>}

@@ -1,6 +1,6 @@
 import { ChevronLeftIcon, LockIcon } from '../../../_shared/ui/components/Icons.jsx';
 
-export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, state, error }) {
+export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, state, error, mode }) {
   const preparing = state?.status === 'preparing';
   const failed = state?.status === 'error' || state?.status === 'unavailable' || !!error;
   const replacementRequired = state?.status === 'replacement_required';
@@ -17,12 +17,12 @@ export function InboxSetup({ onClose, onRetry, onReplace, organizationSelected, 
     <div className="tray-scroll inbox-setup">
       <div className="inbox-setup-heading">
         <span className="inbox-setup-icon" aria-hidden="true"><LockIcon /></span>
-        <h2>{replacementRequired ? 'Reset access' : 'Set up Secure Chat'}</h2>
+        <h2>{mode === 'access' ? 'Unlock Secure Chat' : replacementRequired ? 'Reset access' : 'Set up Secure Chat'}</h2>
       </div>
       <div className="inbox-setup-status" role="status">{organizationSelected && !failed && !replacementRequired && <span className="inbox-setup-spinner" aria-hidden="true" />}<p>{message}</p></div>
       {organizationSelected && replacementRequired && <p className="inbox-setup-warning">Earlier protected messages and chat history cannot be recovered here after a reset.</p>}
       {organizationSelected && replacementRequired && <button type="button" onClick={onReplace}>Reset on this computer</button>}
-      {organizationSelected && failed && !replacementRequired && <button type="button" onClick={onRetry}>Try setup again</button>}
+      {organizationSelected && failed && !replacementRequired && <button type="button" onClick={onRetry}>{mode === 'access' ? 'Try again' : 'Try setup again'}</button>}
       {!organizationSelected && <button type="button" onClick={onClose}>Choose organisation</button>}
     </div>
   </main>;

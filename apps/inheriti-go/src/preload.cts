@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
   version: (): Promise<string> => ipcRenderer.invoke('tray:version'),
   inboxState: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-state'),
+  inboxAccess: (requestId: number): Promise<void> => ipcRenderer.invoke('tray:inbox-access', requestId),
+  inboxCancelAccess: (requestId: number): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-access', requestId),
   selectCustodianDevice: (value: 'SK_MOBILE' | 'SK_PRO'): Promise<TrayState> => ipcRenderer.invoke('tray:select-custodian-device', value),
   submitSafeKeyProPin: (value: string): Promise<TrayState> => ipcRenderer.invoke('tray:submit-safekey-pro-pin', value),
   signIn: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-in'),
