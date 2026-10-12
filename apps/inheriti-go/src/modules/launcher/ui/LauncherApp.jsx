@@ -10,6 +10,7 @@ import { ReadyPlan } from '../../quick-plan/ui/ReadyPlan.jsx';
 import { useQuickPlanFlow } from '../../quick-plan/ui/hooks/useQuickPlanFlow.js';
 import { useTraySession } from './hooks/useTraySession.js';
 import { InboxPanel } from '../../inbox/ui/InboxPanel.jsx';
+import { useInboxState } from '../../inbox/ui/useInboxState.js';
 import { clearInboxPresence, rememberInboxPresence } from '../../inbox/ui/hooks/useInboxPanel.js';
 
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
@@ -25,6 +26,7 @@ export function LauncherApp({ messages }) {
   const switchingOrganization = useRef(false);
   const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
+  const inboxIdentity = useInboxState(state?.status === 'signed-in' ? state.selectedId : undefined);
   useEffect(() => { clearInboxPresence(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
@@ -98,7 +100,7 @@ export function LauncherApp({ messages }) {
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
-    organizationSelected={!!state.selectedId} organizationId={state.selectedId} targetConversation={inboxTarget}
+    identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
     onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
