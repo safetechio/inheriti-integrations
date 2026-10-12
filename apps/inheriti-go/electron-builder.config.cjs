@@ -19,7 +19,8 @@ module.exports = {
   linux: { category: 'Utility', target: ['AppImage'], icon: resolve(__dirname, deployment === 'prod' ? 'src/tray.png' : `build/tray-${deployment}.png`), executableName: 'inheriti-go', executableArgs: ['--ozone-platform=x11'], syncDesktopName: true },
   mac: {
     category: 'public.app-category.utilities',
-    target: ['dmg'],
+    target: ['dmg', 'zip'],
+    extendInfo: { NSAppTransportSecurity: { NSAllowsLocalNetworking: true } },
     notarize: true,
     hardenedRuntime: true,
     entitlements: resolve(__dirname, 'build/entitlements.mac.plist'),

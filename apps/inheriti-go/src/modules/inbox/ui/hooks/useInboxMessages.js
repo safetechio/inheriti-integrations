@@ -38,8 +38,10 @@ async function loadMessagePages(id) {
 
 export function useInboxMessages(onClose) {
   const generation = useRef(0);
+  const session = useRef(0);
+  const activeConversation = useRef('');
   const request = useRef(0);
-  const pendingSend = useRef({ parentId: '', expiresAt: '' });
+  const pendingSends = useRef(new Map());
   const planFile = useRef(null);
   const [conversationId, setConversationId] = useState('');
   const [items, setItems] = useState([]);
@@ -54,12 +56,14 @@ export function useInboxMessages(onClose) {
   const [error, setError] = useState('');
   const [sendError, setSendError] = useState('');
   const [transfer, setTransfer] = useState(null);
-  const [pendingMessage, setPendingMessage] = useState(null);
+  const [pendingMessages, setPendingMessages] = useState([]);
   const [acceptedMessages, setAcceptedMessages] = useState([]);
 
   useEffect(() => {
     const stop = window.inheritiTray.onHidden(() => {
       generation.current++;
+      session.current++;
+      activeConversation.current = '';
       planFile.current = null;
       setRevealed(null);
       setNormalItems([]);
@@ -68,21 +72,20 @@ export function useInboxMessages(onClose) {
       setDraft('');
       setMarks([]);
       setSendError('');
-      clearPendingSend(pendingSend.current);
+      pendingSends.current.clear();
       setRevealSeconds(0);
       setTransfer(null);
-      setPendingMessage(null);
+      setPendingMessages([]);
       setAcceptedMessages([]);
       onClose();
     });
-    return () => { generation.current++; planFile.current = null; clearPendingSend(pendingSend.current); stop(); void window.inheritiTray.inboxHideText(); };
+    return () => { generation.current++; session.current++; planFile.current = null; pendingSends.current.clear(); stop(); void window.inheritiTray.inboxHideText(); };
   }, [onClose]);
 
   useEffect(() => window.inheritiTray.onInboxTransferProgress(setTransfer), []);
   useEffect(() => window.inheritiTray.onInboxParentSendProgress(progress => {
-    if (progress.parentId !== pendingSend.current.parentId) return;
-    setPendingMessage(current => current?.parentId === progress.parentId
-      ? { ...current, completed: progress.completed, total: progress.total } : current);
+    setPendingMessages(messages => messages.map(message => message.parentId === progress.parentId
+      ? { ...message, completed: progress.completed, total: progress.total } : message));
   }), []);
   useEffect(() => window.inheritiTray.onInboxFileForPlan(async (opened) => {
     const expected = planFile.current;
@@ -108,8 +111,8 @@ export function useInboxMessages(onClose) {
     planFile.current = null;
     const latest = ++request.current;
     void window.inheritiTray.inboxHideText();
+    activeConversation.current = id;
     setConversationId(id);
-    if (id !== conversationId) clearPendingSend(pendingSend.current);
     setRevealed(null);
     setNormalItems([]);
     setParentItems([]);
@@ -120,8 +123,6 @@ export function useInboxMessages(onClose) {
     setItems([]);
     setError('');
     setSendError('');
-    setPendingMessage(null);
-    if (id !== conversationId) setAcceptedMessages([]);
     setBusy('loading');
     try {
       const [protectedPage, normalPage, parentPage] = await loadMessagePages(id);
@@ -179,7 +180,8 @@ export function useInboxMessages(onClose) {
   }
 
   async function clearHistory() {
-    if (!conversationId || busy || !window.confirm('Clear your history in this conversation? You will lose access to its current messages and files. Other members keep theirs, and new messages will still arrive.')) return;
+    if (!conversationId || busy || [...pendingSends.current.values()].some(pending => pending.conversationId === conversationId && pending.inFlight) ||
+      !window.confirm('Clear your history in this conversation? You will lose access to its current messages and files. Other members keep theirs, and new messages will still arrive.')) return;
     const id = conversationId;
     const current = ++generation.current;
     planFile.current = null;
@@ -196,6 +198,9 @@ export function useInboxMessages(onClose) {
       setParentItems([]);
       setNormalUnreadCount(0);
       setParentUnreadCount(0);
+      for (const [clientId, pending] of pendingSends.current) if (pending.conversationId === id) pendingSends.current.delete(clientId);
+      setPendingMessages(messages => messages.filter(message => message.conversationId !== id));
+      setAcceptedMessages(messages => messages.filter(message => message.conversationId !== id));
       await refresh();
     } catch {
       if (generation.current === current) setError('Could not clear your history. Try again.');
@@ -204,67 +209,69 @@ export function useInboxMessages(onClose) {
     }
   }
 
-  async function send(event) {
+  async function deliver(clientId) {
+    const pending = pendingSends.current.get(clientId);
+    if (!pending || pending.inFlight) return;
+    pending.inFlight = true;
+    const { conversationId: id, session: sendSession, segments, protectedSend, protectedCount, text } = pending;
+    setPendingMessages(messages => messages.map(message => message.clientId === clientId
+      ? { ...message, status: 'sending', completed: 0 } : message));
+    try {
+      if (!pending.parentId) {
+        const preparation = await window.inheritiTray.inboxNormalPreparation(id);
+        if (session.current !== sendSession || pendingSends.current.get(clientId) !== pending) return;
+        pending.parentId = preparation.parentId;
+        setPendingMessages(messages => messages.map(message => message.clientId === clientId
+          ? { ...message, parentId: preparation.parentId } : message));
+      }
+      if (session.current !== sendSession || pendingSends.current.get(clientId) !== pending) return;
+      if (!protectedSend) await window.inheritiTray.inboxSendNormal(id, pending.parentId, text);
+      else await window.inheritiTray.inboxSendParent(id, pending.parentId, protectedSegmentsForSend(segments, pending));
+      if (session.current !== sendSession || pendingSends.current.get(clientId) !== pending) return;
+      pendingSends.current.delete(clientId);
+      setPendingMessages(messages => messages.filter(message => message.clientId !== clientId));
+      setAcceptedMessages(messages => [...messages, { conversationId: id, parentId: pending.parentId,
+        protectedSend, text: protectedSend ? '' : text, status: 'sent' }]);
+      if (activeConversation.current === id) await refresh();
+    } catch (failure) {
+      if (String(failure).toLowerCase().includes('inbox_parent_failed')) clearPendingSend(pending);
+      if (session.current === sendSession && pendingSends.current.get(clientId) === pending) setPendingMessages(messages => messages.map(message => message.clientId === clientId
+        ? { ...message, status: 'failed', error: isOrganisationKeyUnavailable(failure) ? ORGANISATION_KEY_UNAVAILABLE
+          : String(failure).includes('INBOX_UNAVAILABLE') ? 'Secure Chat storage is unavailable. Try again later.'
+            : 'Could not send. Try again.' } : message));
+    } finally { pending.inFlight = false; }
+  }
+
+  function send(event) {
     event.preventDefault();
-    if (!draft.trim() || busy) return;
+    if (!draft.trim() || busy || !conversationId) return;
     const id = conversationId;
-    const current = generation.current;
     const segments = draftSegments(draft, marks, mode);
     const protectedSend = segments.some(segment => 'protectedText' in segment);
     const protectedCount = segments.filter(segment => 'protectedText' in segment).length;
-    setBusy(protectedSend ? 'sending' : 'sending-normal');
+    const clientId = crypto.randomUUID();
+    pendingSends.current.set(clientId, { conversationId: id, session: session.current, segments,
+      protectedSend, protectedCount, text: protectedSend ? '' : draft, parentId: '', expiresAt: '', inFlight: false });
     setError('');
     setSendError('');
-    setPendingMessage({ conversationId: id, parentId: pendingSend.current.parentId, protectedSend,
-      text: protectedSend ? '' : draft, completed: 0, total: protectedCount, status: 'sending' });
-    try {
-      if (!pendingSend.current.parentId) {
-        const preparation = await window.inheritiTray.inboxNormalPreparation(id);
-        pendingSend.current.parentId = preparation.parentId;
-        setPendingMessage(current => current ? { ...current, parentId: preparation.parentId } : current);
-      }
-      if (!protectedSend) {
-        await window.inheritiTray.inboxSendNormal(id, pendingSend.current.parentId, draft);
-      } else {
-        await window.inheritiTray.inboxSendParent(id, pendingSend.current.parentId, protectedSegmentsForSend(segments, pendingSend.current));
-      }
-      if (generation.current !== current) return;
-      const sentParentId = pendingSend.current.parentId;
-      clearPendingSend(pendingSend.current);
-      setDraft('');
-      setMarks([]);
-      setAcceptedMessages(messages => [...messages, { conversationId: id, parentId: sentParentId,
-        protectedSend, text: protectedSend ? '' : draft, status: 'sent' }]);
-      setPendingMessage(null);
-      await refresh();
-    } catch (failure) {
-      if (String(failure).toLowerCase().includes('inbox_parent_failed')) clearPendingSend(pendingSend.current);
-      if (generation.current === current) setSendError(!protectedSend
-        ? 'Could not send the message. Your text is still here.' : isOrganisationKeyUnavailable(failure)
-        ? `${ORGANISATION_KEY_UNAVAILABLE} Your text is still here.` : String(failure).includes('INBOX_UNAVAILABLE')
-        ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM. Your text is still here.'
-        : 'Could not send the message. Your text is still here.');
-      if (generation.current === current) setPendingMessage(message => message ? { ...message, status: 'failed' } : null);
-    } finally {
-      if (generation.current === current) setBusy('');
-    }
+    setPendingMessages(messages => [...messages, { clientId, conversationId: id, parentId: '', protectedSend,
+      text: protectedSend ? '' : draft, completed: 0, total: protectedCount, status: 'sending' }]);
+    setDraft('');
+    setMarks([]);
+    void deliver(clientId);
   }
 
   function updateDraft(value) {
-    clearPendingSend(pendingSend.current);
     setSendError('');
-    setPendingMessage(null);
     setMarks(current => updateMarkedDraft(draft, current, value));
     setDraft(value);
   }
-  function updateMode(value) { clearPendingSend(pendingSend.current); setSendError(''); setPendingMessage(null); setMode(value); }
+  function updateMode(value) { setSendError(''); setMode(value); }
   function markSelection(start, end) {
-    clearPendingSend(pendingSend.current);
     setSendError('');
-    setPendingMessage(null);
     setMarks(current => draft.slice(start, end).trim() ? markDraft(current, start, end) : current);
   }
-  function unmarkSelection(start, end) { clearPendingSend(pendingSend.current); setSendError(''); setPendingMessage(null); setMarks(current => unmarkDraft(current, start, end)); }
+  function unmarkSelection(start, end) { setSendError(''); setMarks(current => unmarkDraft(current, start, end)); }
 
   async function sendFile() {
     if (!conversationId || busy) return;
@@ -371,6 +378,6 @@ export function useInboxMessages(onClose) {
 
   return { conversationId, items, normalItems, normalUnreadCount, parentItems, parentUnreadCount, mode, setMode: updateMode,
     draft, setDraft: updateDraft, marks, markSelection, unmarkSelection, unitReveals,
-    segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer, pendingMessage, acceptedMessages,
-    select, refresh, clearHistory, send, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning };
+    segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer, pendingMessages, acceptedMessages,
+    select, refresh, clearHistory, send, retrySend: deliver, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning };
 }

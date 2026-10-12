@@ -94,7 +94,8 @@ export class TraySession {
   setInboxStatePublisher(publish: () => void): void { this.inboxStatePublisher = publish; }
   async availableUpdate(version: string): Promise<InternalBuild | undefined> {
     if (this.status !== 'signed-in') throw new Error('sign_in_required');
-    return latestIntegrationBuild(await this.core.listInternalBuilds(), 'tray', version, `${process.platform}-${process.arch}`);
+    const platform = `${process.platform}-${process.arch}${process.platform === 'darwin' ? '-update' : ''}`;
+    return latestIntegrationBuild(await this.core.listInternalBuilds(), 'tray', version, platform);
   }
   requestUpdateDownload(id: string): ReturnType<NodeIntegrationCore['requestInternalBuildDownload']> {
     if (this.status !== 'signed-in') throw new Error('sign_in_required');

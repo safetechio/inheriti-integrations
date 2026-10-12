@@ -61,14 +61,14 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
       onRefresh={inbox.messages.select}
       onView={inbox.messages.view} onSend={inbox.messages.send}
       onSendFile={inbox.messages.sendFile} onSaveFile={inbox.messages.saveFile}
-      onCancelTransfer={inbox.messages.cancelTransfer} transfer={inbox.messages.transfer} pendingMessage={inbox.messages.pendingMessage} acceptedMessages={inbox.messages.acceptedMessages}
+      onCancelTransfer={inbox.messages.cancelTransfer} transfer={inbox.messages.transfer} pendingMessages={inbox.messages.pendingMessages} acceptedMessages={inbox.messages.acceptedMessages} onRetrySend={inbox.messages.retrySend}
       draft={inbox.messages.draft} setDraft={inbox.messages.setDraft} sendError={inbox.messages.sendError} busy={inbox.messages.busy} />}
     {screen === 'thread' && showMembers && conversation && <div className="inbox-sheet" role="dialog" aria-modal="true" aria-label="Participants">
       <button type="button" className="inbox-sheet-backdrop" aria-label="Close participants" onClick={navigation.closeMembers} />
       <div className="inbox-sheet-body"><div className="inbox-sheet-header"><h2>Participants</h2><button ref={navigation.sheetDone} type="button" className="inbox-link" onClick={navigation.closeMembers}>Done</button></div>
         <InboxConversationMembers conversation={conversation} ownMemberId={inbox.identity?.memberId}
           participants={inbox.participants} names={inbox.participants.names} avatars={inbox.participants.avatars} busy={inbox.busy} onChange={inbox.conversations.change} presenceStatus={inbox.presenceStatus} />
-        <button type="button" className="inbox-link inbox-clear-history" disabled={!!inbox.messages.busy} onClick={() => { navigation.closeMembers(); inbox.messages.clearHistory(); }}>Clear my history</button>
+        <button type="button" className="inbox-link inbox-clear-history" disabled={!!inbox.messages.busy || inbox.messages.pendingMessages.some(message => message.conversationId === inbox.messages.conversationId && message.status === 'sending')} onClick={() => { navigation.closeMembers(); inbox.messages.clearHistory(); }}>Clear my history</button>
       </div>
     </div>}
   </main>;

@@ -1,0 +1,143 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+
+const hooks = vi.hoisted(() => ({ slots: [], cursor: 0, effects: [], first: true }));
+vi.mock('react', async importOriginal => ({
+  ...(await importOriginal()),
+  useRef(initial) {
+    const index = hooks.cursor++;
+    return hooks.slots[index] ??= { current: initial };
+  },
+  useState(initial) {
+    const index = hooks.cursor++;
+    if (!(index in hooks.slots)) hooks.slots[index] = typeof initial === 'function' ? initial() : initial;
+    return [hooks.slots[index], value => { hooks.slots[index] = typeof value === 'function' ? value(hooks.slots[index]) : value; }];
+  },
+  useEffect(effect) { if (hooks.first) hooks.effects.push(effect); },
+}));
+
+import { useInboxMessages } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+function render() {
+  hooks.cursor = 0;
+  const inbox = useInboxMessages(() => {});
+  if (hooks.first) { hooks.first = false; hooks.effects.forEach(effect => effect()); }
+  return inbox;
+}
+
+async function flush() { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); }
+
+beforeEach(() => {
+  hooks.slots = [];
+  hooks.cursor = 0;
+  hooks.effects = [];
+  hooks.first = true;
+  let hidden;
+  globalThis.window = { confirm: vi.fn(() => true), inheritiTray: {
+    onHidden: callback => { hidden = callback; return () => {}; },
+    onInboxTransferProgress: () => () => {},
+    onInboxParentSendProgress: () => () => {},
+    onInboxFileForPlan: () => () => {},
+    inboxHideText: vi.fn(async () => {}),
+    inboxMessages: vi.fn(async () => ({ items: [] })),
+    inboxNormalMessages: vi.fn(async () => ({ items: [], unreadCount: 0 })),
+    inboxParents: vi.fn(async () => ({ items: [], unreadCount: 0 })),
+    inboxNormalPreparation: vi.fn(async () => ({ parentId: 'parent-1' })),
+    inboxSendNormal: vi.fn(async () => {}),
+    inboxClearHistory: vi.fn(async () => {}),
+  } };
+  window.hideInbox = () => hidden();
+});
+
+it('finishes an in-flight send after reselecting the same conversation and clears history after delivery', async () => {
+  const preparation = deferred();
+  window.inheritiTray.inboxNormalPreparation.mockReturnValue(preparation.promise);
+  let inbox = render();
+  await inbox.select('conversation');
+  inbox = render();
+  inbox.setDraft('first message');
+  inbox = render();
+  inbox.send({ preventDefault() {} });
+  inbox = render();
+  expect(inbox.draft).toBe('');
+  expect(inbox.pendingMessages).toHaveLength(1);
+  await inbox.select('conversation');
+  inbox = render();
+  expect(inbox.pendingMessages[0].status).toBe('sending');
+  await inbox.clearHistory();
+  expect(window.inheritiTray.inboxClearHistory).not.toHaveBeenCalled();
+  preparation.resolve({ parentId: 'parent-1' });
+  await flush();
+  inbox = render();
+  expect(inbox.pendingMessages).toHaveLength(0);
+  expect(inbox.acceptedMessages).toHaveLength(1);
+  expect(window.inheritiTray.inboxSendNormal).toHaveBeenCalledWith('conversation', 'parent-1', 'first message');
+  await inbox.clearHistory();
+  inbox = render();
+  expect(inbox.acceptedMessages).toHaveLength(0);
+});
+
+it('keeps a failed message across conversation switches and does not send after the window hides', async () => {
+  const preparation = deferred();
+  window.inheritiTray.inboxNormalPreparation.mockReturnValue(preparation.promise);
+  window.inheritiTray.inboxSendNormal.mockRejectedValue(new Error('offline'));
+  let inbox = render();
+  await inbox.select('first');
+  inbox = render();
+  inbox.setDraft('keep me');
+  inbox = render();
+  inbox.send({ preventDefault() {} });
+  await inbox.select('second');
+  preparation.resolve({ parentId: 'parent-1' });
+  await flush();
+  inbox = render();
+  expect(inbox.pendingMessages[0]).toMatchObject({ conversationId: 'first', status: 'failed', text: 'keep me' });
+  await inbox.select('first');
+  inbox = render();
+  expect(inbox.pendingMessages[0].status).toBe('failed');
+
+  const next = deferred();
+  window.inheritiTray.inboxNormalPreparation.mockReturnValue(next.promise);
+  inbox.setDraft('do not send after hide');
+  inbox = render();
+  inbox.send({ preventDefault() {} });
+  window.hideInbox();
+  next.resolve({ parentId: 'parent-2' });
+  await flush();
+  expect(window.inheritiTray.inboxSendNormal).toHaveBeenCalledTimes(1);
+  expect(render().pendingMessages).toHaveLength(0);
+});
+
+it('accepts a second message while the first is still sending', async () => {
+  const firstSend = deferred();
+  window.inheritiTray.inboxNormalPreparation
+    .mockResolvedValueOnce({ parentId: 'parent-1' })
+    .mockResolvedValueOnce({ parentId: 'parent-2' });
+  window.inheritiTray.inboxSendNormal.mockImplementation((id, parentId) =>
+    parentId === 'parent-1' ? firstSend.promise : Promise.resolve());
+  let inbox = render();
+  await inbox.select('conversation');
+  inbox = render();
+  inbox.setDraft('first');
+  render().send({ preventDefault() {} });
+  await flush();
+  inbox = render();
+  expect(inbox.draft).toBe('');
+  inbox.setDraft('second');
+  render().send({ preventDefault() {} });
+  await flush();
+  inbox = render();
+  expect(window.inheritiTray.inboxSendNormal).toHaveBeenCalledWith('conversation', 'parent-1', 'first');
+  expect(window.inheritiTray.inboxSendNormal).toHaveBeenCalledWith('conversation', 'parent-2', 'second');
+  expect(inbox.pendingMessages).toHaveLength(1);
+  expect(inbox.pendingMessages[0].text).toBe('first');
+  expect(inbox.draft).toBe('');
+  firstSend.resolve();
+  await flush();
+  expect(render().pendingMessages).toHaveLength(0);
+});

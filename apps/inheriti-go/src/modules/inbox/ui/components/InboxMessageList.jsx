@@ -61,7 +61,7 @@ function MessageCard({ message, name, avatarUrl, own, names, revealed, revealSec
 export function InboxMessageList({ conversationId, messages, normalMessages = [], normalUnreadCount = 0, parentMessages = [], parentUnreadCount = 0, unitReveals,
   mode = 'PROTECTED', setMode = () => {}, marks = [], onMark = () => {}, onUnmark = () => {},
   names, avatars = {}, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile,
-  onSend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, onCreatePlanFromFile, onSaveFileAsPlan, transfer, draft, setDraft, sendError, busy, pendingMessage, acceptedMessages = [] }) {
+  onSend, onRetrySend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, onCreatePlanFromFile, onSaveFileAsPlan, transfer, draft, setDraft, sendError, busy, pendingMessages = [], acceptedMessages = [] }) {
   const scroll = useRef(null);
   const previous = useRef({ conversationId: '', newestMessageId: '' });
   const parentIds = new Set(parentMessages.map(message => message.parentId));
@@ -69,9 +69,9 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
     .concat(normalMessages.filter(message => !parentIds.has(message.parentId)).map(message => ({ kind: 'NORMAL', id: message.parentId, message })))
     .concat(parentMessages.map(message => ({ kind: 'PARENT', id: message.parentId, message })))
     .sort((a, b) => new Date(a.message.createdAt) - new Date(b.message.createdAt) || a.id.localeCompare(b.id));
-  const pendingMessages = [...acceptedMessages, ...(pendingMessage ? [pendingMessage] : [])]
+  const visiblePendingMessages = [...acceptedMessages, ...pendingMessages]
     .filter(message => message.conversationId === conversationId && !ordered.some(item => item.id === message.parentId));
-  const newestMessageId = pendingMessages.at(-1)?.parentId || ordered.at(-1)?.id || '';
+  const newestMessageId = visiblePendingMessages.at(-1)?.clientId || visiblePendingMessages.at(-1)?.parentId || ordered.at(-1)?.id || '';
   useLayoutEffect(() => {
     const panel = scroll.current;
     if (!panel || !newestMessageId) {
@@ -92,15 +92,15 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
     <div className="inbox-thread-tools"><span>{unread} unread</span><button type="button" className="inbox-link" disabled={!!busy} onClick={() => onRefresh(conversationId)}>Refresh</button></div>
     <div ref={scroll} className="tray-scroll inbox-thread-scroll">
       {busy === 'loading' && <InboxSkeleton label="Loading messages…" kind="messages" />}
-      {busy !== 'loading' && !ordered.length && !pendingMessages.length && <p className="inbox-empty">No messages yet. Send the first one below.</p>}
+      {busy !== 'loading' && !ordered.length && !visiblePendingMessages.length && <p className="inbox-empty">No messages yet. Send the first one below.</p>}
       {ordered.map(({ kind, id, message }) => kind === 'PARENT'
         ? <InboxParentMessage key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId}
             units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''} openingProgress={unitReveals?.openingProgress}
             summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} />
         : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId} />
         : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
-      {pendingMessages.map(pendingMessage =>
-        <article key={pendingMessage.parentId || 'pending'} className="inbox-thread-message is-own inbox-pending-message" aria-live="polite">
+      {visiblePendingMessages.map(pendingMessage =>
+        <article key={pendingMessage.clientId || pendingMessage.parentId} className="inbox-thread-message is-own inbox-pending-message" aria-live="polite">
           <div className="inbox-thread-message-content"><small>You · {pendingMessage.status === 'failed' ? 'Failed' : pendingMessage.status === 'sent' ? 'Sent' : 'Sending'}</small>
             <div className="inbox-message-bubble"><div className="inbox-message-heading"><span className="inbox-parent-pill">{pendingMessage.protectedSend ? 'Protected' : 'Normal'}</span><small className="inbox-pending-status">{pendingMessage.status === 'sending' && <ClockIcon />}{pendingMessage.status === 'failed' ? 'Not sent' : pendingMessage.status === 'sent' ? 'Syncing…' : 'Sending…'}</small></div>
               <p className="inbox-revealed">{pendingMessage.protectedSend ? 'Protected message' : pendingMessage.text}</p>
@@ -111,7 +111,7 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
                     ? `Sealing protected text ${pendingMessage.completed + 1}/${pendingMessage.total}` : 'Publishing protected message…'}</small>
                 <span className="inbox-progress-track is-indeterminate" aria-hidden="true"><span /></span>
               </div>}
-              {pendingMessage.status === 'failed' && <button type="button" className="button-secondary" disabled={!!busy} onClick={onSend}>Retry</button>}
+              {pendingMessage.status === 'failed' && <><small role="alert">{pendingMessage.error}</small><button type="button" className="button-secondary" disabled={!!busy} onClick={() => onRetrySend(pendingMessage.clientId)}>Retry</button></>}
             </div></div>
         </article>)}
     </div>

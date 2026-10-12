@@ -1,5 +1,7 @@
-import { app, dialog, globalShortcut, Notification, powerMonitor } from 'electron';
+import { app, autoUpdater, dialog, globalShortcut, Notification, powerMonitor, shell } from 'electron';
 import { basename, join } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { currentWindow, prepareToQuit, showLauncher } from './launcher-window.js';
 import type { TraySession } from './state.js';
 import type { TrayInboxSignal } from '../../inbox/main/inbox.js';
@@ -7,7 +9,7 @@ import { trayMessages as messages } from '../../../messages.js';
 import { registerTrayEvents, setTrayUnread } from './tray.js';
 import { registerTrayIpc } from './ipc.js';
 import { watchLinuxLock } from './linux-lock.js';
-import { downloadGoUpdate } from './update.js';
+import { downloadGoUpdate, installMacGoUpdate, replaceGoAppImage, runWindowsGoInstaller } from './update.js';
 import { ensureStartAtLogin, isBackgroundLaunch } from './start-at-login.js';
 
 export function registerAppEvents(session: TraySession, appUrl: string | undefined, deployment: string): void {
@@ -126,18 +128,44 @@ async function checkForUpdates(session: TraySession): Promise<void> {
       await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: `Version ${app.getVersion()} is up to date.` });
       return;
     }
-    const extension = ({ linux: '.AppImage', darwin: '.dmg', win32: '.exe' } as Record<string, string>)[process.platform];
+    const extension = ({ linux: '.AppImage', darwin: '.zip', win32: '.exe' } as Record<string, string>)[process.platform];
     if (!extension || basename(build.fileName) !== build.fileName || !build.fileName.endsWith(extension)) throw new Error('Invalid update artifact.');
     const answer = await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update',
-      message: `Version ${build.version} is available.`, detail: 'Download the installer now?', buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1 });
+      message: `Version ${build.version} is available.`, detail: 'Install the update now?',
+      buttons: ['Install', 'Later'], defaultId: 0, cancelId: 1 });
     if (answer.response !== 0) return;
-    const selected = await dialog.showSaveDialog({ title: 'Download Inheriti Go', defaultPath: join(app.getPath('downloads'), build.fileName), buttonLabel: 'Download' });
-    if (selected.canceled || !selected.filePath) return;
-    const { url } = await session.requestUpdateDownload(build.id);
-    await downloadGoUpdate(build, url, selected.filePath);
-    await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update', message: `Version ${build.version} downloaded.`, detail: selected.filePath });
+    if (process.platform === 'darwin') {
+      const { url } = await session.requestUpdateDownload(build.id);
+      await installMacGoUpdate(build, url, autoUpdater, () => { session.clearRevealed(); prepareToQuit(); });
+      return;
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'inheriti-go-update-'));
+    const destination = join(directory, build.fileName);
+    try {
+      const { url } = await session.requestUpdateDownload(build.id);
+      await downloadGoUpdate(build, url, destination);
+      if (process.platform === 'linux') {
+        const current = process.env.APPIMAGE;
+        if (current && await replaceGoAppImage(destination, current)) {
+          await rm(directory, { recursive: true, force: true });
+          app.relaunch({ execPath: current, args: [] });
+          app.quit();
+          return;
+        }
+        shell.showItemInFolder(destination);
+        await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update', message: 'Open the downloaded AppImage to install the update.' });
+        return;
+      }
+      if (process.platform === 'win32') {
+        await runWindowsGoInstaller(destination, () => app.quit());
+        return;
+      }
+    } catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    }
   } catch {
-    await dialog.showMessageBox({ type: 'error', title: 'Inheriti Go updates', message: 'The update could not be checked or downloaded. Please try again.' });
+    await dialog.showMessageBox({ type: 'error', title: 'Inheriti Go updates', message: 'The update could not be installed. Please try again.' });
   }
 }
 

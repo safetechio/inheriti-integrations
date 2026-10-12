@@ -32,25 +32,36 @@ it('does not offer the sender a one-time reveal and shows real recipient status'
 });
 
 it('shows actual protected send progress and a pending read without plaintext', () => {
-  const preparing = render({ pendingMessage: { conversationId: 'conversation', parentId: 'parent',
-    protectedSend: true, completed: 0, total: 3, status: 'sending', text: '' } });
+  const preparing = render({ pendingMessages: [{ conversationId: 'conversation', clientId: 'first', parentId: 'parent',
+    protectedSend: true, completed: 0, total: 3, status: 'sending', text: '' }] });
   expect(preparing).toContain('Sealing 3 protected parts…');
   expect(preparing).not.toContain('1/3');
   expect(preparing).toContain('<circle cx="10" cy="10" r="7"></circle>');
   expect(preparing).not.toContain('Delivered');
-  const sending = render({ busy: 'sending', draft: 'protected draft', pendingMessage: {
+  const sending = render({ draft: 'next draft', pendingMessages: [{ clientId: 'first',
     conversationId: 'conversation', parentId: 'parent', protectedSend: true, completed: 1, total: 3, status: 'sending', text: '',
-  } });
+  }] });
   expect(sending).toContain('Sealing protected text 2/3');
   expect(sending).toContain('class="inbox-pending-footer" role="status"');
   expect(sending).toMatch(/inbox-pending-footer[\s\S]*Sealing protected text 2\/3[\s\S]*inbox-progress-track/);
-  expect(sending.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0]).not.toContain('protected draft');
+  expect(sending.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0]).not.toContain('next draft');
   expect(sending).toContain('You · Sending');
+  expect(sending).toContain('>next draft</textarea>');
+  expect(sending).not.toMatch(/<textarea[^>]*disabled/);
 
-  const failed = render({ draft: 'editable', pendingMessage: { conversationId: 'conversation', parentId: 'parent',
-    protectedSend: false, completed: 0, total: 0, status: 'failed', text: 'editable' } });
+  const failed = render({ draft: 'new message', pendingMessages: [{ clientId: 'failed', conversationId: 'conversation', parentId: 'parent',
+    protectedSend: false, completed: 0, total: 0, status: 'failed', text: 'previous message', error: 'Could not send. Try again.' }] });
   expect(failed).toContain('Not sent');
   expect(failed).toContain('Retry');
+  expect(failed).toContain('previous message');
+  expect(failed).toContain('>new message</textarea>');
+
+  const parallel = render({ pendingMessages: [
+    { clientId: 'first', conversationId: 'conversation', parentId: 'one', protectedSend: true, completed: 1, total: 3, status: 'sending', text: '' },
+    { clientId: 'second', conversationId: 'conversation', parentId: 'two', protectedSend: false, completed: 0, total: 0, status: 'sending', text: 'Another message' },
+  ] });
+  expect(parallel.match(/You · Sending/g)).toHaveLength(2);
+  expect(parallel).not.toContain('secret value');
 
   const sent = { conversationId: 'conversation', parentId: 'parent', protectedSend: false,
     completed: 0, total: 0, status: 'sent', text: 'accepted text' };

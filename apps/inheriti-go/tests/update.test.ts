@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { InternalBuild } from '@safetech/inheriti-elements-core/node';
-import { downloadGoUpdate } from '../src/modules/launcher/main/update.js';
+import { downloadGoUpdate, installMacGoUpdate, replaceGoAppImage, runWindowsGoInstaller } from '../src/modules/launcher/main/update.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -13,7 +14,7 @@ it('downloads a verified update without overwriting an existing file', async () 
   const directory = await mkdtemp(join(tmpdir(), 'go-update-'));
   const bytes = new Uint8Array([1, 2, 3]);
   const build = { size: bytes.length, checksum: createHash('sha256').update(bytes).digest('hex') } as InternalBuild;
-  globalThis.fetch = vi.fn().mockResolvedValue(new Response(bytes));
+  globalThis.fetch = vi.fn().mockImplementation(() => Promise.resolve({ ...new Response(bytes), ok: true, body: new Response(bytes).body, url: 'https://updates.test/go' }));
   try {
     const target = join(directory, 'go.AppImage');
     await downloadGoUpdate(build, 'https://updates.test/go', target);
@@ -27,9 +28,61 @@ it('downloads a verified update without overwriting an existing file', async () 
 it('deletes a corrupt partial download', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'go-update-'));
   const build = { size: 3, checksum: '0'.repeat(64) } as InternalBuild;
-  globalThis.fetch = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
+  globalThis.fetch = vi.fn().mockImplementation(() => Promise.resolve({ ok: true, body: new Response(new Uint8Array([1, 2, 3])).body, url: 'https://updates.test/go' }));
   try {
     await expect(downloadGoUpdate(build, 'https://updates.test/go', join(directory, 'go.AppImage'))).rejects.toThrow('integrity');
     expect(await readdir(directory)).toEqual([]);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('replaces the active AppImage and retains the previous executable', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'go-update-'));
+  try {
+    const current = join(directory, 'go.AppImage');
+    const downloaded = join(directory, 'new.AppImage');
+    await writeFile(current, 'old');
+    await writeFile(downloaded, 'new');
+    expect(await replaceGoAppImage(downloaded, current)).toBe(true);
+    expect(await readFile(current, 'utf8')).toBe('new');
+    const staging = (await readdir(directory)).find((name) => name.startsWith('.inheriti-go-update-'))!;
+    expect(await readFile(join(directory, staging, 'previous.AppImage'), 'utf8')).toBe('old');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('starts the Windows installer silently and quits after spawn', async () => {
+  const quit = vi.fn();
+  const unref = vi.fn();
+  const start = vi.fn().mockImplementation(() => ({ once(event: string, callback: () => void) { if (event === 'spawn') queueMicrotask(callback); return this; }, unref }));
+  await runWindowsGoInstaller('installer.exe', quit, start);
+  expect(start).toHaveBeenCalledWith('installer.exe', ['/S'], { detached: true, stdio: 'ignore', windowsHide: true });
+  expect(unref).toHaveBeenCalledOnce();
+  expect(quit).toHaveBeenCalledOnce();
+});
+
+it('passes a verified ZIP feed to the macOS updater and installs after download', async () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const checksum = createHash('sha256').update(bytes).digest('hex');
+  const build = { fileName: 'go.zip', size: bytes.length, checksum } as InternalBuild;
+  const signedUrl = 'https://updates.test/go.zip';
+  const localFetch = globalThis.fetch;
+  globalThis.fetch = vi.fn().mockImplementation(() => Promise.resolve({ ok: true, body: new Response(bytes).body, url: signedUrl }));
+  const order: string[] = [];
+  const updater = Object.assign(new EventEmitter(), {
+    setFeedURL: vi.fn(), checkForUpdates: vi.fn(), quitAndInstall: vi.fn(() => { order.push('install'); }),
+  });
+  updater.checkForUpdates.mockImplementation(() => {
+    void localFetch(updater.setFeedURL.mock.calls[0]![0].url).then(response => response.json()).then(async feed => {
+      expect(feed.url).toMatch(/^http:\/\/127\.0\.0\.1:/u);
+      expect(new Uint8Array(await (await localFetch(feed.url)).arrayBuffer())).toEqual(bytes);
+      updater.emit('update-downloaded');
+    }).catch(error => updater.emit('error', error));
+  });
+  await installMacGoUpdate(build, signedUrl, updater as never, () => { order.push('prepare'); });
+  expect(order).toEqual(['prepare', 'install']);
+  expect(updater.quitAndInstall).toHaveBeenCalledOnce();
+  await expect(installMacGoUpdate({ ...build, fileName: 'go.dmg' }, signedUrl, updater as never, () => {}))
+    .rejects.toThrow('Invalid macOS update');
+  await expect(installMacGoUpdate({ ...build, checksum: '0'.repeat(64) }, signedUrl, updater as never, () => {}))
+    .rejects.toThrow('integrity');
+  expect(updater.quitAndInstall).toHaveBeenCalledOnce();
 });
