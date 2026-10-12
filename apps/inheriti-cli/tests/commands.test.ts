@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { login, loginWithDevice } from '../src/commands/login.js';
 import { logout } from '../src/commands/logout.js';
 import { messageFor, parsePlanHints, run } from '../src/main.js';
+import * as session from '../src/session.js';
 import { OperatorNotSignedIn, PlanIdRequired, abortPlanAccess, listPlanLogs, listPlans, resolvePlanId, showPlan } from '../src/commands/plans.js';
 import { completeWords, printCompletionScript } from '../src/commands/completion.js';
 import type { Terminal } from '../src/output.js';
@@ -93,8 +94,16 @@ describe('help', () => {
     expect(help).toContain('--fd');
     expect(help).toContain('--temp-file');
     expect(help).toContain('--socket');
+    expect(help).toContain('[--output suppress|inherit]');
     expect(help).not.toContain('--raw');
     expect(help).not.toContain('--stdout');
+  });
+
+  it('lists plan abort and version in the main usage', async () => {
+    const terminal = recordingTerminal(false);
+    await expect(run(['--help'], {}, terminal)).resolves.toBe(0);
+    expect(terminal.lines.join('\n')).toContain('plans abort [id]');
+    expect(terminal.lines.join('\n')).toContain('version');
   });
 
   it('documents the machine-oriented secrets commands', async () => {
@@ -603,6 +612,24 @@ describe('completion', () => {
 });
 
 describe('choosing a plan', () => {
+  it('treats show output flags as options when the plan id is omitted', async () => {
+    const mockedContext = vi.spyOn(session, 'createCliContext').mockReturnValue(contextWith());
+    const terminal = recordingTerminal(false);
+    try {
+      await expect(run(['plans', 'show', '--json'], {
+        XDG_CONFIG_HOME: temporaryState(),
+        INHERITI_ELEMENTS_API_URL: 'http://127.0.0.1:3000',
+        INHERITI_ELEMENTS_APPLICATION_ID: 'test-app',
+        INHERITI_ELEMENTS_ISSUER: 'http://127.0.0.1:8180',
+        INHERITI_ELEMENTS_CLIENT_ID: 'test-client',
+        INHERITI_ELEMENTS_ENVIRONMENT: 'TEST',
+      }, terminal)).resolves.toBe(1);
+      expect(terminal.errors.join('\n')).toContain('Pass a plan id');
+    } finally {
+      mockedContext.mockRestore();
+    }
+  });
+
   it('explains an unavailable API instead of showing TypeError', () => {
     const error = new TypeError('fetch failed', { cause: Object.assign(new Error(), { code: 'ECONNREFUSED' }) });
     expect(messageFor(error, true)).toBe('Cannot connect to the Inheriti API.');

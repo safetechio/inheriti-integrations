@@ -61,6 +61,7 @@ inheriti <command>
   plans create [--title NAME] [--description TEXT] [--asset TYPE ...]
                      Prefill the desktop assistant with plan metadata and likely asset types
   plans show [id]    Show one plan, its assets and its participants
+  plans abort [id]   Abandon the current access request for a plan
   plans logs [id] [--limit n] [--offset n] [--json|--table]
                      Show the plan activity log
   plans reveal [id] [--field asset.field ...]
@@ -68,7 +69,7 @@ inheriti <command>
                      Whether approval is needed is read from the plan.
   plans download [id] --asset code-or-id --output path
                      Save one authorized media asset to a new restricted file.
-  plans use [id] [--stdin asset.field] [--env NAME=asset.field ...] [--fd N=asset.field ...] [--temp-file NAME=asset.field ...] [--socket NAME=asset.field ...] [--ttl 30s] -- command [args]
+  plans use [id] [--stdin asset.field] [--env NAME=asset.field ...] [--fd N=asset.field ...] [--temp-file NAME=asset.field ...] [--socket NAME=asset.field ...] [--ttl 30s] [--output suppress|inherit] -- command [args]
                      Run an exact executable with destination-bound secrets. No shell.
   secrets exec [id] [--env NAME=asset.field ...] [--output inherit] -- command [args]
                      Run a process with reveal-authorized environment variables.
@@ -78,6 +79,7 @@ inheriti <command>
                      Enable shell autocomplete (Yes is the default)
   completion <shell> Print the tab-completion script for bash, zsh or fish
   update [--install] Check for a newer CLI build; install after confirmation
+  version            Print the CLI version
   help [command]    Show detailed usage without signing in
 
 An id or a --field left out is asked for in a terminal, and refused in a pipe.
@@ -94,14 +96,14 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     login: `Usage: inheriti login [--device]\n\nSign in using the system browser. --device uses a device code for headless environments and can continue through the plan's approval process.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organizations or select one for this account.`,
-    plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|abort>\n\nCreate a plan or inspect plan metadata and activity. Run inheriti help plans <command> for details.`,
+    plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or inspect plan metadata and activity. Run inheriti help plans <command> for details.`,
     'plans create': `Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n\nPrefill editable, non-secret plan metadata and likely asset types in the desktop window. Repeat --asset for up to ${localPlanAssetLimit} catalog types. Types: ${quickPlanAssetCatalog.map(({ id }) => id).join(', ')}. Enter secret values only in the window. Requires an interactive terminal, a selected Organisation, and sign-in. First use offers a model and runtime download of about 1.1 GB.`,
     'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table]\n\nList non-sensitive plan metadata. --json never includes reconstructed secret values.`,
     'plans show': `Usage: inheriti plans show [PLAN_ID] [--json|--table]\n\nShow one plan's non-sensitive assets, fields, participants, governance, and reveal policy. An interactive terminal can prompt for PLAN_ID.`,
     'plans logs': `Usage: inheriti plans logs [PLAN_ID] [--limit N] [--offset N] [--json|--table]\n\nShow authorized plan activity. The table summarizes events; --json includes all safe log fields and total count. An interactive terminal can prompt for PLAN_ID.`,
     'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...] [--clipboard-ttl DURATION]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. Values are never printed. In a terminal, omit --field to select fields with Space or choose ALL. Each field copy is authorized and audited independently. --clipboard-ttl waits in the foreground and conditionally clears unchanged clipboard content. Cleanup is best effort; clipboard history, synchronization, shutdown and SIGKILL remain outside its control.`,
     'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.`,
-    'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h, up to 2147483647ms. --ttl bounds the whole command; authorization expiry may end delivery sooner. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed on handled completion; unlinking is not secure deletion. A socket trusts the local account, not the identity of its first peer. Sockets and descriptors are unsupported on Windows. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. --output inherit explicitly exposes child logs, which may contain credentials. Approve the exact command before an agent runs it.`,
+    'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] [--output suppress|inherit] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h, up to 2147483647ms. --ttl bounds the whole command; authorization expiry may end delivery sooner. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed on handled completion; unlinking is not secure deletion. A socket trusts the local account, not the identity of its first peer. Sockets and descriptors are unsupported on Windows. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. --output inherit explicitly exposes child logs, which may contain credentials. Approve the exact command before an agent runs it.`,
     secrets: `Usage: inheriti secrets <exec|resolve>\n\nMachine-oriented secret delivery built on the same reveal and use flows as plans commands.`,
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's logs visible and may expose credentials.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD --allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
@@ -303,19 +305,22 @@ async function plans(
     return await listPlanLogs(context, terminal, await resolvePlanId(context, terminal, hasPlanId ? planId : undefined), parsed);
   }
   if (subcommand === 'show') {
-    const format = parseFormat(options);
+    const hasPlanId = planId !== undefined && !planId.startsWith('--');
+    const format = parseFormat(hasPlanId ? options : rest);
     if ('error' in format) {
       terminal.writeError(format.error);
       return 1;
     }
-    return await showPlan(context, terminal, await resolvePlanId(context, terminal, planId), format);
+    return await showPlan(context, terminal, await resolvePlanId(context, terminal, hasPlanId ? planId : undefined), format);
   }
   if (subcommand === 'abort') {
-    if (options.length > 0) {
-      terminal.writeError(`Unknown or incomplete abort option: ${options[0]}`);
+    const hasPlanId = planId !== undefined && !planId.startsWith('--');
+    const abortOptions = hasPlanId ? options : rest;
+    if (abortOptions.length > 0) {
+      terminal.writeError(`Unknown or incomplete abort option: ${abortOptions[0]}`);
       return 1;
     }
-    return await abortPlanAccess(context, terminal, await resolvePlanId(context, terminal, planId));
+    return await abortPlanAccess(context, terminal, await resolvePlanId(context, terminal, hasPlanId ? planId : undefined));
   }
   if (subcommand === 'reveal') {
     const hasPlanId = planId !== undefined && !planId.startsWith('--');

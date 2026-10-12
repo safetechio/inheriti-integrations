@@ -42,6 +42,7 @@ await build({
   logLevel: 'info',
   plugins: [optionalToastPlugin, optionalDevtoolsPlugin],
   external: ['@napi-rs/keyring'],
+  alias: { react: resolve(root, 'node_modules/react') },
   define: buildDefines(),
   // Some transitive dependencies are still CommonJS, and esbuild's ESM output has no `require` to
   // hand them — without this shim the bundle dies on its first `require('fs')`.
