@@ -1,0 +1,32 @@
+[
+  {
+    "id": "b7e2a1c4-1111-4a2b-9c3d-000000000001",
+    "name": "Chatwoot Support",
+    "username": "support@eduorg.example.com",
+    "secret": "Chatw00t!Supp0rt",
+    "uri": "https://support-dev.inheriti.com",
+    "description": "Shared support inbox login",
+    "folder_parent": "Customer Support",
+    "tags": ["support", "shared"]
+  },
+  {
+    "id": "b7e2a1c4-1111-4a2b-9c3d-000000000002",
+    "name": "Stripe Dashboard",
+    "username": "finance@eduorg.example.com",
+    "secret": "Str1pe#Fin4nce",
+    "uri": "https://dashboard.stripe.com",
+    "description": "Billing and payouts",
+    "folder_parent": "Finance",
+    "tags": ["billing"]
+  },
+  {
+    "id": "b7e2a1c4-1111-4a2b-9c3d-000000000003",
+    "name": "Mailgun",
+    "username": "postmaster@eduorg.example.com",
+    "secret": "M41lgun_Tr4nsact!",
+    "uri": "https://app.mailgun.com",
+    "description": "Transactional email provider",
+    "folder_parent": "Infra",
+    "tags": ["email", "infra"]
+  }
+]

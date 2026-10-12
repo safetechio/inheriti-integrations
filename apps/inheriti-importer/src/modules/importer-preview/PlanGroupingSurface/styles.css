@@ -1,0 +1,113 @@
+.plan-grouping-columns {
+  align-items: flex-start;
+}
+
+.plan-grouping-surface {
+  gap: var(--importer-content-gap);
+}
+
+.plan-grouping-unassigned,
+.plan-grouping-plan,
+.plan-grouping-details {
+  border-radius: var(--importer-radius-card) !important;
+}
+
+.plan-grouping-unassigned {
+  border-color: var(--primary-30) !important;
+}
+
+.plan-grouping-details {
+  max-width: 320px;
+}
+
+.plan-asset-row {
+  padding: 10px var(--importer-section-gap);
+  border: var(--importer-border-width) solid var(--gray-10);
+  border-radius: 10px;
+  background: var(--gray-5);
+  cursor: grab;
+}
+
+.plan-asset-row.is-dragged {
+  opacity: 0.55;
+  border-color: var(--primary-50);
+  background: var(--primary-5);
+}
+
+.plan-drop-target {
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.plan-drop-target.over-valid {
+  border-color: var(--success) !important;
+  background-color: var(--success-5);
+}
+
+.plan-drop-target.over-invalid {
+  border-color: var(--warning) !important;
+  background-color: var(--warning-5);
+}
+
+.plan-card-header {
+  flex-wrap: wrap;
+}
+
+.plan-card-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.plan-drop-zone {
+  padding: var(--importer-section-gap);
+  border: var(--importer-border-width) dashed var(--gray-30);
+  border-radius: 10px;
+  background: var(--gray-5);
+  text-align: center;
+}
+
+.over-valid .plan-drop-zone {
+  border-color: var(--success);
+  background: var(--success-10);
+  color: var(--success-120);
+}
+
+.over-invalid .plan-drop-zone {
+  border-color: var(--warning);
+  background: var(--warning-10);
+  color: var(--warning-200);
+}
+
+.plan-drop-target.is-selected {
+  border-color: var(--primary) !important;
+  box-shadow: var(--importer-shadow-focus);
+}
+
+@media (max-width: 1050px) {
+  .plan-grouping-details {
+    flex-basis: 100% !important;
+    max-width: none;
+  }
+
+  .plan-grouping-plans {
+    flex-basis: calc(100% - 300px) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .plan-grouping-columns {
+    flex-direction: column;
+  }
+
+  .plan-grouping-unassigned,
+  .plan-grouping-plans,
+  .plan-grouping-details {
+    width: 100%;
+    flex-basis: auto !important;
+    max-width: none;
+  }
+}

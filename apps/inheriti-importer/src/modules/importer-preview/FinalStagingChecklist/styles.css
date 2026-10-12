@@ -1,0 +1,76 @@
+.staging-checklist-surface {
+  gap: 16px;
+}
+.staging-checklist-row {
+  padding: var(--importer-row-padding-block) var(--importer-card-padding);
+  border: var(--importer-border-width) solid var(--gray-10);
+  border-radius: var(--importer-radius-input);
+  background: var(--importer-color-surface);
+}
+.staging-checklist-row.needs-fix {
+  border-color: var(--warning-30);
+  background: var(--warning-5);
+}
+.staging-checklist-row.has-error {
+  border-color: var(--danger-30);
+  background: var(--danger-5);
+}
+.staging-check-mark {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gray-30);
+  border-radius: 999px;
+  background: var(--gray-5);
+}
+.staging-checklist-row.is-complete .staging-check-mark {
+  border-color: var(--success-30);
+  background: var(--success-10);
+}
+.staging-checklist-row.needs-fix .staging-check-mark {
+  border-color: var(--warning-30);
+  background: var(--warning-10);
+}
+.staging-checklist-row.has-error .staging-check-mark {
+  border-color: var(--danger-30);
+  background: var(--danger-10);
+}
+.staging-checklist-row > div:nth-child(2) {
+  flex: 1;
+  min-width: 180px;
+}
+.staging-checklist-list {
+  gap: 10px !important;
+}
+.staging-success {
+  box-sizing: border-box;
+  min-height: 420px;
+  padding: 48px 32px;
+  text-align: center;
+}
+.staging-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+}
+.staging-success > div:nth-child(2) {
+  max-width: 560px;
+}
+.staging-success-link {
+  min-height: var(--importer-control-height-md);
+  padding: 0 var(--importer-action-padding-inline);
+}
+@media (max-width: 620px) {
+  .staging-checklist-row {
+    align-items: flex-start;
+  }
+  .staging-checklist-row > div:nth-child(2) {
+    min-width: 0;
+  }
+  .staging-success {
+    min-height: 360px;
+    padding: 32px 20px;
+  }
+}

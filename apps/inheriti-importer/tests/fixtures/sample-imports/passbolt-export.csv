@@ -1,0 +1,4 @@
+Name,Username,Password,URI,Description,Folder,Tags
+Google Workspace Admin,admin@eduorg.example.com,GW5!Admin_2026,https://admin.google.com,Domain admin console,IT,"admin,google"
+Datadog,oncall@eduorg.example.com,D4tad0g#Monitor,https://app.datadoghq.com,Monitoring and alerting,Infra,monitoring
+Figma Team,design@eduorg.example.com,F1gma_Team!9x,https://figma.com,Shared design team login,Design,design

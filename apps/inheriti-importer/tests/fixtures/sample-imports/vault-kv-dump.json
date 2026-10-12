@@ -1,0 +1,22 @@
+{
+  "request_id": "8f2c1a3e-0000-4b7d-9c1a-000000000001",
+  "lease_id": "",
+  "lease_duration": 0,
+  "renewable": false,
+  "data": {
+    "data": {
+      "api_key": "vlt_live_3f8a9c2b1e0d7f6a",
+      "api_secret": "vlt_secret_9b2e5c8a1d4f7g3h",
+      "webhook_signing_key": "whsec_vault_5c9a2e8b1d3f6h"
+    },
+    "metadata": {
+      "created_time": "2026-08-14T10:22:31.000Z",
+      "custom_metadata": null,
+      "deletion_time": "",
+      "destroyed": false,
+      "version": 3
+    }
+  },
+  "path": "secret/data/eduorg/payments-service",
+  "warnings": null
+}

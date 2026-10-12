@@ -1,0 +1,25 @@
+.source-import-list {
+  width: 100%;
+  gap: 12px !important;
+}
+.source-file-card {
+  border-radius: var(--importer-radius-input) !important;
+  padding: var(--importer-row-padding-block) var(--importer-card-padding) !important;
+  background: var(--importer-color-surface);
+  border-color: var(--line) !important;
+  box-shadow: none;
+}
+.source-unlock-panel {
+  padding: 12px;
+  border: 1px solid var(--info-30);
+  border-radius: 10px;
+  background: var(--info-10);
+}
+@media (max-width: 640px) {
+  .source-file-card {
+    padding: 12px !important;
+  }
+  .source-file-card button {
+    margin-left: 30px;
+  }
+}

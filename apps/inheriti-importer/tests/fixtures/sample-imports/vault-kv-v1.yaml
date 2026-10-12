@@ -1,0 +1,9 @@
+request_id: 8f2c1a3e-0000-4b7d-9c1a-000000000004
+lease_id: ""
+lease_duration: 0
+renewable: false
+path: secret/eduorg/notification-service
+data:
+  username: notification-worker
+  password: SyntheticVaultPassword_8d2f
+  endpoint: https://notifications.example.test

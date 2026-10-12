@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+release/
+*.tsbuildinfo
+.env*
+!.env.dev
+!.env.stg
+!.env.prod
+!tests/fixtures/sample-imports/.env.production
