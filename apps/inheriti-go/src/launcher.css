@@ -290,6 +290,7 @@ body { padding: 0; background: #fff; }
 .inbox-new-content .inbox-member-row input { width: 18px; height: 18px; }
 .inbox-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .inbox-picked button { min-height: 28px; padding: 3px 10px 3px 4px; display: flex; align-items: center; gap: 6px; border: 1px solid #dbe4ff; border-radius: 999px; color: #1642ba; background: #edf2ff; font-size: 12px; }
+.inbox-picked button:hover:not(:disabled) { border-color: #b7c7ff; background: #dbe4ff; }
 .inbox-picked .inbox-avatar { width: 18px; height: 18px; color: #fff; background: #2962ff; font-size: 9px; }
 .inbox-new-footer { flex: none; display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eaecf0; }
 .inbox-new-footer button:first-child { flex: 1; }.inbox-new-footer button:last-child { flex: 2; }
