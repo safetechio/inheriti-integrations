@@ -28,6 +28,14 @@
 .edit-selected-plan { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid #e3e6ef; border-radius: 10px; background: #fff; }
 .edit-selected-plan small { color: #6b738a; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .edit-selected-plan strong { overflow: hidden; color: #1c2333; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.edit-recovery { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; padding: 16px; border: 1px solid #dbe4ff; border-radius: 12px; background: #f7f9ff; }
+.edit-recovery-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: #2f55f0; background: #e9eeff; }
+.edit-recovery-icon svg { width: 20px; height: 20px; }
+.edit-recovery h2 { margin: 1px 0 6px; color: #1c2333; font-size: 16px; line-height: 1.35; }
+.edit-recovery p { margin: 0; color: #3d4660; font-size: 13px; line-height: 1.5; }
+.edit-recovery .edit-recovery-hint { margin-top: 8px; color: #5d667c; }
+.edit-recovery-actions { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 4px; }
+.edit-recovery-actions .button-danger { justify-self: start; min-height: 36px; padding: 6px 10px; font-size: 13px; }
 .edit-picker-loading { margin: 0; padding: 16px; border: 1px solid #e3e6ef; border-radius: 10px; color: #5d667c; background: #fff; font-size: 13px; }
 .edit-plan-search-field { display: flex; align-items: center; gap: 8px; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid #d5d9e4; border-radius: 10px; color: #8a93a8; background: #fff; }
 .edit-plan-search-field:focus-within { border-color: #2f55f0; box-shadow: 0 0 0 3px #e0e8ff; }

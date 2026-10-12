@@ -170,7 +170,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
       if (generation.current !== currentGeneration) return;
       setState(next);
       if (next.creation?.status === 'ready') {
-        setReadySummary({ title: form.title, assetName: form.assetName, assetType: form.assetType, audience: form.audience, teamId: form.teamId });
+        setReadySummary({ title: form.title, assetName: form.assetName, assetType: form.assetType, audience: form.audience, teamId: form.audience === 'team' ? form.teamId : '' });
         setDraft(null);
         setForm(blankForm(state?.teams));
         setStep('ready');

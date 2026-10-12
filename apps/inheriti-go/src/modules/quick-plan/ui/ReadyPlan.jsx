@@ -5,7 +5,7 @@ import { ExternalLinkIcon } from '../../_shared/ui/components/Icons.jsx';
 export function ReadyPlan({ messages, state, readySummary, returnToInbox, onNew, onOpenApp, onHome }) {
   const summary = readySummary || {};
   const teamId = summary.teamId || state.creation?.teamId;
-  const audience = teamId
+  const audience = summary.audience !== 'private' && teamId
     ? state.teams.find(({ id }) => id === teamId)?.name || messages.teamAudience
     : messages.privateAudience;
 

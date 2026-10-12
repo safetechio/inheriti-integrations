@@ -64,10 +64,18 @@ export function PlanEditPanel({ messages, state, flow, onOpenApp, onSignIn }) {
       {!picking && selectedPlan && <div className="edit-selected-plan"><small>Selected plan</small><strong>{selectedPlan.name}</strong></div>}
       {!picking && <PlanEditProgress messages={messages} edit={edit} busy={flow.busy} onRetry={() => void flow.retryAccess()} />}
       {picking && noEligiblePlans && <EmptyState title={messages.noEditablePlansTitle} description={messages.noEditablePlans} actionLabel={messages.openApp} onAction={onOpenApp} />}
-      {edit.message && !(edit.status === 'error' && edit.phase) && <p role="status">{edit.message}</p>}
-      {edit.status === 'recovery-required' && edit.canRecover && <button type="button" disabled={flow.busy} onClick={() => void flow.recover()}>{messages.recoverEdit}</button>}
-      {edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={onSignIn}>{messages.signIn}</button>}
-      {!edit.needsSignIn && (edit.status === 'error' || edit.status === 'recovery-required') && edit.canDiscard && !flow.confirmation && <button className="button-danger" type="button" disabled={flow.busy} onClick={() => void flow.discard()}>{messages.discardEdit}</button>}
+      {edit.status === 'recovery-required' && <div className="edit-recovery" aria-labelledby="edit-recovery-title">
+        <div className="edit-recovery-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.4 6.2" /><path d="M20 5v6h-6" /><path d="M9 12l2 2 4-4" /></svg></div>
+        <div><h2 id="edit-recovery-title">Finish this update</h2><p role="status">{edit.message || messages.editNeedsRecovery}</p><p className="edit-recovery-hint">If recovery still fails, check this plan in Inheriti® Business before discarding the saved edit.</p></div>
+        <div className="edit-recovery-actions">
+          {edit.canRecover && <button type="button" disabled={flow.busy} onClick={() => void flow.recover()}>{messages.recoverEdit}</button>}
+          {edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={onSignIn}>{messages.signIn}</button>}
+          {!edit.needsSignIn && edit.canDiscard && !flow.confirmation && <button className="button-danger" type="button" disabled={flow.busy} onClick={() => void flow.discard()}>{messages.discardEdit}</button>}
+        </div>
+      </div>}
+      {edit.message && edit.status !== 'recovery-required' && !(edit.status === 'error' && edit.phase) && <p role="status">{edit.message}</p>}
+      {edit.status !== 'recovery-required' && edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={onSignIn}>{messages.signIn}</button>}
+      {edit.status === 'error' && !edit.needsSignIn && edit.canDiscard && !flow.confirmation && <button className="button-danger" type="button" disabled={flow.busy} onClick={() => void flow.discard()}>{messages.discardEdit}</button>}
       <EditConfirmation flow={flow} messages={messages} />
       {edit.status === 'error' && !edit.canDiscard && !edit.needsSignIn && <button type="button" disabled={flow.busy} onClick={() => void flow.open()}>{messages.retryLoadingPlans}</button>}
       {managing && !progressOnly && !failed && <div className="edit-mode" role="group" aria-label={messages.addOrEditAsset}>

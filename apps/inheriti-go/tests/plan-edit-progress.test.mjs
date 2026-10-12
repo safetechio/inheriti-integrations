@@ -66,6 +66,21 @@ it('shows the access failure and retry in the failed step', () => {
   expect(markup).not.toContain('tray-footer');
 });
 
+it('presents recovery as the primary action while keeping discard available', () => {
+  globalThis.React = React;
+  const markup = renderToStaticMarkup(createElement(PlanEditPanel, {
+    messages: trayMessages,
+    state: { edit: { status: 'recovery-required', canRecover: true, canDiscard: true, plans: [{ id: 'plan-1', name: 'Plan' }], assets: [], planId: 'plan-1', message: trayMessages.editStillNeedsRecovery } },
+    flow: { stage: 'access', planId: 'plan-1', action: 'add', form: {}, busy: false, canceling: false, error: '', recover() {}, discard() {}, close() {} },
+    onOpenApp() {},
+  }));
+  expect(markup).toContain('Finish this update');
+  expect(markup).toContain(trayMessages.editStillNeedsRecovery);
+  expect(markup.indexOf(trayMessages.recoverEdit)).toBeLessThan(markup.indexOf(trayMessages.discardEdit));
+  expect(markup).toContain('class="button-danger"');
+  expect(markup).not.toContain('tray-footer');
+});
+
 it('offers the SafeKey Desktop Tool download when the device is full', () => {
   const markup = renderToStaticMarkup(createElement(PlanEditProgress, {
     messages: trayMessages,
