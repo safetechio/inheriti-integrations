@@ -41,7 +41,7 @@ export async function organizationCommand(
   if (argv[0] === 'use') {
     if (argv.length > 2) throw coded('organization_command_invalid');
     const selected = argv[1] ?? (terminal.interactive
-      ? await promptSelect('Which organization?', items.map(({ id, name }) => ({ value: id, description: name })))
+      ? await promptSelect('Which organisation?', items.map(({ id, name }) => ({ value: id, description: name })))
       : undefined);
     if (!selected) throw new OrganizationChoiceRequired('organization_selection_required', items);
     if (!items.some(({ id }) => id === selected)) throw new OrganizationChoiceRequired('organization_access_denied', items);
@@ -72,7 +72,7 @@ export async function selectedOrganization(
   if (items.length === 0) throw new OrganizationChoiceRequired('organization_required', items);
   if (items.length === 1) return items[0]!;
   if (!terminal.interactive) throw new OrganizationChoiceRequired('organization_selection_required', items);
-  const chosen = await promptSelect('Which organization?', items.map(({ id, name }) => ({ value: id, description: name })));
+  const chosen = await promptSelect('Which organisation?', items.map(({ id, name }) => ({ value: id, description: name })));
   if (!chosen) throw new OrganizationChoiceRequired('organization_selection_required', items);
   selections[key] = chosen;
   await saveOrganizationPreferences(path, selections);

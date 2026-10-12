@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { BUILD_DEPLOYMENT, CliConfigurationInvalid, defaultConfigurationPath, resolveConfiguration } from './configuration.js';
 import { defaultSessionPath } from './session-store.js';
 import { createCliContext } from './session.js';
-import { login, loginWithDevice } from './commands/login.js';
+import { login } from './commands/login.js';
 import { logout } from './commands/logout.js';
 import { abortPlanAccess, listPlanLogs, listPlans, resolvePlanId, showPlan } from './commands/plans.js';
 import type { ListPlansOptions, PlanLogsOptions } from './commands/plans.js';
@@ -24,6 +24,7 @@ import type { CliConfiguration } from './configuration.js';
 import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node-base';
 import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
 import { automationSecretsRequested, withAutomationSecrets } from './automation-secrets.js';
+import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import type { SecretRevealContext } from './session.js';
 
 export function parsePlanHints(args: readonly string[]): LocalPlanHints | undefined {
@@ -42,7 +43,7 @@ export function parsePlanHints(args: readonly string[]): LocalPlanHints | undefi
 
 function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const configuration = BUILD_DEPLOYMENT
-    ? `Configuration: this artifact is locked to the ${BUILD_DEPLOYMENT} Business deployment. Sign in, then select an organization.`
+    ? `Configuration: this artifact is locked to the ${BUILD_DEPLOYMENT} Business deployment. Sign in, then select an organisation.`
     : `Configuration: config.json in the existing CLI configuration directory.
              apiUrl, issuer and clientId are required; applicationId is required for
              standalone plans. For Business set business: true and deployment to
@@ -52,10 +53,10 @@ function usage(environmentVariables: Readonly<Record<string, string | undefined>
 
 inheriti <command>
 
-  login [--device]   Sign in — in the browser, or with a device code when headless
+  login              Sign in using the browser
   logout             Clear the local session
-  organizations list List Business organizations and the selected one
-  organizations use [id] Select a Business organization
+  organizations list List Business organisations and the selected one
+  organizations use [id] Select a Business organisation
   plans list [--limit n] [--all] [--cursor c] [--organization id]
                      List plans in the selected context
   plans create [--title NAME] [--description TEXT] [--asset TYPE ...]
@@ -93,18 +94,18 @@ ${configuration}`;
 function commandUsage(topic: readonly string[], environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const command = topic.join(' ');
   const details: Readonly<Record<string, string>> = {
-    login: `Usage: inheriti login [--device]\n\nSign in using the system browser. --device uses a device code for headless environments and can continue through the plan's approval process.`,
+    login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
-    organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organizations or select one for this account.`,
-    plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or inspect plan metadata and activity. Run inheriti help plans <command> for details.`,
+    organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
+    plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or inspect plan metadata and activity. Business commands accept --organization ID to select an eligible organisation for that command. Run inheriti help plans <command> for details.`,
     'plans create': `Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n\nPrefill editable, non-secret plan metadata and likely asset types in the desktop window. Repeat --asset for up to ${localPlanAssetLimit} catalog types. Types: ${quickPlanAssetCatalog.map(({ id }) => id).join(', ')}. Enter secret values only in the window. Requires an interactive terminal, a selected Organisation, and sign-in. First use offers a model and runtime download of about 1.1 GB.`,
-    'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table]\n\nList non-sensitive plan metadata. --json never includes reconstructed secret values.`,
+    'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table] [--organization ID]\n\nList non-sensitive plan metadata. --all fetches up to 50 pages; use the next cursor to continue. --json never includes reconstructed secret values.`,
     'plans show': `Usage: inheriti plans show [PLAN_ID] [--json|--table]\n\nShow one plan's non-sensitive assets, fields, participants, governance, and reveal policy. An interactive terminal can prompt for PLAN_ID.`,
     'plans logs': `Usage: inheriti plans logs [PLAN_ID] [--limit N] [--offset N] [--json|--table]\n\nShow authorized plan activity. The table summarizes events; --json includes all safe log fields and total count. An interactive terminal can prompt for PLAN_ID.`,
     'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...] [--clipboard-ttl DURATION]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. Values are never printed. In a terminal, omit --field to select fields with Space or choose ALL. Each field copy is authorized and audited independently. --clipboard-ttl waits in the foreground and conditionally clears unchanged clipboard content. Cleanup is best effort; clipboard history, synchronization, shutdown and SIGKILL remain outside its control.`,
     'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.`,
     'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl DURATION] [--output suppress|inherit] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver secrets directly to one trusted child process without printing them or placing them in arguments. --stdin maps one field to stdin. Repeat --env for child-only environment variables, --fd for descriptors 3-255, --temp-file to pass a restricted temporary path through NAME, and --socket to pass a one-connection local socket endpoint through NAME. DURATION accepts ms, s, m, or h, up to 2147483647ms. --ttl bounds the whole command; authorization expiry may end delivery sooner. Child environment variables may be inspectable by same-user processes. Temporary files and socket endpoints are removed on handled completion; unlinking is not secure deletion. A socket trusts the local account, not the identity of its first peer. Sockets and descriptors are unsupported on Windows. Child stdout and stderr are suppressed because a generic executable could echo its credential; only Inheriti metadata/status is returned. --output inherit explicitly exposes child logs, which may contain credentials. Approve the exact command before an agent runs it.`,
-    secrets: `Usage: inheriti secrets <exec|resolve>\n\nMachine-oriented secret delivery built on the same reveal and use flows as plans commands.`,
+    secrets: `Usage: inheriti secrets <exec|resolve>\n\nMachine-oriented secret delivery built on the same reveal and use flows as plans commands. Business commands accept --organization ID to select an eligible organisation for that command.`,
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; --output inherit keeps the child's logs visible and may expose credentials.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD --allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its output to logs.`,
     'plans abort': `Usage: inheriti plans abort PLAN_ID\n\nAbandon the current access request for this operator. The next reveal starts a new access flow.`,
@@ -143,10 +144,22 @@ export async function run(
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
   let business = Boolean(BUILD_DEPLOYMENT);
   try {
+    if (command === 'login' && rest.length > 0) {
+      terminal.writeError(commandUsage(['login'], environmentVariables));
+      return 1;
+    }
+    if (command === 'logout' && rest.length > 0) {
+      terminal.writeError(commandUsage(['logout'], environmentVariables));
+      return 1;
+    }
     const secretDelivery = command === 'secrets' && (rest[0] === 'exec' || rest[0] === 'resolve');
     const separator = rest.indexOf('--');
     const markerIndex = secretDelivery ? rest.slice(0, separator < 0 ? undefined : separator).indexOf('--automation') : -1;
     const automation = markerIndex >= 0;
+    if (secretDelivery && (automation || automationSecretsRequested(environmentVariables)) &&
+        (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) {
+      throw new Error('automation_disabled');
+    }
     if (automation) rest.splice(markerIndex, 1);
     if (secretDelivery && (automation || automationSecretsRequested(environmentVariables))) {
       const google = environmentVariables.INHERITI_AUTOMATION_PROVIDER === 'GOOGLE_CLOUD';
@@ -178,14 +191,7 @@ export async function run(
       return await withAutomationSecrets(configuration.apiUrl, environmentVariables,
         (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true));
     }
-    // The device grant is a different OAuth client, so the choice has to be made before the context
-    // exists — and every later command reads whichever session that login wrote.
-    const headless = command === 'login' && rest.includes('--device');
-    const context = createCliContext(
-      configuration,
-      defaultSessionPath(environmentVariables),
-      headless ? 'device' : 'interactive',
-    );
+    const context = createCliContext(configuration, defaultSessionPath(environmentVariables));
     if (command === 'update') {
       if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--install')) { terminal.writeError(commandUsage(['update'], environmentVariables)); return 1; }
       if (!configuration.business || !BUILD_DEPLOYMENT) { terminal.writeError('Updates require a channel-locked Business build.'); return 1; }
@@ -202,18 +208,18 @@ export async function run(
       if ('error' in parsed) return 0;
       if (!completionNeedsPlanContext(parsed.argv)) return await completeWords(context, terminal, parsed.argv, environmentVariables);
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, parsed.organizationId);
-      const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), 'interactive', organization.id);
+      const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;
       return await completeWords(scoped, terminal, parsed.argv, environmentVariables);
     }
-    if (command === 'login') return await (headless ? loginWithDevice(context, terminal) : login(context, terminal));
+    if (command === 'login') return await login(context, terminal);
     if (command === 'logout') return await logout(context, terminal);
     if (command === 'plans' || command === 'secrets') {
       if (!configuration.business) return command === 'plans' ? await plans(context, terminal, rest) : await secrets(context, terminal, rest, (id) => resolvePlanId(context, terminal, id));
       const parsed = extractOrganization(rest);
       if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, parsed.organizationId);
-      const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), 'interactive', organization.id);
+      const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;
       return command === 'plans' ? await plans(scoped, terminal, parsed.argv, configuration) : await secrets(scoped, terminal, parsed.argv, (id) => resolvePlanId(scoped, terminal, id));
     }
@@ -607,7 +613,8 @@ const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',
-  organization_preference_invalid: 'The saved organization preference is unreadable. Check organizations.json.',
+  automation_disabled: 'Automation is unavailable.',
+  organization_preference_invalid: 'The saved organisation preference is unreadable. Check organizations.json.',
   organization_command_invalid: 'Usage: inheriti organizations list | organizations use [id]',
   plan_id_required: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
   PlanIdRequired: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
@@ -621,11 +628,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
   session_file_unreadable: 'The stored session could not be read. Check access to the CLI state folder, then retry.',
   session_permissions_widened: 'The stored session was readable by others and has been cleared. Sign in again.',
   InteractiveTerminalRequired: 'Signing in needs an interactive terminal.',
-  BrowserUnavailable: 'Could not open a browser. Sign in with `inheriti login --device`.',
+  BrowserUnavailable: 'Could not open a browser. Open the sign-in URL printed in the terminal.',
   local_window_unavailable: 'Could not open the plan window. Check the CLI installation and try again.',
   local_plan_canceled: 'Plan creation canceled.',
   local_plan_expired: 'The plan window expired. Start again when ready.',
-  login_could_not_open_a_browser: 'Could not open a browser. Sign in with `inheriti login --device`.',
+  login_could_not_open_a_browser: 'Could not open a browser. Open the sign-in URL printed in the terminal.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',
   use_canceled: 'Secret delivery canceled.',

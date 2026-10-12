@@ -9,7 +9,7 @@ const candidates = (...values: readonly (readonly [string, string])[]): Candidat
   values.map(([value, description]) => ({ value, description }));
 
 const ROOT = candidates(
-  ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Business organizations'],
+  ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Business organisations'],
   ['plans', 'List and use plans'], ['secrets', 'Machine-oriented secret delivery'],
   ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
@@ -19,7 +19,7 @@ const PLANS = candidates(
   ['use', 'Run a command with secrets'], ['abort', 'Abandon current access'],
 );
 const SECRETS = candidates(['exec', 'Run a command with secrets'], ['resolve', 'Resolve one field']);
-const ORGANIZATIONS = candidates(['list', 'List organizations'], ['use', 'Select an organization']);
+const ORGANIZATIONS = candidates(['list', 'List organisations'], ['use', 'Select an organisation']);
 
 type Completion =
   | { kind: 'static'; candidates: Candidate[] }
@@ -111,7 +111,7 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
     return subcommand === 'use' && rest.length === 1 ? { kind: 'organizations' } : { kind: 'none' };
   }
   if (command === 'help') return helpCompletion(words.slice(1));
-  if (command === 'login') return { kind: 'static', candidates: candidates(['--device', 'Use device login'], ['--help', 'Show help']) };
+  if (command === 'login') return { kind: 'static', candidates: candidates(['--help', 'Show help']) };
   if (command !== 'plans' && command !== 'secrets') return { kind: 'none' };
   if (words.length === 2) return { kind: 'static', candidates: command === 'plans' ? PLANS : SECRETS };
   if (command === 'plans' && subcommand === 'create') return { kind: 'static', candidates: optionCandidates(['--title', '--description', '--asset'], false) };

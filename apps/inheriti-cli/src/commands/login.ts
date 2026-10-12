@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import type { DeviceTransaction } from '@safetech/inheriti-elements-core';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { SessionStoreUnreadable } from '../session-store.js';
@@ -32,24 +31,6 @@ export async function login(context: CliContext, terminal: Terminal): Promise<nu
   if (await context.sessions.load()) await context.keyVault?.clear();
   const callbackUrl = await waitForCallback(context, terminal);
   await context.core.auth.completeAuthorizationCode(callbackUrl);
-  if (!(await context.sessions.load())) throw new SessionStoreUnreadable('session_file_unreadable');
-  terminal.write('Signed in.');
-  return 0;
-}
-
-/**
- * The headless login: a code read here and approved elsewhere.
- *
- * Kept for the shells this harness cannot open a browser from — CI, a container, an SSH session —
- * where the alternative is no login at all. The resulting session can enter governed reveals; the
- * plan policy remains responsible for approvals and release progression.
- */
-export async function loginWithDevice(context: CliContext, terminal: Terminal): Promise<number> {
-  if (await context.sessions.load()) await context.keyVault?.clear();
-  const started = await context.core.auth.beginDeviceAuthorization() as DeviceTransaction;
-  terminal.write(`Open ${started.verificationUri} and enter the code: ${started.userCode}`);
-  terminal.write('Waiting for approval…');
-  await context.core.auth.pollDeviceAuthorization();
   if (!(await context.sessions.load())) throw new SessionStoreUnreadable('session_file_unreadable');
   terminal.write('Signed in.');
   return 0;

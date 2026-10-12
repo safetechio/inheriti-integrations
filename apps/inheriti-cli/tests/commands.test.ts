@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { login, loginWithDevice } from '../src/commands/login.js';
+import { login } from '../src/commands/login.js';
 import { logout } from '../src/commands/logout.js';
 import { messageFor, parsePlanHints, run } from '../src/main.js';
 import * as session from '../src/session.js';
@@ -28,8 +28,6 @@ function recordingTerminal(interactive: boolean): Terminal & { lines: string[]; 
 function contextWith(overrides: Record<string, unknown> = {}): never {
   const cleared: string[] = [];
   const auth = {
-    beginDeviceAuthorization: async () => ({ userCode: 'WDJB-MJHT', verificationUri: 'http://127.0.0.1:4564/device' }),
-    pollDeviceAuthorization: async () => undefined,
     getAccessToken: async () => 'access-token',
     clear: async () => { cleared.push('auth'); },
     ...(overrides.auth as Record<string, unknown> ?? {}),
@@ -137,14 +135,6 @@ describe('plan logs', () => {
 });
 
 describe('login', () => {
-  it('does not report success when the device login did not leave a readable session', async () => {
-    const terminal = recordingTerminal(true);
-    const context = contextWith();
-    (context as { sessions: { load: () => Promise<undefined> } }).sessions.load = async () => undefined;
-    await expect(loginWithDevice(context, terminal)).rejects.toMatchObject({ code: 'session_file_unreadable' });
-    expect(terminal.lines).not.toContain('Signed in.');
-  });
-
   it('signs in through the browser and hands the whole callback back to the SDK', async () => {
     process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
     const occupied = createServer();
@@ -287,21 +277,6 @@ describe('login', () => {
     await expect(login(context, recordingTerminal(true))).rejects.toThrow('login_requires_an_http_ipv4_loopback_callback');
   });
 
-  it('shows the verification URI and code when signing in headlessly', async () => {
-    const terminal = recordingTerminal(true);
-    await expect(loginWithDevice(contextWith(), terminal)).resolves.toBe(0);
-    expect(terminal.lines[0]).toContain('http://127.0.0.1:4564/device');
-    expect(terminal.lines[0]).toContain('WDJB-MJHT');
-    expect(terminal.lines.at(-1)).toBe('Signed in.');
-  });
-
-  it('prints the device instructions in a non-interactive shell for headless login', async () => {
-    const terminal = recordingTerminal(false);
-    await expect(loginWithDevice(contextWith(), terminal)).resolves.toBe(0);
-    expect(terminal.lines[0]).toContain('http://127.0.0.1:4564/device');
-    expect(terminal.lines[0]).toContain('WDJB-MJHT');
-    expect(terminal.lines.at(-1)).toBe('Signed in.');
-  });
 });
 
 describe('logout', () => {

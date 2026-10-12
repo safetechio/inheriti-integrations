@@ -27,13 +27,11 @@ export type SecretRevealContext = Pick<CliContext, 'keyOwner' | 'safeKeyPro' | '
 /**
  * One composition point, so no command builds its own client or re-solves refresh.
  *
- * `client` selects the registered OAuth flow. Business accepts both verified client IDs;
- * reveal policy and the signed client ID still bind each session on the server.
+ * Browser sign-in uses the interactive OAuth client; the plan still determines reveal policy.
  */
 export function createCliContext(
   configuration: CliConfiguration,
   sessionPath: string,
-  client: 'interactive' | 'device' = 'interactive',
   organizationId?: string,
 ): CliContext {
   const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
@@ -41,7 +39,7 @@ export function createCliContext(
   const source = createCliMasterKeySource(configuration);
   const authConfiguration: NodeIntegrationCoreOptions['configuration'] = {
     issuer: configuration.issuer,
-    clientId: client === 'device' ? configuration.clientId : configuration.interactiveClientId,
+    clientId: configuration.interactiveClientId,
     audience: configuration.business ? 'inheriti-integrations-api' : 'inheriti-elements-api',
     environment: configuration.environment,
     redirectUri: configuration.redirectUri,

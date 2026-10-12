@@ -171,7 +171,7 @@ export function resolveConfiguration(
       ?? required(environmentVariables, 'INHERITI_ELEMENTS_CLIENT_ID', 'clientId'),
     environment,
     scopes: file.business ? ['openid'] : DEFAULT_SCOPES,
-    // The device grant never redirects, but the SDK's configuration requires the field.
+    // Browser sign-in redirects to this loopback callback.
     redirectUri: environmentVariables.INHERITI_ELEMENTS_REDIRECT_URI ?? 'http://127.0.0.1/oauth/callback',
     ...(masterKeyPassphrase === undefined ? {} : { masterKeyPassphrase, masterKeySalt: masterKeySalt! }),
     ...(file.business && file.deployment ? {

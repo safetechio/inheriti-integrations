@@ -40,7 +40,7 @@ export async function listPlans(
     terminal.write(context.organization ? `No plans in ${context.organization.name}.` : 'No plans in this Application.');
     return 0;
   }
-  if (context.organization) terminal.write(`Organization: ${context.organization.name} (${context.organization.id})`);
+  if (context.organization) terminal.write(`Organisation: ${context.organization.name} (${context.organization.id})`);
   renderTo(terminal, React.createElement(PlansList, { plans: items, more: nextCursor !== null, width: terminal.columns }));
   return 0;
 }
@@ -64,7 +64,7 @@ export async function listPlanLogs(context: CliContext, terminal: Terminal, plan
     renderJson(terminal, result);
     return 0;
   }
-  if (context.organization) terminal.write(`Organization: ${context.organization.name} (${context.organization.id})`);
+  if (context.organization) terminal.write(`Organisation: ${context.organization.name} (${context.organization.id})`);
   if (result.items.length === 0) { terminal.write('No logs for this plan.'); return 0; }
   renderTo(terminal, React.createElement(Box, { flexDirection: 'column' },
     React.createElement(Table<(typeof result.items)[number]>, { width: terminal.columns, rows: result.items, columns: [
@@ -138,7 +138,7 @@ export async function showPlan(
     renderJson(terminal, context.organization ? { organization: context.organization, plan } : plan);
     return 0;
   }
-  if (context.organization) terminal.write(`Organization: ${context.organization.name} (${context.organization.id})`);
+  if (context.organization) terminal.write(`Organisation: ${context.organization.name} (${context.organization.id})`);
   renderTo(terminal, React.createElement(PlanView, { plan, width: terminal.columns, keyOwner: context.keyOwner }));
   return 0;
 }
