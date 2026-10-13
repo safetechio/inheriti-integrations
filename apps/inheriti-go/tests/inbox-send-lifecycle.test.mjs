@@ -155,3 +155,44 @@ it('ignores a message load that fails after leaving the conversation', async () 
   expect(inbox.busy).toBe('');
   expect(inbox.error).toBe('');
 });
+
+it('retries a cancelled message page and clears a previous refresh error after recovery', async () => {
+  window.inheritiTray.inboxParents.mockRejectedValueOnce(new DOMException('This operation was aborted', 'AbortError'));
+  let inbox = render();
+  await inbox.select('conversation');
+  inbox = render();
+  expect(inbox.error).toBe('');
+  expect(window.inheritiTray.inboxParents).toHaveBeenCalledTimes(2);
+
+  window.inheritiTray.inboxMessages.mockRejectedValue(new Error('server unavailable'));
+  await inbox.refresh();
+  inbox = render();
+  expect(inbox.error).toBe('Could not refresh all messages. Try again.');
+
+  window.inheritiTray.inboxMessages.mockResolvedValue({ items: [] });
+  await inbox.refresh();
+  expect(render().error).toBe('');
+});
+
+it('keeps a file save failure visible through a successful background refresh', async () => {
+  window.inheritiTray.inboxOpenFile = vi.fn().mockRejectedValue(new Error('download failed'));
+  let inbox = render();
+  await inbox.select('conversation');
+  inbox = render();
+  await inbox.saveFile('file-1');
+  inbox = render();
+  expect(inbox.error).toBe('Could not save this protected file. Try again while it is available.');
+  await inbox.refresh();
+  expect(render().error).toBe('Could not save this protected file. Try again while it is available.');
+});
+
+it('unlocks the composer after a file upload fails', async () => {
+  window.inheritiTray.inboxSendFile = vi.fn().mockRejectedValue(new Error('upload failed'));
+  let inbox = render();
+  await inbox.select('conversation');
+  inbox = render();
+  await inbox.sendFile();
+  inbox = render();
+  expect(inbox.busy).toBe('');
+  expect(inbox.sendError).toBe('Could not send the file. Try again.');
+});

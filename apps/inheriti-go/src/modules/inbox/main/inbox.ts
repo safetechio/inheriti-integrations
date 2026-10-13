@@ -10,9 +10,11 @@ import { InboxReadAck } from './read-ack.js';
 export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'NEW_MESSAGE' }
   | { kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }
   | { kind: 'PRESENCE'; tenantId: string; memberIds?: string[]; checkedAt?: string; connected: boolean }
-  | { conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string };
+  | { conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string };
 
 const MAX_FILE_BYTES = 10_000_000;
+type Receipt = { memberId: string; read?: boolean; readAt?: string | null;
+  secrets?: Array<{ position: number; status: string; revealedAt?: string | null }> };
 
 function mimeTypeFor(filePath: string): string {
   const extension = extname(filePath).toLowerCase();
@@ -119,6 +121,7 @@ export class TrayInbox {
           if (signal.recipientStatus) update.recipientStatus = signal.recipientStatus;
           if (signal.senderMemberId) update.senderMemberId = signal.senderMemberId;
           if (signal.memberId) update.memberId = signal.memberId;
+          if (signal.memberName) update.memberName = signal.memberName;
           this.onSignal?.(update);
         }, () => this.onSignal?.(), tenantId, (snapshot) => {
           if (tenantId !== this.selectedOrganization()) return;
@@ -148,12 +151,13 @@ export class TrayInbox {
       const page = await client.listParents(conversationId, { limit: 25 }, signal);
       const items = await Promise.all(page.items.map(async (message: {
         parentId: string; sequence: number; mode: string; status: string; senderMemberId: string;
-        senderDeviceId: string; participantRevision: number; createdAt: string;
+        senderDeviceId: string; participantRevision: number; createdAt: string; recipientStatuses?: Receipt[];
       }) => {
         const opened = await client.openParent({ conversationId, parentId: message.parentId, identity, signal });
         return { parentId: message.parentId, sequence: message.sequence, mode: message.mode, status: message.status,
           senderMemberId: message.senderMemberId, senderDeviceId: message.senderDeviceId,
           participantRevision: message.participantRevision, createdAt: message.createdAt,
+          recipientStatuses: message.recipientStatuses,
           segments: opened.segments };
       }));
       signal.throwIfAborted();
@@ -192,12 +196,12 @@ export class TrayInbox {
       const page = await client.listNormal(conversationId, { limit: 25 }, signal);
       const items = await Promise.all(page.items.map(async (message: {
         parentId: string; sequence: number; senderMemberId: string; senderDeviceId: string;
-        participantRevision: number; createdAt: string;
+        participantRevision: number; createdAt: string; recipientStatuses?: Receipt[];
       }) => {
         const opened = await client.openNormal({ conversationId, parentId: message.parentId, identity, signal });
         return { parentId: message.parentId, sequence: message.sequence, senderMemberId: message.senderMemberId,
           senderDeviceId: message.senderDeviceId, participantRevision: message.participantRevision,
-          createdAt: message.createdAt, text: opened.text };
+          createdAt: message.createdAt, recipientStatuses: message.recipientStatuses, text: opened.text };
       }));
       signal.throwIfAborted();
       const read = items.length ? await client.markNormalRead({ conversationId, parentId: items[0].parentId, identity, signal }).catch(() => null) : null;

@@ -6,20 +6,22 @@ import { useInboxMessageState } from '../hooks/useInboxMessageState.js';
 import { InboxSkeleton } from './InboxSkeleton.jsx';
 import { InboxRevealProgress } from './InboxRevealProgress.jsx';
 import { InboxAvatar } from './InboxAvatar.jsx';
+import { InboxReceipts } from './InboxReceipts.jsx';
 import { INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
 
 
-function NormalMessageCard({ message, name, avatarUrl, own }) {
+function NormalMessageCard({ message, name, avatarUrl, own, names, avatars }) {
   const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return <article className={`inbox-thread-message ${own ? 'is-own' : ''}`}>
     {!own && <InboxAvatar name={name} url={avatarUrl} />}
     <div className="inbox-thread-message-content"><small>{own ? 'You' : name} · {time}</small>
       <div className="inbox-message-bubble"><div className="inbox-message-heading"><span className="inbox-parent-pill">Normal</span><small>Message</small></div>
-        <p className="inbox-revealed">{message.text}</p></div></div>
+        <p className="inbox-revealed">{message.text}</p></div>
+      {own && <InboxReceipts recipients={message.recipientStatuses} names={names} avatars={avatars} />}</div>
   </article>;
 }
 
-function MessageCard({ message, name, avatarUrl, own, names, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
+function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
   const [confirm, setConfirm] = useState(false);
   const state = useInboxMessageState(message, own);
   const isFile = message.contentKind === 'FILE';
@@ -37,7 +39,7 @@ function MessageCard({ message, name, avatarUrl, own, names, revealed, revealSec
       <div className="inbox-message-bubble">
         <div className="inbox-message-heading"><span className={`inbox-status inbox-status-${displayState.kind}`}>{displayState.label}</span><small>{isFile ? 'Protected file' : 'Protected message'}</small></div>
         {visible ? <div className="inbox-reveal">
-          {revealed.fileName && <p className="inbox-revealed">Saved {revealed.fileName} to your chosen location.</p>}
+          {revealed.fileName && <p className="inbox-revealed inbox-file-saved-copy">Saved {revealed.fileName} to your chosen location.</p>}
           {revealed.text && <><p className="inbox-revealed">{revealed.text}</p><div className="inbox-reveal-timer" role="timer" aria-label={`Message hides in ${revealSeconds} ${revealSeconds === 1 ? 'second' : 'seconds'}`}><span className="inbox-progress-track"><span style={{ width: `${revealSeconds / INBOX_REVEAL_SECONDS * 100}%` }} /></span><span>Hides in {revealSeconds}s</span></div></>}
           {revealed.text && revealed.suggestion && onCreatePlanFromSecret && <button type="button" className="button-secondary" onClick={() => { onCreatePlanFromSecret(revealed.suggestion); onHide(); }}>Create plan from secret</button>}
           {!revealed.text && !revealed.fileName && <p className="inbox-sealed-copy">{revealed.planAcknowledged ? 'File ready for Quick Plan.' : revealed.planPending ? 'File ready for Quick Plan. Confirm the read to continue.' : 'Message hidden. Confirm the read to finish.'}</p>}
@@ -47,13 +49,9 @@ function MessageCard({ message, name, avatarUrl, own, names, revealed, revealSec
           : <InboxRevealProgress />
         : state.canView ? confirm ? <div className="inbox-reveal-confirm"><p>{isFile ? 'Open this file once. Choose how to use it.' : `Reveal this message once? It hides after ${INBOX_REVEAL_SECONDS} ${INBOX_REVEAL_SECONDS === 1 ? 'second' : 'seconds'}.`}</p><div className={isFile ? 'inbox-file-actions' : undefined}><button type="button" disabled={!!busy} onClick={() => { setConfirm(false); action(message.id); }}>{isFile ? 'Save to computer' : 'Reveal now'}</button>{isFile && onSaveFileAsPlan && <button type="button" className="button-secondary" disabled={!!busy} onClick={() => { setConfirm(false); onSaveFileAsPlan(message.id, onCreatePlanFromFile); }}>Create Quick Plan</button>}<button type="button" className="button-secondary" onClick={() => setConfirm(false)}>Not now</button></div></div>
         : <button type="button" disabled={!!busy} onClick={() => setConfirm(true)}>{label}</button>
-        : <p className="inbox-sealed-copy">{own ? state.label === 'Failed' ? 'This message could not be delivered.' : isFile ? 'File sealed for recipients.' : 'Message sealed for recipients.' : state.label === 'Read' ? 'This message has been opened.' : 'Encrypted content is unavailable.'}</p>}
+        : <p className="inbox-sealed-copy">{own ? state.label === 'Failed' ? 'This message could not be delivered.' : message.status === 'PREPARING' ? `This ${isFile ? 'file' : 'message'} has not finished sending.` : isFile ? 'File sealed for recipients.' : 'Message sealed for recipients.' : state.label === 'Read' ? 'This message has been opened.' : message.status === 'PREPARING' ? `This ${isFile ? 'file' : 'message'} has not finished sending. Ask the sender to retry if it persists.` : 'Encrypted content is unavailable.'}</p>}
       </div>
-      {own && message.recipientStatuses?.length > 0 && <div className="inbox-recipient-statuses" aria-label="Recipient status">{message.recipientStatuses.map(recipient => {
-        const complete = recipient.status === 'CONSUMED';
-        const label = complete ? isFile ? 'saved' : 'revealed' : recipient.status === 'UNREAD' ? 'sealed' : recipient.status === 'LEASED' ? 'opening' : 'unavailable';
-        return <span key={recipient.memberId} className={complete ? 'is-complete' : ''}><span className="inbox-recipient-dot" aria-hidden="true">{complete ? '✓' : ''}</span>{names[recipient.memberId] || 'Member'} · {label}</span>;
-      })}</div>}
+      {own && <InboxReceipts recipients={message.recipientStatuses} names={names} avatars={avatars} protectedParts={1} />}
     </div>
   </article>;
 }
@@ -96,9 +94,9 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
       {ordered.map(({ kind, id, message }) => kind === 'PARENT'
         ? <InboxParentMessage key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId}
             units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''} openingProgress={unitReveals?.openingProgress}
-            summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} />
-        : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId} />
-        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
+            summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} names={names} avatars={avatars} />
+        : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId} names={names} avatars={avatars} />
+        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} avatars={avatars} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
       {visiblePendingMessages.map(pendingMessage =>
         <article key={pendingMessage.clientId || pendingMessage.parentId} className="inbox-thread-message is-own inbox-pending-message" aria-live="polite">
           <div className="inbox-thread-message-content"><small>You</small>
@@ -121,7 +119,8 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
       <button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel</button>
       <span className={`inbox-progress-track ${shareProgress ? '' : 'is-indeterminate'}`}><span style={shareProgress ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span>
     </div>}
-    <InboxComposer mode={mode} setMode={setMode} draft={draft} setDraft={setDraft} marks={marks} onMark={onMark} onUnmark={onUnmark} sendError={sendError}
+    {sendError && <p className="inbox-send-snackbar" role="alert">{sendError}</p>}
+    <InboxComposer mode={mode} setMode={setMode} draft={draft} setDraft={setDraft} marks={marks} onMark={onMark} onUnmark={onUnmark}
       onSend={onSend} onSendFile={onSendFile} onCreatePlanFromSecret={onCreatePlanFromSecret} busy={busy} />
   </section>;
 }

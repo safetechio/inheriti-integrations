@@ -17,6 +17,7 @@ export function fileSendErrorMessage(failure) {
   if (String(failure).includes('INBOX_UNAVAILABLE'))
     return 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM.';
   if (String(failure).includes('inbox_file_too_large')) return 'Could not send the file. The 10 MB limit was exceeded.';
+  if (String(failure).includes('inbox_share_upload_failed')) return 'File not sent. Secure storage could not save it. Try a smaller file or retry later.';
   return 'Could not send the file. Try again.';
 }
 
@@ -33,7 +34,14 @@ export function protectedSegmentsForSend(segments, pending) {
 
 async function settled(operation) {
   try { return { status: 'fulfilled', value: await operation() }; }
-  catch { return { status: 'rejected' }; }
+  catch (error) {
+    // Hiding an earlier reveal can abort a queued metadata read; retry after cancellation settles.
+    if (/AbortError|inbox_identity_not_ready/.test(String(error))) {
+      try { return { status: 'fulfilled', value: await operation() }; }
+      catch { /* Report the page failure below. */ }
+    }
+    return { status: 'rejected' };
+  }
 }
 
 async function loadMessagePages(id) {
@@ -181,6 +189,7 @@ export function useInboxMessages(onClose) {
             (parentPage.status === 'fulfilled' && parentPage.value.items.some(item => item.parentId === message.parentId)))));
         if (protectedPage.status === 'rejected' || (normalPage.status === 'rejected' && parentPage.status === 'rejected'))
           setError('Could not refresh all messages. Try again.');
+        else setError(previous => previous.startsWith('Could not refresh') ? '' : previous);
       }
     } catch {
       if (generation.current === current && request.current === latest) setError('Could not refresh messages. Try again.');
@@ -288,12 +297,13 @@ export function useInboxMessages(onClose) {
     setBusy('sending-file');
     setTransfer(null);
     setError('');
+    setSendError('');
     try {
       const result = await window.inheritiTray.inboxSendFile(id, new Date(Date.now() + INBOX_MESSAGE_EXPIRY_DAYS * MILLISECONDS_PER_DAY).toISOString());
       if (generation.current !== current || result?.cancelled) return;
       await refresh();
     } catch (failure) {
-      if (generation.current === current && !String(failure).includes('AbortError')) setError(fileSendErrorMessage(failure));
+      if (generation.current === current && !String(failure).includes('AbortError')) setSendError(fileSendErrorMessage(failure));
     } finally {
       if (generation.current === current) { setBusy(''); setTransfer(null); }
     }

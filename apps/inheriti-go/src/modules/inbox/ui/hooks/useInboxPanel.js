@@ -44,11 +44,13 @@ export function useInboxPanel(onClose, identity, organizationId) {
       return;
     }
     if (signal?.kind === 'NEW_MESSAGE') {
-      setToast({ kind: 'info', message: 'A new message is ready.' });
+      setToast({ kind: 'info', message: 'You have a new Secure Chat message.' });
     }
     if (signal?.recipientStatus === 'CONSUMED' && signal.senderMemberId === identity?.memberId &&
       signal.memberId !== identity?.memberId) {
-      setToast({ kind: 'info', message: 'A member opened your message.' });
+      const name = /^[\p{L}\p{M}][\p{L}\p{M} .'-]{0,59}$/u.test(signal.memberName ?? '')
+        ? signal.memberName : 'A member';
+      setToast({ kind: 'info', message: `${name} opened your message.` });
     }
     if (!signal || signal.kind === 'PARTICIPANTS' || signal.kind === 'CONVERSATIONS') void participants.refresh();
     if (signal?.kind === 'PARTICIPANTS') return;

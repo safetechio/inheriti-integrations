@@ -233,7 +233,9 @@ async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | 
     const memberId = await session.registeredInboxMemberId();
     if (!memberId || session.state().selectedId !== organizationId) { seen.delete(key); return; }
     if (signal.recipientStatus === 'CONSUMED' && signal.senderMemberId === memberId && signal.memberId !== memberId) {
-      notify('A member opened your Secure Chat message.', { organizationId, conversationId: signal.conversationId });
+      const name = /^[\p{L}\p{M}][\p{L}\p{M} .'-]{0,59}$/u.test(signal.memberName ?? '')
+        ? signal.memberName : 'A member';
+      notify(`${name} opened your Secure Chat message.`, { organizationId, conversationId: signal.conversationId });
       return;
     }
     if (signal.status === 'FAILED' && signal.senderMemberId === memberId) {
@@ -259,7 +261,7 @@ async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | 
       }
     }
     publishInboxChanged({ kind: 'NEW_MESSAGE' });
-    notify('A new message is ready in Secure Chat.', { organizationId, conversationId: signal.conversationId }, true);
+    notify('You have a new Secure Chat message.', { organizationId, conversationId: signal.conversationId }, true);
   } catch {
     seen.delete(key);
   }

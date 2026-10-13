@@ -3,8 +3,9 @@ import { INBOX_REVEAL_SECONDS } from '../inboxSettings.js';
 import { ProtectedPart } from './ProtectedPart.jsx';
 import { InboxRevealProgress } from './InboxRevealProgress.jsx';
 import { InboxAvatar } from './InboxAvatar.jsx';
+import { InboxReceipts } from './InboxReceipts.jsx';
 
-export function InboxParentMessage({ message, name, avatarUrl, own, units, now, openingUnitId, openingProgress, summary, busy, onReveal, onRevealAll, onRetry, onHide, onCreatePlanFromSecret }) {
+export function InboxParentMessage({ message, name, avatarUrl, own, names, avatars, units, now, openingUnitId, openingProgress, summary, busy, onReveal, onRevealAll, onRetry, onHide, onCreatePlanFromSecret }) {
   const [confirmUnitId, setConfirmUnitId] = useState(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [selectedPartId, setSelectedPartId] = useState(null);
@@ -47,6 +48,7 @@ export function InboxParentMessage({ message, name, avatarUrl, own, units, now, 
         {available.length > 1 && confirmAll && <div className="inbox-reveal-confirm"><p>Reveal {available.length} protected parts independently? Each can only be opened once.</p><div><button type="button" className="button-secondary" onClick={() => setConfirmAll(false)}>Not now</button><button type="button" disabled={!!busy} onClick={() => { setConfirmAll(false); void onRevealAll(message.parentId, available.map(part => part.unitId)); }}>Reveal all</button></div></div>}
         {summary?.parentId === message.parentId && <p role="status" className="inbox-reveal-summary">{summary.succeeded} revealed, {summary.failed} failed.</p>}
       </div>
+      {own && <InboxReceipts recipients={message.recipientStatuses} names={names} avatars={avatars} protectedParts={parts.length} />}
     </div>
   </article>;
 }

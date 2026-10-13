@@ -10,6 +10,7 @@ globalThis.React = React;
 it('only mentions the file limit for a size failure', () => {
   expect(fileSendErrorMessage(new Error('request_failed'))).toBe('Could not send the file. Try again.');
   expect(fileSendErrorMessage(new Error('inbox_file_too_large'))).toContain('10 MB limit was exceeded');
+  expect(fileSendErrorMessage(new Error('inbox_share_upload_failed'))).toContain('Secure storage could not save it');
 });
 
 it('recognises missing Organisation Key errors without treating unrelated failures as key errors', () => {
@@ -29,11 +30,76 @@ function render(props) {
 it('does not offer the sender a one-time reveal and shows real recipient status', () => {
   const markup = render({ messages: [{ id: 'message', senderMemberId: 'me', status: 'AVAILABLE',
     contentKind: 'TEXT', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    recipientStatuses: [{ memberId: 'other', status: 'CONSUMED' }] }] });
+    recipientStatuses: [{ memberId: 'other', status: 'CONSUMED', consumedAt: '2026-10-13T13:00:00Z' }] }] });
   expect(markup).toContain('Message sealed for recipients.');
-  expect(markup).toContain('Ana · revealed');
+  expect(markup).toContain('inbox-receipt-compact');
+  expect(markup).toContain('Revealed');
+  expect(markup).not.toContain('1 of 1 protected part revealed');
+  expect(markup).not.toContain('Part 1:');
+  expect(markup).not.toContain('Read');
   expect(markup).not.toContain('View once');
   expect(markup).not.toContain('1 unread');
+});
+
+it('counts consumed protected parts when their reveal dates are unavailable', () => {
+  const markup = render({ parentMessages: [{ parentId: 'mixed', senderMemberId: 'me', mode: 'PROTECTED',
+    createdAt: '2026-10-13T12:00:00Z', segments: [{ unitId: 'first', status: 'UNREAD' }, { unitId: 'second', status: 'UNREAD' }],
+    recipientStatuses: [{ memberId: 'other', secrets: [{ position: 1, status: 'CONSUMED', revealedAt: null }, { position: 2, status: 'UNREAD', revealedAt: null }] }] }] });
+  expect(markup).toContain('1/2 revealed');
+  expect(markup).not.toContain('Part 1:');
+  expect(markup).not.toContain('Invalid Date');
+});
+
+it('numbers protected receipt parts by their order rather than segment positions', () => {
+  const markup = render({ parentMessages: [{ parentId: 'mixed', senderMemberId: 'me', mode: 'MIXED',
+    createdAt: '2026-10-13T12:00:00Z', segments: [{ text: 'before' }, { unitId: 'first', status: 'UNREAD' }, { text: 'middle' }, { unitId: 'second', status: 'UNREAD' }],
+    recipientStatuses: [{ memberId: 'other', secrets: [{ position: 1, status: 'CONSUMED' }, { position: 3, status: 'UNREAD' }] }] }] });
+  expect(markup).toContain('1/2 revealed');
+  expect(markup).not.toContain('Part 3:');
+});
+
+it('summarizes standalone protected group receipts as reveals', () => {
+  const markup = render({ messages: [{ id: 'protected', senderMemberId: 'me', status: 'AVAILABLE', contentKind: 'TEXT',
+    createdAt: '2026-10-13T12:00:00Z', recipientStatuses: [{ memberId: 'other', status: 'CONSUMED' }, { memberId: 'third', status: 'UNREAD' }] }] });
+  expect(markup).toContain('1/2 revealed · Details');
+  expect(markup).not.toContain('0/2 read');
+});
+
+it('shows sender receipts across normal and mixed messages without invented dates', () => {
+  const normal = { parentId: 'normal', senderMemberId: 'me', text: 'hello', createdAt: '2026-10-13T12:00:00Z',
+    recipientStatuses: [{ memberId: 'other', read: true }] };
+  const mixed = { parentId: 'mixed', senderMemberId: 'me', mode: 'MIXED', createdAt: '2026-10-13T12:00:00Z',
+    segments: [{ text: 'hello' }, { unitId: 'secret', status: 'UNREAD' }],
+    recipientStatuses: [{ memberId: 'other', readAt: null, secrets: [{ position: 1, status: 'UNREAD' }] }] };
+  const markup = render({ normalMessages: [normal], parentMessages: [mixed] });
+  expect(markup).toContain('inbox-receipt-compact');
+  expect(markup).toContain('Read');
+  expect(markup).toContain('Sent · Not revealed');
+  expect(markup).not.toContain('Part 1:');
+  expect(markup).not.toContain('Invalid Date');
+});
+
+it('hides recipient receipts on incoming messages', () => {
+  const markup = render({ normalMessages: [{ parentId: 'normal', senderMemberId: 'other', text: 'hello',
+    createdAt: '2026-10-13T12:00:00Z', recipientStatuses: [{ memberId: 'me', readAt: '2026-10-13T13:00:00Z' }] }] });
+  expect(markup).not.toContain('Recipient status');
+  expect(markup).not.toContain('Read');
+});
+
+it('summarizes multiple recipients with an accessible details trigger', () => {
+  const markup = render({ normalMessages: [{ parentId: 'normal', senderMemberId: 'me', text: 'hello',
+    createdAt: '2026-10-13T12:00:00Z', recipientStatuses: [{ memberId: 'other', read: true }, { memberId: 'third' }] }] });
+  expect(markup).toContain('1/2 read · Details');
+  expect(markup).toContain('aria-haspopup="dialog"');
+});
+
+it('explains that a staged file cannot be opened until sending finishes', () => {
+  const file = { id: 'file', status: 'PREPARING', contentKind: 'FILE',
+    createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  expect(render({ messages: [{ ...file, senderMemberId: 'me' }] })).toContain('This file has not finished sending.');
+  const recipient = render({ messages: [{ ...file, senderMemberId: 'other', recipientStatus: 'UNREAD' }] });
+  expect(recipient).toContain('Ask the sender to retry if it persists.');
+  expect(recipient).not.toContain('Open file once');
 });
 
 it('shows actual protected send progress and a pending read without plaintext', () => {
@@ -95,6 +161,9 @@ it('shows actual protected send progress and a pending read without plaintext', 
   expect(transfer).toContain('inbox-send-status');
   expect(transfer).toContain('width:50%');
   expect(transfer).not.toContain('You · now');
+  expect(transfer).toMatch(/<textarea[^>]*disabled/);
+  expect(transfer).toMatch(/aria-pressed="true" disabled=""/);
+  expect(render({ busy: '', draft: 'ready' })).not.toMatch(/<textarea[^>]*disabled/);
 
   const pending = render({ messages: [{ id: 'message', senderMemberId: 'other', status: 'AVAILABLE',
     recipientStatus: 'LEASED', contentKind: 'TEXT', createdAt: new Date().toISOString(),

@@ -102,7 +102,7 @@ export function createNodePlanEventListener(apiUrl: string, getBearerToken: () =
   return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
 }
 export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>,
-  onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string } | { tenantId: string; kind: 'PARTICIPANTS' } | { tenantId: string; kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }) => void,
+  onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string } | { tenantId: string; kind: 'PARTICIPANTS' } | { tenantId: string; kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }) => void,
   onConnect: () => void, tenantId: string,
   onPresence: (snapshot: { tenantId: string; memberIds: string[]; checkedAt: string } | null) => void) {
   const socket = io(new URL(apiUrl).origin, {

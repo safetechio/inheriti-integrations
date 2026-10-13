@@ -147,7 +147,7 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
       const status = typeof failure.status === 'number' && Number.isInteger(failure.status) && failure.status >= 100 && failure.status <= 599 ? failure.status : undefined;
       const known = ['operator_token_expired', 'operator_reauthentication_required', 'reauthentication_required',
         'inbox_identity_http_401', 'master_key_required', 'MasterKeyRequired', 'INBOX_UNAVAILABLE', 'inbox_file_too_large',
-        'invalid_contract_address', 'inbox_share_conflict', 'inbox_file_share_too_large'];
+        'invalid_contract_address', 'inbox_share_conflict', 'inbox_file_share_too_large', 'inbox_share_upload_failed'];
       const code = typeof failure.code === 'string' && known.includes(failure.code) ? failure.code : undefined;
       const requestId = typeof failure.requestId === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(failure.requestId) ? failure.requestId : undefined;
       console.error('Secure Chat file send failed', { status, code, requestId });

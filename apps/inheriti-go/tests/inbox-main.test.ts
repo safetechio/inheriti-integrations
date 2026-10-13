@@ -273,4 +273,27 @@ describe('Tray Secure Chat main process', () => {
     expect(resolveKey).not.toHaveBeenCalled();
     expect(client.sendNormal).toHaveBeenNthCalledWith(2, { conversationId: 'conversation', parentId: 'parent-2', text: 'retry', identity });
   });
+
+  it('preserves optional sender receipts when hydrating normal and parent messages', async () => {
+    const normalReceipts = [{ memberId: 'member-b', read: true, readAt: null }];
+    const parentReceipts = [{ memberId: 'member-b', secrets: [{ position: 1, status: 'CONSUMED', revealedAt: null }] }];
+    mock.createNodeInbox.mockReturnValue({
+      listNormal: vi.fn().mockResolvedValue({ items: [{ parentId: 'normal', sequence: 1, senderMemberId: 'member-a',
+        senderDeviceId: 'device-a', participantRevision: 1, createdAt: '2026-10-13T00:00:00Z', recipientStatuses: normalReceipts }],
+      total: 1, limit: 25, offset: 0, unreadCount: 0, readThroughSequence: 0 }),
+      openNormal: vi.fn().mockResolvedValue({ text: 'hello' }),
+      listParents: vi.fn().mockResolvedValue({ items: [{ parentId: 'parent', sequence: 2, mode: 'MIXED', status: 'AVAILABLE',
+        senderMemberId: 'member-a', senderDeviceId: 'device-a', participantRevision: 1, createdAt: '2026-10-13T00:00:00Z',
+        recipientStatuses: parentReceipts }], total: 1, unreadCount: 0 }),
+      openParent: vi.fn().mockResolvedValue({ segments: [{ text: 'hello' }] }),
+      listMessages: vi.fn().mockResolvedValue({ items: [] }),
+      markNormalRead: vi.fn().mockResolvedValue(null),
+    });
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    expect((await inbox.listNormal('conversation')).items[0]?.recipientStatuses).toEqual(normalReceipts);
+    expect((await inbox.listParents('conversation')).items[0]?.recipientStatuses).toEqual(parentReceipts);
+  });
 });

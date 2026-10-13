@@ -4,6 +4,7 @@ export function useInboxNavigation(inbox) {
   const [screen, setScreen] = useState('list');
   const [showMembers, setShowMembers] = useState(false);
   const sheetDone = useRef(null);
+  const opening = useRef(0);
 
   useEffect(() => {
     if (!showMembers) return;
@@ -14,15 +15,18 @@ export function useInboxNavigation(inbox) {
   }, [showMembers]);
 
   function goBack() {
+    opening.current++;
     if (screen === 'thread' && !inbox.messages.leave()) return;
     setScreen('list');
     setShowMembers(false);
   }
 
   async function openConversation(id) {
-    setScreen('thread');
+    const current = ++opening.current;
     await inbox.messages.select(id);
-    await inbox.conversations.refresh();
+    if (current !== opening.current) return;
+    setScreen('thread');
+    void inbox.conversations.refresh();
   }
 
   async function createConversation(event) {
@@ -31,6 +35,6 @@ export function useInboxNavigation(inbox) {
   }
 
   return { screen, showMembers, sheetDone, goBack, openConversation, createConversation,
-    startConversation: () => setScreen('new'), openMembers: () => setShowMembers(true),
+    startConversation: () => { opening.current++; setScreen('new'); }, openMembers: () => setShowMembers(true),
     closeMembers: () => setShowMembers(false) };
 }

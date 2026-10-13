@@ -51,3 +51,13 @@ it('logs only safe file send failure metadata', async () => {
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret|conversation/);
   } finally { log.mockRestore(); }
 });
+
+it('passes the safe share upload failure code to the file composer', async () => {
+  const session = { sendInboxFile: vi.fn().mockRejectedValue(new Error('inbox_share_upload_failed')) };
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    registerInboxIpc(session as unknown as TraySession, vi.fn());
+    await expect(handlers.get('tray:inbox-send-file')!({ sender: { isDestroyed: () => false } }, 'conversation', new Date().toISOString()))
+      .rejects.toThrow('inbox_share_upload_failed');
+  } finally { log.mockRestore(); }
+});

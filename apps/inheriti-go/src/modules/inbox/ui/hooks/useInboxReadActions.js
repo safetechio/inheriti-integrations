@@ -20,7 +20,6 @@ function useRevealTimer(revealed, setRevealed) {
       if (remaining) return;
       setRevealed(current => current?.acknowledgement === 'PENDING'
         ? { messageId: current.messageId, acknowledgement: 'PENDING' } : null);
-      void window.inheritiTray.inboxHideText();
     };
     update();
     const timer = setInterval(update, 250);
