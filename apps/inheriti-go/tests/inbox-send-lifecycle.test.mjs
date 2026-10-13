@@ -175,6 +175,24 @@ it('shows previously loaded messages immediately while refreshing a revisited co
   expect(render().items).toEqual(updated);
 });
 
+it('keeps a file transfer busy while a cached conversation refresh finishes', async () => {
+  await render().select('conversation');
+  render().leave();
+  const reload = deferred();
+  window.inheritiTray.inboxMessages.mockImplementationOnce(() => reload.promise);
+  const loading = render().select('conversation');
+  const uploading = deferred();
+  window.inheritiTray.inboxSendFile = vi.fn(() => uploading.promise);
+  const transfer = render().sendFile();
+  expect(render().busy).toBe('sending-file');
+  reload.resolve({ items: [] });
+  await loading;
+  expect(render().busy).toBe('sending-file');
+  uploading.resolve({ cancelled: true });
+  await transfer;
+  expect(render().busy).toBe('');
+});
+
 it('clears recent messages when the window hides', async () => {
   window.inheritiTray.inboxMessages.mockResolvedValueOnce({ items: [{ id: 'message-1' }] });
   await render().select('conversation');

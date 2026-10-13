@@ -177,7 +177,7 @@ export function useInboxMessages(onClose) {
     } catch {
       if (generation.current === current && request.current === latest) setError('Could not load messages. Try again.');
     } finally {
-      if (generation.current === current) setBusy('');
+      if (generation.current === current) setBusy(previous => previous === 'loading' ? '' : previous);
     }
   }
 
