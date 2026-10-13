@@ -51,17 +51,18 @@ it('replaces the active AppImage and retains the previous executable', async () 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-it('restarts an AppImage after its old mount closes without inheriting the old mount libraries', async () => {
+it('restarts an AppImage after its old process exits without inheriting the old mount libraries', async () => {
   const quit = vi.fn();
   const unref = vi.fn();
   const start = vi.fn().mockImplementation(() => ({
     once(event: string, callback: () => void) { if (event === 'spawn') queueMicrotask(callback); return this; }, unref,
   }));
-  await relaunchGoAppImage('/downloads/go.AppImage', '/tmp/.mount_old', quit, start);
+  await relaunchGoAppImage('/downloads/go.AppImage', quit, ['--inheriti-go-background'], start);
   const [executable, args, options] = start.mock.calls[0]!;
   expect(executable).toBe('/bin/sh');
-  expect(args.slice(-2)).toEqual(['/tmp/.mount_old', '/downloads/go.AppImage']);
-  expect(args[1]).toContain('exec "$2" --ozone-platform=x11');
+  expect(args.slice(-3)).toEqual([String(process.pid), '/downloads/go.AppImage', '--inheriti-go-background']);
+  expect(args[1]).toContain('kill -0 "$1"');
+  expect(args[1]).toContain('exec "$executable" --ozone-platform=x11 "$@"');
   expect(options).toEqual(expect.objectContaining({ detached: true, stdio: 'ignore' }));
   expect(options.env).not.toHaveProperty('APPDIR');
   expect(options.env).not.toHaveProperty('APPIMAGE');

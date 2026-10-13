@@ -30,7 +30,7 @@ export function showLauncher(action?: TrayAction): void {
       width: linuxWindow ? 448 : 404,
       height: linuxWindow ? 756 : 676,
       useContentSize: !linuxWindow,
-      ...(linuxWindow && process.argv.includes('--ozone-platform=x11') ? { type: 'utility' } : {}),
+      ...(linuxWindow && (process.env.DISPLAY || process.argv.includes('--ozone-platform=x11')) ? { type: 'utility' } : {}),
       show: false,
       resizable: false,
       maximizable: false,

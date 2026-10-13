@@ -28,7 +28,7 @@ it('creates the Linux launcher at the design content size', () => {
     width: process.platform === 'linux' ? 448 : 404,
     height: process.platform === 'linux' ? 756 : 676,
     useContentSize: process.platform !== 'linux',
-    ...(process.platform === 'linux' && process.argv.includes('--ozone-platform=x11') ? { type: 'utility' } : {}),
+    ...(process.platform === 'linux' && (process.env.DISPLAY || process.argv.includes('--ozone-platform=x11')) ? { type: 'utility' } : {}),
     title: 'Inheriti Go · DEV',
   }));
   const window = mock.BrowserWindow.mock.results[0]!.value;
@@ -43,21 +43,25 @@ it('creates the Linux launcher at the design content size', () => {
   expect(mock.BrowserWindow).toHaveBeenCalledTimes(1);
 });
 
-it('uses a normal window on native Wayland and a utility window with explicit X11', async () => {
+it('uses a normal window on native Wayland and a utility window when X11 is available', async () => {
   if (process.platform !== 'linux') return;
   const original = process.argv;
+  const display = process.env.DISPLAY;
   try {
     process.argv = original.filter((arg) => arg !== '--ozone-platform=x11');
+    delete process.env.DISPLAY;
     vi.resetModules();
     (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
     expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.not.objectContaining({ type: 'utility' }));
 
-    process.argv = [...original, '--ozone-platform=x11'];
+    process.env.DISPLAY = ':0';
     vi.resetModules();
     (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
     expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'utility' }));
   } finally {
     process.argv = original;
+    if (display === undefined) delete process.env.DISPLAY;
+    else process.env.DISPLAY = display;
   }
 });
 

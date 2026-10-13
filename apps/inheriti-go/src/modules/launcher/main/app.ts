@@ -171,7 +171,7 @@ async function checkForUpdates(session: TraySession, publishProgress: (progress:
         if (current && await replaceGoAppImage(destination, current)) {
           await rm(directory, { recursive: true, force: true });
           publishProgress({ phase: 'restarting', version: build.version });
-          await relaunchGoAppImage(current, process.env.APPDIR, () => app.quit());
+          await relaunchGoAppImage(current, () => app.quit());
           return;
         }
         shell.showItemInFolder(destination);

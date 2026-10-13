@@ -63,15 +63,16 @@ export async function replaceGoAppImage(downloaded: string, current = process.en
   }
 }
 
-export async function relaunchGoAppImage(current: string, mountedDirectory: string | undefined, quit: () => void, start = spawn): Promise<void> {
+export async function relaunchGoAppImage(current: string, quit: () => void,
+  args: string[] = [], start = spawn): Promise<void> {
   const environment = { ...process.env };
   delete environment.APPDIR;
   delete environment.APPIMAGE;
   delete environment.LD_LIBRARY_PATH;
   const launcher = start('/bin/sh', [
     '-c',
-    'i=0; while [ -n "$1" ] && [ -d "$1" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done; exec "$2" --ozone-platform=x11',
-    'sh', mountedDirectory ?? '', current,
+    'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i+1)); done; executable="$2"; shift 2; exec "$executable" --ozone-platform=x11 "$@"',
+    'sh', String(process.pid), current, ...args,
   ], { detached: true, stdio: 'ignore', env: environment });
   await new Promise<void>((resolve, reject) => {
     launcher.once('spawn', resolve);
