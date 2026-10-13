@@ -31,6 +31,7 @@ export function LauncherApp({ messages }) {
   const [inboxHasNew, setInboxHasNew] = useState(false);
   const [inboxTarget, setInboxTarget] = useState(null);
   const [pendingInboxAction, setPendingInboxAction] = useState(null);
+  const [pendingPlanAction, setPendingPlanAction] = useState(null);
   const switchingOrganization = useRef(false);
   const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
@@ -38,6 +39,7 @@ export function LauncherApp({ messages }) {
   useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
+    if (action === messages.savePrivately || action === messages.shareWithTeam) setPendingPlanAction(action);
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
       setPendingInboxAction(action);
@@ -58,6 +60,14 @@ export function LauncherApp({ messages }) {
     onEditAction: () => { if (state?.edit?.available && !editFlow.busy) void editFlow.open(); },
     onReturnToInbox: () => setInboxOpen(true),
   });
+  useEffect(() => {
+    if (!pendingPlanAction || state?.status !== 'signed-in' || !state.selectedId || flow.busy || flow.preparing || editFlow.busy) return;
+    if ((flow.step === 'actions' || flow.step === 'capture') && !editFlow.editing) {
+      closeInbox();
+      flow.openCapture(pendingPlanAction === messages.savePrivately ? 'private' : 'team');
+    }
+    setPendingPlanAction(null);
+  }, [pendingPlanAction, state?.status, state?.selectedId, flow, editFlow.busy, editFlow.editing, closeInbox, messages]);
   useEffect(() => {
     if (!pendingInboxAction || state?.status !== 'signed-in' || switchingOrganization.current) return;
     const belongsToAccount = state.organizations?.some(({ id }) => id === pendingInboxAction.organizationId);

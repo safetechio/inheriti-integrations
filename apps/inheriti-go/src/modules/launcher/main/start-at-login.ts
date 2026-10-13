@@ -29,10 +29,10 @@ export function ensureStartAtLogin(deployment: string, iconSource?: string): voi
     const executable = appImage.replace(/[\\"$`]/gu, '\\$&').replace(/%/gu, '%%');
     const x11 = '--ozone-platform=x11';
     writeFileSync(join(applications, `${desktopName}.desktop`),
-      `[Desktop Entry]\nType=Application\nName=${app.getName()}\nExec="${executable}" ${x11}\n${icon}StartupWMClass=${app.getName()}\nTerminal=false\n`,
+      `[Desktop Entry]\nType=Application\nName=${app.getName()}\nExec="${executable}" ${x11}\n${icon}StartupWMClass=${desktopName}\nTerminal=false\n`,
       { mode: 0o600 });
     writeFileSync(join(directory, `inheriti-go-${deployment}.desktop`),
-      `[Desktop Entry]\nType=Application\nName=${app.getName()}\nExec="${executable}" ${x11} ${backgroundFlag}\n${icon}StartupWMClass=${app.getName()}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`,
+      `[Desktop Entry]\nType=Application\nName=${app.getName()}\nExec="${executable}" ${x11} ${backgroundFlag}\n${icon}StartupWMClass=${desktopName}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`,
       { mode: 0o600 });
     return;
   }

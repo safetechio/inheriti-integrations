@@ -7,6 +7,7 @@ let quitting = false;
 export type TrayAction = string | { kind: 'OPEN_INBOX'; organizationId: string; conversationId?: string };
 declare const __INHERITI_DEPLOYMENT__: string | undefined;
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
+const displayName = app.getName();
 
 export function currentWindow(): BrowserWindow | undefined {
   return window;
@@ -24,16 +25,17 @@ export function showLauncher(action?: TrayAction): void {
   const creating = !window || window.isDestroyed();
   if (creating) {
     const linuxWindow = process.platform === 'linux';
+    if (linuxWindow) app.setName(`inheriti-go-${deployment}`);
     window = new BrowserWindow({
       width: linuxWindow ? 448 : 404,
       height: linuxWindow ? 756 : 676,
       useContentSize: !linuxWindow,
-      ...(linuxWindow ? { type: 'toolbar' } : {}),
+      ...(linuxWindow && process.argv.includes('--ozone-platform=x11') ? { type: 'utility' } : {}),
       show: false,
       resizable: false,
       maximizable: false,
       fullscreenable: false,
-      title: deployment === 'prod' ? app.getName() : `${app.getName()} · ${deployment.toUpperCase()}`,
+      title: deployment === 'prod' ? displayName : `${displayName} · ${deployment.toUpperCase()}`,
       icon: join(import.meta.dirname, deployment === 'prod' ? 'tray.png' : `tray-${deployment}.png`),
       webPreferences: {
         preload: join(import.meta.dirname, 'preload.cjs'),

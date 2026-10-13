@@ -40,7 +40,7 @@ it('registers packaged AppImages for background login, never the development exe
   const desktop = readFileSync(join(autostart, 'inheriti-go-dev.desktop'), 'utf8');
   expect(desktop).toContain(`Exec="${process.env.APPIMAGE}" --ozone-platform=x11 --inheriti-go-background`);
   expect(desktop).not.toContain(process.execPath);
-  expect(desktop).toContain('StartupWMClass=Inheriti Go DEV');
+  expect(desktop).toContain('StartupWMClass=inheriti-go-dev');
   expect(desktop).toContain(`Icon=${join(directory, 'data', 'icons', 'hicolor', '256x256', 'apps', 'inheriti-go-dev.png')}`);
   const launcher = readFileSync(join(directory, 'data', 'applications', 'inheriti-go-dev.desktop'), 'utf8');
   expect(launcher).toContain(`Exec="${process.env.APPIMAGE}" --ozone-platform=x11`);

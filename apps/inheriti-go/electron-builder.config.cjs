@@ -10,7 +10,7 @@ const productName = deployment === 'prod' ? 'Inheriti® Go' : `Inheriti® Go ${d
 module.exports = {
   appId: `com.safetech.inheriti.go.${deployment}`,
   productName,
-  extraMetadata: { productName },
+  extraMetadata: { productName, desktopName: `inheriti-go-${deployment}` },
   icon: resolve(__dirname, deployment === 'prod' ? 'build/icon.svg' : `build/icon-${deployment}.svg`),
   artifactName: `Inheriti-Go-${deployment}-\${version}-\${os}-\${arch}.\${ext}`,
   directories: { output: process.env.INHERITI_ARTIFACTS_DIR ?? `artifacts/${deployment}` },

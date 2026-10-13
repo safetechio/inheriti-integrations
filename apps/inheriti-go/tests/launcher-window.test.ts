@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
-  app: { isReady: vi.fn(() => true), getName: vi.fn(() => 'Inheriti Go') },
+  app: { isReady: vi.fn(() => true), getName: vi.fn(() => 'Inheriti Go'), setName: vi.fn() },
   screen: { getCursorScreenPoint: vi.fn(() => ({ x: 2200, y: 100 })),
     getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 1920, y: 40, width: 1000, height: 800 } })) },
   BrowserWindow: vi.fn(() => ({
@@ -28,7 +28,7 @@ it('creates the Linux launcher at the design content size', () => {
     width: process.platform === 'linux' ? 448 : 404,
     height: process.platform === 'linux' ? 756 : 676,
     useContentSize: process.platform !== 'linux',
-    ...(process.platform === 'linux' ? { type: 'toolbar' } : {}),
+    ...(process.platform === 'linux' && process.argv.includes('--ozone-platform=x11') ? { type: 'utility' } : {}),
     title: 'Inheriti Go · DEV',
   }));
   const window = mock.BrowserWindow.mock.results[0]!.value;
@@ -41,6 +41,24 @@ it('creates the Linux launcher at the design content size', () => {
   showLauncher();
   expect(window.setPosition).toHaveBeenLastCalledWith(2460, 40);
   expect(mock.BrowserWindow).toHaveBeenCalledTimes(1);
+});
+
+it('uses a normal window on native Wayland and a utility window with explicit X11', async () => {
+  if (process.platform !== 'linux') return;
+  const original = process.argv;
+  try {
+    process.argv = original.filter((arg) => arg !== '--ozone-platform=x11');
+    vi.resetModules();
+    (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
+    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.not.objectContaining({ type: 'utility' }));
+
+    process.argv = [...original, '--ozone-platform=x11'];
+    vi.resetModules();
+    (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
+    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'utility' }));
+  } finally {
+    process.argv = original;
+  }
 });
 
 it('passes only bounded Secure Chat identifiers to the launcher', () => {

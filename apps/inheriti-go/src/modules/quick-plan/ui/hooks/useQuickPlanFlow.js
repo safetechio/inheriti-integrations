@@ -39,14 +39,7 @@ export function useQuickPlanFlow({ state, setState, messages, canHandleAction, o
       onEditAction();
       return;
     }
-    if (action === messages.shareWithTeam) {
-      openCapture('team');
-      return;
-    }
-    if (action === messages.savePrivately) {
-      openCapture('private');
-      return;
-    }
+    if (action === messages.shareWithTeam || action === messages.savePrivately) return;
     if (action === messages.savePlan) {
       openCapture();
       return;
