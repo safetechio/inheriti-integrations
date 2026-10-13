@@ -14,7 +14,7 @@ export function useInboxNavigation(inbox) {
   }, [showMembers]);
 
   function goBack() {
-    if (screen === 'thread' && !inbox.messages.hide()) return;
+    if (screen === 'thread' && !inbox.messages.leave()) return;
     setScreen('list');
     setShowMembers(false);
   }

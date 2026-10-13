@@ -3,9 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import { InboxMessageList } from '../src/modules/inbox/ui/components/InboxMessageList.jsx';
 import { InboxRevealProgress } from '../src/modules/inbox/ui/components/InboxRevealProgress.jsx';
-import { clearPendingSend, finishAcknowledgement, isOrganisationKeyUnavailable, protectedSegmentsForSend } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
+import { clearPendingSend, fileSendErrorMessage, finishAcknowledgement, isOrganisationKeyUnavailable, protectedSegmentsForSend } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
 
 globalThis.React = React;
+
+it('only mentions the file limit for a size failure', () => {
+  expect(fileSendErrorMessage(new Error('request_failed'))).toBe('Could not send the file. Try again.');
+  expect(fileSendErrorMessage(new Error('inbox_file_too_large'))).toContain('10 MB limit was exceeded');
+});
 
 it('recognises missing Organisation Key errors without treating unrelated failures as key errors', () => {
   expect(isOrganisationKeyUnavailable(new Error('MasterKeyRequired: master_key_required'))).toBe(true);
@@ -44,8 +49,10 @@ it('shows actual protected send progress and a pending read without plaintext', 
   expect(sending).toContain('Sealing protected text 2/3');
   expect(sending).toContain('class="inbox-pending-footer" role="status"');
   expect(sending).toMatch(/inbox-pending-footer[\s\S]*Sealing protected text 2\/3[\s\S]*inbox-progress-track/);
-  expect(sending.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0]).not.toContain('next draft');
-  expect(sending).toContain('You · Sending');
+  const pendingCard = sending.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0];
+  expect(pendingCard).not.toContain('next draft');
+  expect(pendingCard).not.toContain('>Protected message</p>');
+  expect(sending).toContain('You</small>');
   expect(sending).toContain('>next draft</textarea>');
   expect(sending).not.toMatch(/<textarea[^>]*disabled/);
 
@@ -60,19 +67,23 @@ it('shows actual protected send progress and a pending read without plaintext', 
     { clientId: 'first', conversationId: 'conversation', parentId: 'one', protectedSend: true, completed: 1, total: 3, status: 'sending', text: '' },
     { clientId: 'second', conversationId: 'conversation', parentId: 'two', protectedSend: false, completed: 0, total: 0, status: 'sending', text: 'Another message' },
   ] });
-  expect(parallel.match(/You · Sending/g)).toHaveLength(2);
+  expect(parallel.match(/<small>You<\/small>/g)).toHaveLength(2);
   expect(parallel).not.toContain('secret value');
 
   const sent = { conversationId: 'conversation', parentId: 'parent', protectedSend: false,
     completed: 0, total: 0, status: 'sent', text: 'accepted text' };
-  expect(render({ acceptedMessages: [sent], draft: 'next draft' })).toContain('Syncing…');
+  expect(render({ acceptedMessages: [sent], draft: 'next draft' })).toContain('>Sent</small>');
   const second = { ...sent, parentId: 'parent-2', text: 'second accepted' };
   const awaiting = render({ acceptedMessages: [sent, second], draft: 'next draft' });
-  expect(awaiting.match(/Syncing…/g)).toHaveLength(2);
+  expect(awaiting.match(/>Sent<\/small>/g)).toHaveLength(2);
   const loaded = render({ acceptedMessages: [sent, second], normalMessages: [{ parentId: 'parent', senderMemberId: 'me',
     text: 'accepted text', createdAt: new Date().toISOString() }] });
-  expect(loaded.match(/Syncing…/g)).toHaveLength(1);
+  expect(loaded.match(/>Sent<\/small>/g)).toHaveLength(1);
   expect(loaded.match(/accepted text/g)).toHaveLength(1);
+
+  const protectedAccepted = render({ acceptedMessages: [{ ...sent, protectedSend: true, text: '' }] });
+  expect(protectedAccepted).toContain('Updating conversation…');
+  expect(protectedAccepted.match(/<article class="inbox-thread-message is-own inbox-pending-message"[\s\S]*?<\/article>/)?.[0]).not.toContain('>Protected message</p>');
 
   const choosing = render({ busy: 'sending-file', transfer: null });
   expect(choosing).not.toContain('inbox-send-status');

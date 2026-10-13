@@ -9,6 +9,27 @@ const chrome = ['google-chrome', 'chromium'].find((binary) => {
   try { execFileSync('which', [binary]); return true; } catch { return false; }
 });
 
+it.skipIf(!chrome)('disables Secure Chat until an organisation is selected', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-inbox-availability-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',organizations:[],teams:[],assetCatalog:[]};
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>base,
+        onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},onAction:()=>()=>{},
+        signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{},version:async()=>''};
+      setTimeout(()=>{document.getElementById('root').dataset.withoutOrganisation=String(document.getElementById('open-inbox')?.disabled);
+        window.stateChanged({...base,selectedId:'org-1',organizations:[{id:'org-1',name:'Organisation'}]});},150);
+      setTimeout(()=>{document.getElementById('root').dataset.withOrganisation=String(document.getElementById('open-inbox')?.disabled);},300);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=450', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-without-organisation="true"');
+    expect(html).toContain('data-with-organisation="false"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('opens Secure Chat from a tray action after sign-in and organization selection', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-inbox-action-'));
   try {

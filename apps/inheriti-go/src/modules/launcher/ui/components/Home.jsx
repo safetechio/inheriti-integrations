@@ -40,7 +40,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
       <div className="tray-home-section">
         <h2>Secure Chat</h2>
         <div className="tray-home-actions">
-          <button id="open-inbox" type="button" onClick={onOpenInbox}>
+          <button id="open-inbox" type="button" disabled={!selectedId} onClick={onOpenInbox}>
             <span className="tray-action-icon"><LockIcon /></span><span><strong>Open Secure Chat</strong><small>Private messages and files</small></span>{inboxHasNew && <span className="inbox-unread-badge" aria-label="New message">•</span>}<span className="tray-action-arrow"><ChevronRightIcon /></span>
           </button>
         </div>

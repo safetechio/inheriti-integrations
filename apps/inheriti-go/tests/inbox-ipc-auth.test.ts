@@ -34,3 +34,20 @@ it.each([Object.assign(new Error('forbidden'), { status: 403 }), new Error('netw
     expect(session.signOut).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
   });
+
+it('logs only safe file send failure metadata', async () => {
+  const error = Object.assign(new Error('secret file contents'), { status: 503, code: 'secret', requestId: 'req_123', token: 'secret' });
+  const session = { sendInboxFile: vi.fn().mockRejectedValue(error), signOut: vi.fn() };
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    registerInboxIpc(session as unknown as TraySession, vi.fn());
+    const thrown = await Promise.resolve(handlers.get('tray:inbox-send-file')!({ sender: { isDestroyed: () => false } }, 'conversation', new Date().toISOString()))
+      .then(() => undefined, failure => failure as Error);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).not.toBe(error);
+    expect(String(thrown)).not.toContain('secret');
+    expect(thrown?.stack).not.toContain('secret');
+    expect(log).toHaveBeenCalledWith('Secure Chat file send failed', { status: 503, code: undefined, requestId: 'req_123' });
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret|conversation/);
+  } finally { log.mockRestore(); }
+});

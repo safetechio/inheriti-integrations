@@ -12,6 +12,14 @@ export function isOrganisationKeyUnavailable(failure) {
   return /master_key_required|MasterKeyRequired/i.test(String(failure));
 }
 
+export function fileSendErrorMessage(failure) {
+  if (isOrganisationKeyUnavailable(failure)) return ORGANISATION_KEY_UNAVAILABLE;
+  if (String(failure).includes('INBOX_UNAVAILABLE'))
+    return 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM.';
+  if (String(failure).includes('inbox_file_too_large')) return 'Could not send the file. The 10 MB limit was exceeded.';
+  return 'Could not send the file. Try again.';
+}
+
 export function clearPendingSend(pending) {
   pending.parentId = '';
   pending.expiresAt = '';
@@ -285,10 +293,7 @@ export function useInboxMessages(onClose) {
       if (generation.current !== current || result?.cancelled) return;
       await refresh();
     } catch (failure) {
-      if (generation.current === current && !String(failure).includes('AbortError')) setError(isOrganisationKeyUnavailable(failure)
-        ? ORGANISATION_KEY_UNAVAILABLE : String(failure).includes('INBOX_UNAVAILABLE')
-        ? 'Secure Chat storage is unavailable. Ask an owner or manager to check InheritiChain, Inheriti® Vault, and Inheriti® HSM.'
-        : 'Could not send the file. Check the 10 MB limit and try again.');
+      if (generation.current === current && !String(failure).includes('AbortError')) setError(fileSendErrorMessage(failure));
     } finally {
       if (generation.current === current) { setBusy(''); setTransfer(null); }
     }
@@ -374,10 +379,24 @@ export function useInboxMessages(onClose) {
     return true;
   }
 
+  function leave() {
+    if (!hideWithPlanWarning()) return false;
+    generation.current++;
+    request.current++;
+    activeConversation.current = '';
+    setConversationId('');
+    setItems([]);
+    setNormalItems([]);
+    setParentItems([]);
+    unitReveals.clear();
+    setError('');
+    return true;
+  }
+
   function cancelTransfer() { void window.inheritiTray.inboxCancelTransfer(); }
 
   return { conversationId, items, normalItems, normalUnreadCount, parentItems, parentUnreadCount, mode, setMode: updateMode,
     draft, setDraft: updateDraft, marks, markSelection, unmarkSelection, unitReveals,
     segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer, pendingMessages, acceptedMessages,
-    select, refresh, clearHistory, send, retrySend: deliver, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning };
+    select, refresh, clearHistory, send, retrySend: deliver, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning, leave };
 }

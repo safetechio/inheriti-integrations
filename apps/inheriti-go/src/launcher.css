@@ -334,10 +334,10 @@ body { padding: 0; background: #fff; }
 .inbox-message-heading { display: flex; gap: 8px; justify-content: flex-start; align-items: center; }
 .inbox-message-heading small { color: #667085; font-size: 11px; }.is-own .inbox-message-heading small { color: #fff; }
 .inbox-pending-status { display: inline-flex; align-items: center; gap: 4px; }.inbox-pending-status svg { width: 12px; height: 12px; }
-.inbox-pending-footer { display: grid; gap: 3px; margin: 0 -14px -9px; padding: 5px 10px 6px; border-top: 1px solid #c7d5ff; background: #edf2ff; color: #1642ba; }
+.inbox-pending-footer { display: grid; gap: 3px; margin: 0 -14px -9px; padding: 5px 10px 6px; border-top: 1px solid #ffffff66; background: linear-gradient(135deg, #ffffff19, #ffffff0a); color: #fff; backdrop-filter: blur(10px) saturate(120%); }
 .inbox-pending-footer small { font-size: 11px; line-height: 1.2; }
-.inbox-pending-footer .inbox-progress-track { height: 3px; background: #c7d5ff; }
-.inbox-pending-footer .inbox-progress-track > span { background: #2f55f0; }
+.inbox-pending-footer .inbox-progress-track { height: 3px; background: #ffffff66; }
+.inbox-pending-footer .inbox-progress-track > span { background: #fff; }
 .inbox-message-bubble > button { justify-self: start; min-height: 30px; padding: 3px 10px; font-size: 12px; }
 .inbox-sealed-copy { margin: 0; color: #667085; font-size: 13px; }.is-own .inbox-sealed-copy { color: #fff; }
 .inbox-reveal { display: grid; gap: 8px; }.inbox-reveal > button { justify-self: start; min-height: 30px; padding: 3px 10px; font-size: 12px; }
@@ -347,7 +347,7 @@ body { padding: 0; background: #fff; }
 .inbox-opening { display: grid; grid-template-columns: 16px 1fr; align-items: center; }
 .inbox-opening .inbox-progress-track { grid-column: 1 / -1; }
 .inbox-opening small, .inbox-opening button { grid-column: 2; justify-self: start; }
-.inbox-send-status { flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid #eaecf0; background: #f5f8ff; }
+.inbox-send-status { flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid #ffffff; background: linear-gradient(135deg, #ffffffed, #e2ecffb8); backdrop-filter: blur(10px) saturate(120%); }
 .inbox-send-status .inbox-link { margin-left: auto; }
 .inbox-send-status .inbox-progress-track { flex-basis: 100%; }
 .inbox-progress-track { display: block; width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: #dbe4ff; }
@@ -373,9 +373,12 @@ body { padding: 0; background: #fff; }
 .inbox-new-button svg { width: 14px; height: 14px; }
 @keyframes inbox-progress { to { transform: translateX(190%); } }
 @media (prefers-reduced-motion: reduce) { .inbox-progress-track > span { transition: none; }.inbox-progress-track.is-indeterminate > span { animation: none; width: 100%; }.inbox-revealed { animation: none; } }
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) { .inbox-pending-footer { background: #2448d7; backdrop-filter: none; }.inbox-send-status { background: #f5f8ff; backdrop-filter: none; } }
 .inbox-ack-pending { margin: 0; padding: 6px 8px; border-radius: 6px; color: #8c5100; background: #fff4d6; font-size: 12px; }
 .inbox-reveal-confirm { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe4ff; border-radius: 8px; background: #fff; }
 .inbox-reveal-confirm p { margin: 0; color: #475467; font-size: 12px; }.inbox-reveal-confirm > div { display: flex; gap: 8px; }.inbox-reveal-confirm button { flex: 1; min-height: 30px; padding: 3px 8px; font-size: 12px; }
+.inbox-reveal-confirm .inbox-file-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+.inbox-reveal-confirm .inbox-file-actions button { min-height: 36px; }
 .inbox-thread-composer { flex: none; display: grid; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid #eaecf0; background: #fff; }
 .inbox-thread-composer > div { display: flex; align-items: center; gap: 8px; }.inbox-thread-composer textarea { min-width: 0; flex: 1; resize: none; font-size: 14px; }.inbox-thread-composer button { height: 36px; padding: 6px 10px; font-size: 12px; }.inbox-thread-composer .inbox-attach { width: 36px; padding: 0; display: grid; place-items: center; }.inbox-thread-composer .inbox-attach svg { width: 16px; height: 16px; }.inbox-thread-composer small { color: #667085; font-size: 11px; }
 .inbox-thread-composer .inbox-mode { gap: 4px; }.inbox-mode button { height: 28px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; color: #344054; }.inbox-mode button[aria-pressed="true"] { border-color: #1642ba; background: #edf2ff; color: #1642ba; }

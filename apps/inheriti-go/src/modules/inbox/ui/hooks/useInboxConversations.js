@@ -1,17 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 
-export function useInboxConversations() {
+const CACHE_MS = 2 * 60_000;
+let recentConversations = null;
+
+export function clearInboxConversationCache() { recentConversations = null; }
+
+export function useInboxConversations(organizationId, memberId) {
+  const scope = `${organizationId}:${memberId}`;
+  const cached = recentConversations?.scope === scope && Date.now() - recentConversations.loadedAt < CACHE_MS
+    ? recentConversations.items : [];
   const generation = useRef(0);
   const request = useRef(0);
-  const [items, setItems] = useState([]);
-  const [busy, setBusy] = useState('loading');
+  const [items, setItems] = useState(cached);
+  const [busy, setBusy] = useState(cached.length ? '' : 'loading');
   const [error, setError] = useState('');
+
+  function remember(next) {
+    recentConversations = { scope, loadedAt: Date.now(), items: next };
+    setItems(next);
+  }
 
   useEffect(() => {
     const current = ++generation.current;
     const latest = ++request.current;
     window.inheritiTray.inboxConversations()
-      .then((page) => { if (generation.current === current && request.current === latest) setItems(page.items); })
+      .then((page) => { if (generation.current === current && request.current === latest) remember(page.items); })
       .catch(() => { if (generation.current === current && request.current === latest) setError('Could not load conversations. Try again.'); })
       .finally(() => { if (generation.current === current && request.current === latest) setBusy(''); });
     return () => { generation.current++; };
@@ -24,7 +37,7 @@ export function useInboxConversations() {
     setError('');
     try {
       const page = await window.inheritiTray.inboxConversations();
-      if (generation.current === current && request.current === latest) setItems(page.items);
+      if (generation.current === current && request.current === latest) remember(page.items);
     } catch {
       if (generation.current === current && request.current === latest) setError('Could not load conversations. Try again.');
     } finally {
@@ -40,7 +53,11 @@ export function useInboxConversations() {
       const conversation = await window.inheritiTray.inboxCreateConversation(title, memberIds);
       if (generation.current !== current) return;
       request.current++;
-      setItems((existing) => [conversation].concat(existing.filter(({ id }) => id !== conversation.id)));
+      setItems((existing) => {
+        const next = [conversation].concat(existing.filter(({ id }) => id !== conversation.id));
+        recentConversations = { scope, loadedAt: Date.now(), items: next };
+        return next;
+      });
       return conversation;
     } catch {
       if (generation.current === current) setError('Could not start the conversation. Try again.');
@@ -57,8 +74,12 @@ export function useInboxConversations() {
       const updated = await window.inheritiTray.inboxChangeParticipants(conversation.id, action, memberId, conversation.participantRevision);
       if (generation.current === current) {
         request.current++;
-        setItems((existing) => existing.map((item) => item.id === updated.id
-          ? { ...updated, unreadCount: item.unreadCount || 0 } : item));
+        setItems((existing) => {
+          const next = existing.map((item) => item.id === updated.id
+            ? { ...updated, unreadCount: item.unreadCount || 0 } : item);
+          recentConversations = { scope, loadedAt: Date.now(), items: next };
+          return next;
+        });
       }
       return true;
     } catch {
@@ -66,7 +87,7 @@ export function useInboxConversations() {
         setError('Could not change members. The conversation may have changed; review the refreshed list and try again.');
         try {
           const page = await window.inheritiTray.inboxConversations();
-          if (generation.current === current) setItems(page.items);
+          if (generation.current === current) remember(page.items);
         } catch { /* Keep the current list and error visible. */ }
       }
       return false;

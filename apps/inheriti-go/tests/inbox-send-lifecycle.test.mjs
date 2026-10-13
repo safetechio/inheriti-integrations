@@ -18,9 +18,9 @@ vi.mock('react', async importOriginal => ({
 import { useInboxMessages } from '../src/modules/inbox/ui/hooks/useInboxMessages.js';
 
 function deferred() {
-  let resolve;
-  const promise = new Promise(done => { resolve = done; });
-  return { promise, resolve };
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 function render() {
@@ -140,4 +140,18 @@ it('accepts a second message while the first is still sending', async () => {
   firstSend.resolve();
   await flush();
   expect(render().pendingMessages).toHaveLength(0);
+});
+
+it('ignores a message load that fails after leaving the conversation', async () => {
+  const pending = deferred();
+  window.inheritiTray.inboxMessages.mockReturnValue(pending.promise);
+  const loading = render().select('conversation');
+  expect(render().busy).toBe('loading');
+  expect(render().leave()).toBe(true);
+  pending.reject(new Error('cancelled'));
+  await loading;
+  const inbox = render();
+  expect(inbox.conversationId).toBe('');
+  expect(inbox.busy).toBe('');
+  expect(inbox.error).toBe('');
 });

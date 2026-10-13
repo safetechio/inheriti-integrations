@@ -22,7 +22,7 @@ export function inboxPresenceStatus(presence, memberId, organizationId, elapsedM
 
 export function useInboxPanel(onClose, identity, organizationId) {
   const participants = useInboxParticipants();
-  const conversations = useInboxConversations();
+  const conversations = useInboxConversations(organizationId, identity?.memberId);
   const messages = useInboxMessages(onClose);
   const [toast, setToast] = useState(null);
   const [title, setTitle] = useState('');

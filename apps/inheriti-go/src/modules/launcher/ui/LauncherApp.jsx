@@ -12,6 +12,7 @@ import { useTraySession } from './hooks/useTraySession.js';
 import { InboxPanel } from '../../inbox/ui/InboxPanel.jsx';
 import { useInboxState } from '../../inbox/ui/useInboxState.js';
 import { clearInboxPresence, rememberInboxPresence } from '../../inbox/ui/hooks/useInboxPanel.js';
+import { clearInboxConversationCache } from '../../inbox/ui/hooks/useInboxConversations.js';
 
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
 
@@ -27,7 +28,7 @@ export function LauncherApp({ messages }) {
   const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
   const inboxIdentity = useInboxState(state?.status === 'signed-in' ? state.selectedId : undefined);
-  useEffect(() => { clearInboxPresence(); }, [state?.status, state?.selectedId]);
+  useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&

@@ -135,11 +135,31 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
     if (typeof content !== 'string' || !content.trim() || content.length > 10000 || typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt))) throw new Error('Invalid Secure Chat message');
     return session.sendInboxText(inboxId(conversationId), content, expiresAt);
   });
-  handle('tray:inbox-send-file', (event, conversationId: unknown, expiresAt: unknown) => {
+  handle('tray:inbox-send-file', async (event, conversationId: unknown, expiresAt: unknown) => {
     trusted(event);
     if (typeof expiresAt !== 'string' || !Number.isFinite(Date.parse(expiresAt))) throw new Error('Invalid Secure Chat expiry');
-    return session.sendInboxFile(inboxId(conversationId), expiresAt,
-      (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
+    const conversation = inboxId(conversationId);
+    try {
+      return await session.sendInboxFile(conversation, expiresAt,
+        (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
+    } catch (error) {
+      const failure = error && typeof error === 'object' ? error as { status?: unknown; code?: unknown; requestId?: unknown } : {};
+      const status = typeof failure.status === 'number' && Number.isInteger(failure.status) && failure.status >= 100 && failure.status <= 599 ? failure.status : undefined;
+      const known = ['operator_token_expired', 'operator_reauthentication_required', 'reauthentication_required',
+        'inbox_identity_http_401', 'master_key_required', 'MasterKeyRequired', 'INBOX_UNAVAILABLE', 'inbox_file_too_large',
+        'invalid_contract_address', 'inbox_share_conflict', 'inbox_file_share_too_large'];
+      const code = typeof failure.code === 'string' && known.includes(failure.code) ? failure.code : undefined;
+      const requestId = typeof failure.requestId === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(failure.requestId) ? failure.requestId : undefined;
+      console.error('Secure Chat file send failed', { status, code, requestId });
+      const original = error instanceof Error ? error.message : '';
+      const reason = known.find(value => code === value || original.includes(value)) ?? 'Secure Chat file send failed';
+      const safeError = new Error(reason);
+      if (error instanceof Error && error.name === 'AbortError') safeError.name = 'AbortError';
+      if (status !== undefined) Object.assign(safeError, { status });
+      if (code !== undefined) Object.assign(safeError, { code });
+      if (requestId !== undefined) Object.assign(safeError, { requestId });
+      throw safeError;
+    }
   });
   handle('tray:inbox-open-text', (event, conversationId: unknown, messageId: unknown) => {
     trusted(event);

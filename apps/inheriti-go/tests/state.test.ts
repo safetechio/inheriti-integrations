@@ -136,12 +136,41 @@ describe('TraySession', () => {
     await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
   });
 
-  it.each(['local', 'dev', 'stg', 'prod'] as const)('requests only identity scopes for %s Business sign-in', (deployment) => {
+  it.each(['local', 'dev', 'stg', 'prod'] as const)('requests offline access for %s Business sign-in', (deployment) => {
     new TraySession(deployment);
     expect(mock.core).toHaveBeenCalledWith(expect.objectContaining({
       business: true,
-      configuration: expect.objectContaining({ scopes: ['openid', 'profile'] }),
+      configuration: expect.objectContaining({ scopes: ['openid', 'profile', 'offline_access'] }),
     }));
+  });
+
+  it('retries with a normal session when Keycloak rejects offline_access', async () => {
+    const session = new TraySession('dev');
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
+    mock.complete.mockResolvedValue({});
+    let opened = 0;
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?${++opened === 1 ? 'error=invalid_scope' : 'code=code&state=state'}`);
+    });
+    expect(opened).toBe(2);
+    expect(mock.begin).toHaveBeenCalledTimes(2);
+    expect(mock.complete).toHaveBeenCalledTimes(1);
+    expect(configuration.scopes).toEqual(['openid', 'profile']);
+    expect(session.state().status).toBe('signed-in');
+  });
+
+  it('does not retry when the operator declines authorisation', async () => {
+    const session = new TraySession('dev');
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?error=access_denied`);
+    });
+    expect(mock.begin).toHaveBeenCalledOnce();
+    expect(session.state().status).toBe('error');
   });
 
   it.each(['dev', 'prod'] as const)('uses the bound callback URI throughout %s sign-in', async (deployment) => {

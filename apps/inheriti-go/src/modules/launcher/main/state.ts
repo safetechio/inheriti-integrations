@@ -64,7 +64,7 @@ export class TraySession {
       audience: 'inheriti-integrations-api',
       environment: config.environment,
       redirectUri: 'http://127.0.0.1/oauth/callback',
-      scopes: ['openid', 'profile'],
+      scopes: ['openid', 'profile', 'offline_access'],
     };
     this.operatorSessions = new ProtectedOperatorSessionStore(deployment, issuer);
     this.core = createNodeIntegrationCore({
@@ -136,21 +136,31 @@ export class TraySession {
   private async runSignIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
     const authorization = new AbortController();
     this.authorization = authorization;
+    this.configuration.scopes = ['openid', 'profile', 'offline_access'];
     this.status = 'authorizing';
     this.message = undefined;
     onChange();
     try {
-      const callbackUrl = await waitForCallback(async (redirectUri) => {
-        if (this.pendingAuthorization) await untilCanceled(this.pendingAuthorization.catch(() => undefined), authorization.signal);
-        authorization.signal.throwIfAborted();
-        this.configuration.redirectUri = redirectUri;
-        const pending = this.core.auth.beginAuthorizationCode();
-        this.pendingAuthorization = pending;
-        const started = await untilCanceled(pending, authorization.signal);
-        authorization.signal.throwIfAborted();
-        return started.authorizationUrl;
-      }, openBrowser, authorization.signal);
-      const session = await this.core.auth.completeAuthorizationCode(callbackUrl) as OperatorSession;
+      const authorize = async () => {
+        const callbackUrl = await waitForCallback(async (redirectUri) => {
+          if (this.pendingAuthorization) await untilCanceled(this.pendingAuthorization.catch(() => undefined), authorization.signal);
+          authorization.signal.throwIfAborted();
+          this.configuration.redirectUri = redirectUri;
+          const pending = this.core.auth.beginAuthorizationCode();
+          this.pendingAuthorization = pending;
+          const started = await untilCanceled(pending, authorization.signal);
+          authorization.signal.throwIfAborted();
+          return started.authorizationUrl;
+        }, openBrowser, authorization.signal);
+        return this.core.auth.completeAuthorizationCode(callbackUrl) as Promise<OperatorSession>;
+      };
+      let session: OperatorSession;
+      try { session = await authorize(); }
+      catch (error) {
+        if (!(error instanceof Error) || (error.message !== 'invalid_scope' && !('code' in error && error.code === 'invalid_scope'))) throw error;
+        this.configuration.scopes = ['openid', 'profile'];
+        session = await authorize();
+      }
       if (authorization.signal.aborted) return;
       this.accountName = accountNameFromIdToken(session?.idToken);
       await this.discover(authorization.signal);
