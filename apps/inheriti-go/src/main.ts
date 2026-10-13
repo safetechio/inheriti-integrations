@@ -1,8 +1,11 @@
 import { BUSINESS_DEPLOYMENTS } from '@safetech/inheriti-elements-core/node';
+import { app } from 'electron';
 import { TraySession } from './modules/launcher/main/state.js';
 import type { Deployment } from './modules/launcher/main/state.js';
 import { registerAppEvents } from './modules/launcher/main/app.js';
 import { trayMessages as messages } from './messages.js';
+
+if (process.platform === 'linux' && process.env.DISPLAY) app.commandLine.appendSwitch('ozone-platform', 'x11');
 
 declare const __INHERITI_DEPLOYMENT__: string | undefined;
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined'

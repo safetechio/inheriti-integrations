@@ -19,6 +19,13 @@ const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __IN
 export function LauncherApp({ messages }) {
   useEffect(() => { document.title = deployment === 'prod' ? messages.appName : `${messages.appName} · ${deployment.toUpperCase()}`; }, [messages]);
   const session = useTraySession(messages);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  useEffect(() => {
+    let received = false;
+    const stop = window.inheritiTray.onUpdateProgress?.((progress) => { received = true; setUpdateProgress(progress); });
+    void window.inheritiTray.updateProgress?.().then((progress) => { if (!received) setUpdateProgress(progress); }).catch(() => {});
+    return stop;
+  }, []);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inboxRequested, setInboxRequested] = useState(false);
   const [inboxHasNew, setInboxHasNew] = useState(false);
@@ -81,6 +88,17 @@ export function LauncherApp({ messages }) {
     setInboxHasNew(false);
     return true;
   };
+
+  if (updateProgress) return <main className="tray-screen tray-update" aria-label="Inheriti Go update">
+    <img src="tray.png" alt="" className="tray-sign-in-logo" />
+    <h1>Updating Inheriti Go</h1>
+    <p role="status">{updateProgress.phase === 'downloading' ? `Downloading version ${updateProgress.version}…` :
+      updateProgress.phase === 'installing' ? 'Installing the update…' : 'Restarting Inheriti Go…'}</p>
+    {updateProgress.phase === 'downloading' && <div className="tray-update-progress">
+      <progress max="100" value={updateProgress.percent ?? 0} aria-label="Download progress" />
+      <strong>{updateProgress.percent ?? 0}%</strong>
+    </div>}
+  </main>;
 
   const screen = !state ? <main className="tray-screen"><p id="status" role="status">{session.error}</p></main> : null;
   if (screen) return screen;

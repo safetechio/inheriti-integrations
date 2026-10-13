@@ -23,9 +23,9 @@ export function useInboxNavigation(inbox) {
 
   async function openConversation(id) {
     const current = ++opening.current;
+    setScreen('thread');
     await inbox.messages.select(id);
     if (current !== opening.current) return;
-    setScreen('thread');
     void inbox.conversations.refresh();
   }
 

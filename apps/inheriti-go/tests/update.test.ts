@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { InternalBuild } from '@safetech/inheriti-elements-core/node';
-import { downloadGoUpdate, installMacGoUpdate, replaceGoAppImage, runWindowsGoInstaller } from '../src/modules/launcher/main/update.js';
+import { downloadGoUpdate, installMacGoUpdate, relaunchGoAppImage, replaceGoAppImage, runWindowsGoInstaller } from '../src/modules/launcher/main/update.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -17,7 +17,9 @@ it('downloads a verified update without overwriting an existing file', async () 
   globalThis.fetch = vi.fn().mockImplementation(() => Promise.resolve({ ...new Response(bytes), ok: true, body: new Response(bytes).body, url: 'https://updates.test/go' }));
   try {
     const target = join(directory, 'go.AppImage');
-    await downloadGoUpdate(build, 'https://updates.test/go', target);
+    const progress = vi.fn();
+    await downloadGoUpdate(build, 'https://updates.test/go', target, progress);
+    expect(progress).toHaveBeenLastCalledWith(3, 3);
     expect(await readFile(target)).toEqual(Buffer.from(bytes));
     if (process.platform === 'linux') expect((await stat(target)).mode & 0o777).toBe(0o700);
     await expect(downloadGoUpdate(build, 'https://updates.test/go', target)).rejects.toThrow();
@@ -49,6 +51,25 @@ it('replaces the active AppImage and retains the previous executable', async () 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+it('restarts an AppImage after its old mount closes without inheriting the old mount libraries', async () => {
+  const quit = vi.fn();
+  const unref = vi.fn();
+  const start = vi.fn().mockImplementation(() => ({
+    once(event: string, callback: () => void) { if (event === 'spawn') queueMicrotask(callback); return this; }, unref,
+  }));
+  await relaunchGoAppImage('/downloads/go.AppImage', '/tmp/.mount_old', quit, start);
+  const [executable, args, options] = start.mock.calls[0]!;
+  expect(executable).toBe('/bin/sh');
+  expect(args.slice(-2)).toEqual(['/tmp/.mount_old', '/downloads/go.AppImage']);
+  expect(args[1]).toContain('exec "$2" --ozone-platform=x11');
+  expect(options).toEqual(expect.objectContaining({ detached: true, stdio: 'ignore' }));
+  expect(options.env).not.toHaveProperty('APPDIR');
+  expect(options.env).not.toHaveProperty('APPIMAGE');
+  expect(options.env).not.toHaveProperty('LD_LIBRARY_PATH');
+  expect(unref).toHaveBeenCalledOnce();
+  expect(quit).toHaveBeenCalledOnce();
+});
+
 it('starts the Windows installer silently and quits after spawn', async () => {
   const quit = vi.fn();
   const unref = vi.fn();
@@ -77,8 +98,8 @@ it('passes a verified ZIP feed to the macOS updater and installs after download'
       updater.emit('update-downloaded');
     }).catch(error => updater.emit('error', error));
   });
-  await installMacGoUpdate(build, signedUrl, updater as never, () => { order.push('prepare'); });
-  expect(order).toEqual(['prepare', 'install']);
+  await installMacGoUpdate(build, signedUrl, updater as never, () => { order.push('prepare'); }, undefined, () => { order.push('downloaded'); });
+  expect(order).toEqual(['downloaded', 'prepare', 'install']);
   expect(updater.quitAndInstall).toHaveBeenCalledOnce();
   await expect(installMacGoUpdate({ ...build, fileName: 'go.dmg' }, signedUrl, updater as never, () => {}))
     .rejects.toThrow('Invalid macOS update');

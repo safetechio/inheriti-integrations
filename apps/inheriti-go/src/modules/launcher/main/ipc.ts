@@ -4,14 +4,16 @@ import type { TraySession } from './state.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { registerQuickPlanIpc } from '../../quick-plan/main/ipc.js';
 import { registerInboxIpc } from '../../inbox/main/ipc.js';
+import type { GoUpdateProgress } from './update.js';
 
-export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void, refreshBadge?: () => void): void {
+export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void, refreshBadge?: () => void, updateProgress?: () => GoUpdateProgress): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
     const window = currentWindow();
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(messages.untrustedRenderer);
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
   ipcMain.handle('tray:version', (event) => { trusted(event); return app.getVersion(); });
+  ipcMain.handle('tray:update-progress', (event) => { trusted(event); return updateProgress?.() ?? null; });
   ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
     trusted(event);
     session.selectCustodianDevice(value);

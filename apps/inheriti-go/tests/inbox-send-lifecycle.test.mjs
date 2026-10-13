@@ -156,6 +156,38 @@ it('ignores a message load that fails after leaving the conversation', async () 
   expect(inbox.error).toBe('');
 });
 
+it('shows previously loaded messages immediately while refreshing a revisited conversation', async () => {
+  const secondLoad = deferred();
+  const first = [{ id: 'message-1' }];
+  const updated = [{ id: 'message-2' }];
+  window.inheritiTray.inboxMessages.mockResolvedValueOnce({ items: first });
+  window.inheritiTray.inboxMessages.mockImplementationOnce(() => secondLoad.promise);
+  let inbox = render();
+  await inbox.select('conversation');
+  expect(render().items).toEqual(first);
+  expect(render().leave()).toBe(true);
+  const loading = render().select('conversation');
+  inbox = render();
+  expect(inbox.items).toEqual(first);
+  expect(inbox.busy).toBe('');
+  secondLoad.resolve({ items: updated });
+  await loading;
+  expect(render().items).toEqual(updated);
+});
+
+it('clears recent messages when the window hides', async () => {
+  window.inheritiTray.inboxMessages.mockResolvedValueOnce({ items: [{ id: 'message-1' }] });
+  await render().select('conversation');
+  window.hideInbox();
+  const nextLoad = deferred();
+  window.inheritiTray.inboxMessages.mockImplementationOnce(() => nextLoad.promise);
+  const loading = render().select('conversation');
+  expect(render().busy).toBe('loading');
+  expect(render().items).toEqual([]);
+  nextLoad.resolve({ items: [] });
+  await loading;
+});
+
 it('retries a cancelled message page and clears a previous refresh error after recovery', async () => {
   window.inheritiTray.inboxParents.mockRejectedValueOnce(new DOMException('This operation was aborted', 'AbortError'));
   let inbox = render();

@@ -4,6 +4,7 @@ import type { TrayState } from './modules/launcher/main/state.js';
 import type { InboxIdentityState } from './modules/inbox/main/identity.js';
 import type { TrayInboxSignal } from './modules/inbox/main/inbox.js';
 import type { TrayAction } from './modules/launcher/main/launcher-window.js';
+import type { GoUpdateProgress } from './modules/launcher/main/update.js';
 import type { CreateQuickPlanInput } from './modules/quick-plan/main/quick-plan-input.js' with { 'resolution-mode': 'import' };
 
 const pendingActions: TrayAction[] = [];
@@ -26,6 +27,12 @@ ipcRenderer.on('tray:action', (_event, action: TrayAction) => {
 contextBridge.exposeInMainWorld('inheritiTray', {
   state: (): Promise<TrayState> => ipcRenderer.invoke('tray:state'),
   version: (): Promise<string> => ipcRenderer.invoke('tray:version'),
+  updateProgress: (): Promise<GoUpdateProgress> => ipcRenderer.invoke('tray:update-progress'),
+  onUpdateProgress: (callback: (progress: GoUpdateProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: GoUpdateProgress) => callback(progress);
+    ipcRenderer.on('tray:update-progress', listener);
+    return () => ipcRenderer.removeListener('tray:update-progress', listener);
+  },
   inboxState: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-state'),
   inboxAccess: (requestId: number): Promise<void> => ipcRenderer.invoke('tray:inbox-access', requestId),
   inboxCancelAccess: (requestId: number): Promise<void> => ipcRenderer.invoke('tray:inbox-cancel-access', requestId),

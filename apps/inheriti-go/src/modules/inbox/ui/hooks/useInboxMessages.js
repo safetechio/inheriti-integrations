@@ -57,6 +57,7 @@ export function useInboxMessages(onClose) {
   const session = useRef(0);
   const activeConversation = useRef('');
   const request = useRef(0);
+  const recentMessages = useRef(new Map());
   const pendingSends = useRef(new Map());
   const planFile = useRef(null);
   const [conversationId, setConversationId] = useState('');
@@ -75,15 +76,27 @@ export function useInboxMessages(onClose) {
   const [pendingMessages, setPendingMessages] = useState([]);
   const [acceptedMessages, setAcceptedMessages] = useState([]);
 
+  function remember(id, protectedPage, normalPage, parentPage) {
+    if (protectedPage.status !== 'fulfilled' || normalPage.status !== 'fulfilled' || parentPage.status !== 'fulfilled') return;
+    recentMessages.current.delete(id);
+    recentMessages.current.set(id, { items: protectedPage.value.items, normalItems: normalPage.value.items,
+      parentItems: parentPage.value.items, normalUnreadCount: 0, parentUnreadCount: parentPage.value.unreadCount });
+    if (recentMessages.current.size > 5) recentMessages.current.delete(recentMessages.current.keys().next().value);
+  }
+
   useEffect(() => {
     const stop = window.inheritiTray.onHidden(() => {
       generation.current++;
       session.current++;
       activeConversation.current = '';
+      recentMessages.current.clear();
       planFile.current = null;
       setRevealed(null);
+      setItems([]);
       setNormalItems([]);
       setParentItems([]);
+      setNormalUnreadCount(0);
+      setParentUnreadCount(0);
       unitReveals.clear();
       setDraft('');
       setMarks([]);
@@ -95,7 +108,7 @@ export function useInboxMessages(onClose) {
       setAcceptedMessages([]);
       onClose();
     });
-    return () => { generation.current++; session.current++; planFile.current = null; pendingSends.current.clear(); stop(); void window.inheritiTray.inboxHideText(); };
+    return () => { generation.current++; session.current++; recentMessages.current.clear(); planFile.current = null; pendingSends.current.clear(); stop(); void window.inheritiTray.inboxHideText(); };
   }, [onClose]);
 
   useEffect(() => window.inheritiTray.onInboxTransferProgress(setTransfer), []);
@@ -128,18 +141,19 @@ export function useInboxMessages(onClose) {
     const latest = ++request.current;
     void window.inheritiTray.inboxHideText();
     activeConversation.current = id;
+    const cached = recentMessages.current.get(id);
     setConversationId(id);
     setRevealed(null);
-    setNormalItems([]);
-    setParentItems([]);
+    setNormalItems(cached?.normalItems ?? []);
+    setParentItems(cached?.parentItems ?? []);
     unitReveals.clear();
-    setNormalUnreadCount(0);
-    setParentUnreadCount(0);
+    setNormalUnreadCount(cached?.normalUnreadCount ?? 0);
+    setParentUnreadCount(cached?.parentUnreadCount ?? 0);
     setRevealSeconds(0);
-    setItems([]);
+    setItems(cached?.items ?? []);
     setError('');
     setSendError('');
-    setBusy('loading');
+    setBusy(cached ? '' : 'loading');
     try {
       const [protectedPage, normalPage, parentPage] = await loadMessagePages(id);
       if (generation.current === current && request.current === latest) {
@@ -153,6 +167,7 @@ export function useInboxMessages(onClose) {
           setParentUnreadCount(parentPage.value.unreadCount);
           setNormalUnreadCount(0);
         }
+        remember(id, protectedPage, normalPage, parentPage);
         setAcceptedMessages(messages => messages.filter(message =>
           !((normalPage.status === 'fulfilled' && normalPage.value.items.some(item => item.parentId === message.parentId)) ||
             (parentPage.status === 'fulfilled' && parentPage.value.items.some(item => item.parentId === message.parentId)))));
@@ -184,6 +199,7 @@ export function useInboxMessages(onClose) {
           setParentUnreadCount(parentPage.value.unreadCount);
           setNormalUnreadCount(0);
         }
+        remember(id, protectedPage, normalPage, parentPage);
         setAcceptedMessages(messages => messages.filter(message =>
           !((normalPage.status === 'fulfilled' && normalPage.value.items.some(item => item.parentId === message.parentId)) ||
             (parentPage.status === 'fulfilled' && parentPage.value.items.some(item => item.parentId === message.parentId)))));
@@ -201,6 +217,7 @@ export function useInboxMessages(onClose) {
       !window.confirm('Clear your history in this conversation? You will lose access to its current messages and files. Other members keep theirs, and new messages will still arrive.')) return;
     const id = conversationId;
     const current = ++generation.current;
+    recentMessages.current.delete(id);
     planFile.current = null;
     setBusy('clearing-history');
     setError('');

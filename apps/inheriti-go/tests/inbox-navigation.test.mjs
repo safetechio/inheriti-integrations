@@ -16,13 +16,13 @@ import { useInboxNavigation } from '../src/modules/inbox/ui/hooks/useInboxNaviga
 
 beforeEach(() => { hooks.slots = []; hooks.cursor = 0; });
 
-it('opens a thread once its first message load is ready and ignores a cancelled opening', async () => {
+it('opens a thread immediately while messages load and ignores a cancelled opening', async () => {
   let finish;
   const inbox = { messages: { select: vi.fn(() => new Promise(resolve => { finish = resolve; })), leave: vi.fn(() => true) },
     conversations: { refresh: vi.fn(async () => {}) } };
   const render = () => { hooks.cursor = 0; return useInboxNavigation(inbox); };
   const pending = render().openConversation('conversation-1');
-  expect(render().screen).toBe('list');
+  expect(render().screen).toBe('thread');
   finish();
   await pending;
   expect(render().screen).toBe('thread');
@@ -30,6 +30,7 @@ it('opens a thread once its first message load is ready and ignores a cancelled 
 
   render().goBack();
   const cancelled = render().openConversation('conversation-2');
+  expect(render().screen).toBe('thread');
   render().goBack();
   finish();
   await cancelled;

@@ -28,6 +28,7 @@ export function showLauncher(action?: TrayAction): void {
       width: linuxWindow ? 448 : 404,
       height: linuxWindow ? 756 : 676,
       useContentSize: !linuxWindow,
+      ...(linuxWindow ? { type: 'toolbar' } : {}),
       show: false,
       resizable: false,
       maximizable: false,
@@ -44,11 +45,11 @@ export function showLauncher(action?: TrayAction): void {
     window.setMenu(null);
     registerWindowEvents(window, action, () => quitting);
     void window.loadFile(join(import.meta.dirname, 'launcher.html'));
-    const { x, y, width } = screen.getPrimaryDisplay().workArea;
-    window.setPosition(x + width - window.getBounds().width, y);
   }
   const launcher = window;
   if (!launcher) return;
+  const { x, y, width } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  launcher.setPosition(x + width - launcher.getBounds().width, y);
   launcher.show();
   launcher.focus();
   if (action && !creating) launcher.webContents.send('tray:action', action);

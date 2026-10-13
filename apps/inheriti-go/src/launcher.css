@@ -114,6 +114,12 @@ body { padding: 0; background: #fff; }
 .tray-restoring-content { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--gray-text); font-size: 13px; }
 .tray-restoring-track { width: 140px; height: 3px; overflow: hidden; border-radius: 999px; background: #e0e7ff; }
 .tray-restoring-track > span { display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--primary); animation: tray-loading 1.3s ease-in-out infinite alternate; }
+.tray-update { align-items: center; justify-content: center; gap: 12px; padding: 32px; text-align: center; }
+.tray-update h1 { font-size: 20px; line-height: 1.4; }
+.tray-update p { color: var(--gray-text); }
+.tray-update-progress { display: flex; align-items: center; gap: 12px; width: min(100%, 280px); margin-top: 8px; }
+.tray-update-progress progress { flex: 1; width: 100%; height: 8px; accent-color: var(--primary); }
+.tray-update-progress strong { min-width: 36px; color: var(--primary); font-size: 13px; text-align: right; }
 @keyframes tray-loading { from { transform: translateX(0); } to { transform: translateX(150%); } }
 @media (prefers-reduced-motion: reduce) { .tray-restoring-track > span { animation: none; width: 100%; } }
 .tray-sign-in-center h1 { font-size: 22px; line-height: 1.4; }

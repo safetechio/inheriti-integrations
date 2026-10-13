@@ -9,10 +9,17 @@ import { trayMessages as messages } from '../../../messages.js';
 import { registerTrayEvents, setTrayUnread } from './tray.js';
 import { registerTrayIpc } from './ipc.js';
 import { watchLinuxLock } from './linux-lock.js';
-import { downloadGoUpdate, installMacGoUpdate, replaceGoAppImage, runWindowsGoInstaller } from './update.js';
+import { downloadGoUpdate, installMacGoUpdate, relaunchGoAppImage, replaceGoAppImage, runWindowsGoInstaller } from './update.js';
+import type { GoUpdateProgress } from './update.js';
 import { ensureStartAtLogin, isBackgroundLaunch } from './start-at-login.js';
 
 export function registerAppEvents(session: TraySession, appUrl: string | undefined, deployment: string): void {
+  let updateProgress: GoUpdateProgress = null;
+  const publishUpdateProgress = (progress: GoUpdateProgress) => {
+    updateProgress = progress;
+    const window = currentWindow();
+    if (window && !window.isDestroyed()) window.webContents.send('tray:update-progress', progress);
+  };
   let stopLinuxLock: (() => void) | undefined;
   const seenInboxMessages = new Set<string>();
   const notices = new Set<Notification>();
@@ -81,7 +88,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   }));
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.go.${deployment}`);
-    try { ensureStartAtLogin(deployment); }
+    try { ensureStartAtLogin(deployment, join(import.meta.dirname, deployment === 'prod' ? 'tray.png' : `tray-${deployment}.png`)); }
     catch { console.warn('Could not enable Inheriti Go launch at login.'); }
     const publishState = () => {
       if (session.state().status === 'signed-out') for (const notice of notices) notice.close();
@@ -95,9 +102,9 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
       void notifyInboxEvent(session, signal, seenInboxMessages, notify).finally(() => { void refreshBadge(); });
     });
     session.setInboxStatePublisher(() => publishInbox(session));
-    registerTrayEvents(appUrl, deployment, () => { void checkForUpdates(session); });
+    registerTrayEvents(appUrl, deployment, () => { void checkForUpdates(session, publishUpdateProgress); });
     registerTrayIpc(session, currentWindow, publishState, appUrl, notify,
-      () => publishInbox(session), () => { void refreshBadge(); });
+      () => publishInbox(session), () => { void refreshBadge(); }, () => updateProgress);
     powerMonitor.on('lock-screen', () => hideForLock(session));
     powerMonitor.on('suspend', () => hideForLock(session));
     if (process.platform === 'linux') stopLinuxLock = watchLinuxLock(() => hideForLock(session));
@@ -117,12 +124,15 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   });
 }
 
-async function checkForUpdates(session: TraySession): Promise<void> {
-  if (session.state().status !== 'signed-in') {
-    await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: 'Sign in to check for updates.' });
-    return;
-  }
+let updateRunning = false;
+async function checkForUpdates(session: TraySession, publishProgress: (progress: GoUpdateProgress) => void): Promise<void> {
+  if (updateRunning) return;
+  updateRunning = true;
   try {
+    if (session.state().status !== 'signed-in') {
+      await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: 'Sign in to check for updates.' });
+      return;
+    }
     const build = await session.availableUpdate(app.getVersion());
     if (!build) {
       await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go updates', message: `Version ${app.getVersion()} is up to date.` });
@@ -134,25 +144,38 @@ async function checkForUpdates(session: TraySession): Promise<void> {
       message: `Version ${build.version} is available.`, detail: 'Install the update now?',
       buttons: ['Install', 'Later'], defaultId: 0, cancelId: 1 });
     if (answer.response !== 0) return;
+    showLauncher();
+    let lastPercent = -1;
+    const onProgress = (downloaded: number, total: number) => {
+      const percent = Math.floor(downloaded * 100 / total);
+      if (percent === lastPercent) return;
+      lastPercent = percent;
+      publishProgress({ phase: 'downloading', version: build.version, percent });
+    };
+    onProgress(0, build.size);
     if (process.platform === 'darwin') {
       const { url } = await session.requestUpdateDownload(build.id);
-      await installMacGoUpdate(build, url, autoUpdater, () => { session.clearRevealed(); prepareToQuit(); });
+      await installMacGoUpdate(build, url, autoUpdater,
+        () => { publishProgress({ phase: 'restarting', version: build.version }); session.clearRevealed(); prepareToQuit(); },
+        onProgress, () => publishProgress({ phase: 'installing', version: build.version }));
       return;
     }
     const directory = await mkdtemp(join(tmpdir(), 'inheriti-go-update-'));
     const destination = join(directory, build.fileName);
     try {
       const { url } = await session.requestUpdateDownload(build.id);
-      await downloadGoUpdate(build, url, destination);
+      await downloadGoUpdate(build, url, destination, onProgress);
+      publishProgress({ phase: 'installing', version: build.version });
       if (process.platform === 'linux') {
         const current = process.env.APPIMAGE;
         if (current && await replaceGoAppImage(destination, current)) {
           await rm(directory, { recursive: true, force: true });
-          app.relaunch({ execPath: current, args: [] });
-          app.quit();
+          publishProgress({ phase: 'restarting', version: build.version });
+          await relaunchGoAppImage(current, process.env.APPDIR, () => app.quit());
           return;
         }
         shell.showItemInFolder(destination);
+        publishProgress(null);
         await dialog.showMessageBox({ type: 'info', title: 'Inheriti Go update', message: 'Open the downloaded AppImage to install the update.' });
         return;
       }
@@ -165,7 +188,10 @@ async function checkForUpdates(session: TraySession): Promise<void> {
       throw error;
     }
   } catch {
+    publishProgress(null);
     await dialog.showMessageBox({ type: 'error', title: 'Inheriti Go updates', message: 'The update could not be installed. Please try again.' });
+  } finally {
+    updateRunning = false;
   }
 }
 

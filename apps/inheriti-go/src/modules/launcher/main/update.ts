@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import type { InternalBuild } from '@safetech/inheriti-elements-core/node';
 import type { autoUpdater } from 'electron';
 
-export async function downloadGoUpdate(build: InternalBuild, url: string, destination: string): Promise<void> {
+export type GoUpdateProgress = { phase: 'downloading' | 'installing' | 'restarting'; version: string; percent?: number } | null;
+
+export async function downloadGoUpdate(build: InternalBuild, url: string, destination: string,
+  onProgress?: (downloaded: number, total: number) => void): Promise<void> {
   if (!/^https:\/\//u.test(url) || !Number.isSafeInteger(build.size) || build.size < 1 || !/^[a-f0-9]{64}$/u.test(build.checksum)) {
     throw new Error('Invalid update metadata.');
   }
@@ -28,6 +31,7 @@ export async function downloadGoUpdate(build: InternalBuild, url: string, destin
       if (size > build.size) throw new Error('Update integrity check failed.');
       hash.update(value);
       for (let offset = 0; offset < value.length;) offset += (await file.write(value, offset)).bytesWritten;
+      onProgress?.(size, build.size);
     }
     if (size !== build.size || hash.digest('hex') !== build.checksum) throw new Error('Update integrity check failed.');
     if (process.platform === 'linux') await file.chmod(0o700);
@@ -59,6 +63,24 @@ export async function replaceGoAppImage(downloaded: string, current = process.en
   }
 }
 
+export async function relaunchGoAppImage(current: string, mountedDirectory: string | undefined, quit: () => void, start = spawn): Promise<void> {
+  const environment = { ...process.env };
+  delete environment.APPDIR;
+  delete environment.APPIMAGE;
+  delete environment.LD_LIBRARY_PATH;
+  const launcher = start('/bin/sh', [
+    '-c',
+    'i=0; while [ -n "$1" ] && [ -d "$1" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done; exec "$2" --ozone-platform=x11',
+    'sh', mountedDirectory ?? '', current,
+  ], { detached: true, stdio: 'ignore', env: environment });
+  await new Promise<void>((resolve, reject) => {
+    launcher.once('spawn', resolve);
+    launcher.once('error', reject);
+  });
+  launcher.unref();
+  quit();
+}
+
 export async function runWindowsGoInstaller(destination: string, quit: () => void, start = spawn): Promise<void> {
   const installer = start(destination, ['/S'], { detached: true, stdio: 'ignore', windowsHide: true });
   await new Promise<void>((resolve, reject) => {
@@ -71,7 +93,8 @@ export async function runWindowsGoInstaller(destination: string, quit: () => voi
 
 let macUpdateRunning = false;
 
-export async function installMacGoUpdate(build: InternalBuild, url: string, updater: typeof autoUpdater, prepareToQuit: () => void): Promise<void> {
+export async function installMacGoUpdate(build: InternalBuild, url: string, updater: typeof autoUpdater,
+  prepareToQuit: () => void, onProgress?: (downloaded: number, total: number) => void, onDownloaded?: () => void): Promise<void> {
   if (macUpdateRunning || !build.fileName.endsWith('.zip') || !/^https:\/\//u.test(url) ||
     !Number.isSafeInteger(build.size) || build.size < 1 || !/^[a-f0-9]{64}$/u.test(build.checksum)) throw new Error('Invalid macOS update.');
   macUpdateRunning = true;
@@ -81,7 +104,8 @@ export async function installMacGoUpdate(build: InternalBuild, url: string, upda
   try {
     directory = await mkdtemp(join(tmpdir(), 'inheriti-go-update-'));
     const archive = join(directory, build.fileName);
-    await downloadGoUpdate(build, url, archive);
+    await downloadGoUpdate(build, url, archive, onProgress);
+    onDownloaded?.();
     const server = createServer((request, response) => {
       if (request.method !== 'GET') { response.writeHead(405).end(); return; }
       if (request.url === `/${token}/archive`) {

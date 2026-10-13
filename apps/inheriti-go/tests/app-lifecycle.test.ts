@@ -142,7 +142,7 @@ it('shows an OS notification for an unread message while the tray is visible', a
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE' });
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE' });
   await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
-  expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String), body: 'A new message is ready in Secure Chat.' }));
+  expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String), body: 'You have a new Secure Chat message.' }));
   expect(mock.send).toHaveBeenCalledWith('tray:inbox-changed', { kind: 'NEW_MESSAGE' });
   expect(listInboxMessages).toHaveBeenCalledOnce();
 });
@@ -204,7 +204,7 @@ it('notifies for an unread normal parent without opening its ciphertext', async 
   setInboxPublisher.mock.calls[0]![0]({ conversationId: 'conversation-1', messageId: 'parent-1', status: 'AVAILABLE' });
   await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
   expect(listInboxParentMetadata).toHaveBeenCalledWith('conversation-1');
-  expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String), body: 'A new message is ready in Secure Chat.' }));
+  expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String), body: 'You have a new Secure Chat message.' }));
 });
 
 it('finds normal-only messages after the mixed-parent metadata lookup misses', async () => {
@@ -231,11 +231,11 @@ it('notifies for a remote open receipt and a failed send without exposing conten
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
   const publish = setInboxPublisher.mock.calls[0]![0];
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE', recipientStatus: 'CONSUMED',
-    senderMemberId: 'member-a', memberId: 'member-b' });
+    senderMemberId: 'member-a', memberId: 'member-b', memberName: 'Reader Name' });
   publish({ conversationId: 'conversation-1', messageId: 'message-2', status: 'FAILED', senderMemberId: 'member-a' });
   await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledTimes(2));
   expect(mock.showNotification.mock.calls.map(([item]) => item.body)).toEqual([
-    'A member opened your Secure Chat message.', 'A Secure Chat message could not be sent.',
+    'Reader Name opened your Secure Chat message.', 'A Secure Chat message could not be sent.',
   ]);
 });
 
