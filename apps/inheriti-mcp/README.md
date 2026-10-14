@@ -4,8 +4,6 @@ Inheriti MCP connects Inheriti Business to MCP-compatible clients over stdio. Th
 
 Downloading the `.tgz` package does not install the `inheriti-mcp` command. In PowerShell, from the download folder, run `npm.cmd install --global ".\safetech-inheriti-mcp-<version>.tgz"`. Verify it with `inheriti-mcp --version` and `where.exe inheriti-mcp`.
 
-After the dev package is published to npm with the `dev` tag, install it with `npm install --global @safetech/inheriti-mcp@dev` (or `npm.cmd install --global @safetech/inheriti-mcp@dev` in PowerShell). Check `inheriti-mcp --version`; the version should end in `-dev.0`. The package is not yet available on the public registry.
-
 Call `list_organizations` to open browser sign-in and see the available organizations, then `select_organization` if needed. If the browser does not open, use the URL returned by the tool. `list_backup_plans` shows plan metadata. `create_plan_with_assistant` opens a native window for local asset suggestions and review; use its job ID with `check_plan_creation_status`.
 
 ## Automation setup
