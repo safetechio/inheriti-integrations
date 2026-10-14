@@ -1,6 +1,6 @@
 {
   "name": "@safetech/inheriti-cli",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
   "type": "module",
   "files": [
@@ -14,7 +14,7 @@
     "test": "vitest run --root . --config ../../vitest.config.ts",
     "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
     "package": "pnpm run build && node ../../scripts/package-cli.mjs",
-    "package:dev": "pnpm run build -- --deployment=dev && node ../../scripts/package-cli.mjs --deployment=dev",
+    "package:dev": "pnpm --filter @safetech/inheriti-elements-core run build && pnpm run build -- --deployment=dev && node ../../scripts/package-cli.mjs --deployment=dev",
     "package:stg": "pnpm run build -- --deployment=stg && node ../../scripts/package-cli.mjs --deployment=stg",
     "package:prod": "pnpm run build -- --deployment=prod && node ../../scripts/package-cli.mjs --deployment=prod",
     "release": "pnpm run lint && pnpm run package"

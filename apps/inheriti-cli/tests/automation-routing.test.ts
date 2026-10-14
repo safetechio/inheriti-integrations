@@ -35,10 +35,10 @@ beforeEach(() => {
 });
 
 describe('automation feature flag', () => {
-  it('enables automation only in the local build map', () => {
+  it('enables automation in local and dev builds', () => {
     expect(CLI_FEATURE_FLAGS).toEqual({
       local: { automation: true },
-      dev: { automation: false },
+      dev: { automation: true },
       stg: { automation: false },
       prod: { automation: false },
     });

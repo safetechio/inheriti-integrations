@@ -10,11 +10,13 @@ function terminal(): Terminal & { lines: string[]; errors: string[] } {
 const automationEnvironment = {
   INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1',
   INHERITI_AUTOMATION_AUDIENCE: 'audience-1',
+  ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/oidc',
+  ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
 };
 
 async function runInDeployment(deployment: 'dev' | 'stg' | 'prod', args: string[], environment: Record<string, string> = {}) {
   vi.resetModules();
-  const withAutomationSecrets = vi.fn();
+  const withAutomationSecrets = vi.fn(async () => 0);
   vi.doMock('../src/configuration.js', async (original) => ({
     ...(await original<object>()),
     BUILD_DEPLOYMENT: deployment,
@@ -33,7 +35,15 @@ afterEach(() => {
 });
 
 describe('automation deployment routing', () => {
-  it.each(['dev', 'stg', 'prod'] as const)('rejects explicit exec automation in %s', async (deployment) => {
+  it.each(['secrets exec plan-1 --automation -- fixture', 'secrets resolve plan-1 --automation --field asset.field --allow-plaintext-output'])('routes explicit automation in dev: %s', async (command) => {
+    const args = command.split(' ');
+    const { result, output, withAutomationSecrets } = await runInDeployment('dev', args, automationEnvironment);
+    expect(result).toBe(0);
+    expect(output.errors).toHaveLength(0);
+    expect(withAutomationSecrets).toHaveBeenCalledWith('https://business.example/api', automationEnvironment, expect.any(Function));
+  }, 15_000);
+
+  it.each(['stg', 'prod'] as const)('rejects explicit exec automation in %s', async (deployment) => {
     const { result, output, withAutomationSecrets } = await runInDeployment(
       deployment,
       ['secrets', 'exec', 'plan-1', '--automation', '--', 'fixture'],
@@ -43,7 +53,7 @@ describe('automation deployment routing', () => {
     expect(withAutomationSecrets).not.toHaveBeenCalled();
   }, 15_000);
 
-  it.each(['dev', 'stg', 'prod'] as const)('rejects explicit resolve automation in %s', async (deployment) => {
+  it.each(['stg', 'prod'] as const)('rejects explicit resolve automation in %s', async (deployment) => {
     const { result, output, withAutomationSecrets } = await runInDeployment(
       deployment,
       ['secrets', 'resolve', 'plan-1', '--automation', '--field', 'asset.field', '--allow-plaintext-output'],
@@ -53,7 +63,7 @@ describe('automation deployment routing', () => {
     expect(withAutomationSecrets).not.toHaveBeenCalled();
   }, 15_000);
 
-  it.each(['dev', 'stg', 'prod'] as const)('rejects environment-triggered automation in %s', async (deployment) => {
+  it.each(['dev', 'stg', 'prod'] as const)('requires explicit automation when environment requests it in %s', async (deployment) => {
     const { result, output, withAutomationSecrets } = await runInDeployment(
       deployment,
       ['secrets', 'exec', 'plan-1', '--env', 'TOKEN=asset.field', '--', 'fixture'],

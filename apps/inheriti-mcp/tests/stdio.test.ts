@@ -56,12 +56,14 @@ it('registers secure delivery tools by default over the real stdio transport', a
     client = await connect(directory, false);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_plan_with_assistant', 'download_plan_asset',
-      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
-      'logout', 'reveal_plan_secret', 'select_organization',
+      'abort_plan_access', 'activate_automation_grant', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
+      'get_backup_plan', 'github_automation_usage', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
+      'logout', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_setup',
     ]);
     const result = await client.callTool({ name: 'check_update', arguments: {} });
     expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
+    const usage = await client.callTool({ name: 'github_automation_usage', arguments: { planId: 'plan', connectionId: 'connection', field: 'account.password' } });
+    expect(usage).toMatchObject({ isError: true, content: [{ type: 'text', text: 'request_failed' }] });
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });
@@ -75,9 +77,9 @@ it('keeps the old flag working and returns a safe error over stdio', async () =>
     client = await connect(directory, true);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_plan_with_assistant', 'download_plan_asset',
-      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
-      'logout', 'reveal_plan_secret', 'select_organization',
+      'abort_plan_access', 'activate_automation_grant', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
+      'get_backup_plan', 'github_automation_usage', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_organizations',
+      'logout', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_setup',
     ]);
     const invalid = await client.callTool({ name: 'reveal_plan_secret', arguments: {
       planId: 'plan', selector: 'account.password', all: true,

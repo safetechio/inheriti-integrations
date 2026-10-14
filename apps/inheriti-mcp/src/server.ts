@@ -6,8 +6,8 @@ import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, createNativeWindowSession, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createQuickPlanOperations, quickPlanAssetCatalog, localPlanAssetLimit, runLocalPlanBrowser, LlamaPlanModel } from '@safetech/inheriti-elements-core/node-base';
-import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
+import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, createNativeWindowSession, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization, MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createQuickPlanOperations, quickPlanAssetCatalog, localPlanAssetLimit, runLocalPlanBrowser, createAutomationSetupOperations, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector, runLocalAutomationProofBrowser, LlamaPlanModel } from '@safetech/inheriti-elements-core/node-base';
+import type { LocalPlanHints, AutomationProvider, AutomationTrust } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import { beginBrowserLogin } from './browser-login.js';
 import { planDetail, planSummary } from './metadata.js';
@@ -23,6 +23,10 @@ const configPath = () => {
   return existsSync(current) || !existsSync(legacy) ? current : legacy;
 };
 const coded = (code: string) => Object.assign(new Error(code), { code });
+type AutomationTrustInput = Exclude<AutomationTrust, { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC' }> |
+  { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC'; audienceBase: string; serviceAccountSubject: string };
+const automationTrust = (input: AutomationTrustInput, connectionId: string): AutomationTrust => input.method === 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC'
+  ? { method: input.method, audience: `${input.audienceBase.replace(/\/$/, '')}/${connectionId}`, serviceAccountSubject: input.serviceAccountSubject } : input;
 declare const __INHERITI_PRODUCTION_BUILD__: boolean;
 declare const __INHERITI_DEPLOYMENT__: string;
 const developmentBuild = typeof __INHERITI_PRODUCTION_BUILD__ !== 'boolean' || !__INHERITI_PRODUCTION_BUILD__;
@@ -63,6 +67,7 @@ export class MetadataTools {
   private sessions = new MemoryOperatorSessionStore();
   private job?: { id: string; planId: string; organizationId: string; phase: string; progress?: { revealId?: string; expiresAt?: string; dmsExpiresAt?: string; governanceExpiresAt?: string; governanceGate?: string; approvedModerators?: number; requiredModerators?: number; deniedBy?: string; closedReason?: string }; message?: string; code?: string; status: 'WAITING' | 'DELIVERED' | 'FAILED' | 'CANCELED'; controller: AbortController; done: Promise<void> };
   private planJob?: { id: string; status: 'WAITING' | 'CREATED' | 'PENDING' | 'FAILED' | 'CANCELED'; phase: string; planId?: string; controller: AbortController; done: Promise<void> };
+  private automationJob?: { id: string; status: 'WAITING' | 'COMPLETE' | 'FAILED' | 'CANCELED'; phase: string; controller: AbortController; done: Promise<void> };
   private selectionVersion = 0;
   private login: { authorizationUrl: string } | undefined;
   private loginFailure: string | undefined;
@@ -184,9 +189,10 @@ export class MetadataTools {
   private preferences() { return readOrganizationPreferences(this.preferencePath()); }
   private save(value: Record<string, string>) { return saveOrganizationPreferences(this.preferencePath(), value); }
   private async stopLocalAccess() {
-    if (!this.scoped && this.job?.status !== 'WAITING' && this.planJob?.status !== 'WAITING') return;
+    if (!this.scoped && this.job?.status !== 'WAITING' && this.planJob?.status !== 'WAITING' && this.automationJob?.status !== 'WAITING') return;
     this.selectionVersion++;
     await this.cancelPlanJob();
+    await this.cancelAutomationJob();
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
     await this.clearScoped();
@@ -212,6 +218,7 @@ export class MetadataTools {
     const generation = this.authGeneration;
     const version = ++this.selectionVersion;
     await this.cancelPlanJob();
+    await this.cancelAutomationJob();
     const active = this.job;
     const canceling = active?.status === 'WAITING';
     if (active?.status === 'WAITING') active.controller.abort();
@@ -258,9 +265,10 @@ export class MetadataTools {
     this.assertGeneration(generation);
     const identity = JSON.stringify([this.config!.issuer, this.config!.environment, session.principal.subject, session.principal.sessionId]);
     if (this.scoped?.identity !== identity || this.scoped.organizationId !== id) {
-      if (this.scoped && (this.job?.status === 'WAITING' || this.planJob?.status === 'WAITING')) {
+      if (this.scoped && (this.job?.status === 'WAITING' || this.planJob?.status === 'WAITING' || this.automationJob?.status === 'WAITING')) {
         this.selectionVersion++;
         await this.cancelPlanJob();
+        await this.cancelAutomationJob();
         if (this.job?.status === 'WAITING') { this.job.controller.abort(); await this.job.done; }
         await this.clearScoped();
         throw coded('organization_selection_changed');
@@ -285,6 +293,7 @@ export class MetadataTools {
     this.selectionVersion++;
     this.authGeneration++;
     await this.cancelPlanJob();
+    await this.cancelAutomationJob();
     this.browserLogin?.cancel();
     const retired = this.sessions;
     const retiredScoped = this.scoped;
@@ -336,6 +345,108 @@ export class MetadataTools {
   private async cancelPlanJob() {
     const job = this.planJob;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
+  }
+  private async cancelAutomationJob() {
+    const job = this.automationJob;
+    if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
+  }
+  private localAutomation() {
+    const url = this.config?.apiUrl;
+    const parsed = url ? new URL(url) : undefined;
+    const hostname = parsed?.hostname ?? '';
+    if (!['localhost', '127.0.0.1'].includes(hostname) && !hostname.endsWith('.localhost') && parsed?.href !== BUSINESS_DEPLOYMENTS.dev.apiUrl) throw coded('automation_local_only');
+  }
+  private async automationOperations() {
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    this.localAutomation();
+    return { organizationId: selected.organizationId, operations: createAutomationSetupOperations({ apiUrl: this.config!.apiUrl,
+      organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() }) };
+  }
+  async listAutomationConnections() {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const items = await selected.operations.listConnections();
+    return { organizationId: selected.organizationId, items: items.map(({ id, name, provider, environment, status }) => ({ id, name, provider, environment, status })) };
+  }
+  async listAutomationGrants(planId: string) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const items = await selected.operations.listGrants(planId);
+    return { organizationId: selected.organizationId, planId, items: items.map(({ id, connectionId, responsibleMemberId, status }) => ({ id, connectionId, responsibleMemberId, status })) };
+  }
+  async githubAutomationUsage(planId: string, connectionId: string, selector: string) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const grants = await selected.operations.listGrants(planId);
+    if (!grants.some(grant => grant.connectionId === connectionId && grant.status === 'ACTIVE')) throw coded('automation_active_grant_required');
+    const connection = await selected.operations.getConnection(connectionId);
+    if (connection.provider !== 'GITHUB' || connection.status !== 'VERIFIED' || connection.trust.method !== 'GITHUB_ACTIONS_OIDC') throw coded('automation_verified_github_required');
+    const location = githubAutomationWorkflowLocation(connection.trust.repositoryName, connection.trust.workflow);
+    const release = await selected.operations.getVerifiedGithubRelease();
+    return { organizationId: selected.organizationId, planId, connectionId, location, workflow: githubAutomationWorkflow({ release, environment: connection.trust.environment, planId, connectionId, selector }), instruction: `Save this YAML in ${location.repository}/${location.path} on branch ${location.branch}. The file and branch must match the verified connection. Find asset.field in the plan Data tab; the default run only checks injection.` };
+  }
+  async listAutomationMembers() {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const items = await selected.operations.listMembers();
+    return { organizationId: selected.organizationId, items: items.map(({ id, firstName, lastName, status }) => ({
+      id, displayName: [firstName, lastName].filter(Boolean).join(' ') || id, status,
+    })) };
+  }
+  async createAutomationConnection(input: { name: string; provider: AutomationProvider; environment: 'TEST' | 'LIVE'; trust: AutomationTrustInput; managingTeamId?: string | undefined }) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const id = crypto.randomUUID();
+    const trust = automationTrust(input.trust, id);
+    await selected.operations.createConnection({ id, name: input.name, provider: input.provider, environment: input.environment,
+      trust, ...(input.managingTeamId ? { managingTeamId: input.managingTeamId } : {}) });
+    return { organizationId: selected.organizationId, connectionId: id, status: 'PENDING_VERIFICATION',
+      ...(trust.method === 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC' ? { expectedAudience: trust.audience } : input.provider === 'GITHUB' ? { expectedAudience: `urn:inheriti:automation:connection:${id}` } : {}),
+      instruction: 'Open the secure window with this connectionId to enter identity proof.' };
+  }
+  async changeAutomationTrust(connectionId: string, trust: AutomationTrustInput) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const value = automationTrust(trust, connectionId);
+    await selected.operations.changeTrust(connectionId, value);
+    return { organizationId: selected.organizationId, connectionId, updated: true,
+      ...(value.method === 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC' ? { expectedAudience: value.audience } : value.method === 'GITHUB_ACTIONS_OIDC' ? { expectedAudience: `urn:inheriti:automation:connection:${connectionId}` } : {}),
+      instruction: 'Open the secure window with this connectionId to verify the new identity.' };
+  }
+  async disableAutomationConnection(connectionId: string) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    await selected.operations.disableConnection(connectionId);
+    return { organizationId: selected.organizationId, connectionId, disabled: true };
+  }
+  async manageAutomationGrant(action: 'create' | 'activate' | 'replace' | 'revoke', planId: string, input: { grantId?: string; connectionId?: string; responsibleMemberId?: string }) {
+    const selected = await this.automationOperations(); if (!('operations' in selected)) return selected;
+    const grantId = action === 'create' ? crypto.randomUUID() : input.grantId!;
+    if (action === 'create') await selected.operations.createGrant(planId, { id: grantId, connectionId: input.connectionId!, responsibleMemberId: input.responsibleMemberId! });
+    else if (action === 'activate') await selected.operations.activateGrant(planId, grantId);
+    else if (action === 'replace') await selected.operations.replaceResponsibleMember(planId, grantId, input.responsibleMemberId!);
+    else await selected.operations.revokeGrant(planId, grantId);
+    return { organizationId: selected.organizationId, planId, grantId, action };
+  }
+  async startAutomationSetup(connectionId: string) {
+    const version = this.selectionVersion;
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    if (version !== this.selectionVersion) throw coded('organization_selection_changed');
+    this.localAutomation();
+    if (this.automationJob?.status === 'WAITING') throw coded('automation_setup_in_progress');
+    const controller = new AbortController();
+    let unavailable = false;
+    const window = createNativeWindowSession(reason => { unavailable = reason === 'unavailable'; controller.abort(); });
+    const job: NonNullable<typeof this.automationJob> = { id: crypto.randomUUID(), status: 'WAITING', phase: 'WINDOW', controller, done: Promise.resolve() };
+    this.automationJob = job;
+    job.done = (async () => {
+      const operations = createAutomationSetupOperations({ apiUrl: this.config!.apiUrl, organizationId: selected.organizationId,
+        getBearerToken: () => selected.core.getAccessToken() });
+      const result = await runLocalAutomationProofBrowser({ operations, connectionId, open: url => window.open(url), signal: controller.signal });
+      if (controller.signal.aborted || version !== this.selectionVersion) throw coded('automation_setup_canceled');
+      job.status = result.action === 'verified' ? 'COMPLETE' : 'CANCELED'; job.phase = job.status;
+    })().catch(() => { job.status = unavailable ? 'FAILED' : controller.signal.aborted ? 'CANCELED' : 'FAILED'; job.phase = unavailable ? 'WINDOW_UNAVAILABLE' : job.status; })
+      .finally(() => { if (job.status === 'COMPLETE') window.complete(); else window.close(); });
+    return { jobId: job.id, status: job.status };
+  }
+  async automationSetupStatus(jobId: string, cancel = false) {
+    const job = this.automationJob;
+    if (!job || job.id !== jobId) throw coded('automation_setup_not_found');
+    if (cancel && job.status === 'WAITING') { job.controller.abort(); await job.done; }
+    return { jobId: job.id, status: job.status, phase: job.phase };
   }
   async createPlanWithAssistant(hints?: LocalPlanHints) {
     const version = this.selectionVersion;
@@ -598,7 +709,10 @@ const safeCodes = new Set([
   'plan_request_rate_limited', 'reveal_restart_required', 'reveal_cancellation_failed', 'master_key_relay_cancellation_failed',
   'asset_selector_invalid', 'asset_not_found', 'asset_field_not_found', 'action_not_allowed', 'reveal_in_progress', 'reveal_not_found',
   'plan_creation_in_progress', 'plan_creation_not_found',
-  'plan_creation_input_changed',
+  'plan_creation_input_changed', 'automation_local_only', 'automation_setup_in_progress', 'automation_setup_not_found',
+  'automation_setup_authentication_required', 'automation_setup_permission_denied', 'automation_setup_request_failed',
+  'automation_verified_release_unavailable', 'automation_active_grant_required', 'automation_verified_github_required',
+  'automation_github_workflow_ref_invalid',
 ]);
 function safeErrorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
@@ -628,6 +742,12 @@ export function registerRevealTools(server: McpServer, tools: MetadataTools) {
 export function createServer() {
   const server = new McpServer({ name: 'inheriti-mcp', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version });
   const tools = new MetadataTools();
+  const trustSchema = z.discriminatedUnion('method', [
+    z.object({ method: z.literal('GITHUB_ACTIONS_OIDC'), repositoryName: z.string().min(1).describe('GitHub owner/repository, e.g. acme/deploy.'), environment: z.string().min(1).describe('GitHub Actions environment name bound to this identity.'), workflow: z.string().min(1).describe('Full GitHub workflow_ref claim, e.g. acme/deploy/.github/workflows/release.yml@refs/heads/main; find it in the workflow OIDC token claims.') }),
+    z.object({ method: z.literal('GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC'), audienceBase: z.string().min(1).describe('Workload identity audience base from the Google Cloud provider configuration; the connection ID is appended automatically.'), serviceAccountSubject: z.string().regex(/^\d+$/).describe('Numeric service account unique ID from Google Cloud service account details, not its email address.') }),
+    z.object({ method: z.literal('AWS_IAM_ROLE'), roleArn: z.string().min(1).describe('AWS IAM task role ARN used by the automation; find it in the task definition or IAM role details.') }),
+    z.object({ method: z.literal('PORTABLE_SIGNED_ASSERTION'), keyId: z.string().min(1).describe('Identifier of the runner public key.'), publicKey: z.string().min(1).describe('Runner public key in PEM format. Never send its private key.'), runnerSubject: z.string().min(1).describe('Nonsecret identity name asserted by the runner.'), environment: z.string().min(1).describe('Runner environment bound to this identity.') }),
+  ]);
   server.registerTool('list_organizations', { description: 'List available organizations and the current selection. May return a browser sign-in URL.', inputSchema: z.object({}) }, safeResult(() => tools.listOrganizations()));
   server.registerTool('check_update', { description: 'Check this MCP server version and whether an update exists in its locked channel. Does not expose a download URL.', inputSchema: z.object({}) }, safeResult(() => tools.checkUpdate()));
   server.registerTool('select_organization', { description: 'Select an organization by ID from list_organizations.', inputSchema: z.object({ id: z.string().min(1) }) }, safeResult(({ id }: { id: string }) => tools.selectOrganization(id)));
@@ -643,6 +763,19 @@ export function createServer() {
     ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}), ...(assetTypes ? { assetTypes } : {}),
   })));
   server.registerTool('check_plan_creation_status', { description: 'Check or cancel local assisted plan creation.', inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.planCreationStatus(jobId, cancel)));
+  server.registerTool('start_automation_setup', { description: 'Open the local secure window for a human to enter identity proof for an existing automation connection. The proof stays in the window; never pass it as a tool argument or in conversation. Then check_automation_setup_status.', inputSchema: z.object({ connectionId: z.string().min(1) }) }, safeResult(({ connectionId }: { connectionId: string }) => tools.startAutomationSetup(connectionId)));
+  server.registerTool('check_automation_setup_status', { description: 'Check or cancel local automation setup. Report the status to the human; this server cannot wake the assistant.', inputSchema: z.object({ jobId: z.string().uuid(), cancel: z.boolean().optional() }) }, safeResult(({ jobId, cancel }: { jobId: string; cancel?: boolean | undefined }) => tools.automationSetupStatus(jobId, cancel)));
+  server.registerTool('list_automation_connections', { description: 'List safe automation connection metadata in the selected organization, when Business permits. Identity proof is never returned.', inputSchema: z.object({}) }, safeResult(() => tools.listAutomationConnections()));
+  server.registerTool('list_automation_grants', { description: 'List safe automation grant metadata for an editable plan in the selected organization, when Business permits.', inputSchema: z.object({ planId: z.string().min(1) }) }, safeResult(({ planId }: { planId: string }) => tools.listAutomationGrants(planId)));
+  server.registerTool('github_automation_usage', { description: 'Generate copyable GitHub Actions YAML for an active plan grant and verified GitHub connection using the Business verified Action and CLI release. Ask for asset.field from the plan Data tab when missing; do not guess it or request a secret. The generated command only checks that injection worked.', inputSchema: z.object({ planId: z.string().min(1), connectionId: z.string().min(1), field: z.string().refine(isGithubAutomationSelector, 'Use a valid asset.field selector from the plan Data tab.').describe('Nonsecret asset.field selector from the plan Data tab.') }) }, safeResult(({ planId, connectionId, field }: { planId: string; connectionId: string; field: string }) => tools.githubAutomationUsage(planId, connectionId, field)));
+  server.registerTool('list_automation_members', { description: 'List member IDs, display names, and status in the selected organization for choosing a responsible member on an automation grant, when Business permits. No email or credentials are returned.', inputSchema: z.object({}) }, safeResult(() => tools.listAutomationMembers()));
+  server.registerTool('create_automation_connection', { description: 'Create a connection from nonsecret provider and runner trust metadata supplied by the human. Ask for the exact provider values described in the trust fields. Do not include private keys or identity proof. After creation, use start_automation_setup with the returned connectionId for human proof.', inputSchema: z.object({ name: z.string().trim().min(1), provider: z.enum(['GITHUB', 'GOOGLE_CLOUD', 'AWS', 'PORTABLE']), environment: z.enum(['TEST', 'LIVE']), trust: trustSchema, managingTeamId: z.string().min(1).optional() }) }, safeResult((input: { name: string; provider: AutomationProvider; environment: 'TEST' | 'LIVE'; trust: AutomationTrustInput; managingTeamId?: string | undefined }) => tools.createAutomationConnection(input)));
+  server.registerTool('change_automation_trust', { description: 'Replace nonsecret trust metadata for an automation connection. Ask for the exact provider values described in the trust fields. Never include a private key or identity proof. The human must reverify identity in start_automation_setup.', inputSchema: z.object({ connectionId: z.string().min(1), trust: trustSchema }) }, safeResult(({ connectionId, trust }: { connectionId: string; trust: AutomationTrustInput }) => tools.changeAutomationTrust(connectionId, trust)));
+  server.registerTool('disable_automation_connection', { description: 'Disable an automation connection in the selected organization.', inputSchema: z.object({ connectionId: z.string().min(1) }) }, safeResult(({ connectionId }: { connectionId: string }) => tools.disableAutomationConnection(connectionId)));
+  server.registerTool('create_automation_grant', { description: 'Create a plan grant using IDs supplied by the human; Business enforces plan editor permission. Activate it separately after review.', inputSchema: z.object({ planId: z.string().min(1), connectionId: z.string().min(1), responsibleMemberId: z.string().min(1) }) }, safeResult(({ planId, connectionId, responsibleMemberId }: { planId: string; connectionId: string; responsibleMemberId: string }) => tools.manageAutomationGrant('create', planId, { connectionId, responsibleMemberId })));
+  server.registerTool('activate_automation_grant', { description: 'Activate an existing plan grant after the human confirms the intended connection and responsible member.', inputSchema: z.object({ planId: z.string().min(1), grantId: z.string().min(1) }) }, safeResult(({ planId, grantId }: { planId: string; grantId: string }) => tools.manageAutomationGrant('activate', planId, { grantId })));
+  server.registerTool('replace_automation_responsible_member', { description: 'Replace the responsible member for an existing plan grant.', inputSchema: z.object({ planId: z.string().min(1), grantId: z.string().min(1), responsibleMemberId: z.string().min(1) }) }, safeResult(({ planId, grantId, responsibleMemberId }: { planId: string; grantId: string; responsibleMemberId: string }) => tools.manageAutomationGrant('replace', planId, { grantId, responsibleMemberId })));
+  server.registerTool('revoke_automation_grant', { description: 'Revoke an existing plan grant.', inputSchema: z.object({ planId: z.string().min(1), grantId: z.string().min(1) }) }, safeResult(({ planId, grantId }: { planId: string; grantId: string }) => tools.manageAutomationGrant('revoke', planId, { grantId })));
   registerRevealTools(server, tools);
   return server;
 }

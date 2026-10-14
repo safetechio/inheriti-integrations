@@ -26,4 +26,9 @@ describe('model-facing metadata', () => {
     expect(result).toMatchObject({ isError: true, content: [{ text: 'reveal_restart_required' }] });
     expect(JSON.stringify(result)).not.toContain('private diagnostic');
   });
+  it.each(['automation_verified_release_unavailable', 'automation_active_grant_required', 'automation_verified_github_required', 'automation_github_workflow_ref_invalid'])('returns safe GitHub usage error %s', async (code) => {
+    const result = await safeResult(async () => { throw Object.assign(new Error('private diagnostic'), { code }); })({});
+    expect(result).toMatchObject({ isError: true, content: [{ text: code }] });
+    expect(JSON.stringify(result)).not.toContain('private diagnostic');
+  });
 });

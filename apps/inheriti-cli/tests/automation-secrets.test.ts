@@ -33,11 +33,12 @@ describe('GitHub automation secret session', () => {
       } });
     });
     clientFactory.mockImplementation(({ getBearerToken }) => ({ getPlan: vi.fn(), openReveal: vi.fn(), getBearerToken }));
-    await withAutomationSecrets('https://business.example/api', environment, async (context) => {
+    await withAutomationSecrets('https://business.example/integrations/', environment, async (context) => {
       expect(await Promise.all([context.core.getAccessToken(), context.core.getAccessToken()]))
         .toEqual(['second-token', 'second-token']);
     }, transport);
-    expect(paths).toEqual(['/oidc', '/api/automation/jobs', '/oidc', '/api/automation/jobs/renew', '/api/automation/jobs/end']);
+    expect(paths).toEqual(['/oidc', '/automation/jobs', '/oidc', '/automation/jobs/renew', '/automation/jobs/end']);
+    expect(clientFactory).toHaveBeenCalledWith(expect.objectContaining({ apiUrl: 'https://business.example/' }));
     expect(bodies[1]).toEqual({ connectionId: 'connection-1', proof: 'proof-1' });
     expect(bodies[3]).toEqual({ proof: 'proof-2' });
     expect(JSON.stringify(bodies)).not.toContain('github-request-token');
@@ -55,7 +56,7 @@ describe('GitHub automation secret session', () => {
     });
     clientFactory.mockReturnValue({ getPlan: vi.fn(), openReveal: vi.fn() });
     await expect(withAutomationSecrets('https://business.example/api', environment, async () => { throw new Error('denied'); }, transport)).rejects.toThrow('denied');
-    expect(paths.at(-1)).toBe('/api/automation/jobs/end');
+    expect(paths.at(-1)).toBe('/automation/jobs/end');
   });
 
   it('does not create a client or job when GitHub identity is incomplete', async () => {
@@ -157,8 +158,8 @@ describe('Google Cloud automation secret session', () => {
       expect(await context.core.getAccessToken()).toBe('second-token');
     }, transport);
     expect(paths).toEqual([
-      '/computeMetadata/v1/instance/service-accounts/default/identity', '/api/automation/jobs',
-      '/computeMetadata/v1/instance/service-accounts/default/identity', '/api/automation/jobs/renew', '/api/automation/jobs/end',
+      '/computeMetadata/v1/instance/service-accounts/default/identity', '/automation/jobs',
+      '/computeMetadata/v1/instance/service-accounts/default/identity', '/automation/jobs/renew', '/automation/jobs/end',
     ]);
     expect(bodies[1]).toEqual({ connectionId: 'connection-1', proof: 'google-proof-1' });
     expect(bodies[3]).toEqual({ proof: 'google-proof-2' });
@@ -240,8 +241,8 @@ describe('AWS automation secret session', () => {
       AWS_REGION: 'us-east-1', AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: '/v2/credentials/task',
     }, async (context) => { await context.core.getAccessToken(); }, transport);
     expect(paths).toEqual([
-      '/api/automation/jobs/aws-challenge', '/v2/credentials/task', '/api/automation/jobs',
-      '/api/automation/jobs/aws-challenge', '/v2/credentials/task', '/api/automation/jobs/renew', '/api/automation/jobs/end',
+      '/automation/jobs/aws-challenge', '/v2/credentials/task', '/automation/jobs',
+      '/automation/jobs/aws-challenge', '/v2/credentials/task', '/automation/jobs/renew', '/automation/jobs/end',
     ]);
     expect(proofs.map((proof) => proof.challenge)).toEqual(['challenge-1', 'challenge-2']);
     expect(proofs[0]?.authorization).toContain('SignedHeaders=content-type;host;x-amz-date;x-amz-security-token;x-inheriti-aws-challenge');

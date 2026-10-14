@@ -11,6 +11,7 @@ const candidates = (...values: readonly (readonly [string, string])[]): Candidat
 const ROOT = candidates(
   ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Business organisations'],
   ['plans', 'List and use plans'], ['secrets', 'Machine-oriented secret delivery'],
+  ['automations', 'Manage local Business automations'],
   ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
 const PLANS = candidates(
@@ -20,6 +21,7 @@ const PLANS = candidates(
 );
 const SECRETS = candidates(['exec', 'Run a command with secrets'], ['resolve', 'Resolve one field']);
 const ORGANIZATIONS = candidates(['list', 'List organisations'], ['use', 'Select an organisation']);
+const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['grant', 'Manage plan grant']);
 
 type Completion =
   | { kind: 'static'; candidates: Candidate[] }
@@ -110,6 +112,14 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
     if (words.length === 2) return { kind: 'static', candidates: ORGANIZATIONS };
     return subcommand === 'use' && rest.length === 1 ? { kind: 'organizations' } : { kind: 'none' };
   }
+  if (command === 'automations') {
+    if (words.length === 2) return { kind: 'static', candidates: AUTOMATIONS };
+    if (subcommand === 'grant' && words.length === 3) return { kind: 'static', candidates: ['create', 'activate', 'member', 'revoke'].map(value => ({ value })) };
+    if (subcommand === 'grant') return { kind: 'static', candidates: ['--plan', '--grant', '--connection', '--member', '--id', '--help'].map(value => ({ value })) };
+    if (subcommand === 'create' || subcommand === 'trust') return { kind: 'static', candidates: ['--name', '--provider', '--deployment-environment', '--repository', '--environment', '--workflow', '--audience-base', '--subject', '--role-arn', '--key-id', '--public-key', '--connection', '--id', '--help'].map(value => ({ value })) };
+    if (subcommand === 'verify' || subcommand === 'disable') return { kind: 'static', candidates: ['--connection', '--help'].map(value => ({ value })) };
+    return { kind: 'none' };
+  }
   if (command === 'help') return helpCompletion(words.slice(1));
   if (command === 'login') return { kind: 'static', candidates: candidates(['--help', 'Show help']) };
   if (command !== 'plans' && command !== 'secrets') return { kind: 'none' };
@@ -159,5 +169,6 @@ function helpCompletion(words: readonly string[]): Completion {
   if (words[0] === 'plans' && words.length === 2) return { kind: 'static', candidates: PLANS };
   if (words[0] === 'secrets' && words.length === 2) return { kind: 'static', candidates: SECRETS };
   if (words[0] === 'organizations' && words.length === 2) return { kind: 'static', candidates: ORGANIZATIONS };
+  if (words[0] === 'automations' && words.length === 2) return { kind: 'static', candidates: AUTOMATIONS };
   return { kind: 'none' };
 }

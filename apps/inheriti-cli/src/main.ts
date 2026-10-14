@@ -20,6 +20,7 @@ import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-ele
 import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
 import { createPlan } from './commands/create-plan.js';
+import { automationManage, automationMetadata } from './commands/automations.js';
 import type { CliConfiguration } from './configuration.js';
 import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node-base';
 import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
@@ -57,6 +58,10 @@ inheriti <command>
   logout             Clear the local session
   organizations list List Business organisations and the selected one
   organizations use [id] Select a Business organisation
+  automations list   List safe connection metadata
+  automations grants PLAN_ID List safe grant metadata for one plan
+  automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML
+  automations grant create|activate|member|revoke Manage a plan grant
   plans list [--limit n] [--all] [--cursor c] [--organization id]
                      List plans in the selected context
   plans create [--title NAME] [--description TEXT] [--asset TYPE ...]
@@ -97,6 +102,15 @@ function commandUsage(topic: readonly string[], environmentVariables: Readonly<R
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
+    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|grant create|activate|member|revoke>\n\nManage Business automation connections and grants locally. Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected Organisation.`,
+    'automations list': `Usage: inheriti automations list\n\nPrint safe connection metadata for the selected Business Organisation.`,
+    'automations grants': `Usage: inheriti automations grants PLAN_ID\n\nPrint safe grant metadata for one plan in the selected Business Organisation.`,
+    'automations create': `Usage: inheriti automations create --name NAME --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE --deployment-environment TEST|LIVE [--id ID] PROVIDER_FIELDS\n\nGITHUB: --repository OWNER/REPO --environment NAME --workflow 'OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH'. GOOGLE_CLOUD: --audience-base URL --subject NUMERIC_SERVICE_ACCOUNT_UNIQUE_ID. AWS: --role-arn TASK_ROLE_ARN. PORTABLE: --key-id ID --public-key 'MULTILINE_PEM_PUBLIC_KEY' --subject NAME --environment NAME. The command prints the exact audience for GitHub and Google Cloud. No private key or proof arguments. See the automation setup guide in the CLI README.`,
+    'automations verify': `Usage: inheriti automations verify [--connection ID]\n\nOpen a native window for the identity proof. Never pass proof on the command line.`,
+    'automations trust': `Usage: inheriti automations trust [--connection ID] --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE PROVIDER_FIELDS\n\nReplace nonsecret trust fields using the same provider fields as create. Reverification may be required.`,
+    'automations disable': `Usage: inheriti automations disable [--connection ID]`,
+    'automations usage': `Usage: inheriti automations usage [--plan PLAN_ID] [--connection CONNECTION_ID] --field ASSET.FIELD\n\nPrint copyable GitHub Actions YAML for an active plan grant and verified GitHub connection. Find ASSET.FIELD in the plan Data tab. The generated command only checks that the injected value is present. The Action reference and CLI version come from Business's verified release; if unavailable, no workflow is printed.`,
+    'automations grant': `Usage: inheriti automations grant create|activate|member|revoke [--plan PLAN_ID] [--grant GRANT_ID] [--connection CONNECTION_ID] [--member MEMBER_ID]\n\nCreate requires connection and responsible member; activate/revoke require grant; member also requires a new responsible member. Missing IDs can be selected in a terminal.`,
     plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or inspect plan metadata and activity. Business commands accept --organization ID to select an eligible organisation for that command. Run inheriti help plans <command> for details.`,
     'plans create': `Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n\nPrefill editable, non-secret plan metadata and likely asset types in the desktop window. Repeat --asset for up to ${localPlanAssetLimit} catalog types. Types: ${quickPlanAssetCatalog.map(({ id }) => id).join(', ')}. Enter secret values only in the window. Requires an interactive terminal, a selected Organisation, and sign-in. First use offers a model and runtime download of about 1.1 GB.`,
     'plans list': `Usage: inheriti plans list [--limit N] [--all] [--cursor CURSOR] [--json|--table] [--organization ID]\n\nList non-sensitive plan metadata. --all fetches up to 50 pages; use the next cursor to continue. --json never includes reconstructed secret values.`,
@@ -153,6 +167,8 @@ export async function run(
       return 1;
     }
     const secretDelivery = command === 'secrets' && (rest[0] === 'exec' || rest[0] === 'resolve');
+    if (command === 'automations' && (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
+      throw new Error('automation_disabled');
     const separator = rest.indexOf('--');
     const markerIndex = secretDelivery ? rest.slice(0, separator < 0 ? undefined : separator).indexOf('--automation') : -1;
     const automation = markerIndex >= 0;
@@ -200,6 +216,21 @@ export async function run(
     if (command === 'organizations') {
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
+    }
+    if (command === 'automations') {
+      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'grant'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
+      if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
+      if ((rest[0] === 'list' && rest.length !== 1) || (rest[0] === 'grants' && (rest.length !== 2 || !rest[1] || rest[1].startsWith('--')))) {
+        terminal.writeError(commandUsage(['automations', rest[0]!], environmentVariables)); return 1;
+      }
+      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
+      const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
+      scoped.organization = organization;
+      if (rest[0] === 'list' || rest[0] === 'grants') return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? rest[1] : undefined);
+      const controller = new AbortController();
+      const unregister = registerCliCancel(controller);
+      try { return await automationManage(scoped, configuration, terminal, controller.signal, rest); }
+      finally { unregister(); }
     }
     if (command === '__complete') {
       if (!configuration.business) return await completeWords(context, terminal, rest, environmentVariables);
@@ -614,6 +645,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
   operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',
   automation_disabled: 'Automation is unavailable.',
+  automation_setup_authentication_required: 'Sign in again to manage automation.',
+  automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
+  automation_setup_request_failed: 'Business did not accept this automation request. Check your access and entries.',
+  automation_verified_release_unavailable: 'A verified GitHub Action and CLI release is not available yet. No workflow was generated.',
+  automation_github_workflow_ref_invalid: 'The verified GitHub connection has an invalid or mismatched workflow file or branch. Correct its trust settings and verify again.',
   organization_preference_invalid: 'The saved organisation preference is unreadable. Check organizations.json.',
   organization_command_invalid: 'Usage: inheriti organizations list | organizations use [id]',
   plan_id_required: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',

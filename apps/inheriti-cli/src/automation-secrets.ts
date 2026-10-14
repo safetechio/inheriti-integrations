@@ -36,6 +36,7 @@ export async function withAutomationSecrets<T>(
   const oidcUrl = google || portable || aws ? undefined : new URL(requestUrl!);
   if (oidcUrl && (oidcUrl.protocol !== 'https:' || !(oidcUrl.hostname === 'actions.githubusercontent.com' || oidcUrl.hostname.endsWith('.actions.githubusercontent.com'))))
     throw new Error('automation_github_oidc_url_invalid');
+  const automationApiUrl = `${new URL(apiUrl).origin}/`;
   let bearer: string | undefined;
   let expiresAt = 0;
   let renewing: Promise<void> | undefined;
@@ -82,7 +83,7 @@ export async function withAutomationSecrets<T>(
     return body.value;
   };
   const jobRequest = async (path: string, credential: string | undefined, body?: object): Promise<unknown> => {
-    const response = await transport(new URL(path, apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`), {
+    const response = await transport(new URL(path, automationApiUrl), {
       method: 'POST',
       headers: { ...(credential ? { authorization: `Bearer ${credential}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -111,7 +112,7 @@ export async function withAutomationSecrets<T>(
       return bearer;
     };
     const { createNodeAutomationRevealClient } = await import('@safetech/inheriti-elements-core/node-base');
-    const client = createNodeAutomationRevealClient({ apiUrl, getBearerToken, transport });
+    const client = createNodeAutomationRevealClient({ apiUrl: automationApiUrl, getBearerToken, transport });
     const context: SecretRevealContext = {
       keyOwner: 'Organisation',
       core: {
