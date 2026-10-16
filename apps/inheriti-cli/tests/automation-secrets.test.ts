@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { automationConfigurationComplete, withAutomationSecrets } from '../src/automation-secrets.js';
+import { automationConfigurationComplete, pairAutomationIdentity, withAutomationSecrets } from '../src/automation-secrets.js';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,6 +18,23 @@ const environment = {
   ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/oidc',
   ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'github-request-token',
 };
+
+describe('workload identity pairing', () => {
+  it('sends native proof directly to Business without a ticket or operator session', async () => {
+    const calls: { path: string; body?: unknown }[] = [];
+    const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      calls.push({ path: url.pathname, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.hostname === 'token.actions.githubusercontent.com') return Response.json({ value: 'native-proof' });
+      return Response.json({ ok: true });
+    });
+    await pairAutomationIdentity('https://business.example/integrations/', environment, transport);
+    expect(calls).toEqual([
+      { path: '/oidc' },
+      { path: '/integrations/v1/automation-identity-pairings/redeem', body: { connectionId: 'connection-1', proof: 'native-proof' } },
+    ]);
+  });
+});
 
 describe('automation provider configuration', () => {
   it('checks each provider through the same preflight and rejects an unsupported provider before a job', async () => {

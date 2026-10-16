@@ -29,7 +29,25 @@ export function messageFor(error: unknown, business = false): string {
     return RECONSTRUCTION_MESSAGES[reason] ?? MESSAGES.plan_share_reconstruction_failed!;
   }
   if (typeof code === 'string') return MESSAGES[code] ?? code;
+  const message = (error as { message?: unknown })?.message;
+  if (typeof message === 'string' && Object.hasOwn(MESSAGES, message)) return MESSAGES[message]!;
   return typeof name === 'string' && name !== 'Error' ? MESSAGES[name] ?? name : 'The command failed.';
+}
+
+export function planCreationFailureMessage(stage: 'key' | 'context' | 'save', error: unknown): string {
+  const status = (error as { status?: unknown })?.status;
+  if (status === 401) return MESSAGES.operator_reauthentication_required!;
+  if (status === 402) return 'The Organisation has reached its plan capacity.';
+  const code = (error as { code?: unknown; message?: unknown })?.code
+    ?? (error as { message?: unknown })?.message;
+  if (code === 'plan_creation_input_changed') return MESSAGES.plan_creation_input_changed!;
+  if (code === 'master_key_not_claimed') return MESSAGES.master_key_not_claimed!;
+  if (code === 'plan_storage_context_changed') return MESSAGES.plan_storage_context_changed!;
+  if (code === 'plan_share_count_invalid') return MESSAGES.plan_share_count_invalid!;
+  if (code === 'reconciliation_required') return MESSAGES.reconciliation_required!;
+  if (stage === 'key') return 'Could not obtain the Organisation key. Check SafeKey Mobile and retry.';
+  if (stage === 'context') return 'Could not prepare the plan. Check your Organisation access and retry.';
+  return 'Could not save the plan. Check your access and plan data before retrying.';
 }
 
 const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
@@ -96,6 +114,11 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   local_window_unavailable: 'Could not open the plan window. Check the CLI installation and try again.',
   local_plan_canceled: 'Plan creation canceled.',
   local_plan_expired: 'The plan window expired. Start again when ready.',
+  plan_creation_input_changed: 'The plan details changed during creation. Close the window and start plan creation again.',
+  master_key_not_claimed: 'Claim the Organisation key in SafeKey Mobile before creating a plan.',
+  plan_storage_context_changed: 'The plan storage settings changed. Start plan creation again.',
+  plan_share_count_invalid: 'The plan storage settings cannot protect this plan. Review the storage configuration.',
+  reconciliation_required: 'This Organisation is being reconciled. Try again shortly.',
   login_could_not_open_a_browser: 'Could not open a browser. Open the sign-in URL printed in the terminal.',
   OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
   AbortError: 'Reveal canceled.',

@@ -22,7 +22,7 @@ import { automationManage, automationMetadata } from './commands/automations.js'
 import { automationSetup } from './commands/automation-setup.js';
 import { publishAwsSecrets } from './commands/secrets-publish-aws.js';
 import { publishGoogleSecrets } from './commands/secrets-publish-google.js';
-import { automationConfigurationComplete, automationSecretsRequested, withAutomationSecrets } from './automation-secrets.js';
+import { automationConfigurationComplete, automationSecretsRequested, pairAutomationIdentity, withAutomationSecrets } from './automation-secrets.js';
 import { usage, commandUsage, helpTopic } from './commands/help.js';
 import { extractOrganization, parseResolveOptions, parseMemberLogOptions } from './commands/arguments.js';
 import { secrets, requiredAutomationPlanId } from './commands/secrets.js';
@@ -101,8 +101,13 @@ export async function run(
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
     }
     if (command === 'automations') {
-      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'grant', 'setup', 'publish'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
+      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'grant', 'setup', 'publish', 'pair'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
+      if (rest[0] === 'pair' && rest[1] === 'redeem' && rest.length === 2) {
+        await pairAutomationIdentity(configuration.apiUrl, environmentVariables);
+        terminal.write('Workload identity verified.');
+        return 0;
+      }
       if ((rest[0] === 'list' && rest.length !== 1) || (rest[0] === 'grants' && (rest.length !== 2 || !rest[1] || rest[1].startsWith('--')))) {
         terminal.writeError(commandUsage(['automations', rest[0]!], environmentVariables)); return 1;
       }

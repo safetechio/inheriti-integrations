@@ -125,7 +125,7 @@ export async function createAutomationConnection(
     connectionId: id,
     status: 'PENDING_VERIFICATION',
     ...(expectedAudience ? { expectedAudience } : {}),
-    instruction: 'Open the secure window with this connectionId to enter identity proof.',
+    instruction: 'Start one-use workload pairing with this connectionId. Use the secure proof window only as a manual fallback.',
   };
 }
 export async function changeAutomationTrust(this: MetadataTools, connectionId: string, trust: AutomationTrustInput) {
@@ -142,7 +142,7 @@ export async function changeAutomationTrust(this: MetadataTools, connectionId: s
     connectionId,
     updated: true,
     ...(expectedAudience ? { expectedAudience } : {}),
-    instruction: 'Open the secure window with this connectionId to verify the new identity.',
+    instruction: 'Start one-use workload pairing with this connectionId to verify the new identity. Use the secure proof window only as a manual fallback.',
   };
 }
 export async function disableAutomationConnection(this: MetadataTools, connectionId: string) {
@@ -229,6 +229,17 @@ export async function startAutomationSetup(this: MetadataTools, connectionId: st
       window.close();
     });
   return { jobId: job.id, status: job.status };
+}
+export async function startAutomationPairing(this: MetadataTools, connectionId: string) {
+  const selected = await this.automationOperations();
+  if (!('operations' in selected)) return selected;
+  const pairing = await selected.operations.startPairing(connectionId);
+  return {
+    organizationId: selected.organizationId,
+    connectionId,
+    expiresAt: pairing.expiresAt,
+    instruction: 'Run pairing redemption inside the configured workload before expiry, then check list_automation_connections. Native identity proof travels directly to Business.',
+  };
 }
 export async function automationSetupStatus(this: MetadataTools, jobId: string, cancel = false) {
   const job = this.automationJob;

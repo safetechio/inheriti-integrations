@@ -17,7 +17,7 @@ import type { Configuration } from './runtime/configuration.js';
 import {
   listAutomationConnections, listAutomationGrants, githubAutomationUsage, listAutomationMembers,
   createAutomationConnection, changeAutomationTrust, disableAutomationConnection, manageAutomationGrant,
-  startAutomationSetup, automationSetupStatus,
+  startAutomationSetup, startAutomationPairing, automationSetupStatus,
 } from './runtime/automation.js';
 import { createPlanWithAssistant, planCreationStatus } from './runtime/plan-assistant.js';
 import { applyAutomationRuntime, prepareAutomationRuntime } from './runtime/runtime-setup.js';
@@ -358,6 +358,7 @@ export class MetadataTools {
     return manageAutomationGrant.call(this, action, planId, input);
   }
   async startAutomationSetup(connectionId: string) { return startAutomationSetup.call(this, connectionId); }
+  async startAutomationPairing(connectionId: string) { return startAutomationPairing.call(this, connectionId); }
   async automationSetupStatus(jobId: string, cancel = false) { return automationSetupStatus.call(this, jobId, cancel); }
   async prepareAutomationRuntime(input: { planId: string; connectionId: string; field?: string; environmentVariable?: string;
     mappings?: ReadonlyArray<{ selector: string; envName: string }>;

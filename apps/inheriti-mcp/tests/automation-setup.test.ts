@@ -4,11 +4,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 const mock = vi.hoisted(() => ({
   connections: vi.fn(), grants: vi.fn(), members: vi.fn(), browser: vi.fn(), open: vi.fn(), close: vi.fn(), complete: vi.fn(),
   createConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
-  getConnection: vi.fn(), getVerifiedGithubRelease: vi.fn(),
+  getConnection: vi.fn(), getVerifiedGithubRelease: vi.fn(), startPairing: vi.fn(),
 }));
 vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
   ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
-  createAutomationSetupOperations: () => ({ listConnections: mock.connections, listGrants: mock.grants, listMembers: mock.members, getConnection: mock.getConnection, getVerifiedGithubRelease: mock.getVerifiedGithubRelease, createConnection: mock.createConnection,
+  createAutomationSetupOperations: () => ({ listConnections: mock.connections, listGrants: mock.grants, listMembers: mock.members, getConnection: mock.getConnection, getVerifiedGithubRelease: mock.getVerifiedGithubRelease, startPairing: mock.startPairing, createConnection: mock.createConnection,
     changeTrust: mock.changeTrust, disableConnection: mock.disableConnection, createGrant: mock.createGrant,
     activateGrant: mock.activateGrant, replaceResponsibleMember: mock.replaceResponsibleMember, revokeGrant: mock.revokeGrant }),
   runLocalAutomationProofBrowser: mock.browser,
@@ -79,6 +79,15 @@ it('cancels an active window and reports safe status', async () => {
   expect(mock.close).toHaveBeenCalled();
 });
 
+it('starts server-side pairing without returning a proof or local ticket', async () => {
+  const tools = setup();
+  mock.startPairing.mockResolvedValue({ expiresAt: '2030-01-01T00:00:00.000Z' });
+  const result = await tools.startAutomationPairing('connection');
+  expect(result).toMatchObject({ organizationId: 'org', connectionId: 'connection', expiresAt: '2030-01-01T00:00:00.000Z' });
+  expect(JSON.stringify(result)).not.toMatch(/ticket|proof.*:/i);
+  expect(mock.startPairing).toHaveBeenCalledWith('connection');
+});
+
 it('cancels automation setup on logout', async () => {
   const tools = setup();
   mock.browser.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('private proof')), { once: true })));
@@ -92,7 +101,7 @@ it('creates a connection with nonsecret trust and returns no trust or proof', as
   const trust = { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123:role/runner' };
   const result = await tools.createAutomationConnection({ name: 'Runner', provider: 'AWS', environment: 'TEST', trust });
   expect(mock.createConnection).toHaveBeenCalledWith({ id: result.connectionId, name: 'Runner', provider: 'AWS', environment: 'TEST', trust });
-  expect(result).toEqual({ organizationId: 'org', connectionId: result.connectionId, status: 'PENDING_VERIFICATION', instruction: expect.stringContaining('secure window') });
+  expect(result).toEqual({ organizationId: 'org', connectionId: result.connectionId, status: 'PENDING_VERIFICATION', instruction: expect.stringContaining('Start one-use workload pairing') });
 });
 
 it('appends the generated connection ID to Google audience base and returns the exact audience', async () => {

@@ -241,6 +241,7 @@ async function openSecretSocket(endpoint: string, value: string): Promise<Socket
   const bytes = Buffer.from(value, 'utf8');
   let settled = false;
   let accepted = false;
+  let flushed = false;
   const peers = new Set<Socket>();
   let resolveDelivery: () => void = () => undefined;
   let rejectDelivery: (error: Error) => void = () => undefined;
@@ -259,9 +260,12 @@ async function openSecretSocket(endpoint: string, value: string): Promise<Socket
     if (accepted || settled) { socket.destroy(); return; }
     accepted = true;
     peers.add(socket);
+    socket.setTimeout(3_000, () => finish(failed()));
     socket.on('error', (cause) => finish(failed(cause)));
-    socket.on('close', () => { peers.delete(socket); if (!settled) finish(failed()); });
-    socket.end(bytes, () => finish());
+    socket.on('end', () => { if (!flushed) finish(failed()); });
+    socket.on('close', (hadError) => { peers.delete(socket); if (!settled) finish(hadError || !flushed ? failed() : undefined); });
+    socket.resume();
+    socket.end(bytes, () => { flushed = true; });
   });
   const closed = new Promise<void>((resolve) => server.once('close', resolve));
   server.on('error', (cause) => finish(failed(cause)));

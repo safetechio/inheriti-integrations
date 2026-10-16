@@ -21,6 +21,7 @@ export type AutomationSetupOperations = {
   getConnection(id: string): Promise<AutomationConnection>;
   createConnection(input: { id: string; name: string; provider: AutomationProvider; environment: 'TEST' | 'LIVE'; trust: AutomationTrust; managingTeamId?: string }): Promise<void>;
   verifyConnection(id: string, proof: string): Promise<void>;
+  startPairing(id: string, pairingId?: string): Promise<{ expiresAt: string }>;
   changeTrust(id: string, trust: AutomationTrust): Promise<void>;
   disableConnection(id: string): Promise<void>;
   listGrants(planId: string): Promise<AutomationGrant[]>;
@@ -80,6 +81,12 @@ export function createAutomationSetupOperations(options: {
     getConnection: async (id) => { const item = await request(`${connections}/${encodeURIComponent(id)}`); if (!item || typeof item !== 'object' || !connectionValid(item)) throw new Error('Invalid Business API response'); return item as AutomationConnection; },
     createConnection: async (input) => { await request(connections, 'POST', input); },
     verifyConnection: async (id, proof) => { await request(`${connections}/${encodeURIComponent(id)}/verify-identity`, 'POST', { proof }); },
+    startPairing: async (id, pairingId) => {
+      const value = await request(`${connections}/${encodeURIComponent(id)}/identity-pairings`, 'POST', { id: pairingId ?? randomUUID() });
+      if (!record(value) || typeof value.expiresAt !== 'string' || !Number.isFinite(Date.parse(value.expiresAt)) ||
+          Date.parse(value.expiresAt) <= Date.now()) throw new Error('Invalid Business API response');
+      return { expiresAt: value.expiresAt };
+    },
     changeTrust: async (id, trust) => { await request(`${connections}/${encodeURIComponent(id)}/trust`, 'PATCH', { trust }); },
     disableConnection: async (id) => { await request(`${connections}/${encodeURIComponent(id)}`, 'DELETE'); },
     listGrants: async (planId) => items<AutomationGrant>(await request(grants(planId)), grantValid),

@@ -59,6 +59,24 @@ describe('automation setup', () => {
     expect(calls[1]!.url).not.toContain('secret proof');
   });
 
+  it('opens an authenticated pairing window and rejects malformed responses', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const pairing = { expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    const fetchImpl = vi.fn(async (url: URL | RequestInfo, init: RequestInit = {}) => {
+      calls.push({ url: String(url), init });
+      return Response.json({ ok: true, result: pairing });
+    }) as typeof fetch;
+    const operations = createAutomationSetupOperations({ apiUrl: 'https://business.example/integrations/', organizationId: org,
+      getBearerToken: async () => 'jwt', fetchImpl });
+    expect(await operations.startPairing(id, 'd38f2da2-94c3-4718-8ebd-6ba5e0375a0c')).toEqual(pairing);
+    expect(new URL(calls[0]!.url).pathname).toBe(`/integrations/v1/automation-connections/${id}/identity-pairings`);
+    expect(calls[0]!.init.method).toBe('POST');
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ id: 'd38f2da2-94c3-4718-8ebd-6ba5e0375a0c' });
+    expect(calls[0]!.init.headers).toMatchObject({ Authorization: 'Bearer jwt', 'x-organization-id': org });
+    pairing.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    await expect(operations.startPairing(id)).rejects.toThrow('Invalid Business API response');
+  });
+
   it('fails closed on malformed Business envelopes', async () => {
     const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: false, result: [] })) });
     await expect(operations.listConnections()).rejects.toThrow('Invalid Business API response');
@@ -88,7 +106,7 @@ describe('automation setup', () => {
     const open = vi.fn();
     const operations = { getVerifiedGithubRelease: vi.fn(),
       listConnections: () => loading, listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
-      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), startPairing: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const session = runLocalAutomationSetupBrowser({ operations, open, signal: controller.signal });
     controller.abort();
@@ -101,7 +119,7 @@ describe('automation setup', () => {
     let opened = '';
     const operations = { getVerifiedGithubRelease: vi.fn(),
       getConnection: async () => ({ id, name: 'CI', provider: 'GITHUB' as const, environment: 'TEST' as const, status: 'PENDING_VERIFICATION', trust: { method: 'GITHUB_ACTIONS_OIDC' as const, repositoryName: 'acme/ci', environment: 'test', workflow: 'ci.yml' } }),
-      verifyConnection: vi.fn(async () => {}), listConnections: vi.fn(), listPlans: vi.fn(), listMembers: vi.fn(), listGrants: vi.fn(), createConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      verifyConnection: vi.fn(async () => {}), startPairing: vi.fn(), listConnections: vi.fn(), listPlans: vi.fn(), listMembers: vi.fn(), listGrants: vi.fn(), createConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const session = runLocalAutomationProofBrowser({ operations, connectionId: id, open: (url) => { opened = url; } });
     await vi.waitFor(() => expect(opened).not.toBe(''));
@@ -124,7 +142,7 @@ describe('automation setup', () => {
     let opened = '';
     const operations = { getVerifiedGithubRelease: vi.fn(),
       listConnections: async () => [], listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
-      getConnection: vi.fn(), createConnection: vi.fn(async (_input: Parameters<AutomationSetupOperations['createConnection']>[0]) => {}), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      getConnection: vi.fn(), createConnection: vi.fn(async (_input: Parameters<AutomationSetupOperations['createConnection']>[0]) => {}), verifyConnection: vi.fn(), startPairing: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const session = runLocalAutomationSetupBrowser({ operations, open: (url) => { opened = url; } });
     await vi.waitFor(() => expect(opened).not.toBe(''));
@@ -149,7 +167,7 @@ describe('automation setup', () => {
     let opened = '';
     const operations = { getVerifiedGithubRelease: vi.fn(),
       listConnections: async () => [], listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
-      getConnection: vi.fn(), createConnection: vi.fn(async () => {}), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      getConnection: vi.fn(), createConnection: vi.fn(async () => {}), verifyConnection: vi.fn(), startPairing: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const promise = runLocalAutomationSetupBrowser({ operations, open: (url) => { opened = url; } });
     await vi.waitFor(() => expect(opened).not.toBe(''));
@@ -169,7 +187,7 @@ describe('automation setup', () => {
     const operations = { getVerifiedGithubRelease: vi.fn(),
       listConnections: async () => [{ id, name: 'CI', provider: 'GITHUB' as const, environment: 'TEST' as const, status: 'VERIFIED', trust: { method: 'GITHUB_ACTIONS_OIDC' as const, repositoryName: 'owner/repo', environment: 'test', workflow: 'publish.yml' } }],
       listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
-      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), startPairing: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const session = runLocalAutomationSetupBrowser({ operations, open: (url) => { opened = url; }, initialConnectionId: id });
     await vi.waitFor(() => expect(opened).not.toBe(''));
@@ -190,7 +208,7 @@ describe('automation setup', () => {
     const operations = { getVerifiedGithubRelease: vi.fn(),
       listConnections: async () => [{ id, name: 'CI', provider: 'GITHUB' as const, environment: 'TEST' as const, status: 'PENDING_VERIFICATION', trust: { method: 'GITHUB_ACTIONS_OIDC' as const, repositoryName: 'owner/repo', environment: 'test', workflow: 'publish.yml' } }],
       listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
-      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), startPairing: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
     };
     const promise = runLocalAutomationSetupBrowser({ operations, open: (url) => { opened = url; }, initialConnectionId: id });
     await vi.waitFor(() => expect(opened).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{48}$/));

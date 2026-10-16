@@ -21,6 +21,7 @@ inheriti <command>
   automations list   List safe connection metadata
   automations grants PLAN_ID List safe grant metadata for one plan
   automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML
+  automations pair start|redeem Verify a workload without copying its proof
   secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)
   automations grant create|activate|member|revoke Manage a plan grant
   plans list [--limit n] [--all] [--cursor c] [--organization id]
@@ -67,7 +68,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
-    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|setup|grant ` +
+    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|setup|pair|grant ` +
       `create|activate|member|revoke>\n\nManage Business automation connections and grants locally. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
@@ -78,7 +79,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `from the repository URL; --environment NAME from Settings > Environments and the job; ` +
       `--workflow 'OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH' for the file and branch ` +
       `that run it. GOOGLE_CLOUD: --audience-base URI is a stable nonsecret value you choose; ` +
-      `--project PROJECT --region REGION --job JOB reads the attached service account numeric ID ` +
+      `--project PROJECT --region REGION (--job JOB | --service SERVICE) reads the attached service account numeric ID ` +
       `automatically using the installed Google Cloud CLI. Alternatively pass --subject NUMERIC_ID. ` +
       `AWS: --region REGION --cluster CLUSTER --service SERVICE reads taskRoleArn automatically ` +
       `using the installed AWS CLI; --task-definition ARN can replace --service. Alternatively ` +
@@ -88,8 +89,12 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `configuration. The command prints the exact audience for GitHub and Google Cloud. No private ` +
       `key or proof arguments. See the automation setup guide in the CLI README.`,
     'automations verify': `Usage: inheriti automations verify [--connection ID]\n\nOpen a native window for a fresh proof ` +
-      `from the configured workload. Transfer it securely; never pass proof on the command line or ` +
+      `from the running workload. You must already have a secure way to transfer that proof: this command ` +
+      `opens the window but does not collect proof from Cloud Run or ECS. Never pass proof on the command line or ` +
       `print it in logs.`,
+    'automations pair': `Usage: inheriti automations pair <start|redeem>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
+    'automations pair start': `Usage: inheriti automations pair start [--connection ID]\n\nOpen a ten-minute pairing window for the selected connection. No ticket or proof is printed. Run pair redeem inside that workload before expiry.`,
+    'automations pair redeem': `Usage: inheriti automations pair redeem\n\nRun inside the configured workload during its pairing window with the usual provider identity settings. Obtains a fresh native proof and verifies the connection directly; no operator login is needed inside the workload.`,
     'automations trust': `Usage: inheriti automations trust [--connection ID] --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
       `PROVIDER_FIELDS\n\nReplace nonsecret trust fields using the same provider fields as create. ` +
       `Reverification may be required.`,

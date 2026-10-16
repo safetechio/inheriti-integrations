@@ -15,6 +15,7 @@ import { registerAbortPlanAccess } from './abort_plan_access.js';
 import { registerCreatePlanWithAssistant } from './create_plan_with_assistant.js';
 import { registerCheckPlanCreationStatus } from './check_plan_creation_status.js';
 import { registerStartAutomationSetup } from './start_automation_setup.js';
+import { registerStartAutomationPairing } from './start_automation_pairing.js';
 import { registerCheckAutomationSetupStatus } from './check_automation_setup_status.js';
 import { registerListAutomationConnections } from './list_automation_connections.js';
 import { registerListAutomationGrants } from './list_automation_grants.js';
@@ -46,6 +47,7 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
   registerCreatePlanWithAssistant(server, tools);
   registerCheckPlanCreationStatus(server, tools);
   registerStartAutomationSetup(server, tools);
+  registerStartAutomationPairing(server, tools);
   registerCheckAutomationSetupStatus(server, tools);
   registerListAutomationConnections(server, tools);
   registerListAutomationGrants(server, tools);

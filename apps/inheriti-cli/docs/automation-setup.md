@@ -13,7 +13,7 @@ This walkthrough uses a plan with fields such as `database.username` and `databa
 
 `gh` is used in the GitHub example to identify the repository. For Cloud Run and ECS, install and authenticate the provider CLI on your computer; Inheriti calls it to inspect the selected job or service. These operator-side sessions do not replace the identity of the workload that later runs the reveal.
 
-**Before you begin:** GitHub workflow generation is blocked until Business publishes a verified Action/CLI release. Initial identity verification also still needs a fresh proof transferred securely from the workload to the CLI's native window; if you cannot do that without exposing the proof in logs or artifacts, leave the connection pending. These are current product limits, not extra setup steps you should work around.
+**Before you begin:** GitHub workflow generation is blocked until Business publishes a verified Action/CLI release. Initial identity pairing opens a short-lived window for the configured workload to send its proof directly to Business. If the workload cannot run the CLI during that window, leave the connection pending or use the advanced manual verification flow.
 
 ## 1. Check access before collecting provider details
 
@@ -33,6 +33,8 @@ No provider API key, private key, password, or identity token belongs in CLI arg
 Pick the provider whose identity the **running workload** will use. `--deployment-environment TEST` selects the Business connection environment; a provider's `--environment` is a separate exact-match identity field. The command prints a connection ID. For GitHub and Google Cloud it also prints the exact audience to request; copy that output into the workload configuration.
 
 ### GitHub Actions
+
+**Already have a repository?** Choose the branch, workflow path, and job environment you will use. **Starting new?** [Create the repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository) and choose those values first. The initial pairing job must run in that repository with `id-token: write`; after verification and grant activation, Inheriti can generate the final workflow for the selected plan. The CLI does not create the repository or initial pairing job.
 
 Required data:
 
@@ -62,7 +64,9 @@ For the first job, run `inheriti automations usage --field database.password` an
 
 ### Google Cloud Run
 
-Start with an existing Cloud Run **service** that runs your application. Its attached service account is the workload identity; use a stable, nonsecret audience base URI under a domain your organisation controls. Sign in to Google Cloud locally once with the normal Google Cloud CLI. The Inheriti command inspects the service and resolves the service account's numeric unique ID automatically; you do not need to copy it from IAM or run a separate `gcloud` command. For a scheduled batch process, use a Cloud Run job and `--job` instead of `--service`.
+**Already have a Cloud Run service?** Use its project, region, and name; confirm which service account is attached. It must exist, but need not be receiving traffic. **Starting new?** [Deploy an initial service](https://docs.cloud.google.com/run/docs/deploying) with the service account and explicit application startup command. It must become ready before managed setup, which preserves that command when it adds the Inheriti launcher. The image used for pairing must contain Inheriti CLI. If the application cannot start without plan values, managed setup cannot bootstrap it: generate the launcher after pairing and grant activation, then install it in your own deployment. For a scheduled batch process, [create a Cloud Run job](https://docs.cloud.google.com/run/docs/create-jobs) with a service account and use `--job` instead of `--service`.
+
+The attached service account is the workload identity. Choose a stable, nonsecret audience base URI under a domain your organisation controls, then sign in to Google Cloud locally with the normal Google Cloud CLI. Inheriti inspects the existing service or job and resolves the service account's numeric unique ID automatically; you do not need to copy it from IAM or run a separate `gcloud` command.
 
 ```bash
 read -r -p 'Cloud Run project: ' PROJECT
@@ -78,7 +82,9 @@ The CLI prints the connection ID and exact expected audience. It does not create
 
 ### AWS ECS
 
-Start with an existing ECS **service** whose task definition has a task role. Sign in to AWS locally once with your usual AWS CLI profile or SSO session. The Inheriti command inspects the service and resolves its `taskRoleArn` automatically; you do not need to copy the ARN or run a separate `aws` command. An ECS task definition ARN may be used instead of `--service` if you have a standalone task; keep `--cluster` for the target context.
+**Already have an ECS service?** Use its region, cluster, and name; confirm that its task definition has a **task role**, separate from the execution role. **Starting new?** [Register a task definition](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-task-definition.html) with that role and an explicit application entry point, then [create the service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-service-console-v2.html) in a cluster. The image used for pairing must contain Inheriti CLI. `automations setup --apply` requires a stable service with at least one running task and preserves the existing entry point; it cannot bootstrap a zero-task service or an app that needs plan values to start. For those apps, generate the launcher after pairing and grant activation, then install it in your own deployment.
+
+Sign in to AWS locally once with your usual AWS CLI profile or SSO session. Inheriti inspects the existing service and resolves its `taskRoleArn` automatically; you do not need to copy the ARN or run a separate `aws` command. A task definition ARN may be used instead of `--service` for a standalone task; keep `--cluster` for the target context.
 
 ```bash
 read -r -p 'ECS region: ' REGION
@@ -109,19 +115,27 @@ This command reads only the public key. Its PEM content is an argument, so use t
 
 ## 3. Verify identity, then grant plan access
 
-The connection created in step 2 is initially pending. Run the following commands in an **interactive terminal** on the operator's desktop, with the same organization selected in step 1. The CLI shows a selector whenever an ID is omitted; it does not automatically choose a plan, connection, member, or grant.
+The connection created in step 2 is initially pending. Prepare the one-off workload described below, then open a ten-minute pairing window from the operator's authenticated CLI:
 
 ```bash
-inheriti automations verify
+inheriti automations pair start --connection CONNECTION_ID
+```
+
+Prepare a **one-off pairing execution** before opening the window. Its image must already contain Inheriti CLI and be able to reach Business. A Cloud Run service has no shell to execute this command: create a temporary [Cloud Run job](https://docs.cloud.google.com/run/docs/create-jobs) with the **same image and attached service account** as the service. Set its entry point and command to run `inheriti automations pair redeem`, then [execute the job](https://docs.cloud.google.com/run/docs/execute/jobs) during the window. For an existing Cloud Run job, use a separate temporary job with that job's image and service account so its normal command remains intact. For ECS, [register a one-off task definition](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-task-definition.html) with an image containing the CLI, the service's **same task role**, and an entry point that runs `inheriti automations pair redeem`; then [launch a standalone task](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) with the required launch type or capacity provider and network configuration. A RunTask `command` override changes CMD, **not ENTRYPOINT**, so the service's existing task definition may run its application instead of the CLI. Do not use your desktop's `gcloud` or `aws` identity to redeem.
+
+In that one-off execution set the nonsecret `INHERITI_AUTOMATION_CONNECTION_ID` and provider settings: `INHERITI_AUTOMATION_PROVIDER=GOOGLE_CLOUD` with the exact `INHERITI_AUTOMATION_AUDIENCE`, or `INHERITI_AUTOMATION_PROVIDER=AWS` with `AWS_REGION`. The job/task must run with the configured identity; GitHub Actions uses its native OIDC variables and expected audience without setting the provider variable. The CLI obtains a fresh native proof and sends it directly to Business; the proof never belongs in command arguments, chat, logs, or source control. If the window expires, open it again with `pair start`. The normal service is configured in the next section, after verification and grant activation.
+
+After the connection is verified, run these commands on the **operator's desktop** with the same organization selected in step 1. The CLI shows a selector whenever an ID is omitted; it does not automatically choose a plan, connection, member, or grant.
+
+```bash
 inheriti automations grant create
 inheriti automations grant activate
 ```
 
-1. **Verify:** choose the connection just created. The native window asks for a fresh proof from that **configured workload**; the CLI does not accept `--proof`. The current flow requires a secure manual transfer from the workload. If you cannot transfer it without logs or artifacts, leave the connection pending. Closing the window cancels verification. The workload's private key stays on the runner.
-2. **Create the grant:** choose the **protected Business plan** whose data the workload needs, choose that same connection, then choose the **responsible organization member**. This member is accountable for the automation. The CLI prints the new grant ID, and its status remains pending.
-3. **Activate:** choose the **same plan**, then the **grant just created**. Review the choices before activation. A plan editor must perform the grant steps if your account lacks plan edit permission. Use `inheriti automations grants PLAN_ID` to inspect the plan's grants and IDs afterward.
+1. **Create the grant:** choose the **protected Business plan** whose data the workload needs, choose that same connection, then choose the **responsible organization member**. This member is accountable for the automation. The CLI prints the new grant ID, and its status remains pending.
+2. **Activate:** choose the **same plan**, then the **grant just created**. Review the choices before activation. A plan editor must perform the grant steps if your account lacks plan edit permission. Use `inheriti automations grants PLAN_ID` to inspect the plan's grants and IDs afterward.
 
-The short commands above depend on terminal selectors. If you already know the nonsecret IDs, you can pass them explicitly: `inheriti automations verify --connection CONNECTION_ID`, `inheriti automations grant create --plan PLAN_ID --connection CONNECTION_ID --member MEMBER_ID`, then `inheriti automations grant activate --plan PLAN_ID --grant GRANT_ID`. Verification still needs an interactive terminal and desktop window. Get `PLAN_ID` from Business plan details, `CONNECTION_ID` from step 2 or `inheriti automations list`, `MEMBER_ID` from the organization's members, and `GRANT_ID` from the create output or `inheriti automations grants PLAN_ID`. Do not put an identity proof in a command argument.
+The short commands above depend on terminal selectors. If you already know the nonsecret IDs, you can pass them explicitly: `inheriti automations grant create --plan PLAN_ID --connection CONNECTION_ID --member MEMBER_ID`, then `inheriti automations grant activate --plan PLAN_ID --grant GRANT_ID`. Get `PLAN_ID` from Business plan details, `CONNECTION_ID` from step 2 or `inheriti automations list`, `MEMBER_ID` from the organization's members, and `GRANT_ID` from the create output or `inheriti automations grants PLAN_ID`. For workloads unable to run the CLI in a pairing window, `inheriti automations verify --connection CONNECTION_ID` remains an advanced manual fallback requiring an interactive desktop and secure proof transfer.
 
 **Only after verification and activation** can the workload request the plan field. These commands configure Inheriti access; they do not create a GitHub repository, Cloud Run job, ECS task, or provider identity. `inheriti automations trust` changes nonsecret provider identity settings and requires fresh verification. `inheriti automations grant revoke` or `inheriti automations disable` ends access.
 

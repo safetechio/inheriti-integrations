@@ -48,10 +48,11 @@ export async function automationManage(
 ): Promise<number> {
   const [verb, maybeAction, ...tail] = argv;
   const grant = verb === 'grant';
-  const action = grant ? maybeAction : verb;
-  const options = flags(grant ? tail : argv.slice(1));
-  const usage = 'Usage: inheriti automations create|verify|trust|disable|usage|grant create|activate|member|revoke [nonsecret flags]';
-  const actions = grant ? ['create', 'activate', 'member', 'revoke'] : ['create', 'verify', 'trust', 'disable', 'usage'];
+  const pair = verb === 'pair';
+  const action = grant || pair ? maybeAction : verb;
+  const options = flags(grant || pair ? tail : argv.slice(1));
+  const usage = 'Usage: inheriti automations create|verify|trust|disable|usage|pair start|grant create|activate|member|revoke [nonsecret flags]';
+  const actions = grant ? ['create', 'activate', 'member', 'revoke'] : pair ? ['start'] : ['create', 'verify', 'trust', 'disable', 'usage'];
   if (!options || !action || !actions.includes(action)) {
     terminal.writeError(usage);
     return 1;
@@ -65,6 +66,18 @@ export async function automationManage(
     organizationId: context.organization!.id,
     getBearerToken: () => context.core.getAccessToken(),
   });
+  if (pair) {
+    if (Object.keys(options).some(key => key !== '--connection')) {
+      terminal.writeError(usage);
+      return 1;
+    }
+    const connectionId = await choose(options['--connection'], terminal, 'Which connection?',
+      options['--connection'] ? [] : (await operations.listConnections()).map(({ id, name }) => ({ id, name })), signal);
+    if (!connectionId) { terminal.writeError('Connection ID required.'); return 1; }
+    const pairing = await operations.startPairing(connectionId);
+    terminal.write(`Waiting for the configured workload to verify this connection until ${pairing.expiresAt}. Run inheriti automations pair redeem inside that workload.`);
+    return 0;
+  }
   if (!grant && action === 'usage') {
     if (Object.keys(options).some(key => !['--plan', '--connection', '--field'].includes(key))) {
       terminal.writeError(usage);

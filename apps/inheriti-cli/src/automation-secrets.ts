@@ -5,6 +5,31 @@ export { automationConfigurationComplete } from './automation-identity.js';
 
 type Transport = typeof fetch;
 
+/** Verify a pending connection from inside the configured workload. */
+export async function pairAutomationIdentity(
+  apiUrl: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  transport: Transport = fetch,
+): Promise<void> {
+  const connectionId = environment.INHERITI_AUTOMATION_CONNECTION_ID;
+  const audience = environment.INHERITI_AUTOMATION_AUDIENCE;
+  if (!connectionId) throw new Error('automation_pairing_configuration_required');
+  const identity = automationIdentity(environment.INHERITI_AUTOMATION_PROVIDER);
+  identity.validate(connectionId, audience, environment);
+  const root = `${new URL(apiUrl).origin}/`;
+  const jobRequest = async (path: string, _credential: string | undefined, body?: object): Promise<unknown> => {
+    const response = await transport(new URL(path, root), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error('automation_pairing_failed');
+    const value: unknown = await response.json();
+    if (!isRecord(value) || value.ok !== true) throw new Error('automation_pairing_failed');
+    return value.result;
+  };
+  const proof = await identity.proof(connectionId, audience, environment, transport, jobRequest);
+  await jobRequest('integrations/v1/automation-identity-pairings/redeem', undefined, { connectionId, proof });
+}
+
 export function automationSecretsRequested(environment: Readonly<Record<string, string | undefined>>): boolean {
   return Boolean(environment.INHERITI_AUTOMATION_PROVIDER || environment.INHERITI_AUTOMATION_CONNECTION_ID || environment.INHERITI_AUTOMATION_AUDIENCE || environment.INHERITI_AUTOMATION_PRIVATE_KEY_FILE);
 }

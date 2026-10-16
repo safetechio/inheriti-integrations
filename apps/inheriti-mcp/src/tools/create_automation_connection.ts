@@ -17,8 +17,8 @@ export function registerCreateAutomationConnection(server: McpServer, tools: Met
         'for missing nonsecret provider values described in trust fields. For an existing Cloud Run ' +
         'job or ECS service, use inspect_automation_cloud_identity to obtain its numeric service ' +
         'account ID or task role ARN before creating the connection. Do not guess identities or ' +
-        'ask for private keys, secret values, or identity proof. After creation open ' +
-        'start_automation_setup for human proof in the secure window; list eligible members, create a ' +
+        'ask for private keys, secret values, or identity proof. After creation, call ' +
+        'start_automation_pairing to open the server-side verification window. Use start_automation_setup only for manual fallback; list eligible members, create a ' +
         'plan grant, and activate only after the human reviews the responsible member and connection. ' +
         'GitHub YAML comes from github_automation_usage only after verification, an active grant, and ' +
         'a verified release.',

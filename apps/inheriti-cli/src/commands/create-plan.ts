@@ -6,6 +6,7 @@ import type { Terminal } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { createLocalAssistantInstallPresenter } from '../render/local-assistant-install.js';
 import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base';
+import { planCreationFailureMessage } from './errors.js';
 
 export async function createPlan(context: CliContext, configuration: CliConfiguration | undefined, terminal: Terminal, signal: AbortSignal, fontFile?: URL, hints?: LocalPlanHints): Promise<number> {
   if (!configuration?.business || !context.organization) {
@@ -53,6 +54,7 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
   let planContext: Awaited<ReturnType<typeof operations.createContext>> | undefined;
   let inputFingerprint: string | undefined;
   let completed = false;
+  let reportedFailure: string | undefined;
   try {
     terminal.write('Opening local plan assistant in a secure window…');
     const result = await runLocalPlanBrowser({
@@ -64,16 +66,28 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
       teams,
       open: url => window.open(url),
       create: async (input) => {
-        const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-        if (inputFingerprint && inputFingerprint !== fingerprint) throw new Error('plan_creation_input_changed');
-        inputFingerprint = fingerprint;
-        if (!masterKeySource) {
-          const key = await operations.acquireKey(sessionSignal, () => terminal.write('Waiting for the Organisation key from SafeKey Mobile…'));
-          if (!key) throw new Error('master_key_not_claimed');
-          masterKeySource = { resolve: async () => key };
+        let stage: 'key' | 'context' | 'save' = 'key';
+        try {
+          const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+          if (inputFingerprint && inputFingerprint !== fingerprint) throw new Error('plan_creation_input_changed');
+          inputFingerprint = fingerprint;
+          if (!masterKeySource) {
+            const key = await operations.acquireKey(sessionSignal, () => terminal.write('Open SafeKey Mobile → Pending actions, then tap the green Release button for this Organisation. Waiting for the Organisation key…'));
+            if (!key) throw new Error('master_key_not_claimed');
+            masterKeySource = { resolve: async () => key };
+          }
+          stage = 'context';
+          planContext ??= await operations.createContext();
+          stage = 'save';
+          return await operations.createMany({ context: planContext, ...input, masterKeySource });
+        } catch (error) {
+          if (!sessionSignal.aborted) {
+            const message = planCreationFailureMessage(stage, error);
+            if (message !== reportedFailure) terminal.writeError(message);
+            reportedFailure = message;
+          }
+          throw error;
         }
-        planContext ??= await operations.createContext();
-        return operations.createMany({ context: planContext, ...input, masterKeySource });
       },
     });
     completed = true;
