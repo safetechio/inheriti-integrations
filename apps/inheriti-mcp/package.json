@@ -13,6 +13,7 @@
     "test": "vitest run --root . --config ../../vitest.config.ts"
   },
   "dependencies": {
+    "@google-cloud/secret-manager": "6.3.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@safetech/inheriti-core-sdk": "4.0.36",
     "@safetech/inheriti-elements-core": "workspace:*",

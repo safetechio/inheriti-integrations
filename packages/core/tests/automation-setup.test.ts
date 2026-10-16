@@ -32,8 +32,11 @@ describe('automation setup', () => {
     for (const selector of ['-account.password', 'account-.password', '_account.password', 'account_.password', 'account.-password', 'account.1password', `${'a'.repeat(65)}.password`]) {
       expect(() => githubAutomationWorkflow({ release, environment: 'production', planId: id, connectionId: id, selector })).toThrow('Invalid GitHub workflow input');
     }
-    const unavailable = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response('{}', { status: 404 }) });
-    await expect(unavailable.getVerifiedGithubRelease()).rejects.toThrow('automation_verified_release_unavailable');
+    for (const status of [400, 404]) {
+      const unavailable = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response('{}', { status }) });
+      await expect(unavailable.getVerifiedGithubRelease()).rejects.toThrow('automation_verified_release_unavailable');
+      await expect(unavailable.listConnections()).rejects.toThrow(status === 400 ? 'automation_setup_request_failed' : 'automation_setup_permission_denied');
+    }
   });
   it('routes management through Elements operator auth with selected organization and exact payload', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
@@ -58,6 +61,12 @@ describe('automation setup', () => {
 
   it('fails closed on malformed Business envelopes', async () => {
     const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: false, result: [] })) });
+    await expect(operations.listConnections()).rejects.toThrow('Invalid Business API response');
+  });
+
+  it('rejects connections whose provider and trust method disagree', async () => {
+    const connection = { id, name: 'CI', provider: 'GITHUB', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/CI' } };
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: [connection] })) });
     await expect(operations.listConnections()).rejects.toThrow('Invalid Business API response');
   });
 
@@ -146,13 +155,34 @@ describe('automation setup', () => {
     await vi.waitFor(() => expect(opened).not.toBe(''));
     const page = await (await fetch(opened)).text();
     expect(page).toContain('name="deploymentEnvironment"');
-    expect(page).toContain("select.value==='PORTABLE'?'PORTABLE_SIGNED_ASSERTION'");
+    expect(page).toContain('"PORTABLE":"PORTABLE_SIGNED_ASSERTION"');
     expect(page).toContain("['trustEnvironment','Runner environment']");
     const csrf = page.match(/name="csrf" value="([a-f0-9]+)"/)?.[1] ?? '';
     await fetch(opened, { method: 'POST', headers: { Origin: new URL(opened).origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf, action: 'create', provider: 'PORTABLE', name: 'Runner', deploymentEnvironment: 'LIVE', keyId: 'kid', publicKey: 'pub', runnerSubject: 'runner', trustEnvironment: 'ci' }) });
     expect(operations.createConnection).toHaveBeenCalledWith(expect.objectContaining({ environment: 'LIVE', trust: { method: 'PORTABLE_SIGNED_ASSERTION', keyId: 'kid', publicKey: 'pub', runnerSubject: 'runner', environment: 'ci' } }));
     await fetch(opened, { method: 'POST', headers: { Origin: new URL(opened).origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf, action: 'done' }) });
     await promise;
+  });
+
+  it('rejects a posted trust method that does not match the connection provider', async () => {
+    let opened = '';
+    const operations = { getVerifiedGithubRelease: vi.fn(),
+      listConnections: async () => [{ id, name: 'CI', provider: 'GITHUB' as const, environment: 'TEST' as const, status: 'VERIFIED', trust: { method: 'GITHUB_ACTIONS_OIDC' as const, repositoryName: 'owner/repo', environment: 'test', workflow: 'publish.yml' } }],
+      listPlans: async () => [], listMembers: async () => [], listGrants: async () => [],
+      getConnection: vi.fn(), createConnection: vi.fn(), verifyConnection: vi.fn(), changeTrust: vi.fn(), disableConnection: vi.fn(), createGrant: vi.fn(), activateGrant: vi.fn(), replaceResponsibleMember: vi.fn(), revokeGrant: vi.fn(),
+    };
+    const session = runLocalAutomationSetupBrowser({ operations, open: (url) => { opened = url; }, initialConnectionId: id });
+    await vi.waitFor(() => expect(opened).not.toBe(''));
+    const page = await (await fetch(opened)).text();
+    const csrf = page.match(/name="csrf" value="([a-f0-9]+)"/)?.[1] ?? '';
+    const headers = { Origin: new URL(opened).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const posted = { csrf, method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/CI', connectionId: id };
+    expect((await fetch(opened, { method: 'POST', headers, body: new URLSearchParams({ ...posted, action: 'create', provider: 'GITHUB', name: 'Wrong' }) })).status).toBe(400);
+    expect((await fetch(opened, { method: 'POST', headers, body: new URLSearchParams({ ...posted, action: 'change-trust' }) })).status).toBe(400);
+    expect(operations.createConnection).not.toHaveBeenCalled();
+    expect(operations.changeTrust).not.toHaveBeenCalled();
+    await fetch(opened, { method: 'POST', headers, body: new URLSearchParams({ csrf, action: 'done' }) });
+    await session;
   });
 
   it('uses a local capability path, CSRF, and POST-only proof', async () => {

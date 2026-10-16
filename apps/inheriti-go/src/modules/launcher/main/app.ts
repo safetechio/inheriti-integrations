@@ -110,6 +110,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     if (process.platform === 'linux') stopLinuxLock = watchLinuxLock(() => hideForLock(session));
     registerShortcut();
     if (!isBackgroundLaunch()) showLauncher();
+    if (process.platform === 'darwin') app.on('activate', () => showLauncher());
     await session.restore();
     publish(session);
     void refreshBadge();

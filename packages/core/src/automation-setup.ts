@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpPlanEditPort } from '@safetech/inheriti-client-sdk/node-base';
 import { validateAssetIntegrationCode } from '@safetech/inheriti-core-sdk/vanilla';
+import { AutomationProviderValue } from './automation-provider.js';
 
 export type AutomationProvider = 'GITHUB' | 'GOOGLE_CLOUD' | 'AWS' | 'PORTABLE';
 export type AutomationTrust =
@@ -47,7 +48,7 @@ export function createAutomationSetupOperations(options: {
     if (!token) throw new Error('Authentication required');
     const response = await transport(url, { method, headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': 'TEST', ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) {
-      const code = response.status === 404 && url.endsWith('/verified-github-release') ? 'automation_verified_release_unavailable'
+      const code = (response.status === 400 || response.status === 404) && url.endsWith('/verified-github-release') ? 'automation_verified_release_unavailable'
         : response.status === 401 ? 'automation_setup_authentication_required'
         : response.status === 403 || response.status === 404 ? 'automation_setup_permission_denied'
         : 'automation_setup_request_failed';
@@ -63,7 +64,11 @@ export function createAutomationSetupOperations(options: {
     if (!Array.isArray(list) || !list.every(valid)) throw new Error('Invalid Business API response');
     return list as T[];
   };
-  const connectionValid = (item: unknown) => record(item) && typeof item.id === 'string' && typeof item.name === 'string' && ['GITHUB', 'GOOGLE_CLOUD', 'AWS', 'PORTABLE'].includes(String(item.provider)) && typeof item.status === 'string' && record(item.trust) && typeof item.trust.method === 'string';
+  const providerValid = (provider: unknown, trust: unknown) => {
+    if (!record(trust) || typeof trust.method !== 'string') return false;
+    try { return AutomationProviderValue.from(provider).accepts(trust as AutomationTrust); } catch { return false; }
+  };
+  const connectionValid = (item: unknown) => record(item) && typeof item.id === 'string' && typeof item.name === 'string' && providerValid(item.provider, item.trust) && typeof item.status === 'string';
   const grantValid = (item: unknown) => record(item) && typeof item.id === 'string' && typeof item.planId === 'string' && typeof item.connectionId === 'string' && typeof item.responsibleMemberId === 'string' && typeof item.status === 'string';
   return {
     getVerifiedGithubRelease: async () => {
@@ -117,7 +122,7 @@ export function githubAutomationWorkflow(input: { release: VerifiedGithubRelease
     'jobs:', '  use-secret:', '    runs-on: ubuntu-latest', `    environment: ${JSON.stringify(environment)}`, '    steps:',
     `      - uses: ${release.actionRepository}/integrations/github-actions@${release.actionRef}`, '        with:',
     `          cli-version: ${JSON.stringify(release.cliVersion)}`, `          plan: ${JSON.stringify(planId)}`,
-    `          connection-id: ${JSON.stringify(connectionId)}`, `          audience: ${JSON.stringify(`urn:inheriti:automation:connection:${connectionId}`)}`,
+    `          connection-id: ${JSON.stringify(connectionId)}`, `          audience: ${JSON.stringify(AutomationProviderValue.from('GITHUB').expectedAudience(connectionId)!)}`,
     '          env: |', `            INHERITI_SECRET=${selector}`, `          run: ${JSON.stringify('test -n "$INHERITI_SECRET"')}`,
   ].join('\n');
 }

@@ -21,6 +21,7 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node22',
+  external: ['@google-cloud/secret-manager'],
   define: buildDefines(),
   banner: { js: "import { createRequire as __nodeCreateRequire } from 'node:module';\nconst require = __nodeCreateRequire(import.meta.url);" },
 });

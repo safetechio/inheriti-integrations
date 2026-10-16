@@ -71,6 +71,15 @@ it('uses the selected organization core for plan logs and returns the safe page'
   expect(listPlanLogs).toHaveBeenCalledWith('plan-1', { limit: 5, offset: 10 });
 });
 
+it('uses the selected organization core for filtered member logs', async () => {
+  const tools = new MetadataTools() as any;
+  const page = { items: [{ id: 'log-1', memberId: 'member-1', source: 'AUTOMATION', event: 'AUTOMATION_CREATED', occurredOn: '2026-10-15T00:00:00Z' }], total: 1 };
+  const listMemberLogs = vi.fn().mockResolvedValue(page);
+  tools.selected = async () => ({ organizationId: 'org-1', core: { listMemberLogs } });
+  expect(await tools.listMemberLogs('member-1', { source: 'AUTOMATION', limit: 5 })).toEqual({ organizationId: 'org-1', ...page });
+  expect(listMemberLogs).toHaveBeenCalledWith('member-1', { source: 'AUTOMATION', limit: 5 });
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;

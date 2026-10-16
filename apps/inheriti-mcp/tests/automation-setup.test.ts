@@ -103,9 +103,22 @@ it('appends the generated connection ID to Google audience base and returns the 
     method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC', audience: `https://example.test/workload/${result.connectionId}`, serviceAccountSubject: '1234567890',
   } }));
   expect(result.expectedAudience).toBe(`https://example.test/workload/${result.connectionId}`);
+  mock.getConnection.mockResolvedValueOnce({ provider: 'GOOGLE_CLOUD' });
   const changed = await tools.changeAutomationTrust('existing', { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC', audienceBase: 'https://example.test/workload', serviceAccountSubject: '1234567890' });
   expect(mock.changeTrust).toHaveBeenLastCalledWith('existing', { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC', audience: 'https://example.test/workload/existing', serviceAccountSubject: '1234567890' });
   expect(changed.expectedAudience).toBe('https://example.test/workload/existing');
+});
+
+it('rejects provider and trust mismatches before changing a connection', async () => {
+  const tools = setup();
+  mock.changeTrust.mockClear();
+  mock.createConnection.mockClear();
+  const trust = { method: 'AWS_IAM_ROLE' as const, roleArn: 'arn:aws:iam::123:role/runner' };
+  await expect(tools.createAutomationConnection({ name: 'Runner', provider: 'GITHUB', environment: 'TEST', trust })).rejects.toMatchObject({ code: 'automation_provider_trust_mismatch' });
+  expect(mock.createConnection).not.toHaveBeenCalled();
+  mock.getConnection.mockResolvedValueOnce({ provider: 'GITHUB' });
+  await expect(tools.changeAutomationTrust('existing', trust)).rejects.toMatchObject({ code: 'automation_provider_trust_mismatch' });
+  expect(mock.changeTrust).not.toHaveBeenCalled();
 });
 
 it('does not report completion when the proof window ends without verification', async () => {

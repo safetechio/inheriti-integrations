@@ -18,6 +18,7 @@ const mock = vi.hoisted(() => ({
   showLauncher: vi.fn(),
   setTrayUnread: vi.fn(),
   isVisible: vi.fn(() => false),
+  isBackgroundLaunch: vi.fn(() => false),
 }));
 
 vi.mock('electron', () => ({
@@ -42,7 +43,7 @@ vi.mock('../src/modules/launcher/main/launcher-window.js', () => ({
 vi.mock('../src/modules/launcher/main/tray.js', () => ({ registerTrayEvents: vi.fn(), setTrayUnread: mock.setTrayUnread }));
 vi.mock('../src/modules/launcher/main/ipc.js', () => ({ registerTrayIpc: mock.registerIpc }));
 vi.mock('../src/modules/launcher/main/linux-lock.js', () => ({ watchLinuxLock: mock.watchLinuxLock }));
-vi.mock('../src/modules/launcher/main/start-at-login.js', () => ({ ensureStartAtLogin: vi.fn(), isBackgroundLaunch: () => false }));
+vi.mock('../src/modules/launcher/main/start-at-login.js', () => ({ ensureStartAtLogin: vi.fn(), isBackgroundLaunch: mock.isBackgroundLaunch }));
 
 import { registerAppEvents } from '../src/modules/launcher/main/app.js';
 
@@ -51,8 +52,26 @@ beforeEach(() => {
   vi.clearAllMocks();
   mock.notifications.length = 0;
   mock.isVisible.mockReturnValue(false);
+  mock.isBackgroundLaunch.mockReturnValue(false);
   mock.appEvents.clear();
   mock.powerEvents.clear();
+});
+
+it('skips the launcher for a mocked macOS background launch and opens it on activate', async () => {
+  const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
+  try {
+    mock.isBackgroundLaunch.mockReturnValue(true);
+    const session = { setPublisher: vi.fn(), setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+      state: () => ({ status: 'signed-out' }) };
+    registerAppEvents(session as never, undefined, 'dev');
+    expect(mock.appEvents.has('activate')).toBe(false);
+    await vi.waitFor(() => expect(mock.appEvents.has('activate')).toBe(true));
+    expect(mock.showLauncher).not.toHaveBeenCalled();
+    mock.appEvents.get('activate')?.();
+    expect(mock.showLauncher).toHaveBeenCalledOnce();
+  } finally {
+    platform.mockRestore();
+  }
 });
 
 it('hides and reloads the launcher on lock and suspend while clearing session data', async () => {

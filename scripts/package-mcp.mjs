@@ -20,6 +20,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   bin: manifest.bin,
   files: ['dist'],
   engines: { node: '>=22' },
+  dependencies: { '@google-cloud/secret-manager': manifest.dependencies['@google-cloud/secret-manager'] },
   private: false,
 }, null, 2)}\n`);
 const packed = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',

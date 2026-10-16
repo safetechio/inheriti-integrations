@@ -10,7 +10,7 @@ const canceled = () => new Error('local_delivery_canceled');
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 /** Human-only native window channel. Its token, PIN and URL never enter an MCP result. */
 export async function openSafeKeyProPrompt(deployment: unknown, device: string | undefined,
-  context: { organizationId: string; planId: string; selector: string; kind: 'FIELD' | 'ASSET' | 'SELECTION' }, signal: AbortSignal,
+  context: { organizationId: string; planId: string; selector: string; kind: 'FIELD' | 'ASSET' | 'SELECTION'; completionMessage?: string }, signal: AbortSignal,
   open: (url: string) => void) {
   if (signal.aborted) throw canceled();
   const channel = businessDeployment(deployment);
@@ -45,7 +45,7 @@ export async function openSafeKeyProPrompt(deployment: unknown, device: string |
           : state === 'touch' ? touch?.operation === 'write' ? 'Writing to SafeKey PRO' : touch?.operation === 'read' ? 'Reading from SafeKey PRO' : 'Unlock SafeKey PRO'
             : selectedDevice === 'mobile' ? 'Continue in SafeKey Mobile' : 'Completing your plan request';
       const body = state === 'complete' || state === 'failed' || state === 'canceled'
-        ? renderTemplate('status', { message: state === 'complete' ? 'The protected data was delivered to a separate local page. You can close this approval page.' : state === 'failed' ? 'Return to your MCP client to check the request status and try again.' : 'The request was canceled. No further device action is needed.' })
+        ? renderTemplate('status', { message: state === 'complete' ? context.completionMessage ?? 'The protected data was delivered to a separate local page. You can close this approval page.' : state === 'failed' ? 'Return to your MCP client to check the request status and try again.' : 'The request was canceled. No further device action is needed.' })
         : state === 'choice'
           ? renderTemplate('device-choice', { intro: escapeHtml(custodianShareCopy.choice.intro), proChoice: rpId ? renderTemplate('pro-choice', { pro, title: custodianShareCopy.choice.proOption, description: custodianShareCopy.choice.proDescription }) : '', mobile, mobileTitle: custodianShareCopy.choice.mobileOption, mobileDescription: custodianShareCopy.choice.mobileDescription })
           : state === 'pin'

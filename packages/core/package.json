@@ -39,6 +39,10 @@
     "package": "pnpm run build && node ../../scripts/package-workspace.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1152.0",
+    "@aws-sdk/client-ssm": "3.1152.0",
+    "@aws-sdk/client-sts": "3.1152.0",
+    "@google-cloud/secret-manager": "6.3.0",
     "@safetech/inheriti-client-sdk": "1.17.22",
     "@safetech/inheriti-core-sdk": "4.0.36",
     "socket.io-client": "4.8.4"

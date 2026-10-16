@@ -28,9 +28,9 @@ it('creates the Linux launcher at the design content size', () => {
     width: process.platform === 'linux' ? 448 : 404,
     height: process.platform === 'linux' ? 756 : 676,
     useContentSize: process.platform !== 'linux',
-    ...(process.platform === 'linux' && (process.env.DISPLAY || process.argv.includes('--ozone-platform=x11')) ? { type: 'utility' } : {}),
     title: 'Inheriti Go · DEV',
   }));
+  expect(mock.BrowserWindow).toHaveBeenCalledWith(expect.not.objectContaining({ type: expect.anything() }));
   const window = mock.BrowserWindow.mock.results[0]!.value;
 
   expect(window.setPosition).toHaveBeenLastCalledWith(2460, 40);
@@ -39,11 +39,11 @@ it('creates the Linux launcher at the design content size', () => {
 
   window.setPosition.mockClear();
   showLauncher();
-  expect(window.setPosition).toHaveBeenLastCalledWith(2460, 40);
+  expect(window.setPosition).not.toHaveBeenCalled();
   expect(mock.BrowserWindow).toHaveBeenCalledTimes(1);
 });
 
-it('uses a normal window on native Wayland and a utility window when X11 is available', async () => {
+it('uses a normal window on native Wayland and X11', async () => {
   if (process.platform !== 'linux') return;
   const original = process.argv;
   const display = process.env.DISPLAY;
@@ -52,12 +52,12 @@ it('uses a normal window on native Wayland and a utility window when X11 is avai
     delete process.env.DISPLAY;
     vi.resetModules();
     (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
-    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.not.objectContaining({ type: 'utility' }));
+    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.not.objectContaining({ type: expect.anything() }));
 
     process.env.DISPLAY = ':0';
     vi.resetModules();
     (await import('../src/modules/launcher/main/launcher-window.js')).showLauncher();
-    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'utility' }));
+    expect(mock.BrowserWindow).toHaveBeenLastCalledWith(expect.not.objectContaining({ type: expect.anything() }));
   } finally {
     process.argv = original;
     if (display === undefined) delete process.env.DISPLAY;

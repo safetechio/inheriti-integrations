@@ -19,9 +19,9 @@ const PLANS = candidates(
   ['reveal', 'Copy selected fields'], ['download', 'Download a media asset'],
   ['use', 'Run a command with secrets'], ['abort', 'Abandon current access'],
 );
-const SECRETS = candidates(['exec', 'Run a command with secrets'], ['resolve', 'Resolve one field']);
+const SECRETS = candidates(['exec', 'Run a command with Inheriti secrets'], ['resolve', 'Resolve one field'], ['publish', 'Optional one-time copy to cloud secret stores']);
 const ORGANIZATIONS = candidates(['list', 'List organisations'], ['use', 'Select an organisation']);
-const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['grant', 'Manage plan grant']);
+const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['usage', 'Print GitHub workflow'], ['setup', 'Prepare workload launcher'], ['grant', 'Manage plan grant']);
 
 type Completion =
   | { kind: 'static'; candidates: Candidate[] }
@@ -118,7 +118,15 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
     if (subcommand === 'grant') return { kind: 'static', candidates: ['--plan', '--grant', '--connection', '--member', '--id', '--help'].map(value => ({ value })) };
     if (subcommand === 'create' || subcommand === 'trust') return { kind: 'static', candidates: ['--name', '--provider', '--deployment-environment', '--repository', '--environment', '--workflow', '--audience-base', '--subject', '--role-arn', '--key-id', '--public-key', '--connection', '--id', '--help'].map(value => ({ value })) };
     if (subcommand === 'verify' || subcommand === 'disable') return { kind: 'static', candidates: ['--connection', '--help'].map(value => ({ value })) };
+    if (subcommand === 'setup') return { kind: 'static', candidates: ['--plan', '--connection', '--map-all', '--only', '--except', '--map', '--field', '--env-name', '--project', '--region', '--job', '--cluster', '--service', '--task-definition', '--container', '--script-path', '--apply', '--image', '--cli-path', '--expect-revision', '--help'].map(value => ({ value })) };
     return { kind: 'none' };
+  }
+  if (command === 'secrets' && subcommand === 'publish') {
+    if (words.length === 3) return { kind: 'static', candidates: candidates(['aws', 'Publish to AWS Secrets Manager or Parameter Store'], ['google', 'Publish to Google Cloud Secret Manager']) };
+    const options = rest[0] === 'google'
+      ? ['--plan', '--project', '--secret-prefix', '--map', '--map-all', '--only', '--except', '--apply', '--help']
+      : ['--plan', '--region', '--account-id', '--secret', '--parameter-prefix', '--map', '--map-all', '--only', '--except', '--apply', '--help'];
+    return { kind: 'static', candidates: options.map(value => ({ value })) };
   }
   if (command === 'help') return helpCompletion(words.slice(1));
   if (command === 'login') return { kind: 'static', candidates: candidates(['--help', 'Show help']) };

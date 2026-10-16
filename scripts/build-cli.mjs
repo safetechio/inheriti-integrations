@@ -11,7 +11,7 @@ import { buildDefines, writeBuildDeployment } from './build-deployment.mjs';
 import { buildNativeWindow } from './build-native-window.mjs';
 
 /**
- * Builds the CLI as one self-contained ESM file.
+ * Builds the CLI as one ESM entry point with declared native and Google Cloud dependencies.
  *
  * `tsc` alone emitted a `dist` whose imports still resolved through the workspace's `node_modules`,
  * so the packed tarball only ran on a machine that already had this checkout — the two SDKs were
@@ -41,7 +41,7 @@ await build({
   sourcemap: true,
   logLevel: 'info',
   plugins: [optionalToastPlugin, optionalDevtoolsPlugin],
-  external: ['@napi-rs/keyring'],
+  external: ['@napi-rs/keyring', '@google-cloud/secret-manager'],
   alias: { react: resolve(root, 'node_modules/react') },
   define: buildDefines(),
   // Some transitive dependencies are still CommonJS, and esbuild's ESM output has no `require` to

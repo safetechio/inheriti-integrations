@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { run } from '../src/main.js';
+import { parseMemberLogOptions, run } from '../src/main.js';
 import type { Terminal } from '../src/output.js';
 
 const { configure, makeContext, download, loginBrowser, logout, selectedOrganization } = vi.hoisted(() => ({
@@ -32,6 +32,7 @@ beforeEach(() => {
       getAccessToken: async () => 'token',
       listPlans: vi.fn(async () => ({ items: [], nextCursor: null })),
       listPlanLogs: vi.fn(async () => ({ items: [], total: 0 })),
+      listMemberLogs: vi.fn(async () => ({ items: [], total: 0 })),
       getPlan: vi.fn(async () => ({ id: 'plan-1' })),
     },
   });
@@ -56,6 +57,21 @@ describe('plan command option routing', () => {
     const context = makeContext.mock.results[0]?.value;
     expect(context.core.listPlanLogs).toHaveBeenCalledWith('plan-1', { limit: 5, offset: 3 });
     expect(JSON.parse(output.lines[0] as string)).toMatchObject({ items: [], total: 0 });
+  });
+
+  it('routes filtered member activity through the selected Business organization', async () => {
+    configure.mockReturnValue({ business: true });
+    const output = terminal();
+    await expect(run(['members', 'logs', 'member-1', '--source', 'AUTOMATION', '--from', '2026-10-01', '--limit', '5', '--json'], {}, output)).resolves.toBe(0);
+    const scoped = makeContext.mock.results[1]?.value;
+    expect(scoped.core.listMemberLogs).toHaveBeenCalledWith('member-1', { source: 'AUTOMATION', from: '2026-10-01', limit: 5 });
+    expect(JSON.parse(output.lines[0] as string)).toEqual({ items: [], total: 0 });
+  });
+
+  it('rejects invalid member log filters before sending a request', () => {
+    expect(parseMemberLogOptions(['--source', 'GITHUB'])).toEqual({ error: '--source must be MEMBER or AUTOMATION.' });
+    expect(parseMemberLogOptions(['--from', 'not-a-date'])).toEqual({ error: '--from requires a valid date.' });
+    expect(parseMemberLogOptions(['--limit', '101'])).toEqual({ error: '--limit takes a whole number from 1 to 100.' });
   });
 
   it('accepts explicit table output for list and logs', async () => {

@@ -147,18 +147,35 @@ export async function loadRevealPlan(context: SecretRevealContext, planId: strin
 }
 
 /** One CLI reveal lifecycle. Destinations vary; governance, reconstruction and auditing never do. */
+type PlanField = string | {
+  selector: string;
+  action: 'COPY_FIELD' | 'USE_FIELD';
+  destination?: 'STDIN' | 'ENVIRONMENT' | 'FILE_DESCRIPTOR' | 'LOCAL_SOCKET' | 'TEMPORARY_FILE' | 'AWS_SECRETS_MANAGER' | 'AWS_PARAMETER_STORE' | 'GOOGLE_CLOUD_SECRET_MANAGER';
+};
+type FieldBatch = { fields: ReadonlyArray<PlanField>;
+  destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void> };
+
 export async function consumePlanFields(
   context: SecretRevealContext,
   terminal: Terminal,
   planId: string,
   plan: CliRevealPlan,
-  fields: ReadonlyArray<string | {
-    selector: string;
-    action: 'COPY_FIELD' | 'USE_FIELD';
-    destination?: 'STDIN' | 'ENVIRONMENT' | 'FILE_DESCRIPTOR' | 'LOCAL_SOCKET' | 'TEMPORARY_FILE';
-  }>,
+  fields: ReadonlyArray<PlanField>,
   signal: AbortSignal | undefined,
   destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void>,
+  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void } = {},
+): Promise<boolean> {
+  return consumePlanFieldBatches(context, terminal, planId, plan, [{ fields, destination }], signal, options);
+}
+
+/** Keep custody open while each batch records its own completed delivery action. */
+export async function consumePlanFieldBatches(
+  context: SecretRevealContext,
+  terminal: Terminal,
+  planId: string,
+  plan: CliRevealPlan,
+  batches: ReadonlyArray<FieldBatch>,
+  signal: AbortSignal | undefined,
   options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void } = {},
 ): Promise<boolean> {
   let lastLine: string | undefined;
@@ -235,12 +252,13 @@ export async function consumePlanFields(
       },
     }, async (reveal) => {
       if (reveal.session?.expiresAt !== undefined) options.onSession?.(reveal.session.expiresAt);
-      await reveal.consumeFields(
+      for (const { fields, destination } of batches) await reveal.consumeFields(
         fields.map((field) => typeof field === 'string'
           ? { selector: field, options: { action: 'COPY_FIELD' as const } }
           : { selector: field.selector, options: {
             action: field.action,
-            ...(field.destination === undefined ? {} : { destination: field.destination }),
+            // The installed SDK declaration predates the server's AWS destination values.
+            ...(field.destination === undefined ? {} : { destination: field.destination as never }),
           } }),
         destination,
       );

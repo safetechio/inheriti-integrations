@@ -145,5 +145,18 @@ export { createNodeAutomationRevealClient } from '@safetech/inheriti-client-sdk/
 export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';
 export { createAutomationSetupOperations, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector } from './automation-setup.js';
 export type { AutomationSetupOperations, AutomationConnection, AutomationGrant, AutomationTrust, AutomationProvider, AutomationPlan, AutomationMember, VerifiedGithubRelease } from './automation-setup.js';
+export { AUTOMATION_PROVIDERS, AutomationProviderValue } from './automation-provider.js';
+export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';
+export type { AutomationRuntimeInput, AutomationRuntimeBundle } from './automation-runtime-setup.js';
+export { resolveAutomationFieldMappings } from './automation-field-mappings.js';
+export type { AutomationMappingSelection } from './automation-field-mappings.js';
+export { inspectCloudIdentity, inspectCloudTarget, previewCloudTarget } from './automation-cloud-target.js';
+export type { CloudTarget, CloudTargetPreview, CloudTargetInspection } from './automation-cloud-target.js';
+export { applyEcsAutomation } from './automation-ecs-apply.js';
+export { createAwsSecretPublisher } from './automation-aws-publisher.js';
+export { createGoogleSecretPublisher } from './google-secret-publisher.js';
+export type { EcsApplyInput, EcsApplyResult } from './automation-ecs-apply.js';
+export { applyCloudRunAutomation, applyCloudRunServiceAutomation } from './automation-cloud-run-apply.js';
+export type { CloudRunAutomationInput, CloudRunAutomationResult } from './automation-cloud-run-apply.js';
 export { runLocalAutomationSetupBrowser, runLocalAutomationProofBrowser } from './local-automation-setup-browser.js';
 export type { AutomationSetupResult, LocalAutomationSetupBrowserOptions } from './local-automation-setup-browser.js';

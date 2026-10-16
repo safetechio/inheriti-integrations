@@ -1,4 +1,4 @@
-import type { ListPlanLogsInput, ListPlansInput, PlanDetail, PlanLogPage, PlanPage } from '@safetech/inheriti-client-sdk';
+import type { ListMemberLogsInput, ListPlanLogsInput, ListPlansInput, MemberLogPage, PlanDetail, PlanLogPage, PlanPage } from '@safetech/inheriti-client-sdk';
 import type { PlanFacade } from './index.js';
 
 /** The read surface of the SDK client, which is all a host needs to list and open plans. */
@@ -6,6 +6,7 @@ export interface SdkPlanReader {
   listPlans(input?: ListPlansInput): Promise<PlanPage>;
   getPlan(planId: string): Promise<PlanDetail>;
   listPlanLogs(planId: string, input?: ListPlanLogsInput): Promise<PlanLogPage>;
+  listMemberLogs(memberId: string, input?: ListMemberLogsInput): Promise<MemberLogPage>;
   getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
   abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }>;
 }
@@ -58,6 +59,14 @@ export class SdkPlanFacade implements ElementsPlanFacade {
   listPlanLogs(planId: string, input?: ListPlanLogsInput): Promise<PlanLogPage> {
     if (!planId) throw new PlanRequestFailed('plan_id_required');
     return this.guard(() => this.reader.listPlanLogs(planId, input));
+  }
+
+  listMemberLogs(memberId: string, input?: ListMemberLogsInput): Promise<MemberLogPage> {
+    if (!memberId) throw new PlanRequestFailed('member_id_required');
+    return this.reader.listMemberLogs(memberId, input).catch(error => {
+      const failure = asPlanRequestFailed(error);
+      throw failure.code === 'plan_not_found' ? new PlanRequestFailed('member_logs_unavailable', failure.status, failure.requestId) : failure;
+    });
   }
 
   getActivePlanReveal(planId: string): Promise<{ id: string } | null> {

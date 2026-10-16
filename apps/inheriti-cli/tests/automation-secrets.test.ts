@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { withAutomationSecrets } from '../src/automation-secrets.js';
+import { automationConfigurationComplete, withAutomationSecrets } from '../src/automation-secrets.js';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const clientFactory = vi.hoisted(() => vi.fn());
-vi.mock('@safetech/inheriti-elements-core/node-base', () => ({ createNodeAutomationRevealClient: clientFactory }));
+vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
+  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
+  AutomationProviderValue: (await import('../../../packages/core/src/automation-provider.js')).AutomationProviderValue,
+  createNodeAutomationRevealClient: clientFactory,
+}));
 
 const environment = {
   INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1',
@@ -14,6 +18,27 @@ const environment = {
   ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/oidc',
   ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'github-request-token',
 };
+
+describe('automation provider configuration', () => {
+  it('checks each provider through the same preflight and rejects an unsupported provider before a job', async () => {
+    expect(automationConfigurationComplete(environment)).toBe(true);
+    expect(automationConfigurationComplete({ INHERITI_AUTOMATION_PROVIDER: 'GOOGLE_CLOUD',
+      INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1', INHERITI_AUTOMATION_AUDIENCE: 'audience' })).toBe(true);
+    expect(automationConfigurationComplete({ INHERITI_AUTOMATION_PROVIDER: 'AWS',
+      INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1' })).toBe(false);
+    expect(automationConfigurationComplete({ INHERITI_AUTOMATION_PROVIDER: 'PORTABLE',
+      INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1' })).toBe(false);
+    expect(automationConfigurationComplete({ ...environment, INHERITI_AUTOMATION_PROVIDER: 'toString' })).toBe(false);
+    const transport = vi.fn();
+    await expect(withAutomationSecrets('https://business.example/api', {
+      ...environment, INHERITI_AUTOMATION_PROVIDER: 'GITHUB',
+    }, async () => 0, transport)).rejects.toThrow('automation_provider_invalid');
+    await expect(withAutomationSecrets('https://business.example/api', {
+      ...environment, INHERITI_AUTOMATION_PROVIDER: 'toString',
+    }, async () => 0, transport)).rejects.toThrow('automation_provider_invalid');
+    expect(transport).not.toHaveBeenCalled();
+  });
+});
 
 describe('GitHub automation secret session', () => {
   it('keeps credentials in memory, renews with a fresh proof, and ends the job', async () => {

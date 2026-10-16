@@ -58,6 +58,7 @@ export interface PlanFacade<TListInput, TPage, TDetail> {
   listPlans(input?: TListInput): Promise<TPage>;
   getPlan(planId: string): Promise<TDetail>;
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage>;
+  listMemberLogs(memberId: string, input?: import('@safetech/inheriti-client-sdk').ListMemberLogsInput): Promise<import('@safetech/inheriti-client-sdk').MemberLogPage>;
   getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
   abortPlanAccess(planId: string, expectedRevealId?: string): Promise<{ aborted: boolean }>;
 }
@@ -227,6 +228,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   listPlans(input?: TListInput): Promise<TPage> { return this.elements.listPlans(input); }
   getPlan(planId: string): Promise<TDetail> { return this.elements.getPlan(planId); }
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage> { return this.elements.listPlanLogs(planId, input); }
+  listMemberLogs(memberId: string, input?: import('@safetech/inheriti-client-sdk').ListMemberLogsInput): Promise<import('@safetech/inheriti-client-sdk').MemberLogPage> { return this.elements.listMemberLogs(memberId, input); }
   getActivePlanReveal(planId: string): Promise<{ id: string } | null> { return this.elements.getActivePlanReveal(planId); }
   /**
    * Gives up the governed access this operator holds on a plan.

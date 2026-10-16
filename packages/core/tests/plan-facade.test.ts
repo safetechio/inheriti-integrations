@@ -53,6 +53,17 @@ describe('SdkPlanFacade', () => {
     expect(() => facade.listPlanLogs('')).toThrow(PlanRequestFailed);
   });
 
+  it('passes member filters through and does not report a plan error for denied activity', async () => {
+    const page = { items: [], total: 0 };
+    const listMemberLogs = vi.fn(async () => page);
+    const facade = new SdkPlanFacade({ listMemberLogs } as never);
+    await expect(facade.listMemberLogs('member-1', { source: 'AUTOMATION', limit: 10 })).resolves.toBe(page);
+    expect(listMemberLogs).toHaveBeenCalledWith('member-1', { source: 'AUTOMATION', limit: 10 });
+    expect(() => facade.listMemberLogs('')).toThrow(PlanRequestFailed);
+    listMemberLogs.mockRejectedValueOnce(Object.assign(new Error('denied'), { status: 403 }));
+    await expect(facade.listMemberLogs('member-1')).rejects.toMatchObject({ code: 'member_logs_unavailable' });
+  });
+
   it('maps an expired session to a reauthentication code a host can act on', async () => {
     const facade = facadeThatFailsWith(Object.assign(new Error('nope'), { status: 401 }));
     await expect(facade.listPlans()).rejects.toMatchObject({ code: 'operator_reauthentication_required' });

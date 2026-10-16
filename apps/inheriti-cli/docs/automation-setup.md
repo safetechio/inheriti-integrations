@@ -2,6 +2,19 @@
 
 This guide covers the local and dev TEST builds. A Business operator configures the connection and a plan editor grants access. The workload later runs the normal reveal: SafeKey Mobile custody, authentication, plan policy, and audit still apply. On dev, install the published CLI with `npm install -g @safetech/inheriti-cli@dev` after the dev package has been released; it points to the deployed Business dev API. The Business UI and API must also be deployed to dev before testing this guide there.
 
+## Start here
+
+This walkthrough uses a plan with fields such as `database.username` and `database.password`. These selectors are **not** secret values. Map each field to the environment variable your application already reads, for example `DB_USER=database.username` and `DB_PASSWORD=database.password`. Inheriti supplies the values to the application process when it starts; the values do not belong in the cloud service configuration. Choose real fields from your plan's **Data** tab.
+
+1. [Check Business permissions](#1-check-access-before-collecting-provider-details).
+2. Choose where the command will actually run: [GitHub Actions](#github-actions), [Google Cloud Run](#google-cloud-run), [AWS ECS](#aws-ecs), or a [custom runner / Ansible](#custom-runner-and-ansible). Create a connection for that workload's identity.
+3. [Verify the connection and grant it access to a plan](#3-verify-identity-then-grant-plan-access).
+4. [Run the provider's example and check the plan logs](#4-execute-and-check-the-result). An approval in SafeKey Mobile may be required by the plan's reveal policy.
+
+`gh` is used in the GitHub example to identify the repository. For Cloud Run and ECS, install and authenticate the provider CLI on your computer; Inheriti calls it to inspect the selected job or service. These operator-side sessions do not replace the identity of the workload that later runs the reveal.
+
+**Before you begin:** GitHub workflow generation is blocked until Business publishes a verified Action/CLI release. Initial identity verification also still needs a fresh proof transferred securely from the workload to the CLI's native window; if you cannot do that without exposing the proof in logs or artifacts, leave the connection pending. These are current product limits, not extra setup steps you should work around.
+
 ## 1. Check access before collecting provider details
 
 ```bash
@@ -41,44 +54,42 @@ inheriti automations create --name "$REPO deployment" --provider GITHUB \
   --workflow "$REPO/.github/workflows/$WORKFLOW_FILE@refs/heads/$BRANCH"
 ```
 
-The workflow job needs `permissions: id-token: write` and must request the **Expected audience** printed by the CLI. [GitHub documents the `repository`, `environment`, and `workflow_ref` claims](https://docs.github.com/en/actions/reference/security/oidc). The public composite Action does not yet have a verified npm Action+CLI pair, so there is no supported workflow YAML to paste. Do not use a guessed commit, `@main`, or npm's `latest` tag. After a published dev CLI passes a real GitHub/Business dev/SafeKey run, Business will provide the verified pair automatically. The [GitHub Action page](../../../integrations/github-actions/README.md) tracks that release gate.
+The workflow job needs `permissions: id-token: write` and must request the **Expected audience** printed by the CLI. [GitHub documents the `repository`, `environment`, and `workflow_ref` claims](https://docs.github.com/en/actions/reference/security/oidc); [Settings → Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) shows the job environment. The public composite Action does not yet have a verified npm Action+CLI pair, so there is no supported workflow YAML to paste. Do not use a guessed commit, `@main`, or npm's `latest` tag. After a published dev CLI passes a real GitHub/Business dev/SafeKey run, Business will provide the verified pair automatically. The [GitHub Action page](../../../integrations/github-actions/README.md) tracks that release gate.
 
 After the connection is verified and its plan grant is active, generate a workflow with `inheriti automations usage --plan PLAN_ID --connection CONNECTION_ID --field ASSET.FIELD`. The IDs can be selected interactively. Find the nonsecret `ASSET.FIELD` selector in the plan's **Data** tab. The command fetches the verified Action commit and CLI version from Business, fills the plan and connection IDs, and prints a smoke-test YAML plus the exact repository, `.github/workflows/…` file, and branch where it belongs. That location must match the verified connection. It fails if the release is not available or the workflow reference is invalid; until the release is published, no customer workflow is generated. The MCP tool `github_automation_usage` returns the same location and YAML with these three nonsecret inputs; an agent should ask you for the field selector if it cannot see the plan Data tab.
 
-### Google Cloud
+For the first job, run `inheriti automations usage --field database.password` and select the plan and connection when prompted. Paste its YAML into the **exact file and branch printed by the CLI**, commit it, then run that workflow from GitHub's **Actions** tab. The generated `run` command is a smoke check for the injected variable. To use the value in your own job, replace that command with the process that reads the mapped variable; if that process needs repository files, add a checkout step first. Keep the generated Action commit, CLI version, plan ID, connection ID, audience, and field mapping. The job may wait for SafeKey Mobile approval; inspect the [result in Business](#4-execute-and-check-the-result). This step is unavailable until Business serves the verified release.
 
-Use the service account assigned to the workload, not a personal account. The service account's **numeric unique ID** is the subject; its email address is not accepted. You can retrieve it with `gcloud iam service-accounts describe SERVICE_ACCOUNT_EMAIL --format='value(uniqueId)'`, if your Google account can inspect that service account. Choose an audience base URI for this integration; Business appends the connection ID and the CLI prints the full value.
+### Google Cloud Run
+
+Start with an existing Cloud Run **service** that runs your application. Its attached service account is the workload identity; use a stable, nonsecret audience base URI under a domain your organisation controls. Sign in to Google Cloud locally once with the normal Google Cloud CLI. The Inheriti command inspects the service and resolves the service account's numeric unique ID automatically; you do not need to copy it from IAM or run a separate `gcloud` command. For a scheduled batch process, use a Cloud Run job and `--job` instead of `--service`.
 
 ```bash
-read -r -p 'Workload service account email: ' SERVICE_ACCOUNT
+read -r -p 'Cloud Run project: ' PROJECT
+read -r -p 'Cloud Run region: ' REGION
+read -r -p 'Cloud Run service: ' SERVICE
 read -r -p 'Audience base URI: ' AUDIENCE_BASE
-SUBJECT="$(gcloud iam service-accounts describe "$SERVICE_ACCOUNT" --format='value(uniqueId)')"
-if test -n "$SUBJECT"; then
-  inheriti automations create --name 'Google Cloud deployment' --provider GOOGLE_CLOUD \
-    --deployment-environment TEST --audience-base "$AUDIENCE_BASE" --subject "$SUBJECT"
-else
-  echo 'Service account unique ID unavailable' >&2
-fi
+inheriti automations create --name 'Cloud Run application' --provider GOOGLE_CLOUD \
+  --deployment-environment TEST --audience-base "$AUDIENCE_BASE" \
+  --project "$PROJECT" --region "$REGION" --service "$SERVICE"
 ```
 
-Request an ID token with the exact audience printed by the CLI. [Google documents service account details](https://cloud.google.com/iam/docs/service-accounts-create) and [`gcloud auth print-identity-token`](https://cloud.google.com/sdk/gcloud/reference/auth/print-identity-token). The served local E2E accepted a Google-signed token using a test service account; native metadata acquisition on Cloud Run/GCE/GKE still needs a workload in Google Cloud.
+The CLI prints the connection ID and exact expected audience. It does not create or edit the Cloud Run service. A Google account with permission to read the service and its service account is required. [Cloud Run service identity](https://cloud.google.com/run/docs/securing/service-identity) explains the identity attached to the workload.
 
 ### AWS ECS
 
-`--role-arn` is the ECS **task role** (`taskRoleArn`) from the task definition, not the execution role. It identifies the workload; static access keys are not setup inputs.
+Start with an existing ECS **service** whose task definition has a task role. Sign in to AWS locally once with your usual AWS CLI profile or SSO session. The Inheriti command inspects the service and resolves its `taskRoleArn` automatically; you do not need to copy the ARN or run a separate `aws` command. An ECS task definition ARN may be used instead of `--service` if you have a standalone task; keep `--cluster` for the target context.
 
 ```bash
-read -r -p 'ECS task definition name or ARN: ' TASK_DEFINITION
-TASK_ROLE="$(aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" --query 'taskDefinition.taskRoleArn' --output text)"
-if test -n "$TASK_ROLE" && test "$TASK_ROLE" != None; then
-  inheriti automations create --name 'ECS deployment' --provider AWS \
-    --deployment-environment TEST --role-arn "$TASK_ROLE"
-else
-  echo 'Task role unavailable' >&2
-fi
+read -r -p 'ECS region: ' REGION
+read -r -p 'ECS cluster: ' CLUSTER
+read -r -p 'ECS service: ' SERVICE
+inheriti automations create --name 'ECS task' --provider AWS \
+  --deployment-environment TEST --region "$REGION" \
+  --cluster "$CLUSTER" --service "$SERVICE"
 ```
 
-[AWS documents the task role and `taskRoleArn`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html). Local tests cover the contract and verifier. Native task-role proof requires an AWS task; this project has no AWS test account or role yet. If you cannot read a task definition, ask an AWS administrator for its task role ARN rather than entering credentials.
+The CLI prints the connection ID. It reads the **task role**, never the execution role or an access key, and does not create or edit the ECS service. The AWS session needs permission to inspect the service and task definition. [AWS task roles](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) describes the distinction.
 
 ### Custom runner and Ansible
 
@@ -98,7 +109,7 @@ This command reads only the public key. Its PEM content is an argument, so use t
 
 ## 3. Verify identity, then grant plan access
 
-Run `inheriti automations verify --connection CONNECTION_ID` on the operator's desktop. Only the native window accepts the fresh proof; the CLI does not accept `--proof`. The proof must come from the configured workload. The current initial-verification flow requires a secure manual transfer from that workload; if you cannot make that transfer without logs, leave the connection pending. Closing the window without successful verification is reported as canceled. The private key remains on the runner.
+The connection created in step 2 is initially pending. Run the following commands in an **interactive terminal** on the operator's desktop, with the same organization selected in step 1. The CLI shows a selector whenever an ID is omitted; it does not automatically choose a plan, connection, member, or grant.
 
 ```bash
 inheriti automations verify
@@ -106,11 +117,45 @@ inheriti automations grant create
 inheriti automations grant activate
 ```
 
-The terminal asks for missing plan, connection, member, and grant IDs. Choose the protected plan and the member accountable for this automation. Creating a grant leaves it pending; activate it after reviewing those choices. A user without plan edit permission must ask a plan editor to do this step. `inheriti automations trust` changes nonsecret provider identity settings and requires fresh verification. `inheriti automations grant revoke` or `inheriti automations disable` ends access.
+1. **Verify:** choose the connection just created. The native window asks for a fresh proof from that **configured workload**; the CLI does not accept `--proof`. The current flow requires a secure manual transfer from the workload. If you cannot transfer it without logs or artifacts, leave the connection pending. Closing the window cancels verification. The workload's private key stays on the runner.
+2. **Create the grant:** choose the **protected Business plan** whose data the workload needs, choose that same connection, then choose the **responsible organization member**. This member is accountable for the automation. The CLI prints the new grant ID, and its status remains pending.
+3. **Activate:** choose the **same plan**, then the **grant just created**. Review the choices before activation. A plan editor must perform the grant steps if your account lacks plan edit permission. Use `inheriti automations grants PLAN_ID` to inspect the plan's grants and IDs afterward.
+
+The short commands above depend on terminal selectors. If you already know the nonsecret IDs, you can pass them explicitly: `inheriti automations verify --connection CONNECTION_ID`, `inheriti automations grant create --plan PLAN_ID --connection CONNECTION_ID --member MEMBER_ID`, then `inheriti automations grant activate --plan PLAN_ID --grant GRANT_ID`. Verification still needs an interactive terminal and desktop window. Get `PLAN_ID` from Business plan details, `CONNECTION_ID` from step 2 or `inheriti automations list`, `MEMBER_ID` from the organization's members, and `GRANT_ID` from the create output or `inheriti automations grants PLAN_ID`. Do not put an identity proof in a command argument.
+
+**Only after verification and activation** can the workload request the plan field. These commands configure Inheriti access; they do not create a GitHub repository, Cloud Run job, ECS task, or provider identity. `inheriti automations trust` changes nonsecret provider identity settings and requires fresh verification. `inheriti automations grant revoke` or `inheriti automations disable` ends access.
+
+### Configure the workload once
+
+For an existing **Cloud Run service** or **ECS service**, `inheriti automations setup` checks the selected plan fields, verified connection, active grant, cloud identity, and current workload revision. Use `--map-all` to select all text fields, `--map-all --except ASSET.FIELD` to leave out one or more, or repeat `--only ASSET.FIELD` to select a few. Generated environment names are uppercase names derived from `ASSET.FIELD`; `--map NAME=ASSET.FIELD` overrides a selected field's generated name and can still map fields explicitly. The preview lists every resolved mapping. Bulk `--apply` always needs an interactive terminal to review the exact list, even with `--expect-revision`. `--field ASSET.FIELD --env-name NAME` remains available for one field. First publish an immutable image containing the released Inheriti CLI at `/usr/local/bin/inheriti` (the default), or pass `--cli-path ABSOLUTE_PATH` if it lives elsewhere. Keep the application's original startup command explicit in the service or task definition. The CLI cannot insert an executable into an existing image. Use the image's `@sha256:` reference for a repeatable deployment.
+
+For the shortest interactive setup, run one command after publishing the image. The CLI shows the resolved mappings and workload revision, then asks you to confirm the update:
+
+```bash
+inheriti automations setup --plan PLAN_ID --map-all \
+  --project PROJECT --region REGION --service SERVICE \
+  --image IMAGE@sha256:DIGEST --apply
+```
+
+The preview shows only the image, identity, revision, and environment variable **names**; existing environment values and startup arguments stay on your computer. For a separate review in an interactive terminal, preview without `--apply` first:
+
+```bash
+inheriti automations setup --plan PLAN_ID \
+  --map-all --map DB_USER=database.username --map DB_PASSWORD=database.password \
+  --project PROJECT --region REGION --service SERVICE
+```
+
+The example includes every eligible text field and names the two database variables `DB_USER` and `DB_PASSWORD` to match the application. To omit a field, add `--except ASSET.FIELD`; use a selector that exists in your plan. To include just a few fields, replace `--map-all` with repeated `--only ASSET.FIELD` flags; keep any `--map` name overrides for those selected fields.
+
+Choose the verified connection when prompted, or pass `--connection CONNECTION_ID`. For ECS, replace the target flags with `--region REGION --cluster CLUSTER --service SERVICE`. Review the preview's revision and the prepared image, then apply the same command with `--image IMAGE@sha256:DIGEST --expect-revision REVISION --apply`. The revision must be copied from the preview; a changed workload is rejected. Bulk field selection always requires an interactive confirmation; noninteractive automation needs explicit `--map` entries and `--expect-revision`. The CLI uses the already authenticated `gcloud` or `aws` session, updates the selected service, and returns the new revision without secret values. Cloud Run jobs remain available with `--job JOB` for batch workloads; job execution and scheduling are separate.
+
+For ECS, the CLI registers a new task definition, updates the service, waits for stability, and restores the previous task definition if rollout fails. Cloud Run service updates create a persistent service revision. Each new task or instance starts the application through the launcher, which obtains the current approved field values and injects the mapped variables into that process. A running process keeps its startup values; deploy or restart it to pick up changed values. To prepare a VM or Kubernetes workload, omit the managed target flags: the CLI prints a launcher and nonsecret configuration, but does not install them on the server or cluster. A standalone ECS task definition and a custom runner still need their scheduler or service configured by their owner. Use `inheriti help automations setup` for the exact flags and [AWS ECS task definition permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) or [Cloud Run service permissions](https://docs.cloud.google.com/run/docs/reference/iam/permissions) for the deployment account.
 
 ## 4. Execute and check the result
 
-Run the CLI **inside the configured workload**, with that connection's ID and the exact audience printed at creation. Select the protected plan and an existing `asset.field` in Business first. The example below prompts for those nonsecret references and injects the selected field as `DEPLOY_VALUE` into the child process; replace the child command with the job that needs it.
+The configured service runs the CLI **inside its own workload** before starting your application. The protected plan ID comes from Business, the connection ID and expected audience come from `automations create`, and field selectors such as `database.username` and `database.password` come from the plan's **Data** tab. Those are nonsecret references. Configure them in the workload; never put the revealed values in GitHub YAML, Cloud Run environment settings, or an ECS task definition.
+
+The command below is useful on an interactive custom runner. It prompts for nonsecret references and checks that the mapped variable reached the child process without printing it. A headless cloud service uses the setup command above instead of prompts.
 
 ```bash
 read -r -p 'Protected plan ID: ' PLAN_ID
@@ -155,6 +200,96 @@ inheriti secrets exec "$PLAN_ID" --automation --env "DEPLOY_VALUE=$FIELD_REF" --
   sh -c 'test -n "$DEPLOY_VALUE"'
 ```
 
-The child receives only the selected field; normal plan access and SafeKey Mobile custody still run. Review the plan's **Logs** and the organization **Audit trail** in Business. A connection marked `VERIFIED` proves only the initial identity check; it does not prove that a deployed job, Action package, or cloud task has completed the reveal.
+### Google Cloud Run execution
+
+In an existing Cloud Run **service**, attach the **same service account** whose numeric unique ID was configured in the connection. Install the published CLI in the container image. In the workload's environment configuration, set these **nonsecret** values:
+
+| Name | Value | Where it comes from |
+| --- | --- | --- |
+| `INHERITI_AUTOMATION_PROVIDER` | `GOOGLE_CLOUD` | Fixed CLI provider name. |
+| `INHERITI_AUTOMATION_CONNECTION_ID` | Connection ID | Output of `automations create` or Business connection details. |
+| `INHERITI_AUTOMATION_AUDIENCE` | Exact Expected audience | Output of `automations create` or Business connection details. |
+| `INHERITI_SECRETS_PLAN` | Protected plan ID | Business plan details. |
+
+[Cloud Run service identity settings](https://cloud.google.com/run/docs/configuring/services/service-identity) explain where to attach the service account. To check the mapping inside a test container without printing either value, use:
+
+```bash
+inheriti secrets exec "$INHERITI_SECRETS_PLAN" --automation \
+  --env DB_USER=database.username --env DB_PASSWORD=database.password -- \
+  sh -c 'test -n "$DB_USER" && test -n "$DB_PASSWORD"'
+```
+
+For your application, the setup command wraps its existing startup process with the same `inheriti secrets exec ... --env DB_USER=database.username --env DB_PASSWORD=database.password --` prefix. Cloud Run must run that process with the attached service account; running the command locally with `gcloud` credentials tests a different identity.
+
+### AWS ECS execution
+
+In an existing ECS task definition, set the **task role** to the ARN configured in the connection and put the published CLI in the container image. Set these **nonsecret** container environment values:
+
+| Name | Value | Where it comes from |
+| --- | --- | --- |
+| `INHERITI_AUTOMATION_PROVIDER` | `AWS` | Fixed CLI provider name. |
+| `INHERITI_AUTOMATION_CONNECTION_ID` | Connection ID | Output of `automations create` or Business connection details. |
+| `INHERITI_SECRETS_PLAN` | Protected plan ID | Business plan details. |
+| `AWS_REGION` | Task's AWS region | ECS task location. |
+
+The [ECS task role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) provides short-lived credentials to the task. The [task definition environment](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/taskdef-envfiles.html) holds only the references above. To check the mapping inside a test task without printing either value, use:
+
+```bash
+inheriti secrets exec "$INHERITI_SECRETS_PLAN" --automation \
+  --env DB_USER=database.username --env DB_PASSWORD=database.password -- \
+  sh -c 'test -n "$DB_USER" && test -n "$DB_PASSWORD"'
+```
+
+For the real task, the setup command wraps its existing entry point so the app receives both variables. The ECS **execution role** or a local AWS login cannot stand in for the configured task role.
+
+### Real application example: PostgreSQL
+
+For either Cloud Run or ECS, suppose `database.password` is the PostgreSQL password in your plan. With `psql` installed in the workload image and the **nonsecret** `DB_HOST`, `DB_USER`, and `DB_NAME` set in its environment, run:
+
+```bash
+inheriti secrets exec "$INHERITI_SECRETS_PLAN" --automation \
+  --env PGPASSWORD=database.password -- \
+  psql "host=$DB_HOST user=$DB_USER dbname=$DB_NAME sslmode=require" -c 'select 1'
+```
+
+The CLI reveals the field, starts `psql` with `PGPASSWORD` only in that child process, and exits with its status. The query checks that the credential works without displaying it. Your application can use the same pattern with its own environment variable and process.
+
+The child receives only the selected field; normal plan access and SafeKey Mobile custody still run. Review the plan's **Logs** and the organization **Audit trail** in Business. A successful smoke check means the child received a nonempty value; it does not prove that your application consumed it correctly. A connection marked `VERIFIED` proves only the initial identity check; it does not prove that a deployed job, Action package, or cloud task has completed the reveal.
 
 The separate local E2E report records a successful public GitHub Action wrapper run with a locally packed CLI, Google-signed identity with a local metadata adapter, mobile custody, plan logs, and audit. These results do not prove the published dev CLI and deployed Business API work together. The Google metadata adapter is test equipment.
+
+## Publish plan fields to AWS secrets
+
+Direct runtime access uses `inheriti secrets exec` above. For an application that already reads AWS secrets, an operator can make an optional one-time copy of selected text fields to AWS Secrets Manager as one JSON object, or to SSM Parameter Store as separate `SecureString` parameters. Subsequent reads use AWS IAM. Plan changes or revocation do not update or delete the copy; there is no automatic synchronization or rotation. Publication does not update a running workload.
+
+```bash
+inheriti login
+inheriti organizations use
+inheriti secrets publish aws --plan PLAN_ID --region us-east-1 --account-id 123456789012 \
+  --secret app/config --map DATABASE_PASSWORD=database.password
+# Review the metadata preview, then repeat the same command with --apply.
+```
+
+For SSM, use `--parameter-prefix /app/config` instead of `--secret app/config`. The command creates `/app/config/DATABASE_PASSWORD` for the mapping above. Use repeatable `--map KEY=ASSET.FIELD`, `--only ASSET.FIELD`, or `--map-all`; `--except ASSET.FIELD` works with `--map-all`. Only plan text fields are eligible. Without `--apply`, the CLI inspects target metadata and does not reveal plan values. With `--apply`, the CLI checks the AWS account against `--account-id`, requests the plan's normal master key and custodian share, then writes the selected values. It reports target names and versions, never values. SSM publishes each parameter as a separate reveal action, so an interruption may leave earlier parameters updated.
+
+The AWS credentials available to this CLI need STS `GetCallerIdentity`, plus Secrets Manager `DescribeSecret`, `GetSecretValue` and `UpdateSecretVersionStage` (when updating an existing JSON secret), `CreateSecret`, and `PutSecretValue` for `--secret`; or SSM `DescribeParameters` and `PutParameter` for `--parameter-prefix`. Grant access only to the intended targets and account. A KMS key policy may also need to allow the relevant encryption operations. Existing Secrets Manager JSON keys are retained; service-managed, rotating, replica, binary, and non-JSON secrets are rejected. Review the preview and target permissions before applying. Never put plan values in command arguments, shell history, or logs.
+
+If an apply is interrupted, inspect target versions before retrying. An AWS write already in flight may have completed, and earlier SSM parameters may already be updated.
+
+## Publish plan fields to Google Cloud Secret Manager
+
+For direct Cloud Run startup injection, use the Cloud Run service workflow above with `inheriti secrets exec`. Use this optional one-time copy when an existing application reads Google Cloud Secret Manager. Each selected text field becomes a separate secret named `PREFIX` plus its mapped key. Subsequent reads use Google Cloud IAM. Plan changes or revocation do not update or delete the copy; there is no automatic synchronization or rotation.
+
+Authenticate the CLI host with [Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials). The destination project must have Secret Manager enabled; the host identity needs permission to inspect secrets, create missing secrets, and add versions to the chosen targets. Existing secrets are updated only when they carry the `inheriti_managed=true` label created by this command.
+
+```bash
+inheriti login
+inheriti organizations use
+read -r -p "Google Cloud project ID: " GOOGLE_PROJECT
+read -r -p "Secret prefix (for example app_): " SECRET_PREFIX
+inheriti secrets publish google --plan PLAN_ID --project "$GOOGLE_PROJECT" \
+  --secret-prefix "$SECRET_PREFIX" --map DATABASE_PASSWORD=database.password
+# Review the destination preview, then repeat the same command with --apply.
+```
+
+Use repeatable `--map KEY=ASSET.FIELD`, `--only ASSET.FIELD`, or `--map-all`. With `--map-all`, `--except ASSET.FIELD` excludes selected fields. Only plan text fields are eligible. Preview inspects target metadata without revealing values. Apply uses the plan's normal master key, custodian share, and governance flow, then adds a [new secret version](https://docs.cloud.google.com/secret-manager/docs/add-secret-version) for each mapped field. Secret values never appear in the CLI result. A partial failure may leave earlier secrets updated; inspect their versions before retrying. The command does not update Cloud Run services or other consumers.

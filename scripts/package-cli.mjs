@@ -9,7 +9,7 @@ import { matchingBuildDeployment, packageVersionForDeployment } from './build-de
  *
  * The published manifest is staged rather than reused: the workspace manifest names the two SDKs as
  * `link:` dependencies, which `npm i -g` cannot resolve anywhere but this checkout. The bundle
- * already contains them. Only the native credential-store binding remains external.
+ * already contains them. The native credential store and Google Secret Manager client remain external.
  */
 const root = process.cwd();
 const deployment = await matchingBuildDeployment(root);
@@ -40,7 +40,8 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   files: ['dist', 'fallbacks'],
   engines: { node: '>=22' },
   scripts: { postinstall: `node -e "console.log('Run inheriti setup to enable shell autocomplete (Yes is the default).')"` },
-  dependencies: { '@napi-rs/keyring': manifest.dependencies['@napi-rs/keyring'] },
+  dependencies: { '@napi-rs/keyring': manifest.dependencies['@napi-rs/keyring'],
+    '@google-cloud/secret-manager': manifest.dependencies['@google-cloud/secret-manager'] },
   private: false,
 }, null, 2)}\n`);
 
