@@ -62,6 +62,8 @@ let signedIn = false;
 let stage = "file";
 let autoAdvanceSuppressed = false;
 let pdfSession;
+let guestSession = false;
+let guestClosing = Promise.resolve(true);
 let pdfPage = 1;
 let pdfPageCount = 0;
 let pdfZoom = 1;
@@ -80,7 +82,7 @@ function resetAdapterProgress() {
 }
 
 function showAdapterProgress(payload) {
-  if (!openingPending || stage !== "opening" || !activeOpeningId || payload?.openingId !== activeOpeningId || !["GridCraft", "Gnumeric"].includes(payload.application)) return;
+  if (!openingPending || stage !== "opening" || !activeOpeningId || payload?.openingId !== activeOpeningId || !["GridCraft", "Gnumeric", "WordCraft", "mpv"].includes(payload.application)) return;
   const messages = {
     checking: `Checking ${payload.application}…`,
     "cache-hit": `${payload.application} is ready to use.`,
@@ -161,6 +163,16 @@ function updateContinue() {
 function clearPreview() {
   previewGeneration++;
   activeOpeningId = undefined;
+  if (guestSession) guestClosing = invoke("viewer_close_guest_session").then(() => {
+    guestSession = false;
+    return true;
+  }, () => {
+    document.getElementById("close-status").hidden = false;
+    result.textContent = "Workspace could not close securely. Try closing it again.";
+    showStage("result");
+    closeFile.disabled = false;
+    return false;
+  });
   resetAdapterProgress();
   revealOpeningPending = false;
   pdfRenderGeneration++;
@@ -181,6 +193,7 @@ function clearPreview() {
   if (stage === "result") showStage("file");
   pairingCode.textContent = "";
   closeFile.disabled = true;
+  return guestClosing;
 }
 
 function drawImage(image) {
@@ -329,7 +342,11 @@ signOut.addEventListener("click", async () => {
   signingOut = true;
   signOut.disabled = true;
   signOut.textContent = "Sign out";
-  clearPreview();
+  if (!(await clearPreview())) {
+    signingOut = false;
+    signOut.disabled = false;
+    return;
+  }
   showStage("file");
   binding.textContent = "No protected file selected yet.";
   openingActions.hidden = true;
@@ -457,11 +474,14 @@ async function openProtectedFile(fromReveal) {
     : "Waiting for SafeKey Mobile approval…";
   openingActions.hidden = true;
   try {
+    if (!(await guestClosing)) throw new Error("workspace close failed");
+    const { supported: useGuest } = await invoke("viewer_guest_preflight");
+    if (generation !== previewGeneration || stage !== "opening" || fileChangePending) return;
+    const command = useGuest ? "viewer_open_startup_file_in_guest" :
+      (fromReveal ? "viewer_open_startup_file_from_reveal" : "viewer_open_startup_file");
     let preview;
     try {
-      preview = await invoke(fromReveal
-        ? "viewer_open_startup_file_from_reveal"
-        : "viewer_open_startup_file", { openingId });
+      preview = await invoke(command, useGuest ? { fromReveal, openingId } : { openingId });
     } catch (error) {
       revealOpeningPending = false;
       if ((error !== "reveal_delivery_unavailable" && error?.message !== "reveal_delivery_unavailable") ||
@@ -469,11 +489,21 @@ async function openProtectedFile(fromReveal) {
       mobileAttempted = true;
       pairingCode.textContent = "";
       openingStatus.textContent = "Active Reveal unavailable. Waiting for SafeKey Mobile approval…";
-      preview = await invoke("viewer_open_startup_file", { openingId });
+      preview = await invoke(useGuest ? "viewer_open_startup_file_in_guest" : "viewer_open_startup_file",
+        useGuest ? { fromReveal: false, openingId } : { openingId });
     }
     revealOpeningPending = false;
-    if (generation !== previewGeneration) return;
-    if (preview.pdf) {
+    if (generation !== previewGeneration) {
+      if (useGuest) {
+        try { await invoke("viewer_close_guest_session"); }
+        catch { throw new Error("workspace cleanup pending"); }
+      }
+      return;
+    }
+    if (useGuest) {
+      guestSession = true;
+      result.textContent = "Your file is open in Inheriti® Workspace.";
+    } else if (preview.pdf) {
       const { sessionId, pageCount, page } = preview.pdf;
       if (typeof sessionId !== "string" || !sessionId || !Number.isInteger(pageCount) || pageCount < 1) throw new Error("invalid pdf");
       pdfSession = sessionId;
@@ -494,7 +524,15 @@ async function openProtectedFile(fromReveal) {
     showStage("result");
     closeFile.disabled = false;
     if (preview.expiresAt) clearAtExpiry(preview.expiresAt, generation);
-  } catch {
+  } catch (error) {
+    if (error === "workspace cleanup pending" || error?.message === "workspace cleanup pending") {
+      guestSession = true;
+      openingProgress.hidden = true;
+      result.textContent = "Workspace could not close securely. Try closing it again.";
+      showStage("result");
+      closeFile.disabled = false;
+      opened = true;
+    } else
     if (generation === previewGeneration) {
       if (pdfSession) invoke("viewer_close_pdf_session", { sessionId: pdfSession }).catch(() => {});
       pdfSession = undefined;
@@ -565,10 +603,10 @@ function cancelOpening() {
 }
 document.getElementById("cancel-opening").addEventListener("click", cancelOpening);
 
-function closePreview() {
+async function closePreview() {
   autoAdvanceSuppressed = true;
   if (openingPending) invoke("viewer_cancel_opening").catch(() => {});
-  clearPreview();
+  if (!(await clearPreview())) return;
   showStage("file");
   if (fileChangePending && !openingPending) {
     fileChangePending = false;

@@ -10,7 +10,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicI32, Ordering},
-        Mutex,
+        Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
 };
@@ -30,7 +30,7 @@ pub(super) fn pairing_code<'a>(
         .get("code")
         .and_then(|v| v.as_str())
         .ok_or("invalid host response")?;
-    if op != "openStartupFileFromReveal"
+    if op != "openStartupFileFromReveal" && op != "openStartupFileFromRevealInGuest"
         || object.len() != 3
         || value.get("id").and_then(|v| v.as_str()) != Some("viewer")
         || value.get("event").and_then(|v| v.as_str()) != Some("pairingCode")
@@ -55,6 +55,8 @@ pub struct HostState {
     pub(super) child: Mutex<Option<Child>>,
     pub(super) child_pid: AtomicI32,
     pub(super) opening_active: AtomicBool,
+    pub(super) cancel_requested: Arc<AtomicBool>,
+    pub(super) opening_gate: Mutex<()>,
     pub(super) startup_file: Mutex<Result<Option<StartupFile>, String>>,
     #[cfg(target_os = "linux")]
     pub(super) pdf: Mutex<Option<PdfSession>>,
@@ -79,6 +81,8 @@ impl HostState {
             child: Mutex::new(None),
             child_pid: AtomicI32::new(0),
             opening_active: AtomicBool::new(false),
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            opening_gate: Mutex::new(()),
             startup_file: Mutex::new(StartupFile::from_args(std::env::args_os().skip(1))),
             #[cfg(target_os = "linux")]
             pdf: Mutex::new(None),
@@ -151,7 +155,65 @@ pub(super) fn invoke<T: for<'de> Deserialize<'de>>(
     organization_id: Option<&str>,
     copy_id: Option<&str>,
 ) -> Result<T, String> {
+    invoke_inner(app, state, op, organization_id, copy_id, None)
+}
+
+pub(super) fn invoke_cancelable<T: for<'de> Deserialize<'de>>(
+    app: &tauri::AppHandle,
+    state: &HostState,
+    op: &str,
+) -> Result<T, String> {
+    invoke_inner(app, state, op, None, None, Some(&state.cancel_requested))
+}
+
+fn lock_child<'a>(
+    state: &'a HostState,
+    cancel: Option<&AtomicBool>,
+) -> Result<MutexGuard<'a, Option<Child>>, String> {
     let mut guard = state.child.lock().map_err(|_| "host unavailable")?;
+    if let Err(error) = check_cancel(cancel) {
+        discard_child(state, &mut guard);
+        return Err(error);
+    }
+    Ok(guard)
+}
+
+fn discard_child(state: &HostState, guard: &mut Option<Child>) {
+    if let Some(mut child) = guard.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+        state.child_pid.store(0, Ordering::Release);
+    }
+}
+
+fn check_cancel(cancel: Option<&AtomicBool>) -> Result<(), String> {
+    if cancel.is_some_and(|flag| flag.load(Ordering::Acquire)) {
+        Err("opening_cancelled".into())
+    } else {
+        Ok(())
+    }
+}
+
+fn must_restart_host(error: &str) -> bool {
+    matches!(
+        error,
+        "host unavailable"
+            | "host timed out"
+            | "host response too large"
+            | "invalid host response"
+            | "opening_cancelled"
+    )
+}
+
+fn invoke_inner<T: for<'de> Deserialize<'de>>(
+    app: &tauri::AppHandle,
+    state: &HostState,
+    op: &str,
+    organization_id: Option<&str>,
+    copy_id: Option<&str>,
+    cancel: Option<&AtomicBool>,
+) -> Result<T, String> {
+    let mut guard = lock_child(state, cancel)?;
     if guard.is_none() {
         let runtime = runtime_dir(app)?;
         let node = runtime.join(node_binary_name());
@@ -186,25 +248,37 @@ pub(super) fn invoke<T: for<'de> Deserialize<'de>>(
     if bytes.len() > MAX_REQUEST {
         return Err("invalid request".into());
     }
-    let outcome = (|| {
-        child
-            .stdin
-            .as_mut()
-            .ok_or("host unavailable")?
-            .write_all(&bytes)
-            .map_err(|_| "host unavailable")?;
+    let outcome: Result<T, String> = (|| {
+        {
+            let _opening = state.opening_gate.lock().map_err(|_| "host unavailable")?;
+            check_cancel(cancel)?;
+            child
+                .stdin
+                .as_mut()
+                .ok_or("host unavailable")?
+                .write_all(&bytes)
+                .map_err(|_| "host unavailable")?;
+        }
         let stdout = child.stdout.as_mut().ok_or("host unavailable")?;
         let deadline = Instant::now()
             + if op == "tryBrowserSignIn" {
                 Duration::from_secs(35)
-            } else if op == "signIn" || op == "openStartupFile" || op == "openStartupFileFromReveal"
+            } else if op == "signIn"
+                || op == "openStartupFile"
+                || op == "openStartupFileFromReveal"
+                || op == "openStartupFileInGuest"
+                || op == "openStartupFileFromRevealInGuest"
             {
                 Duration::from_secs(310)
             } else {
                 Duration::from_secs(15)
             };
         let response: HostResponse<T> = loop {
-            let line = platform::read_host_line(stdout, deadline)?;
+            let mut line = platform::read_host_line(stdout, deadline)?;
+            if check_cancel(cancel).is_err() {
+                line.fill(0);
+                return Err("opening_cancelled".into());
+            }
             let value: serde_json::Value =
                 serde_json::from_slice(&line).map_err(|_| "invalid host response")?;
             if let Some(code) = pairing_code(&value, op)? {
@@ -217,6 +291,7 @@ pub(super) fn invoke<T: for<'de> Deserialize<'de>>(
         if response.id != "viewer" {
             return Err("invalid host response".into());
         }
+        check_cancel(cancel)?;
         if !response.ok {
             return Err(match response.code.as_deref() {
                 Some("sign_in_required") => "sign_in_required",
@@ -230,17 +305,42 @@ pub(super) fn invoke<T: for<'de> Deserialize<'de>>(
             }
             .into());
         }
-        response
+        let result = response
             .result
-            .ok_or_else(|| "invalid host response".into())
+            .ok_or_else(|| "invalid host response".to_owned())?;
+        check_cancel(cancel)?;
+        Ok(result)
     })();
-    if matches!(&outcome, Err(error) if error == "host unavailable" || error == "host timed out" || error == "host response too large" || error == "invalid host response")
-    {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-            state.child_pid.store(0, Ordering::Release);
-        }
+    if matches!(&outcome, Err(error) if must_restart_host(error)) {
+        discard_child(state, &mut guard);
     }
     outcome
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use std::sync::{mpsc, Arc};
+
+    #[test]
+    fn cancellation_waiting_for_sidecar_lock_never_writes_request() {
+        let state = Arc::new(HostState::new());
+        let child = state.child.lock().unwrap();
+        let (ready, waiting) = mpsc::channel();
+        let pending = state.clone();
+        let thread = std::thread::spawn(move || {
+            ready.send(()).unwrap();
+            lock_child(&pending, Some(&pending.cancel_requested)).map(|_| ())
+        });
+        waiting.recv().unwrap();
+        state.cancel_requested.store(true, Ordering::Release);
+        drop(child);
+        assert_eq!(thread.join().unwrap(), Err("opening_cancelled".into()));
+    }
+
+    #[test]
+    fn cancelled_response_discards_sidecar_before_retry() {
+        assert!(must_restart_host("opening_cancelled"));
+        assert!(!must_restart_host("organization_required"));
+    }
 }

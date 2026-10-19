@@ -33,7 +33,7 @@ try {
     cargo build --release --bin inheriti-workspace --bin preview-helper
     if ($LASTEXITCODE -ne 0) { throw 'Workspace build failed' }
 
-    $source = Join-Path $tauri 'native/windows/preview-broker.cpp'
+    $source = Join-Path $tauri 'preview/windows/preview-broker.cpp'
     $broker = Join-Path $release 'preview-broker.exe'
     & cl.exe /nologo /std:c++17 /EHsc /O2 $source "/Fo:$(Join-Path $release 'preview-broker.obj')" "/Fe:$broker" /link userenv.lib advapi32.lib
     if ($LASTEXITCODE -ne 0) { throw 'Preview broker build failed' }
@@ -57,6 +57,7 @@ try {
             resources = @{
                 '../dist/host.cjs' = 'host.cjs'
                 '../dist/node_modules' = 'node_modules'
+                'icons/inheriti.ico' = 'inheriti.ico'
                 "binaries/node-$target.exe" = 'node.exe'
                 'binaries/NODE-LICENSE' = 'NODE-LICENSE'
                 'workspace-vm/' = 'workspace-vm/'

@@ -7,3 +7,4 @@ scripts/__pycache__/
 __pycache__/
 ui/assets/
 tests/**/README.md
+!tests/vm/README.md

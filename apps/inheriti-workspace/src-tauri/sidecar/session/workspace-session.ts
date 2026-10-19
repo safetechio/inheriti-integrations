@@ -3,7 +3,8 @@ import { createNodeIntegrationCore } from '../../../../../packages/core/src/node
 import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions } from '../../../../../packages/core/src/node-base.js';
 import HttpElementsApiPort from '../../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
 import type { FileAccessStatus } from '../../../../../../inheriti-client-sdk/sdk/src/elements/elements-api-port.js';
-import { inspectStartupFileAccess, openStartupFileAccess } from '../access/file-access.js';
+import { inspectStartupFileAccess, inspectStartupFileMime, openStartupFileAccess } from '../access/file-access.js';
+import type { GuestMime, PreviewMime } from '../access/policy.js';
 import { openSystemBrowser, waitForOAuthCallback } from './oauth-callback.js';
 import { WorkspaceOperatorSessionStore } from './operator-session-store.js';
 
@@ -151,15 +152,19 @@ export class WorkspaceSession {
     return inspectStartupFileAccess(this.startupPath, this.apiForOrganization(this.selectedId));
   }
 
+  async inspectStartupFileMime(): Promise<string> {
+    return inspectStartupFileMime(this.startupPath);
+  }
+
   /** Coordinate one opening while access enforces file and delivery policy. */
-  async openStartupFile(delivery: 'REVEAL' | 'MOBILE' = 'MOBILE', onPairingCode?: (code: string) => void): Promise<{ mimeType: 'text/plain' | 'image/webp' | 'application/pdf'; contentBase64: string; expiresAt: string | null }> {
+  async openStartupFile(delivery: 'REVEAL' | 'MOBILE' = 'MOBILE', onPairingCode?: (code: string) => void, destination: 'preview' | 'guest' = 'preview'): Promise<{ mimeType: GuestMime | PreviewMime; contentBase64: string; expiresAt: string | null }> {
     await this.requireSignIn();
     if (!this.selectedId) throw new Error('organization_required');
     if (this.opening) throw new Error('opening_in_progress');
     const abort = new AbortController();
     this.opening = abort;
     try {
-      return await openStartupFileAccess(this.startupPath, this.apiForOrganization(this.selectedId), delivery, abort.signal, onPairingCode);
+      return await openStartupFileAccess(this.startupPath, this.apiForOrganization(this.selectedId), delivery, abort.signal, onPairingCode, destination);
     } finally {
       if (this.opening === abort) this.opening = undefined;
     }

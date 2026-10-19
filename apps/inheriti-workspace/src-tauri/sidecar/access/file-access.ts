@@ -6,7 +6,8 @@ import type { FileAccessStatus } from '../../../../../../inheriti-client-sdk/sdk
 import { inspectInheritiFileAccess, openInheritiFileAccess, readInheritiFileHeader, MAX_INHERITI_FILE_BYTES } from '../../../../../../inheriti-client-sdk/sdk/node.js';
 import type { WorkspaceApi } from '../session/workspace-session.js';
 import { readStartupFile } from './startup-file.js';
-import { checkOpenedPreview, checkPreviewPolicy } from './policy.js';
+import { checkGuestPolicy, checkOpenedPreview, checkPreviewPolicy } from './policy.js';
+import type { GuestMime, PreviewMime } from './policy.js';
 
 export async function inspectStartupFileAccess(path: string | undefined, api: WorkspaceApi): Promise<FileAccessStatus> {
   const bytes = await readStartupFile(path, MAX_INHERITI_FILE_BYTES);
@@ -16,19 +17,28 @@ export async function inspectStartupFileAccess(path: string | undefined, api: Wo
   } finally { bytes.fill(0); }
 }
 
+export async function inspectStartupFileMime(path: string | undefined): Promise<string> {
+  const bytes = await readStartupFile(path, MAX_INHERITI_FILE_BYTES);
+  try { return readInheritiFileHeader(bytes).mimeType; }
+  finally { bytes.fill(0); }
+}
+
 export async function openStartupFileAccess(
   path: string | undefined,
   api: WorkspaceApi,
   delivery: 'REVEAL' | 'MOBILE',
   signal: AbortSignal,
   onPairingCode?: (code: string) => void,
-): Promise<{ mimeType: 'text/plain' | 'image/webp' | 'application/pdf'; contentBase64: string; expiresAt: string | null }> {
+  destination: 'preview' | 'guest' = 'preview',
+): Promise<{ mimeType: GuestMime | PreviewMime; contentBase64: string; expiresAt: string | null }> {
   let fileBytes: Uint8Array | undefined;
   let plaintext: Uint8Array | undefined;
   try {
     fileBytes = await readStartupFile(path, 1024 * 1024 + 4096 + 40);
     const header = readInheritiFileHeader(fileBytes);
-    const { mimeType, maxPlaintext } = checkPreviewPolicy(fileBytes, header.mimeType);
+    const { mimeType, maxPlaintext } = destination === 'guest'
+      ? checkGuestPolicy(fileBytes, header.mimeType)
+      : checkPreviewPolicy(fileBytes, header.mimeType);
     const openingApi = delivery === 'REVEAL' ? {
       getFileAccess: api.getFileAccess.bind(api),
       requestFileAccessOpening: async (...args: Parameters<WorkspaceApi['requestFileAccessOpening']>) => {

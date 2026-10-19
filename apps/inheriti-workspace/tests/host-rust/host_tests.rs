@@ -1,11 +1,66 @@
 use super::{
     bridge::{pairing_code, HostState},
-    commands::{decode_preview, FileAccess, OpenedFile},
+    commands::{
+        decode_guest, decode_preview, guest_application, guest_name, CancelableDownloader,
+        FileAccess, OpenedFile,
+    },
     protocol::{read_host_line, valid_uuid},
     startup_file::StartupFile,
 };
+use inheriti_workspace::isolation::guest::adapter_cache::{
+    AdapterDownload, AdapterDownloader, CacheError,
+};
 use std::time::{Duration, Instant};
-use std::{fs, sync::atomic::Ordering};
+use std::{
+    fs,
+    io::{Cursor, Read},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    },
+};
+
+struct DownloadProbe(Arc<AtomicUsize>);
+
+impl AdapterDownloader for DownloadProbe {
+    fn open(&self, url: &str) -> Result<Box<dyn Read>, CacheError> {
+        Ok(self.open_with_length(url)?.reader)
+    }
+
+    fn open_with_length(&self, _url: &str) -> Result<AdapterDownload, CacheError> {
+        self.0.fetch_add(1, Ordering::AcqRel);
+        Ok(AdapterDownload {
+            reader: Box::new(Cursor::new(b"adapter".to_vec())),
+            total_bytes: Some(7),
+        })
+    }
+}
+
+#[test]
+fn cancellation_interrupts_optional_application_download() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let cancelled = Arc::new(AtomicBool::new(true));
+    let probe = DownloadProbe(calls.clone());
+    let downloader = CancelableDownloader {
+        inner: &probe,
+        cancelled: cancelled.clone(),
+    };
+    assert!(downloader
+        .open_with_length("https://example.test/adapter")
+        .is_err());
+    assert_eq!(calls.load(Ordering::Acquire), 0);
+
+    cancelled.store(false, Ordering::Release);
+    let mut download = downloader
+        .open_with_length("https://example.test/adapter")
+        .unwrap();
+    assert_eq!(download.reader.read(&mut [0; 1]).unwrap(), 1);
+    cancelled.store(true, Ordering::Release);
+    assert_eq!(
+        download.reader.read(&mut [0; 1]).unwrap_err().kind(),
+        std::io::ErrorKind::Interrupted
+    );
+}
 
 #[cfg(target_os = "linux")]
 #[test]
@@ -39,6 +94,10 @@ fn pairing_progress_rejects_untrusted_fields_and_operations() {
     let valid = serde_json::json!({"id":"viewer","event":"pairingCode","code":"abcdef123456"});
     assert_eq!(
         pairing_code(&valid, "openStartupFileFromReveal").unwrap(),
+        Some("abcdef123456")
+    );
+    assert_eq!(
+        pairing_code(&valid, "openStartupFileFromRevealInGuest").unwrap(),
         Some("abcdef123456")
     );
     assert!(pairing_code(&valid, "openStartupFile").is_err());
@@ -83,6 +142,43 @@ fn preview_bridge_rejects_unexpected_payloads() {
     opened.mime_type = "text/plain".into();
     opened.content_base64 = "!!!".into();
     assert!(decode_preview(&opened).is_err());
+}
+
+#[test]
+fn optional_guest_mimes_select_only_approved_applications_and_bounded_bytes() {
+    for (mime, filename, application) in [
+        ("text/csv", "document.csv", "GridCraft"),
+        (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "document.xlsx",
+            "GridCraft",
+        ),
+        (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "document.docx",
+            "WordCraft",
+        ),
+    ] {
+        assert_eq!(guest_name(mime), Some(filename));
+        assert_eq!(guest_application(mime), Some(application));
+        let opened = OpenedFile {
+            mime_type: mime.into(),
+            content_base64: "aGk=".into(),
+            expires_at: None,
+        };
+        assert_eq!(decode_guest(&opened).unwrap(), b"hi");
+        assert!(decode_preview(&opened).is_err());
+        let oversized = OpenedFile {
+            content_base64: base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                vec![1; 1024 * 1024 + 1],
+            ),
+            ..opened
+        };
+        assert!(decode_guest(&oversized).is_err());
+    }
+    assert_eq!(guest_name("application/octet-stream"), None);
+    assert_eq!(guest_application("application/pdf"), None);
 }
 #[test]
 fn accepts_only_uuid_shaped_ids() {

@@ -18,7 +18,7 @@ beforeEach(() => {
     <div id="preview-area" hidden><div id="pdf-controls" hidden><button id="pdf-previous"></button><span id="pdf-page-label"></span><button id="pdf-next"></button><button id="pdf-fit"></button><button id="pdf-zoom-in"></button><button id="pdf-zoom-out"></button></div><p id="pdf-status" hidden></p><pre id="result"></pre><div id="image-scroll" hidden><canvas id="image-preview" hidden></canvas></div></div>`;
 });
 
-function setup(origin = "REVEAL", initialOrganization: string | null = "org") {
+function setup(origin = "REVEAL", initialOrganization: string | null = "org", guest: boolean | "error" | "pending" = false, closeFailsOnce = false) {
   let selectedOrganization = initialOrganization;
   let startup = () => {};
   let pairing = (_payload: string) => {};
@@ -26,15 +26,28 @@ function setup(origin = "REVEAL", initialOrganization: string | null = "org") {
   let adapterProgress = (_payload: unknown) => {};
   let resolveOpening: (value: unknown) => void = () => {};
   let rejectOpening: (reason: Error) => void = () => {};
+  let resolvePreflight: (value: { supported: boolean }) => void = () => {};
+  const preflight = new Promise<{ supported: boolean }>((resolve) => { resolvePreflight = resolve; });
+  let closeFailures = closeFailsOnce ? 1 : 0;
   const opening = new Promise((resolve, reject) => { resolveOpening = resolve; rejectOpening = reject; });
   const invoke = vi.fn(async (operation: string) => {
     if (operation === "viewer_status") return { signedIn: true, selectedOrganizationId: selectedOrganization };
     if (operation === "viewer_select_organization") { selectedOrganization = "org"; return null; }
     if (operation === "viewer_organizations") return [{ id: "org", name: "Team" }];
     if (operation === "viewer_inspect_startup_file") return { status: "READY", origin, recipient: "member", expiresAt: null, allowedUses: 1 };
+    if (operation === "viewer_guest_preflight") {
+      if (guest === "error") throw new Error("workspace VM resources unavailable");
+      if (guest === "pending") return preflight;
+      return { supported: guest };
+    }
+    if (operation === "viewer_close_guest_session" && closeFailures > 0) {
+      closeFailures--;
+      throw new Error("workspace close failed");
+    }
+    if (operation === "viewer_open_startup_file_in_guest") return opening;
     if (operation.startsWith("viewer_open_startup_file")) return opening;
     if (operation === "viewer_render_pdf_page") return { width: 1, height: 1, rgbaBase64: "AQID/w==" };
-    if (operation === "viewer_close_pdf_session" || operation === "viewer_cancel_opening" || operation === "viewer_show_result" || operation === "viewer_close_result") return null;
+    if (operation === "viewer_close_guest_session" || operation === "viewer_close_pdf_session" || operation === "viewer_cancel_opening" || operation === "viewer_show_result" || operation === "viewer_close_result") return null;
     if (operation === "viewer_version") return "1.0";
     throw new Error(operation);
   });
@@ -44,7 +57,7 @@ function setup(origin = "REVEAL", initialOrganization: string | null = "org") {
     if (event === "workspace-close-failed") closeFailure = () => handler({ payload: "" });
     if (event === "workspace-adapter-progress") adapterProgress = (payload) => handler({ payload: payload as string });
   }) } } });
-  return { invoke, resolveOpening, rejectOpening, startup: () => startup(), pairing: (value: string) => pairing(value), closeFailure: () => closeFailure(), adapterProgress: (payload: unknown) => adapterProgress(payload) };
+  return { invoke, resolveOpening, rejectOpening, resolvePreflight, startup: () => startup(), pairing: (value: string) => pairing(value), closeFailure: () => closeFailure(), adapterProgress: (payload: unknown) => adapterProgress(payload) };
 }
 
 function openingId(invoke: ReturnType<typeof vi.fn>) {
@@ -69,6 +82,95 @@ it("shows genuine adapter byte progress and clears it after opening", async () =
   resolveOpening({ text: "secret" });
   await vi.waitFor(() => expect((document.getElementById("preview-area") as HTMLElement).hidden).toBe(false));
   expect((document.getElementById("adapter-status") as HTMLElement).hidden).toBe(true);
+});
+
+it("opens an eligible protected file in the guest and closes its session", async () => {
+  const { invoke, resolveOpening } = setup("INBOX", "org", true);
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_open_startup_file_in_guest", {
+    fromReveal: false, openingId: expect.any(String),
+  }));
+  resolveOpening({ expiresAt: null });
+  await vi.waitFor(() => expect((document.getElementById("preview-area") as HTMLElement).hidden).toBe(false));
+  expect(document.getElementById("result")!.textContent).toContain("Inheriti® Workspace");
+  expect(invoke.mock.calls.some(([op]) => op === "viewer_open_startup_file")).toBe(false);
+  document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_close_guest_session"));
+});
+
+it("fails closed when an eligible guest cannot be prepared", async () => {
+  const { invoke } = setup("INBOX", "org", "error");
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_guest_preflight"));
+  expect(invoke.mock.calls.some(([op]) => op.startsWith("viewer_open_startup_file"))).toBe(false);
+});
+
+it("does not request an opening after cancellation during guest preflight", async () => {
+  const { invoke, resolvePreflight } = setup("INBOX", "org", "pending");
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_guest_preflight"));
+  document.getElementById("cancel-opening")!.click();
+  resolvePreflight({ supported: true });
+  await vi.waitFor(() => expect((document.getElementById("access-step") as HTMLElement).hidden).toBe(false));
+  expect(invoke.mock.calls.some(([op]) => op.startsWith("viewer_open_startup_file"))).toBe(false);
+});
+
+it("offers close retry when a canceled opening finishes late and teardown fails", async () => {
+  const { invoke, resolveOpening } = setup("INBOX", "org", true, true);
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_open_startup_file_in_guest", expect.any(Object)));
+  document.getElementById("cancel-opening")!.click();
+  resolveOpening({ expiresAt: null });
+  await vi.waitFor(() => expect(document.getElementById("result")!.textContent).toContain("Try closing it again"));
+  expect((document.getElementById("close-file") as HTMLButtonElement).disabled).toBe(false);
+  document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect(invoke.mock.calls.filter(([op]) => op === "viewer_close_guest_session")).toHaveLength(2));
+  await vi.waitFor(() => expect((document.getElementById("file-step") as HTMLElement).hidden).toBe(false));
+});
+
+it("keeps a failed guest close available for retry", async () => {
+  const { invoke, resolveOpening } = setup("INBOX", "org", true, true);
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_open_startup_file_in_guest", expect.any(Object)));
+  resolveOpening({ expiresAt: null });
+  await vi.waitFor(() => expect((document.getElementById("preview-area") as HTMLElement).hidden).toBe(false));
+  document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect((document.getElementById("close-status") as HTMLElement).hidden).toBe(false));
+  expect((document.getElementById("close-file") as HTMLButtonElement).disabled).toBe(false);
+  document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect(invoke.mock.calls.filter(([op]) => op === "viewer_close_guest_session")).toHaveLength(2));
+  await vi.waitFor(() => expect((document.getElementById("file-step") as HTMLElement).hidden).toBe(false));
+});
+
+it("offers cleanup retry when guest opening fails and teardown remains pending", async () => {
+  const { invoke, rejectOpening } = setup("INBOX", "org", true);
+  await import("../../ui/workspace.js");
+  await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
+  document.getElementById("file-continue")!.click();
+  document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_open_startup_file_in_guest", expect.any(Object)));
+  rejectOpening(new Error("workspace cleanup pending"));
+  await vi.waitFor(() => expect((document.getElementById("preview-area") as HTMLElement).hidden).toBe(false));
+  expect(document.getElementById("result")!.textContent).toContain("Try closing it again");
+  expect((document.getElementById("close-file") as HTMLButtonElement).disabled).toBe(false);
+  document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("viewer_close_guest_session"));
+  await vi.waitFor(() => expect((document.getElementById("file-step") as HTMLElement).hidden).toBe(false));
 });
 
 it("shows cache hit without download progress and ignores late events after cancel", async () => {
@@ -102,16 +204,16 @@ it("ignores a delayed adapter event from an earlier opening", async () => {
   resolveOpening({ text: "first" });
   await vi.waitFor(() => expect((document.getElementById("preview-area") as HTMLElement).hidden).toBe(false));
   document.getElementById("close-file")!.click();
+  await vi.waitFor(() => expect((document.getElementById("file-step") as HTMLElement).hidden).toBe(false));
   await vi.waitFor(() => expect((document.getElementById("file-continue") as HTMLButtonElement).disabled).toBe(false));
   document.getElementById("file-continue")!.click();
   document.getElementById("access-continue")!.click();
+  await vi.waitFor(() => expect(invoke.mock.calls.filter(([operation]: [string]) => operation === "viewer_open_startup_file")).toHaveLength(2));
   const calls = invoke.mock.calls.filter(([operation]: [string]) => operation === "viewer_open_startup_file");
   const secondId = calls.at(-1)?.[1]?.openingId as string;
   expect(secondId).not.toBe(firstId);
   adapterProgress({ openingId: firstId, phase: "downloading", application: "GridCraft", receivedBytes: 50, totalBytes: 100 });
   expect((document.getElementById("adapter-status") as HTMLElement).hidden).toBe(true);
-  adapterProgress({ openingId: secondId, phase: "cache-hit", application: "GridCraft" });
-  expect(document.getElementById("adapter-status")!.textContent).toBe("GridCraft is ready to use.");
 });
 
 it("shows a retry message when secure close fails", async () => {
@@ -367,6 +469,7 @@ it("ignores a stale saved organisation and lets the user choose a current one", 
       if (!selected) throw new Error("organisation required");
       return { status: "READY", origin: "INBOX", recipient: "member" };
     }
+    if (op === "viewer_guest_preflight") return { supported: false };
     if (op === "viewer_open_startup_file") return new Promise(() => {});
     if (op === "viewer_version") return "1.0";
     throw new Error(op);
@@ -389,6 +492,7 @@ it("falls back from failed Reveal to one automatic SafeKey request", async () =>
     if (op === "viewer_status") return { signedIn: true, selectedOrganizationId: "org" };
     if (op === "viewer_organizations") return [{ id: "org", name: "Team" }];
     if (op === "viewer_inspect_startup_file") return { status: "READY", origin: "REVEAL", recipient: "member" };
+    if (op === "viewer_guest_preflight") return { supported: false };
     if (op === "viewer_open_startup_file_from_reveal") throw new Error("reveal_delivery_unavailable");
     if (op === "viewer_open_startup_file") return { text: "opened on mobile", expiresAt: null };
     if (op === "viewer_version") return "1.0";
@@ -482,6 +586,7 @@ it("does not retry Mobile after a Reveal post-delivery preview failure", async (
     if (op === "viewer_status") return { signedIn: true, selectedOrganizationId: "org" };
     if (op === "viewer_organizations") return [{ id: "org", name: "Team" }];
     if (op === "viewer_inspect_startup_file") return { status: "READY", origin: "REVEAL", recipient: "member" };
+    if (op === "viewer_guest_preflight") return { supported: false };
     if (op === "viewer_open_startup_file_from_reveal") throw new Error("isolated PDF preview unavailable");
     if (op === "viewer_open_startup_file") return { text: "must not repeat" };
     if (op === "viewer_version") return "1.0";

@@ -14,7 +14,11 @@
   "bundle": {
     "active": false,
     "icon": ["icons/icon.png", "icons/icon.ico"],
-    "linux": { "deb": { "files": { "/usr/share/mime/packages/inheriti.xml": "inheriti.xml" } } },
+    "windows": { "nsis": { "installerHooks": "file-association/windows/inheriti-file-icon.nsh" } },
+    "linux": { "deb": { "files": {
+      "/usr/share/mime/packages/inheriti.xml": "inheriti.xml",
+      "/usr/share/icons/hicolor/512x512/mimetypes/application-x-inheriti.png": "icons/inheriti.png"
+    } } },
     "fileAssociations": [
       {
         "ext": ["inheriti"],

@@ -1,5 +1,6 @@
 //! Tauri ownership of the disposable graphical guest session.
 
+use inheriti_workspace::access::handoff::HandoffError;
 #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
 use inheriti_workspace::isolation::guest::{
     platform::prepare_runtime_with_display, qemu_spec::DisplayMode,
@@ -11,16 +12,24 @@ use inheriti_workspace::{
     session::{GuestRuntime, Workspace},
 };
 use std::{
-    sync::{mpsc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Mutex,
+    },
     thread::{self, JoinHandle},
 };
 
 type Reply = mpsc::Sender<Result<(), String>>;
 
 enum Request {
+    Open {
+        runtime: PlatformRuntime,
+        name: &'static str,
+        authorize: Box<dyn FnOnce() -> Result<Vec<u8>, String> + Send>,
+        reply: Reply,
+    },
     #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
     OpenTestPdf(Reply),
-    #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
     Close(Reply),
     Shutdown(Reply),
 }
@@ -30,7 +39,10 @@ struct Worker {
     thread: JoinHandle<()>,
 }
 
-pub(super) struct GuestSession(Mutex<Option<Worker>>);
+pub(super) struct GuestSession {
+    worker: Mutex<Option<Worker>>,
+    generation: AtomicU64,
+}
 
 impl GuestSession {
     pub(super) fn new() -> Self {
@@ -40,29 +52,68 @@ impl GuestSession {
             .spawn(move || run_guest_owner(receiver))
             .ok()
             .map(|thread| Worker { sender, thread });
-        Self(Mutex::new(thread))
+        Self {
+            worker: Mutex::new(thread),
+            generation: AtomicU64::new(0),
+        }
     }
 
-    #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
     fn request(&self, make_request: impl FnOnce(Reply) -> Request) -> Result<(), String> {
-        let guard = self.0.lock().map_err(|_| "workspace unavailable")?;
+        let guard = self.worker.lock().map_err(|_| "workspace unavailable")?;
         let worker = guard.as_ref().ok_or("workspace unavailable")?;
         let (reply, response) = mpsc::channel();
         worker
             .sender
             .send(make_request(reply))
             .map_err(|_| "workspace unavailable")?;
-        response.recv().map_err(|_| "workspace unavailable")?
+        let result = response.recv().map_err(|_| "workspace unavailable")?;
+        if result.is_ok() {
+            self.generation.fetch_add(1, Ordering::AcqRel);
+        }
+        result
     }
 
-    #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
     pub(super) fn close(&self) -> Result<(), String> {
         self.request(Request::Close)
     }
 
+    pub(super) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    pub(super) fn close_if_current(&self, generation: u64) -> Result<(), String> {
+        let guard = self.worker.lock().map_err(|_| "workspace unavailable")?;
+        if self.generation.load(Ordering::Acquire) != generation {
+            return Ok(());
+        }
+        let worker = guard.as_ref().ok_or("workspace unavailable")?;
+        let (reply, response) = mpsc::channel();
+        worker
+            .sender
+            .send(Request::Close(reply))
+            .map_err(|_| "workspace unavailable")?;
+        response.recv().map_err(|_| "workspace unavailable")??;
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    pub(super) fn open(
+        &self,
+        runtime: PlatformRuntime,
+        name: &'static str,
+        authorize: impl FnOnce() -> Result<Vec<u8>, String> + Send + 'static,
+    ) -> Result<(), String> {
+        self.request(|reply| Request::Open {
+            runtime,
+            name,
+            authorize: Box::new(authorize),
+            reply,
+        })
+    }
+
     /// Called when Tauri exits. The owner thread stays alive after a failed cleanup.
     pub(super) fn shutdown(&self) -> Result<(), String> {
-        let mut worker = self.0.lock().map_err(|_| "workspace unavailable")?;
+        let mut worker = self.worker.lock().map_err(|_| "workspace unavailable")?;
         let Some(current) = worker.as_ref() else {
             return Ok(());
         };
@@ -95,11 +146,23 @@ fn run_guest_owner(receiver: mpsc::Receiver<Request>) {
     let mut session: Option<Workspace<PlatformRuntime>> = None;
     for request in receiver {
         match request {
+            Request::Open {
+                runtime,
+                name,
+                authorize,
+                reply,
+            } => {
+                let _ = reply.send(open_authorized_session(
+                    &mut session,
+                    runtime,
+                    name,
+                    authorize,
+                ));
+            }
             #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
             Request::OpenTestPdf(reply) => {
                 let _ = reply.send(open_test_pdf(&mut session));
             }
-            #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
             Request::Close(reply) => {
                 let _ = reply.send(close_session(&mut session));
             }
@@ -113,6 +176,39 @@ fn run_guest_owner(receiver: mpsc::Receiver<Request>) {
             }
         }
     }
+}
+
+fn open_authorized_session<R: GuestRuntime>(
+    session: &mut Option<Workspace<R>>,
+    runtime: R,
+    name: &str,
+    authorize: impl FnOnce() -> Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    if session.is_some() {
+        return Err("workspace already open".into());
+    }
+    let mut current = Workspace::new(runtime);
+    match current.open_authorized(name, authorize) {
+        Ok(()) => {
+            *session = Some(current);
+            Ok(())
+        }
+        Err(HandoffError::Cleanup { .. }) => {
+            *session = Some(current);
+            Err("workspace cleanup pending".into())
+        }
+        Err(HandoffError::Failure(
+            inheriti_workspace::access::handoff::HandoffFailure::Authorization(error),
+        )) => Err(error),
+        Err(_) => Err("workspace open failed".into()),
+    }
+}
+
+#[tauri::command]
+pub(crate) fn viewer_close_guest_session(
+    state: tauri::State<'_, super::HostState>,
+) -> Result<(), String> {
+    state.guest.close()
 }
 
 fn close_session<R: GuestRuntime>(session: &mut Option<Workspace<R>>) -> Result<(), String> {

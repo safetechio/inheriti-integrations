@@ -49,6 +49,9 @@ if [[ ! -d "$app" ]]; then
   echo 'Tauri app bundle unavailable' >&2
   exit 1
 fi
+cp src-tauri/icons/inheriti.icns "$app/Contents/Resources/inheriti.icns"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleDocumentTypes:0:CFBundleTypeIconFile inheriti.icns' "$app/Contents/Info.plist" \
+  || /usr/libexec/PlistBuddy -c 'Add :CFBundleDocumentTypes:0:CFBundleTypeIconFile string inheriti.icns' "$app/Contents/Info.plist"
 bash scripts/package-preview-macos.sh "$app"
 
 version="$(node -p 'require("./package.json").version')"

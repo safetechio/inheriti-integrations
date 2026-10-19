@@ -147,3 +147,21 @@ fn denied_second_file_cleans_up_without_ingress() {
     assert!(workspace.close().is_ok());
     assert_eq!(*events.borrow(), expected);
 }
+
+#[test]
+fn denied_first_file_tears_down_without_ingress_or_residue() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut workspace = Workspace::new(RecordingRuntime(Rc::clone(&events)));
+
+    let denied = workspace.open_authorized("secret.txt", || Err::<Vec<u8>, _>("denied"));
+    assert_eq!(
+        denied,
+        Err(HandoffError::Failure(HandoffFailure::Authorization(
+            "denied"
+        )))
+    );
+    assert_eq!(*events.borrow(), [Event::Start, Event::Teardown]);
+
+    workspace.close().unwrap();
+    assert_eq!(*events.borrow(), [Event::Start, Event::Teardown]);
+}

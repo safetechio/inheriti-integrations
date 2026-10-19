@@ -102,6 +102,7 @@ fn packaged_runtime_synthetic_file_session() {
     let _supervisor_guard = stage_test_supervisor();
 
     let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures");
+    let host_canary = fs::read(fixture_dir.join("manifest.json")).expect("read host canary");
     let manifest: serde_json::Value = serde_json::from_slice(
         &fs::read(fixture_dir.join("manifest.json")).expect("read fixture manifest"),
     )
@@ -184,6 +185,11 @@ fn packaged_runtime_synthetic_file_session() {
             );
         }
         workspace.close().expect("guest teardown must succeed");
+        assert_eq!(
+            fs::read(fixture_dir.join("manifest.json")).expect("read host canary after close"),
+            host_canary,
+            "guest session changed the host-side fixture manifest"
+        );
     }
     #[cfg(target_os = "linux")]
     {

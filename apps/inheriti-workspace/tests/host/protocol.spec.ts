@@ -16,10 +16,27 @@ function session() {
     selectOrganization: vi.fn(async () => undefined),
     getFileAccess: vi.fn(async () => ({ copyId, status: 'READY', deployment: 'dev', origin: 'REVEAL', recipient: 'member-1', expiresAt: null, allowedUses: 1, secret: 'must-not-leak' })),
     inspectStartupFile: vi.fn(async () => ({ copyId, status: 'READY', deployment: 'dev', origin: 'REVEAL', recipient: 'member-1', expiresAt: null, allowedUses: 1, secret: 'must-not-leak' })),
+    inspectStartupFileMime: vi.fn(async () => 'application/pdf'),
+    openStartupFile: vi.fn(async () => ({ mimeType: 'application/pdf', contentBase64: 'cGRm', expiresAt: null })),
   };
 }
 
 describe('Workspace host protocol', () => {
+  it('inspects sealed MIME without opening file access', async () => {
+    const host = session();
+    expect(await handleLine(JSON.stringify({ id: 'viewer', op: 'inspectStartupFileMime' }), host as unknown as WorkspaceSession))
+      .toEqual({ id: 'viewer', ok: true, result: 'application/pdf' });
+    expect(host.openStartupFile).not.toHaveBeenCalled();
+  });
+  it('routes guest opening separately from host preview', async () => {
+    const host = session();
+    expect(await handleLine(JSON.stringify({ id: 'viewer', op: 'openStartupFileInGuest' }), host as unknown as WorkspaceSession))
+      .toEqual({ id: 'viewer', ok: true, result: { mimeType: 'application/pdf', contentBase64: 'cGRm', expiresAt: null } });
+    expect(host.openStartupFile).toHaveBeenCalledWith('MOBILE', undefined, 'guest');
+    expect(await handleLine(JSON.stringify({ id: 'viewer', op: 'openStartupFileFromRevealInGuest' }), host as unknown as WorkspaceSession))
+      .toEqual({ id: 'viewer', ok: true, result: { mimeType: 'application/pdf', contentBase64: 'cGRm', expiresAt: null } });
+    expect(host.openStartupFile).toHaveBeenCalledWith('REVEAL', undefined, 'guest');
+  });
   it('accepts only bounded operations and fixed request fields', async () => {
     const host = session();
     expect(await handleLine(JSON.stringify({ id: '1', op: 'selectOrganization', organizationId }), host as unknown as WorkspaceSession))

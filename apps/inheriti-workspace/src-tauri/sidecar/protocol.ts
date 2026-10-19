@@ -7,7 +7,7 @@ const safeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0
 type Request = { id: string; op: string; organizationId?: string; copyId?: string };
 type Response = { id: string; ok: true; result: unknown } | { id: string; ok: false; code: string };
 
-export async function handleLine(line: string, session: Pick<WorkspaceSession, 'status' | 'signIn' | 'signOut' | 'tryBrowserSignIn' | 'listOrganizations' | 'selectOrganization' | 'getFileAccess' | 'inspectStartupFile' | 'openStartupFile'>, onPairingCode?: (code: string) => void): Promise<Response> {
+export async function handleLine(line: string, session: Pick<WorkspaceSession, 'status' | 'signIn' | 'signOut' | 'tryBrowserSignIn' | 'listOrganizations' | 'selectOrganization' | 'getFileAccess' | 'inspectStartupFile' | 'inspectStartupFileMime' | 'openStartupFile'>, onPairingCode?: (code: string) => void): Promise<Response> {
   let request: Request;
   try {
     if (Buffer.byteLength(line, 'utf8') > maxLineBytes) return { id: '', ok: false, code: 'request_too_large' };
@@ -56,12 +56,21 @@ export async function handleLine(line: string, session: Pick<WorkspaceSession, '
           allowedUses: access.allowedUses,
         } };
       }
+      case 'inspectStartupFileMime': return { id: request.id, ok: true, result: await session.inspectStartupFileMime() };
       case 'openStartupFile': {
         const opened = await session.openStartupFile();
         return { id: request.id, ok: true, result: opened };
       }
       case 'openStartupFileFromReveal': {
         const opened = await session.openStartupFile('REVEAL', onPairingCode);
+        return { id: request.id, ok: true, result: opened };
+      }
+      case 'openStartupFileInGuest': {
+        const opened = await session.openStartupFile('MOBILE', undefined, 'guest');
+        return { id: request.id, ok: true, result: opened };
+      }
+      case 'openStartupFileFromRevealInGuest': {
+        const opened = await session.openStartupFile('REVEAL', onPairingCode, 'guest');
         return { id: request.id, ok: true, result: opened };
       }
       default: return { id: request.id, ok: false, code: 'unsupported_operation' };

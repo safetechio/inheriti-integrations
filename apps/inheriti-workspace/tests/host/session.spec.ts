@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sealInheritiFile } from '../../../../../inheriti-client-sdk/sdk/src/elements/inheriti-file.js';
 import { encryptRSAOAEP } from '../../../../../../inheriti-core-sdk/crypto.js';
+import { checkGuestPolicy, checkPreviewPolicy } from '../../src-tauri/sidecar/access/policy.js';
 
 vi.mock('../../../../packages/core/src/node-base.js', () => ({ createNodeIntegrationCore: vi.fn(() => ({})) }));
 const keychain = vi.hoisted(() => new Map<string, string>());
@@ -22,6 +23,38 @@ vi.mock('@napi-rs/keyring', () => ({
 
 const organizationId = '13ac865a-d60c-4f8c-a783-050bd478f967';
 const copyId = '58513941-c2ca-448a-a7b1-2d41316a54f0';
+
+it('admits bounded PDF and text to a guest on every platform without broadening host preview', async () => {
+  const binding = { deployment: 'dev', origin: 'REVEAL' as const, copyId, recipient: 'member', expiresAt: '2099-10-18T00:00:00.000Z', allowedUses: 1 };
+  const pdf = (await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: 'application/pdf' })).fileBytes;
+  const text = (await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: 'text/plain' })).fileBytes;
+  const image = (await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: 'image/webp' })).fileBytes;
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  try {
+    for (const name of ['linux', 'darwin', 'win32']) {
+      Object.defineProperty(process, 'platform', { ...platform, value: name });
+      expect(checkGuestPolicy(pdf, 'application/pdf').mimeType).toBe('application/pdf');
+      expect(checkGuestPolicy(text, 'text/plain').mimeType).toBe('text/plain');
+      expect(() => checkGuestPolicy(image, 'image/webp')).toThrow('unsupported_file_type');
+      if (name !== 'linux') expect(() => checkPreviewPolicy(pdf, 'application/pdf')).toThrow('unsupported_file_type');
+    }
+  } finally { Object.defineProperty(process, 'platform', platform); }
+});
+
+it('admits bounded office files only to the guest on every platform', async () => {
+  const binding = { deployment: 'dev', origin: 'REVEAL' as const, copyId, recipient: 'member', expiresAt: '2099-10-18T00:00:00.000Z', allowedUses: 1 };
+  for (const mime of [
+    'text/csv',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ]) {
+    const small = (await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: mime })).fileBytes;
+    expect(checkGuestPolicy(small, mime).mimeType).toBe(mime);
+    expect(() => checkPreviewPolicy(small, mime)).toThrow('unsupported_file_type');
+    const oversized = (await sealInheritiFile({ plaintext: new Uint8Array(1024 * 1024 + 1), binding, mimeType: mime })).fileBytes;
+    expect(() => checkGuestPolicy(oversized, mime)).toThrow('file_too_large');
+  }
+});
 
 describe('Workspace session', () => {
   it('obtains its own session from an existing browser sign-in', async () => {
