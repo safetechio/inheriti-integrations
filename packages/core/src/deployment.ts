@@ -23,6 +23,12 @@ export const BUSINESS_DEPLOYMENTS = {
 } as const;
 
 export type BusinessDeployment = keyof typeof BUSINESS_DEPLOYMENTS;
+export const PROTECTED_FILE_FLAGS = {
+  local: false,
+  dev: false,
+  stg: false,
+  prod: false,
+} as const satisfies Record<BusinessDeployment, boolean>;
 export const BUSINESS_DEVICE_CLIENT_ID = 'inheriti-business-integrations-device';
 export const BUSINESS_INTERACTIVE_CLIENT_ID = 'inheriti-business-integrations-interactive';
 
