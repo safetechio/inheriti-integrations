@@ -9,6 +9,7 @@ import { downloadPlanAsset } from './download.js';
 import { usePlan } from './use.js';
 import { parseFormat, parseListOptions, parseLogOptions, parseRevealOptions, parseDownloadOptions, parseUseOptions } from './arguments.js';
 import { parsePlanHints } from './arguments.js';
+import { PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
 export async function plans(
   context: Awaited<ReturnType<typeof createCliContext>>,
@@ -81,12 +82,15 @@ export async function plans(
   }
   if (subcommand === 'download') {
     const hasPlanId = planId !== undefined && !planId.startsWith('--');
-    const parsed = parseDownloadOptions(hasPlanId ? options : rest);
+    const protectedCopy = configuration?.business === true && configuration.deployment !== undefined
+      && PROTECTED_FILE_FLAGS[configuration.deployment];
+    const parsed = parseDownloadOptions(hasPlanId ? options : rest, protectedCopy);
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
     const resolved = await resolvePlanId(context, terminal, hasPlanId ? planId : undefined);
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
-    try { return await downloadPlanAsset(context, terminal, resolved, parsed.asset, parsed.output, controller.signal); }
+    try { return await downloadPlanAsset(context, terminal, resolved, parsed.asset, parsed.output, controller.signal,
+      protectedCopy, parsed.openLimit); }
     finally { unregister(); }
   }
   if (subcommand === 'use') {

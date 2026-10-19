@@ -1,6 +1,6 @@
-import logoFullColor from '@assets/brand/inheriti-logo-full-color.svg';
+import logoFullColor from '@brand-assets/inheriti-logo-full-color.svg';
 import businessLogo from '@assets/brand/inheriti-business-logo.png';
-import brandmark from '@assets/brand/inheriti-brandmark-full-color.svg';
+import brandmark from '@brand-assets/inheriti-brandmark-full-color.svg';
 import type { CSSProperties } from 'react';
 
 type BrandLogoProps = {

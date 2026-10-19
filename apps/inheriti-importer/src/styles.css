@@ -99,7 +99,7 @@
 
 @font-face {
   font-family: 'AppFont';
-  src: url('./assets/fonts/font-app.ttf') format('truetype');
+  src: url('../../../packages/core/assets/font-app.ttf') format('truetype');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;

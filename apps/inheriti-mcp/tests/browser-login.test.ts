@@ -41,3 +41,47 @@ it('does not report sign-in success when the authorization exchange fails', asyn
     login.cancel();
   }
 });
+
+it('passes silent login errors through the SDK for state validation', async () => {
+  const configuration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  const auth = {
+    beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://login.example/authorize', expiresAt: Date.now() + 60_000 })),
+    completeAuthorizationCode: vi.fn().mockRejectedValue(Object.assign(new Error('login_required'), { code: 'login_required' })),
+  };
+  const login = await beginBrowserLogin(auth, configuration, vi.fn(), { prompt: 'none', timeoutMs: 30_000 });
+  try {
+    const callback = `${configuration.redirectUri}?error=login_required&state=expected`;
+    const response = await fetch(callback);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('Continue sign-in');
+    await expect(login.completed).rejects.toMatchObject({ code: 'login_required' });
+    expect(auth.beginAuthorizationCode).toHaveBeenCalledExactlyOnceWith({ prompt: 'none' });
+    expect(auth.completeAuthorizationCode).toHaveBeenCalledExactlyOnceWith(callback);
+  } finally {
+    login.cancel();
+  }
+});
+
+it('does not time out after the callback starts while the code exchange is in flight', async () => {
+  const configuration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  let completeExchange!: () => void;
+  let exchangeStarted!: () => void;
+  const started = new Promise<void>(resolve => { exchangeStarted = resolve; });
+  const exchange = new Promise<void>(resolve => { completeExchange = resolve; });
+  const auth = {
+    beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://login.example/authorize', expiresAt: Date.now() + 60_000 })),
+    completeAuthorizationCode: vi.fn(async () => { exchangeStarted(); await exchange; }),
+  };
+  const login = await beginBrowserLogin(auth, configuration, vi.fn(), { prompt: 'none', timeoutMs: 250 });
+  try {
+    const response = fetch(`${configuration.redirectUri}?code=approved&state=expected`);
+    await started;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    completeExchange();
+    expect((await response).status).toBe(200);
+    await expect(login.completed).resolves.toBeUndefined();
+  } finally {
+    completeExchange();
+    login.cancel();
+  }
+});

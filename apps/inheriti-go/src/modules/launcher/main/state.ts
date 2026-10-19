@@ -1,4 +1,4 @@
-import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
 import type { BusinessOrganization, InternalBuild, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
@@ -18,7 +18,7 @@ import { ProtectedOperatorSessionStore } from './operator-session-store.js';
 
 export type Deployment = keyof typeof BUSINESS_DEPLOYMENTS;
 export type TrayState = {
-  status: 'restoring' | 'signed-out' | 'authorizing' | 'signed-in' | 'error';
+  status: 'restoring' | 'session-unavailable' | 'signed-out' | 'authorizing' | 'signed-in' | 'error';
   message?: string;
   organizations: { id: string; name: string }[];
   teams: { id: string; name: string }[];
@@ -54,7 +54,7 @@ export class TraySession {
   private inboxAccess: { organizationId: string; requestId: number; controller: AbortController; promise: Promise<void> } | undefined;
   private validatedInboxOrganization: string | undefined;
 
-  constructor(deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
+  constructor(private readonly deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
@@ -125,6 +125,7 @@ export class TraySession {
   }
 
   signIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    if (this.status === 'restoring') return Promise.resolve();
     if (this.pendingSignIn) return this.pendingSignIn;
     const pending = this.runSignIn(onChange, openBrowser);
     this.pendingSignIn = pending.finally(() => {
@@ -174,6 +175,8 @@ export class TraySession {
   }
 
   async restore(): Promise<void> {
+    this.status = 'restoring';
+    let hasSavedSession = false;
     this.cancelInboxAccess();
     this.validatedInboxOrganization = undefined;
     this.custodianPrompt.cancel();
@@ -184,7 +187,9 @@ export class TraySession {
         await this.discover();
         return;
       }
-    } catch {}
+    } catch {
+      try { hasSavedSession = !!await this.operatorSessions.load(); } catch { /* A damaged checkpoint cannot be retried. */ }
+    }
     this.organizations = [];
     this.inbox.clear();
     await this.organizationKeys.clear();
@@ -192,7 +197,7 @@ export class TraySession {
     this.planEdit.reset();
     this.selectedId = undefined;
     this.accountName = undefined;
-    this.status = 'signed-out';
+    this.status = hasSavedSession ? 'session-unavailable' : 'signed-out';
     this.message = undefined;
   }
 
@@ -260,9 +265,15 @@ export class TraySession {
   async discardPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.discard(); }
   async cancelPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.cancelAccess(); }
   recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
-  inboxState(): InboxIdentityState { return this.inbox.state(); }
+  protectedFilesEnabled(): boolean { return PROTECTED_FILE_FLAGS[this.deployment]; }
+  inboxState(): InboxIdentityState & { protectedFileEnabled: boolean } {
+    return { ...this.inbox.state(), protectedFileEnabled: this.protectedFilesEnabled() };
+  }
   registeredInboxMemberId(): Promise<string | undefined> { return this.inbox.registeredMemberId(); }
-  prepareInbox(): Promise<InboxIdentityState> { return this.inbox.prepare(); }
+  async prepareInbox(): Promise<InboxIdentityState & { protectedFileEnabled: boolean }> {
+    await this.inbox.prepare();
+    return this.inboxState();
+  }
   prepareInboxAccess(requestId: number): Promise<void> {
     if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
     const organizationId = this.selectedId;
@@ -282,7 +293,10 @@ export class TraySession {
     this.inboxAccess?.controller.abort();
     this.inboxAccess = undefined;
   }
-  replaceInboxDevice(): Promise<InboxIdentityState> { return this.inbox.replace(); }
+  async replaceInboxDevice(): Promise<InboxIdentityState & { protectedFileEnabled: boolean }> {
+    await this.inbox.replace();
+    return this.inboxState();
+  }
   cancelInboxPreparation(): void { this.inbox.cancelPreparation(); }
   listInboxParticipants(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listParticipants(input); }
   listInboxMembers(input?: { q?: string; limit?: number; offset?: number }) { return this.inbox.listMembers(input); }
@@ -302,7 +316,20 @@ export class TraySession {
   sendInboxText(conversationId: string, text: string, expiresAt: string) { return this.inbox.sendText(conversationId, text, expiresAt); }
   sendInboxFile(conversationId: string, expiresAt: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.sendFile(conversationId, expiresAt, progress); }
   openInboxText(conversationId: string, messageId: string) { return this.inbox.openText(conversationId, messageId); }
-  openInboxFile(conversationId: string, messageId: string, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.openFile(conversationId, messageId, progress); }
+  openInboxFile(conversationId: string, messageId: string, progress?: (completed: number, total: number, stage?: string) => void) {
+    if (this.protectedFilesEnabled()) throw new Error('protected_file_required');
+    return this.inbox.openFile(conversationId, messageId, progress);
+  }
+  listInboxProtectedFilePlans() {
+    if (!this.protectedFilesEnabled()) throw new Error('protected_file_unavailable');
+    return this.inbox.listProtectedFilePlans();
+  }
+  openInboxProtectedFile(input: { conversationId: string; messageId: string; planId: string;
+    copyId: string; envelopeId: string; openLimit: number | null },
+    progress?: (completed: number, total: number, stage?: string) => void) {
+    if (!this.protectedFilesEnabled()) throw new Error('protected_file_unavailable');
+    return this.inbox.openProtectedFile(input, progress);
+  }
   openInboxFileForPlan(conversationId: string, messageId: string, deliver: (file: { name: string; mimeType: string; bytes: Uint8Array }) => void, progress?: (completed: number, total: number, stage?: string) => void) { return this.inbox.openFileForPlan(conversationId, messageId, deliver, progress); }
   acceptInboxFileForPlan(conversationId: string, messageId: string): void { this.inbox.acceptFileForPlan(conversationId, messageId); }
   cancelInboxTransfer(): void { this.inbox.cancelTransfer(); }

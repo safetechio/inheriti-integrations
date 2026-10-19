@@ -26,6 +26,7 @@
       "@main-components/*": ["src/modules/_shared/ui/components/*"],
       "@utils/*": ["src/modules/_shared/domain/utils/*"],
       "@assets/*": ["src/assets/*"],
+      "@brand-assets/*": ["../../packages/core/assets/brand/*"],
       "react-native": ["node_modules/react-native-web"]
     }
   },

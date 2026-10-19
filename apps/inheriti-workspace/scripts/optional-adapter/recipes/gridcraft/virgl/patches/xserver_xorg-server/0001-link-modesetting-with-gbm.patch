@@ -1,0 +1,17 @@
+From: Inheriti Workspace <workspace@inheriti.example>
+Subject: [PATCH] modesetting: link GBM directly for glamor
+
+The modesetting module calls gbm_bo_get_offset when glamor is enabled.
+Link GBM explicitly so its symbols are available when Xorg loads the module.
+
+---
+ hw/xfree86/drivers/modesetting/Makefile.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hw/xfree86/drivers/modesetting/Makefile.in b/hw/xfree86/drivers/modesetting/Makefile.in
+--- a/hw/xfree86/drivers/modesetting/Makefile.in
++++ b/hw/xfree86/drivers/modesetting/Makefile.in
+@@ -639,2 +639,2 @@ modesetting_drv_la_LDFLAGS = -module -avoid-version
+-modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS)
++modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS) $(GBM_LIBS)
+ modesetting_drv_ladir = @moduledir@/drivers

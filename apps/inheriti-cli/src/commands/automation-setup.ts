@@ -1,7 +1,9 @@
 import {
   createAutomationSetupOperations,
   generateAutomationRuntimeBundle,
+  inspectEc2AutomationInstance,
   inspectCloudTarget,
+  prepareEc2AutomationService,
   previewCloudTarget,
   resolveAutomationFieldMappings,
 } from '@safetech/inheriti-elements-core/node-base';
@@ -20,11 +22,13 @@ const usage = [
   '  | --region REGION --cluster CLUSTER (--service SERVICE | --task-definition ARN)]',
   '  [--container NAME] [--script-path ABSOLUTE_PATH]',
   '  [--cli-path ABSOLUTE_PATH] [--apply --image IMAGE [--expect-revision REVISION]]',
+  '  EC2: --region REGION --instance INSTANCE_ID --service-name NAME --run-as-user USER [--script-path PATH] -- APP_COMMAND [ARGS...]',
   '  CLI path defaults to /usr/local/bin/inheriti.',
 ].join('\n');
 const allowed = new Set([
   '--plan', '--connection', '--field', '--env-name', '--map', '--map-all', '--only', '--except', '--project', '--region',
   '--job', '--cluster', '--service', '--task-definition', '--container', '--script-path',
+  '--instance', '--service-name', '--run-as-user',
   '--apply', '--image', '--cli-path', '--expect-revision',
 ]);
 
@@ -68,7 +72,9 @@ export async function automationSetup(
   terminal: Terminal,
   argv: readonly string[],
 ): Promise<number> {
-  const parsed = parse(argv);
+  const separator = argv.indexOf('--');
+  const applicationCommand = separator < 0 ? [] : argv.slice(separator + 1);
+  const parsed = parse(separator < 0 ? argv : argv.slice(0, separator));
   const options = parsed?.options;
   const bulk = options?.['--map-all'] === 'true' || Boolean(parsed?.onlyFields.length);
   if (!options?.['--plan'] ||
@@ -158,6 +164,39 @@ export async function automationSetup(
     terminal.write('--- Launcher script (save as an executable file) ---');
     terminal.write(bundle.script);
     return 0;
+  }
+  if (options['--instance']) {
+    if (connection.provider !== 'AWS' || connection.trust.method !== 'AWS_IAM_ROLE' ||
+        !options['--region'] || !options['--service-name'] || !options['--run-as-user'] ||
+        !applicationCommand.length || applying || options['--image'] || options['--expect-revision'] ||
+        options['--cli-path'] || ['--project', '--job', '--cluster', '--service', '--task-definition', '--container'].some(key => options[key])) {
+      terminal.writeError(usage);
+      return 1;
+    }
+    const instance = await inspectEc2AutomationInstance({ region: options['--region'], instanceId: options['--instance'] });
+    if (instance.roleArn !== connection.trust.roleArn) {
+      terminal.writeError('The EC2 instance role does not match the verified connection.');
+      return 1;
+    }
+    const prepared = prepareEc2AutomationService({
+      bundle: { ...bundle, environment: { ...bundle.environment, AWS_REGION: instance.region } },
+      applicationCommand: [...applicationCommand], serviceName: options['--service-name'],
+      runAsUser: options['--run-as-user'], launcherPath: options['--script-path'] ?? '/usr/local/bin/inheriti-automation',
+    });
+    renderJson(terminal, { status: 'installation_required', instanceId: instance.instanceId,
+      roleArn: instance.roleArn, mappings, runScriptPath: prepared.runScriptPath,
+      unitName: prepared.unitName, instructions: prepared.instructions });
+    terminal.write('--- Launcher script ---');
+    terminal.write(bundle.script);
+    terminal.write('--- Application run script ---');
+    terminal.write(prepared.runScript);
+    terminal.write('--- systemd unit ---');
+    terminal.write(prepared.unit);
+    return 0;
+  }
+  if (applicationCommand.length || options['--service-name'] || options['--run-as-user']) {
+    terminal.writeError(usage);
+    return 1;
   }
   if (!['--project', '--region', '--job', '--cluster', '--service', '--task-definition', '--container'].some(key => options[key]) &&
       !applying && !options['--image'] && !options['--expect-revision']) {

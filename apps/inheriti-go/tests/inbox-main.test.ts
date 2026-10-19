@@ -1,11 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const mock = vi.hoisted(() => ({
   createNodeInbox: vi.fn(),
   createNodeInboxEventListener: vi.fn(),
   showOpenDialog: vi.fn(),
   showSaveDialog: vi.fn(),
+  sealInheritiFile: vi.fn(),
+  sealInheritiFileKey: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -18,7 +23,9 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   suggestInboxTextAsset: (text: string) => ({ type: 'PLAIN-TEXT', text }),
 }));
 
-vi.mock('@safetech/inheriti-elements-core/inbox', () => ({ createNodeInbox: mock.createNodeInbox }));
+vi.mock('@safetech/inheriti-elements-core/inbox', () => ({ createNodeInbox: mock.createNodeInbox,
+  generateInheritiFileKey: () => new Uint8Array(32).fill(7),
+  sealInheritiFile: mock.sealInheritiFile, sealInheritiFileKey: mock.sealInheritiFileKey }));
 
 import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
@@ -38,6 +45,118 @@ describe('Tray Secure Chat main process', () => {
     vi.clearAllMocks();
     mock.createNodeInboxEventListener.mockReturnValue(() => {});
     mock.showSaveDialog.mockResolvedValue({ canceled: true });
+  });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  const protectedInput = { conversationId: '00000000-0000-4000-8000-000000000001',
+    messageId: '00000000-0000-4000-8000-000000000002', planId: '00000000-0000-4000-8000-000000000003',
+    copyId: '00000000-0000-4000-8000-000000000004', envelopeId: '00000000-0000-4000-8000-000000000005',
+    openLimit: 2 };
+
+  it('does not save or ACK a protected copy whose SafeKey claim arrives after the lease deadline', async () => {
+    const started = Date.now();
+    let clock = started;
+    vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    const cancelInboxFileAccess = vi.fn().mockResolvedValue(undefined);
+    const client = { getOwnFileAccessIdentityKey: vi.fn().mockResolvedValue({ status: 'ACTIVE', publicKey: 'pem', fingerprint: 'fingerprint' }),
+      createInboxFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'PENDING' }),
+      getFileAccess: vi.fn().mockImplementation(async () => { clock += 40_000; return { copyId: protectedInput.copyId,
+        status: 'READY', deployment: 'https://api.test', origin: 'INBOX', recipient: identity.memberId,
+        expiresAt: null, allowedUses: 2 }; }), cancelInboxFileAccess,
+      openFile: vi.fn().mockImplementation(async ({ save }) => { await save({ name: 'secret.txt', mimeType: 'text/plain',
+        bytes: new Uint8Array([65]) }, { leaseId: 'lease-1', leaseExpiresAt: new Date(started + 65_000).toISOString() });
+        throw new Error('ACK should not be reached'); }), };
+    mock.createNodeInbox.mockReturnValue(client);
+    mock.sealInheritiFileKey.mockResolvedValue('sealed');
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('protected_file_claim_unavailable');
+    expect(cancelInboxFileAccess).toHaveBeenCalledOnce();
+    expect(mock.showSaveDialog).not.toHaveBeenCalled();
+    expect(mock.sealInheritiFile).not.toHaveBeenCalled();
+  });
+
+  it('cancels the original organization copy if selection changes while the save picker is open', async () => {
+    let selectedOrganization = 'org-a';
+    const cancelOriginal = vi.fn().mockResolvedValue(undefined);
+    const cancelOther = vi.fn().mockResolvedValue(undefined);
+    const originalClient = { getOwnFileAccessIdentityKey: vi.fn().mockResolvedValue({ status: 'ACTIVE', publicKey: 'pem', fingerprint: 'fingerprint' }),
+      createInboxFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'PENDING' }),
+      getFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'READY',
+        deployment: 'https://api.test', origin: 'INBOX', recipient: identity.memberId,
+        expiresAt: null, allowedUses: 2 }), cancelInboxFileAccess: cancelOriginal,
+      openFile: vi.fn().mockImplementation(async ({ save }) => { await save({ name: 'secret.txt', mimeType: 'text/plain',
+        bytes: new Uint8Array([65]) }, { leaseId: 'lease-1', leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() }); }), };
+    mock.createNodeInbox.mockImplementation(({ organizationId }) => organizationId === 'org-a'
+      ? originalClient : { cancelInboxFileAccess: cancelOther });
+    mock.sealInheritiFileKey.mockResolvedValue('sealed');
+    mock.sealInheritiFile.mockResolvedValue({ fileBytes: new Uint8Array([1, 2, 3]), fileKey: new Uint8Array(32) });
+    mock.showSaveDialog.mockImplementation(async () => { selectedOrganization = 'org-b'; return { canceled: true }; });
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => selectedOrganization);
+    await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('inbox_file_save_cancelled');
+    expect(cancelOriginal).toHaveBeenCalledExactlyOnceWith(protectedInput.conversationId,
+      protectedInput.messageId, protectedInput.copyId);
+    expect(cancelOther).not.toHaveBeenCalled();
+    expect(mock.createNodeInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a saved protected file when Inbox acknowledgement is uncertain', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'inheriti-inbox-'));
+    const filePath = join(folder, 'secret.inheriti');
+    try {
+      const cancelInboxFileAccess = vi.fn();
+      const client = { getOwnFileAccessIdentityKey: vi.fn().mockResolvedValue({ status: 'ACTIVE', publicKey: 'pem', fingerprint: 'fingerprint' }),
+        createInboxFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'PENDING' }),
+        getFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'READY',
+          deployment: 'https://api.test', origin: 'INBOX', recipient: identity.memberId,
+          expiresAt: null, allowedUses: 2 }), cancelInboxFileAccess,
+        openFile: vi.fn().mockImplementation(async ({ save }) => { await save({ name: 'secret.txt', mimeType: 'text/plain',
+          bytes: new Uint8Array([65]) }, { leaseId: 'lease-1', leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() });
+          return { name: 'secret.txt', leaseId: 'lease-1', acknowledgement: 'PENDING' }; }), };
+      mock.createNodeInbox.mockReturnValue(client);
+      mock.sealInheritiFileKey.mockResolvedValue('sealed');
+      mock.sealInheritiFile.mockResolvedValue({ fileBytes: new Uint8Array([1, 2, 3]), fileKey: new Uint8Array(32) });
+      mock.showSaveDialog.mockResolvedValue({ canceled: false, filePath });
+      vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+        run(identity, new AbortController().signal));
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+        async () => 'a'.repeat(64), () => 'org-a');
+      await expect(inbox.openProtectedFile(protectedInput)).resolves.toMatchObject({ acknowledgement: 'PENDING' });
+      expect(await readFile(filePath)).toEqual(Buffer.from([1, 2, 3]));
+      expect(cancelInboxFileAccess).not.toHaveBeenCalled();
+    } finally { await rm(folder, { recursive: true, force: true }); }
+  });
+
+  it('retains a durable protected file when ACK throws after saving', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'inheriti-inbox-'));
+    const filePath = join(folder, 'secret.inheriti');
+    try {
+      const cancelInboxFileAccess = vi.fn();
+      const client = { getOwnFileAccessIdentityKey: vi.fn().mockResolvedValue({ status: 'ACTIVE', publicKey: 'pem', fingerprint: 'fingerprint' }),
+        createInboxFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'PENDING' }),
+        getFileAccess: vi.fn().mockResolvedValue({ copyId: protectedInput.copyId, status: 'READY',
+          deployment: 'https://api.test', origin: 'INBOX', recipient: identity.memberId,
+          expiresAt: null, allowedUses: 2 }), cancelInboxFileAccess,
+        openFile: vi.fn().mockImplementation(async ({ save }) => { await save({ name: 'secret.txt', mimeType: 'text/plain',
+          bytes: new Uint8Array([65]) }, { leaseId: 'lease-1', leaseExpiresAt: new Date(Date.now() + 120_000).toISOString() });
+          throw new Error('acknowledgement outcome unknown'); }), };
+      mock.createNodeInbox.mockReturnValue(client);
+      mock.sealInheritiFileKey.mockResolvedValue('sealed');
+      mock.sealInheritiFile.mockResolvedValue({ fileBytes: new Uint8Array([1, 2, 3]), fileKey: new Uint8Array(32) });
+      mock.showSaveDialog.mockResolvedValue({ canceled: false, filePath });
+      vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+        run(identity, new AbortController().signal));
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+        async () => 'a'.repeat(64), () => 'org-a');
+      await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('acknowledgement outcome unknown');
+      expect(await readFile(filePath)).toEqual(Buffer.from([1, 2, 3]));
+      expect(cancelInboxFileAccess).not.toHaveBeenCalled();
+    } finally { await rm(folder, { recursive: true, force: true }); }
   });
 
   it('forwards device changes as participant refresh signals for the selected organization', async () => {

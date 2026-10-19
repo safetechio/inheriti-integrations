@@ -3,6 +3,7 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { downloadPlanAsset } from '../src/commands/download.js';
+import { parseDownloadOptions } from '../src/commands/arguments.js';
 import type { Terminal } from '../src/output.js';
 
 function fixture() {
@@ -64,5 +65,37 @@ describe('plans download', () => {
     controller.abort();
     await expect(downloadPlanAsset(context, terminal, 'plan-1', 'runbook', output, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
     await expect(stat(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('uses the deployment mode and rejects a user protection override', () => {
+    expect(parseDownloadOptions(['--asset', 'note', '--output', 'note.inheriti', '--open-limit', '2'], true))
+      .toEqual({ asset: 'note', output: 'note.inheriti', openLimit: 2 });
+    expect(parseDownloadOptions(['--asset', 'note', '--output', 'note.txt'], true)).toHaveProperty('error');
+    expect(parseDownloadOptions(['--asset', 'note', '--output', 'note.inheriti', '--protected'], true)).toHaveProperty('error');
+    expect(parseDownloadOptions(['--asset', 'note', '--output', 'note.txt', '--open-limit', '2'])).toHaveProperty('error');
+  });
+
+  it('saves only SDK sealed bytes for a protected Business reveal', async () => {
+    const output = join(await mkdtemp(join(tmpdir(), 'inheriti-download-')), 'note.inheriti');
+    const { context, terminal, withReveal, exportAsset } = fixture();
+    (context as { keyOwner: string }).keyOwner = 'Organisation';
+    const protectedExport = vi.fn(async (input: { save: (asset: { fileBytes: Uint8Array }) => Promise<void> }) => {
+      await input.save({ fileBytes: new Uint8Array([9, 8, 7]) });
+    });
+    (context as { core: { exportProtectedRevealAsset: typeof protectedExport } }).core.exportProtectedRevealAsset = protectedExport;
+    await expect(downloadPlanAsset(context, terminal, 'plan-1', 'note', output, undefined, true, 2)).resolves.toBe(0);
+    expect(withReveal).toHaveBeenCalledWith('plan-1', expect.objectContaining({ protectedCopy: true }), expect.any(Function));
+    expect(protectedExport).toHaveBeenCalledWith(expect.objectContaining({ selector: 'note', openLimit: 2,
+      copyId: expect.any(String), envelopeId: expect.any(String), save: expect.any(Function) }));
+    expect(exportAsset).not.toHaveBeenCalled();
+    expect([...await readFile(output)]).toEqual([9, 8, 7]);
+    expect((await stat(output)).mode & 0o777).toBe(0o600);
+  });
+
+  it('rejects protected download outside Business before reveal', async () => {
+    const { context, terminal, withReveal } = fixture();
+    await expect(downloadPlanAsset(context, terminal, 'plan-1', 'note', 'note.inheriti', undefined, true))
+      .rejects.toThrow('business_context_required');
+    expect(withReveal).not.toHaveBeenCalled();
   });
 });

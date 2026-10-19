@@ -17,7 +17,9 @@ let pendingAuth = null;
 function callbackPage(success) {
   const appRoot = path.resolve(__dirname, '../..');
   const assetsRoot = app.isPackaged ? path.join(appRoot, 'dist') : appRoot;
-  const fontPath = path.join(assetsRoot, app.isPackaged ? 'font-app.ttf' : 'src/assets/fonts/font-app.ttf');
+  const fontPath = app.isPackaged
+    ? path.join(assetsRoot, 'font-app.ttf')
+    : path.join(appRoot, '../../packages/core/assets/font-app.ttf');
   const logoPath = path.join(assetsRoot, app.isPackaged ? 'favicon.png' : 'public/favicon.png');
   return fs.readFileSync(path.join(__dirname, 'login-callback.html'), 'utf8')
     .replace('{{font}}', fs.readFileSync(fontPath).toString('base64'))
@@ -187,7 +189,6 @@ async function loginWithKeycloak() {
     state,
     code_challenge: sha256Base64Url(verifier),
     code_challenge_method: 'S256',
-    prompt: 'login',
   }).toString();
 
   return new Promise((resolve, reject) => {

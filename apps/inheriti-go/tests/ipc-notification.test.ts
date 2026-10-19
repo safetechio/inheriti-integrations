@@ -21,6 +21,24 @@ it('shows the installed version only to the trusted Tray renderer', () => {
   expect(version({ sender: webContents, senderFrame: frame })).toBe('0.0.5');
 });
 
+it('retries a saved session only from the trusted Tray renderer', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  let status = 'session-unavailable';
+  const publish = vi.fn();
+  const restore = vi.fn(async () => { status = 'signed-in'; });
+  registerTrayIpc({ state: () => ({ status }), restore } as never, () => ({ webContents }) as never, publish);
+  const retry = mock.handlers.get('tray:restore')!;
+
+  expect(() => retry({ sender: webContents, senderFrame: {} })).toThrow();
+  expect(restore).not.toHaveBeenCalled();
+  expect(retry({ sender: webContents, senderFrame: frame })).toEqual({ status: 'signed-in' });
+  await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+  expect(restore).toHaveBeenCalledOnce();
+  expect(retry({ sender: webContents, senderFrame: frame })).toEqual({ status: 'signed-in' });
+  expect(restore).toHaveBeenCalledOnce();
+});
+
 it('notifies only after confirmed protection or update using generic text', async () => {
   const frame = {};
   const webContents = { mainFrame: frame };

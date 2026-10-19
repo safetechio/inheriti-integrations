@@ -41,7 +41,7 @@ export interface InteractionWorkflowPort {
 
 /** Deliberately structural so hosts can inject the public Client SDK without re-exporting its contract. */
 export interface OperatorAuthFacade {
-  beginAuthorizationCode(): Promise<{ authorizationUrl: string; expiresAt: number }>;
+  beginAuthorizationCode(options?: { prompt?: 'none' }): Promise<{ authorizationUrl: string; expiresAt: number }>;
   completeAuthorizationCode(callbackUrl: string): Promise<unknown>;
   beginDeviceAuthorization(): Promise<unknown>;
   pollDeviceAuthorization(signal?: AbortSignal): Promise<unknown>;
@@ -73,7 +73,7 @@ export interface InternalBuildFacade {
 }
 
 export interface ScopedRevealHandle {
-  readonly session: { id: string; expiresAt: string };
+  readonly session: { id: string; expiresAt: string; protectedCopy?: boolean };
   field<TValue = unknown>(selector: string, options?: {
     action?: 'VIEW_FIELD' | 'COPY_FIELD' | 'USE_FIELD' | 'AUTOFILL_FIELD' | 'INSERT_FIELD' | 'DELIVER_FIELD';
     destination?: RevealActionDestination;
@@ -125,6 +125,7 @@ export interface ScopedRevealProgress {
 
 export interface ScopedRevealOptions extends Partial<Pick<OpenRevealOptions, 'selectCustodianDevice' | 'proDevice' | 'onRelaySession'>> {
   mode?: 'DIRECT' | 'GOVERNED';
+  protectedCopy?: boolean;
   /** Every step of the reveal, named by the Client SDK that runs it. */
   onProgress?: (progress: RevealProgress) => void;
   idempotencyKey?: string;
@@ -164,6 +165,18 @@ export interface ScopedRevealFacade {
   ): Promise<TResult>;
 }
 
+export interface ProtectedRevealAssetFacade {
+  exportProtectedRevealAsset(input: {
+    reveal: ScopedRevealHandle;
+    selector: string;
+    copyId: string;
+    envelopeId: string;
+    openLimit?: number;
+    signal?: AbortSignal;
+    save: (asset: { fileName?: string; fileBytes: Uint8Array }) => Promise<void>;
+  }): Promise<void>;
+}
+
 export interface IntegrationCoreOptions<TListInput, TPage, TDetail> {
   environment: ElementsEnvironment;
   liveConfirmation?: string;
@@ -173,6 +186,7 @@ export interface IntegrationCoreOptions<TListInput, TPage, TDetail> {
   reveals?: RevealWorkflowPort;
   interactions?: InteractionWorkflowPort;
   scopedReveals?: ScopedRevealFacade;
+  protectedRevealAssets?: ProtectedRevealAssetFacade;
   masterKeys?: MasterKeyFacade;
   organizations?: BusinessOrganizationFacade;
   internalBuilds?: InternalBuildFacade;
@@ -186,6 +200,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   readonly reveals: RevealWorkflowPort | undefined;
   readonly interactions: InteractionWorkflowPort | undefined;
   private readonly scopedReveals: ScopedRevealFacade | undefined;
+  private readonly protectedRevealAssets: ProtectedRevealAssetFacade | undefined;
   private readonly masterKeys: MasterKeyFacade | undefined;
   private readonly organizations: BusinessOrganizationFacade | undefined;
   private readonly internalBuilds: InternalBuildFacade | undefined;
@@ -200,6 +215,7 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
     this.reveals = options.reveals;
     this.interactions = options.interactions;
     this.scopedReveals = options.scopedReveals;
+    this.protectedRevealAssets = options.protectedRevealAssets;
     this.masterKeys = options.masterKeys;
     this.organizations = options.organizations;
     this.internalBuilds = options.internalBuilds;
@@ -245,6 +261,11 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   ): Promise<TResult> {
     if (!this.scopedReveals) throw new Error('scoped_reveal_facade_required');
     return this.scopedReveals.withReveal(planId, options, work);
+  }
+
+  exportProtectedRevealAsset(input: Parameters<ProtectedRevealAssetFacade['exportProtectedRevealAsset']>[0]): Promise<void> {
+    if (!this.protectedRevealAssets) throw new Error('business_context_required');
+    return this.protectedRevealAssets.exportProtectedRevealAsset(input);
   }
 
   async performAuthorizedInteraction<TResult>(

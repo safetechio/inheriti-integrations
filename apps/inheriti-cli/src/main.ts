@@ -20,6 +20,8 @@ import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
 import { automationManage, automationMetadata } from './commands/automations.js';
 import { automationSetup } from './commands/automation-setup.js';
+import { pairAwsAutomationService } from './commands/automation-pair-aws.js';
+import { pairGoogleAutomationWorkload } from './commands/automation-pair-google.js';
 import { publishAwsSecrets } from './commands/secrets-publish-aws.js';
 import { publishGoogleSecrets } from './commands/secrets-publish-google.js';
 import { automationConfigurationComplete, automationSecretsRequested, pairAutomationIdentity, withAutomationSecrets } from './automation-secrets.js';
@@ -29,6 +31,7 @@ import { secrets, requiredAutomationPlanId } from './commands/secrets.js';
 import { plans } from './commands/plan-command.js';
 import { messageFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
+import { openInheritiFile } from '@safetech/inheriti-elements-core/node-base';
 
 export async function run(
   argv: readonly string[],
@@ -47,6 +50,11 @@ export async function run(
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
   if (command === 'setup') return await setup(rest, environmentVariables, terminal);
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
+  if (command === 'plans' && rest[0] === 'open') {
+    if (rest.length !== 2 || !rest[1]) { terminal.writeError(commandUsage(['plans', 'open'], environmentVariables)); return 1; }
+    try { await openInheritiFile(rest[1]); terminal.write('Opened in Inheriti Workspace.\n'); return 0; }
+    catch { terminal.writeError('Could not open the file in Inheriti Workspace. Check the file and Workspace installation.'); return 1; }
+  }
   const routing = { business: Boolean(BUILD_DEPLOYMENT) };
   try {
     if (command === 'login' && rest.length > 0) {
@@ -116,6 +124,18 @@ export async function run(
       scoped.organization = organization;
       if (rest[0] === 'list' || rest[0] === 'grants') return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? rest[1] : undefined);
       if (rest[0] === 'setup') return await automationSetup(scoped, configuration, terminal, rest.slice(1));
+      if (rest[0] === 'pair' && rest[1] === 'aws') {
+        const controller = new AbortController();
+        const unregister = registerCliCancel(controller);
+        try { return await pairAwsAutomationService(scoped, configuration, terminal, rest.slice(2), controller.signal); }
+        finally { unregister(); }
+      }
+      if (rest[0] === 'pair' && rest[1] === 'google') {
+        const controller = new AbortController();
+        const unregister = registerCliCancel(controller);
+        try { return await pairGoogleAutomationWorkload(scoped, configuration, terminal, rest.slice(2), controller.signal); }
+        finally { unregister(); }
+      }
       const controller = new AbortController();
       const unregister = registerCliCancel(controller);
       try { return await automationManage(scoped, configuration, terminal, controller.signal, rest); }

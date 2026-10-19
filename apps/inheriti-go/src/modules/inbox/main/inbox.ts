@@ -1,8 +1,9 @@
 import { createNodeInboxEventListener, suggestInboxTextAsset } from '@safetech/inheriti-elements-core/node';
-import { createNodeInbox } from '@safetech/inheriti-elements-core/inbox';
+import { createNodeInbox, generateInheritiFileKey, sealInheritiFile, sealInheritiFileKey } from '@safetech/inheriti-elements-core/inbox';
 import { dialog } from 'electron';
 import { open, readFile, stat, unlink } from 'node:fs/promises';
 import { extname, basename } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { TrayInboxIdentity } from './identity.js';
 import type { InboxIdentityState } from './identity.js';
 import { InboxReadAck } from './read-ack.js';
@@ -13,6 +14,9 @@ export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'NEW_MESSAGE' }
   | { conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string };
 
 const MAX_FILE_BYTES = 10_000_000;
+const MAX_VIEWER_TEXT_BYTES = 45 * 1024;
+const LEASE_SAFETY_MS = 30_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Receipt = { memberId: string; read?: boolean; readAt?: string | null;
   secrets?: Array<{ position: number; status: string; revealedAt?: string | null }> };
 
@@ -87,6 +91,7 @@ export class TrayInbox {
   listParticipants(input?: { q?: string; limit?: number; offset?: number }) {
     return this.client().client.listParticipants(input);
   }
+  listProtectedFilePlans() { return this.client().client.listPlans(); }
   listMembers(input?: { q?: string; limit?: number; offset?: number }) {
     return this.client().client.listMembers(input);
   }
@@ -264,6 +269,87 @@ export class TrayInbox {
       this.read.remember(organizationId, conversationId, messageId, result.deviceId,
         result.opened.leaseId, result.opened.acknowledgement);
       return result.opened;
+    } finally { this.transfer = undefined; }
+  }
+  async openProtectedFile(input: { conversationId: string; messageId: string; planId: string;
+    copyId: string; envelopeId: string; openLimit: number | null },
+    progress?: (completed: number, total: number, stage?: string) => void) {
+    if (![input.conversationId, input.messageId, input.planId, input.copyId, input.envelopeId].every(value => UUID.test(value)) ||
+      input.copyId === input.envelopeId ||
+      (input.openLimit !== null && (!Number.isSafeInteger(input.openLimit) || input.openLimit < 1 || input.openLimit > 4294967295)))
+      throw new Error('invalid_protected_file_selection');
+    const operation = this.startTransfer();
+    let savedPath: string | undefined;
+    let creationAttempted = false;
+    let sourceClient: ReturnType<typeof createNodeInbox> | undefined;
+    try {
+      const { organizationId, client } = this.client();
+      sourceClient = client;
+      const result = await this.identity.withIdentity(organizationId, (identity, signal) =>
+        this.withTransferAbort(signal, operation, async () => {
+          const tenantKeyHex = await this.resolveKey(organizationId, operation.signal);
+          const opened = await client.openFile({ conversationId: input.conversationId, messageId: input.messageId,
+            identity, tenantKeyHex, signal: operation.signal, onProgress: progress,
+            save: async (file: { name: string; mimeType: string; bytes: Uint8Array },
+              lease: { leaseId: string; leaseExpiresAt: string }) => {
+              const deadline = Date.parse(lease.leaseExpiresAt) - LEASE_SAFETY_MS;
+              if (!Number.isFinite(deadline) || deadline <= Date.now() + LEASE_SAFETY_MS ||
+                file.mimeType !== 'text/plain' || !file.bytes.length || file.bytes.length > MAX_VIEWER_TEXT_BYTES)
+                throw new Error('protected_file_unavailable');
+              const key = await client.getOwnFileAccessIdentityKey(operation.signal);
+              if (!key || key.status !== 'ACTIVE') throw new Error('protected_file_identity_unavailable');
+              const fileKey = generateInheritiFileKey();
+              try {
+                const sealedFileKey = await sealInheritiFileKey(fileKey, key.publicKey);
+                operation.signal.throwIfAborted();
+                creationAttempted = true;
+                const created = await client.createInboxFileAccess(input.conversationId, input.messageId, {
+                  copyId: input.copyId, envelopeId: input.envelopeId, deviceId: identity.deviceId,
+                  leaseId: lease.leaseId, planId: input.planId, identityKeyFingerprint: key.fingerprint,
+                  sealedFileKey, openLimit: input.openLimit,
+                }, operation.signal);
+                if (created.copyId !== input.copyId || created.status !== 'PENDING') throw new Error('protected_file_creation_invalid');
+                let copy = await client.getFileAccess(input.copyId, operation.signal);
+                while (copy.status === 'PENDING' && Date.now() < deadline) {
+                  await delay(1_000, undefined, { signal: operation.signal });
+                  copy = await client.getFileAccess(input.copyId, operation.signal);
+                }
+                if (Date.now() >= deadline || copy.copyId !== input.copyId || copy.status !== 'READY' ||
+                  copy.deployment !== new URL(this.apiUrl).origin || copy.origin !== 'INBOX' ||
+                  copy.recipient !== identity.memberId || copy.expiresAt !== null || copy.allowedUses !== input.openLimit)
+                  throw new Error('protected_file_claim_unavailable');
+                const encrypted = await sealInheritiFile({ plaintext: file.bytes, fileKey,
+                  binding: { deployment: copy.deployment, origin: 'INBOX', copyId: input.copyId,
+                    recipient: identity.memberId, expiresAt: null, allowedUses: input.openLimit }, mimeType: file.mimeType });
+                try {
+                  operation.signal.throwIfAborted();
+                  if (Date.now() >= deadline) throw new Error('protected_file_claim_unavailable');
+                  const safeName = basename(file.name.replaceAll('\\', '/')) || 'Protected file';
+                  const selected = await dialog.showSaveDialog({ title: 'Save protected .inheriti file', defaultPath: `${safeName}.inheriti` });
+                  if (selected.canceled || !selected.filePath) throw new Error('inbox_file_save_cancelled');
+                  operation.signal.throwIfAborted();
+                  if (Date.now() >= deadline) throw new Error('protected_file_claim_unavailable');
+                  const destination = await open(selected.filePath, 'wx');
+                  try { await destination.writeFile(encrypted.fileBytes); await destination.sync(); }
+                  catch (error) { await destination.close(); await unlink(selected.filePath).catch(() => {}); throw error; }
+                  await destination.close();
+                  savedPath = selected.filePath;
+                  if (Date.now() >= deadline) throw new Error('protected_file_claim_unavailable');
+                } finally { encrypted.fileBytes.fill(0); encrypted.fileKey.fill(0); }
+              } finally { fileKey.fill(0); file.bytes.fill(0); }
+            } });
+          return { opened, deviceId: identity.deviceId };
+        }));
+      this.read.remember(organizationId, input.conversationId, input.messageId, result.deviceId,
+        result.opened.leaseId, result.opened.acknowledgement);
+      return result.opened;
+    } catch (error) {
+      if (!savedPath && creationAttempted) await sourceClient?.cancelInboxFileAccess(input.conversationId, input.messageId, input.copyId).catch(() => {});
+      if (savedPath && error instanceof Error && error.message === 'protected_file_claim_unavailable') {
+        await unlink(savedPath).catch(() => {});
+        if (creationAttempted) await sourceClient?.cancelInboxFileAccess(input.conversationId, input.messageId, input.copyId).catch(() => {});
+      }
+      throw error;
     } finally { this.transfer = undefined; }
   }
   acceptFileForPlan(conversationId: string, messageId: string): void {

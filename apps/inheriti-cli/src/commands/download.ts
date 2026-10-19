@@ -1,5 +1,7 @@
 import { open, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { custodianShareCopy, revealModeOf, revealProgressMessage } from '@safetech/inheriti-elements-core';
+import { saveProtectedFile } from '@safetech/inheriti-elements-core/node-base';
 import type { CliContext } from '../session.js';
 import { cliCustodianOptions } from '../session.js';
 import type { Terminal } from '../output.js';
@@ -7,7 +9,9 @@ import { loadRevealPlan, RevealStoppedByDeadManSwitch } from './reveal.js';
 
 export async function downloadPlanAsset(
   context: CliContext, terminal: Terminal, planId: string, asset: string, output: string, signal?: AbortSignal,
+  protectedCopy = false, openLimit?: number,
 ): Promise<number> {
+  if (protectedCopy && context.keyOwner !== 'Organisation') throw new Error('business_context_required');
   const plan = await loadRevealPlan(context, planId);
   const moderators = (plan.participants ?? [])
     .filter(participant => participant.lifecycle === 'ACTIVE' && participant.relationships.includes('MODERATOR'));
@@ -22,6 +26,7 @@ export async function downloadPlanAsset(
   try {
     await context.core.withReveal(planId, {
       mode: revealModeOf(plan),
+      ...(protectedCopy ? { protectedCopy: true } : {}),
       ...custodianOptions,
       ...(custodianOptions.selectCustodianDevice ? { selectCustodianDevice: async () => {
         const selected = await custodianOptions.selectCustodianDevice();
@@ -44,7 +49,7 @@ export async function downloadPlanAsset(
         if (line !== lastLine) { terminal.write(line); lastLine = line; }
       },
     }, async (reveal) => {
-      await reveal.exportAsset(asset, async ({ bytes }) => {
+      const save = async (bytes: Uint8Array) => {
         if (signal?.aborted) throw abortError();
         const file = await open(output, 'wx', 0o600);
         let saved = false;
@@ -56,7 +61,14 @@ export async function downloadPlanAsset(
           await file.close();
           if (!saved) await unlink(output);
         }
-      });
+      };
+      if (protectedCopy) {
+        await context.core.exportProtectedRevealAsset({ reveal, selector: asset,
+          copyId: randomUUID(), envelopeId: randomUUID(), ...(openLimit === undefined ? {} : { openLimit }),
+          ...(signal === undefined ? {} : { signal }), save: ({ fileBytes }) => saveProtectedFile(output, fileBytes, signal) });
+      } else {
+        await reveal.exportAsset(asset, ({ bytes }) => save(bytes));
+      }
     });
   } catch (error) {
     if (stoppedByDms) throw new RevealStoppedByDeadManSwitch({ cause: error });

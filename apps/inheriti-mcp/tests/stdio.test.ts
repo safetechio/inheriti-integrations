@@ -63,8 +63,8 @@ it('registers secure delivery tools by default over the real stdio transport', a
     const tools = registered.map(tool => tool.name).sort();
     expect(tools).toEqual([
       'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
-      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
+      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
+      'logout', 'open_inheriti_file', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
     ]);
     const setup = registered.find(tool => tool.name === 'create_automation_connection');
     expect(setup?.description).toContain('ask the human only for missing nonsecret provider values');
@@ -88,8 +88,8 @@ it('keeps the old flag working and returns a safe error over stdio', async () =>
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
       'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
-      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
+      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
+      'logout', 'open_inheriti_file', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
     ]);
     const invalid = await client.callTool({ name: 'reveal_plan_secret', arguments: {
       planId: 'plan', selector: 'account.password', all: true,

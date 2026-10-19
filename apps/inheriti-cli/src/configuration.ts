@@ -7,6 +7,7 @@ import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_C
 
 export interface CliConfiguration {
   apiUrl: string;
+  deployment?: keyof typeof BUSINESS_DEPLOYMENTS;
   applicationId?: string;
   business?: boolean;
   issuer: string;
@@ -118,9 +119,14 @@ export function resolveConfiguration(
   liveConfirmation?: string,
 ): CliConfiguration {
   if (BUILD_DEPLOYMENT) {
+    const localApiUrl = BUILD_DEPLOYMENT === 'local' && processEnvironment.INHERITI_LOCAL_BUSINESS_API_URL
+      ? localBusinessApiUrl(processEnvironment.INHERITI_LOCAL_BUSINESS_API_URL)
+      : undefined;
     return {
       ...BUSINESS_DEPLOYMENTS[BUILD_DEPLOYMENT],
+      ...(localApiUrl ? { apiUrl: localApiUrl } : {}),
       business: true,
+      deployment: BUILD_DEPLOYMENT,
       clientId: BUSINESS_DEVICE_CLIENT_ID,
       interactiveClientId: BUSINESS_INTERACTIVE_CLIENT_ID,
       scopes: ['openid'],
@@ -165,6 +171,7 @@ export function resolveConfiguration(
     apiUrl: required(environmentVariables, 'INHERITI_ELEMENTS_API_URL', 'apiUrl'),
     ...(file.business ? {} : { applicationId: required(environmentVariables, 'INHERITI_ELEMENTS_APPLICATION_ID', 'applicationId') }),
     business: file.business,
+    ...(file.business && file.deployment ? { deployment: file.deployment } : {}),
     issuer: required(environmentVariables, 'INHERITI_ELEMENTS_ISSUER', 'issuer'),
     clientId: required(environmentVariables, 'INHERITI_ELEMENTS_CLIENT_ID', 'clientId'),
     interactiveClientId: environmentVariables.INHERITI_ELEMENTS_INTERACTIVE_CLIENT_ID
@@ -179,6 +186,17 @@ export function resolveConfiguration(
       ...(environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE ? { safeKeyProDevice: environmentVariables.INHERITI_SAFEKEY_PRO_DEVICE } : {}),
     } : {}),
   };
+}
+
+function localBusinessApiUrl(value: string): string {
+  if (!URL.canParse(value)) {
+    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Business API override must be an HTTPS /integrations/ URL.');
+  }
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash || url.pathname !== '/integrations/') {
+    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Business API override must be an HTTPS /integrations/ URL without credentials, query or fragment.');
+  }
+  return url.toString();
 }
 
 function defined(

@@ -1,0 +1,22 @@
+{
+  "name": "@safetech/inheriti-workspace",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@napi-rs/keyring": "2.1.0"
+  },
+  "scripts": {
+    "test": "cargo test --offline --manifest-path src-tauri/Cargo.toml",
+    "test:host": "vitest run --root . --config ../../vitest.config.ts tests/host/*.spec.ts",
+    "test:scripts": "node --test tests/scripts/*.test.mjs",
+    "test:portable": "node --test tests/scripts/fixture-corpus.test.mjs && cargo test --locked --manifest-path src-tauri/Cargo.toml --lib && cargo test --locked --manifest-path src-tauri/Cargo.toml --test portable_session",
+    "test:ui": "pnpm -C ../.. exec vitest run --config vitest.config.ts apps/inheriti-workspace/tests/ui/workspace.spec.ts",
+    "prepare:ui": "node scripts/prepare-ui-assets.mjs",
+    "build:host": "pnpm prepare:ui && esbuild src-tauri/sidecar/main.ts --bundle --platform=node --format=cjs --target=node22 --loader:.svg=base64 --loader:.ttf=base64 --external:@napi-rs/keyring --outfile=dist/host.cjs && node scripts/stage-keyring.mjs",
+    "build:prototype": "bash scripts/build-prototype-linux.sh",
+    "package:linux": "bash scripts/package-prototype-linux.sh",
+    "package:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
+    "package:macos": "bash scripts/package-macos.sh",
+    "probe:linux": "python3 scripts/probe-linux-isolation.py"
+  }
+}

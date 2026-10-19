@@ -50,6 +50,19 @@ describe('JwksOperatorTokenValidator', () => {
     expect(principal.scopes).toEqual(['openid', 'plan:list', 'plan:read']);
   });
 
+  it('retries signing-key discovery after a temporary request failure', async () => {
+    let attempts = 0;
+    const unstableFetch: typeof fetch = (input, init) => {
+      if (attempts++ === 0) throw new Error('network unavailable');
+      return issuerFetch(input, init);
+    };
+    const recovering = new JwksOperatorTokenValidator(ISSUER, unstableFetch);
+    const token = await signToken(validClaims());
+
+    await expect(recovering.validateAccessToken(token)).rejects.toThrow('network unavailable');
+    await expect(recovering.validateAccessToken(token)).resolves.toMatchObject({ subject: 'operator-1' });
+  });
+
   it('reads the signed Business integration environment claim', async () => {
     const principal = await validator.validateAccessToken(await signToken(validClaims({
       aud: 'inheriti-integrations-api', integrations_environment: 'LIVE', elements_environment: undefined,

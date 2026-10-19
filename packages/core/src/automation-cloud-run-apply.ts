@@ -31,7 +31,7 @@ const execFileAsync = promisify(execFile);
 const runCloudMutation: CloudCommandRunner = async (binary, args) => {
   try {
     const { stdout } = await execFileAsync(binary, args, {
-      timeout: 180_000, maxBuffer: 1024 * 1024, windowsHide: true,
+      timeout: 900_000, maxBuffer: 1024 * 1024, windowsHide: true,
     });
     return stdout;
   } catch {

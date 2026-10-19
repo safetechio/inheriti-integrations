@@ -1,0 +1,5 @@
+menu "Workspace optional Gnumeric application"
+source "$BR2_EXTERNAL_WORKSPACE_GNUMERIC_PATH/package/workspace-libgsf/Config.in"
+source "$BR2_EXTERNAL_WORKSPACE_GNUMERIC_PATH/package/workspace-goffice/Config.in"
+source "$BR2_EXTERNAL_WORKSPACE_GNUMERIC_PATH/package/workspace-gnumeric/Config.in"
+endmenu

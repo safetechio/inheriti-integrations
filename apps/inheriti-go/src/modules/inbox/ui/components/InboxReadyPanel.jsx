@@ -49,6 +49,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
       loadError={inbox.participants.error} onRetry={inbox.participants.refresh}
       onCreate={navigation.createConversation} busy={inbox.busy} names={inbox.participants.names} avatars={inbox.participants.avatars} presenceStatus={inbox.presenceStatus} />}
     {screen === 'thread' && <InboxMessageList conversationId={inbox.messages.conversationId}
+      protectedFileEnabled={identity?.protectedFileEnabled === true}
       messages={inbox.messages.items} normalMessages={inbox.messages.normalItems}
       parentMessages={inbox.messages.parentItems} parentUnreadCount={inbox.messages.parentUnreadCount} unitReveals={inbox.messages.unitReveals}
       normalUnreadCount={inbox.messages.normalUnreadCount} mode={inbox.messages.mode} setMode={inbox.messages.setMode}
@@ -60,7 +61,7 @@ export function InboxReadyPanel({ onClose, identity, organizationId, targetConve
       onCreatePlanFromFile={onCreatePlanFromFile} onSaveFileAsPlan={inbox.messages.saveFileAsPlan}
       onRefresh={inbox.messages.select}
       onView={inbox.messages.view} onSend={inbox.messages.send}
-      onSendFile={inbox.messages.sendFile} onSaveFile={inbox.messages.saveFile}
+      onSendFile={inbox.messages.sendFile} onSaveFile={inbox.messages.saveFile} onSaveProtectedFile={inbox.messages.saveProtectedFile}
       onCancelTransfer={inbox.messages.cancelTransfer} transfer={inbox.messages.transfer} pendingMessages={inbox.messages.pendingMessages} acceptedMessages={inbox.messages.acceptedMessages} onRetrySend={inbox.messages.retrySend}
       draft={inbox.messages.draft} setDraft={inbox.messages.setDraft} sendError={inbox.messages.sendError} busy={inbox.messages.busy} />}
     {screen === 'thread' && showMembers && conversation && <div className="inbox-sheet" role="dialog" aria-modal="true" aria-label="Participants">

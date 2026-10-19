@@ -6,6 +6,7 @@ import {
   githubAutomationWorkflow,
   githubAutomationWorkflowLocation,
   inspectCloudIdentity,
+  inspectEc2AutomationInstance,
   runLocalAutomationProofBrowser,
 } from '@safetech/inheriti-elements-core/node-base';
 import type { AutomationSetupOperations } from '@safetech/inheriti-elements-core/node-base';
@@ -127,17 +128,22 @@ export async function automationManage(
       terminal.writeError(usage);
       return 1;
     }
-    const hasTarget = ['--project', '--region', '--job', '--cluster', '--service',
+    const ec2 = provider.value === 'AWS' && options['--instance'];
+    const hasTarget = ['--project', '--job', '--cluster', '--service',
       '--task-definition', '--container'].some(key => options[key]);
     const target = hasTarget ? provider.target(options) : undefined;
-    if (hasTarget && (!target || options['--subject'] || options['--role-arn'])) {
+    if ((!ec2 && options['--region'] && !hasTarget) ||
+        (ec2 && (hasTarget || !options['--region'] || options['--role-arn'])) ||
+        (hasTarget && (!target || options['--subject'] || options['--role-arn']))) {
       terminal.writeError(usage);
       return 1;
     }
     const inspected = target ? await inspectCloudIdentity(target) : undefined;
+    const instance = ec2 ? await inspectEc2AutomationInstance({ region: options['--region']!, instanceId: ec2 }) : undefined;
     const resolvedOptions = {
       ...options,
       ...(inspected ? provider.inspectedTrust(inspected) : {}),
+      ...(instance ? { '--role-arn': instance.roleArn } : {}),
     };
     const details = provider.trust(resolvedOptions, id);
     if (!details || !AutomationProviderValue.from(provider.value).accepts(details)) { terminal.writeError(usage); return 1; }

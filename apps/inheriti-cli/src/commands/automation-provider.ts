@@ -80,7 +80,7 @@ class GoogleCloudProvider extends CliAutomationProvider {
 
 class AwsProvider extends CliAutomationProvider {
   readonly value = 'AWS';
-  readonly createFlags = [...commonFlags, '--role-arn', '--region', '--cluster', '--service', '--task-definition', '--container'];
+  readonly createFlags = [...commonFlags, '--role-arn', '--region', '--cluster', '--service', '--task-definition', '--container', '--instance'];
 
   trust(options: Options): AutomationTrust | undefined {
     if (!options['--role-arn']) return;

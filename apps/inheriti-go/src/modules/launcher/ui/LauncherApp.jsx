@@ -119,12 +119,13 @@ export function LauncherApp({ messages }) {
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
   const status = flow.error || session.error || state.message || ({
     'signed-out': messages.signedOut,
+    'session-unavailable': messages.sessionUnavailable,
     authorizing: messages.authorizing,
     'signed-in': messages.signedIn,
     error: messages.signInError,
   })[state.status];
 
-  if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} onSignIn={() => void session.signIn()} onCancelSignIn={() => void flow.signOut()} onOpenApp={() => void session.openApp()} />;
+  if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'} onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void flow.signOut()} onOpenApp={() => void session.openApp()} />;
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 

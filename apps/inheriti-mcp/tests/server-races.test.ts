@@ -89,6 +89,7 @@ function deferred<T>() {
 
 it('starts a fresh browser login after successful login and later session loss', async () => {
   const tools = new MetadataTools() as any;
+  tools.silentAttempted = true;
   let authenticated = false;
   const first = deferred<void>();
   const second = deferred<void>();
@@ -99,6 +100,7 @@ it('starts a fresh browser login after successful login and later session loss',
   expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/first');
   authenticated = true;
   expect(await tools.authorized()).toHaveProperty('auth');
+  tools.silentAttempted = true;
   authenticated = false;
   expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/second');
   expect(begin).toHaveBeenCalledTimes(2);
@@ -107,6 +109,7 @@ it('starts a fresh browser login after successful login and later session loss',
 
 it('reports a failed browser login before offering another URL', async () => {
   const tools = new MetadataTools() as any;
+  tools.silentAttempted = true;
   const completed = deferred<void>();
   const begin = vi.mocked(beginBrowserLogin).mockReset().mockResolvedValueOnce({ authorizationUrl: 'https://login/first', completed: completed.promise, cancel: vi.fn() })
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/second', completed: new Promise(() => undefined), cancel: vi.fn() });
@@ -121,6 +124,33 @@ it('reports a failed browser login before offering another URL', async () => {
   });
   expect(begin).toHaveBeenCalledTimes(1);
   expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/second');
+});
+
+it('uses an existing browser session without presenting an interactive challenge', async () => {
+  const tools = new MetadataTools() as any;
+  let authenticated = false;
+  const begin = vi.mocked(beginBrowserLogin).mockReset().mockImplementationOnce(async () => {
+    authenticated = true;
+    return { authorizationUrl: 'https://login/silent', completed: Promise.resolve(), cancel: vi.fn() };
+  });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  const core = { getAccessToken: async () => authenticated ? 'token' : undefined, auth: {} };
+  tools.client = async () => core;
+  expect(await tools.authorized()).toBe(core);
+  expect(begin).toHaveBeenCalledExactlyOnceWith(core.auth, tools.authConfiguration, undefined, { prompt: 'none', timeoutMs: 30_000 });
+});
+
+it('falls back to one interactive challenge after silent login is unavailable', async () => {
+  const tools = new MetadataTools() as any;
+  const begin = vi.mocked(beginBrowserLogin).mockReset()
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/silent', completed: Promise.reject(Object.assign(new Error('login_required'), { code: 'login_required' })), cancel: vi.fn() })
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/interactive', completed: new Promise(() => undefined), cancel: vi.fn() });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/interactive');
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/interactive');
+  expect(begin).toHaveBeenCalledTimes(2);
+  expect(begin.mock.calls[1]?.[3]).toBeUndefined();
 });
 
 it('reserves a reveal before plan detail and blocks delivery after organization switch', async () => {
@@ -267,6 +297,7 @@ it('clears held keys and cancels local work when SDK refresh loses the session',
 
 it('does not let retired authorization clear a fresh single-flight challenge', async () => {
   const tools = new MetadataTools() as any;
+  tools.silentAttempted = true;
   const oldChallenge = deferred<any>();
   const newChallenge = deferred<any>();
   const begin = vi.mocked(beginBrowserLogin).mockReset().mockImplementationOnce(() => oldChallenge.promise)
@@ -276,6 +307,7 @@ it('does not let retired authorization clear a fresh single-flight challenge', a
   const old = tools.authorized();
   await vi.waitFor(() => expect(begin).toHaveBeenCalledOnce());
   await tools.logout();
+  tools.silentAttempted = true;
   tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
   tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
   const current = tools.authorized();

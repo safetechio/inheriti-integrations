@@ -1,0 +1,9 @@
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/workspace-vm/
+src-tauri/workspace-vm.staging-*/
+src-tauri/gen/schemas/
+scripts/__pycache__/
+__pycache__/
+ui/assets/
+tests/**/README.md

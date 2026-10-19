@@ -20,7 +20,7 @@ import type { ElementsEnvironment, OperatorAuthFacade } from './index.js';
  * Web Crypto rather than `node:crypto` so the same code verifies inside a Chrome service worker.
  */
 export class JwksOperatorTokenValidator implements OperatorTokenValidator {
-  private keys?: Promise<Map<string, CryptoKey>>;
+  private keys: Promise<Map<string, CryptoKey>> | undefined;
 
   constructor(
     private readonly issuer: string,
@@ -38,7 +38,10 @@ export class JwksOperatorTokenValidator implements OperatorTokenValidator {
   }
 
   private signingKeys(): Promise<Map<string, CryptoKey>> {
-    this.keys ??= this.loadSigningKeys();
+    this.keys ??= this.loadSigningKeys().catch(error => {
+      this.keys = undefined;
+      throw error;
+    });
     return this.keys;
   }
 
@@ -138,6 +141,7 @@ export interface OperatorAuthOptions {
   transactions?: OAuthTransactionStore;
   tokenValidator?: OperatorTokenValidator;
   fetchImpl?: typeof fetch;
+  authFetchImpl?: typeof fetch;
 }
 
 /**
@@ -167,11 +171,12 @@ export interface OperatorAuthRuntime {
  * verification (D025).
  */
 export function composeOperatorAuth(runtime: OperatorAuthRuntime, options: OperatorAuthOptions): OperatorAuthFacade {
+  const authFetch = options.authFetchImpl ?? options.fetchImpl;
   return new runtime.OperatorAuthClient({
     configuration: options.configuration,
-    transport: new runtime.HttpOperatorAuthTransport(options.fetchImpl),
+    transport: new runtime.HttpOperatorAuthTransport(authFetch),
     tokenValidator: options.tokenValidator
-      ?? new JwksOperatorTokenValidator(options.configuration.issuer, options.fetchImpl,
+      ?? new JwksOperatorTokenValidator(options.configuration.issuer, authFetch,
         options.configuration.audience === 'inheriti-integrations-api' ? options.configuration.environment : undefined),
     sessions: options.sessions ?? new MemoryOperatorSessionStore(),
     transactions: options.transactions ?? new MemoryOAuthTransactionStore(),

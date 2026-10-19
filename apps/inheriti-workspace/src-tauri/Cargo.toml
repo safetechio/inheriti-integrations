@@ -1,0 +1,76 @@
+[package]
+name = "inheriti-workspace"
+version = "0.0.1"
+edition = "2021"
+default-run = "inheriti-workspace"
+
+[features]
+workspace-test-harness = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+image-webp = "=0.2.4"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+sha2 = "0.10"
+ring = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_System_Threading"] }
+
+[[bin]]
+name = "preview-helper"
+path = "src/bin/preview-helper.rs"
+
+[[test]]
+name = "workspace_vm"
+path = "../tests/vm/workspace_vm.rs"
+
+[[test]]
+name = "graphical_vm"
+path = "../tests/vm/graphical_vm.rs"
+
+
+[[test]]
+name = "parent_death_vm"
+path = "../tests/vm/parent_death_vm.rs"
+
+[[test]]
+name = "network_rejection_vm"
+path = "../tests/vm/network_rejection_vm.rs"
+
+[[test]]
+name = "compromised_guest_vm"
+path = "../tests/vm/compromised_guest_vm.rs"
+
+[[test]]
+name = "portable_session"
+path = "../tests/integration/portable_session.rs"
+
+[[test]]
+name = "real_optional_adapter_vm"
+path = "../tests/vm/real_optional_adapter_vm.rs"
+
+[[test]]
+name = "real_gnumeric_adapter_vm"
+path = "../tests/vm/real_gnumeric_adapter_vm.rs"
+
+[[test]]
+name = "real_gridcraft_adapter_vm"
+path = "../tests/vm/real_gridcraft_adapter_vm.rs"
+
+[[test]]
+name = "real_mpv_adapter_vm"
+path = "../tests/vm/real_mpv_adapter_vm.rs"
+
+[[test]]
+name = "real_wordcraft_adapter_vm"
+path = "../tests/vm/real_wordcraft_adapter_vm.rs"

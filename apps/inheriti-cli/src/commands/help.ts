@@ -21,7 +21,7 @@ inheriti <command>
   automations list   List safe connection metadata
   automations grants PLAN_ID List safe grant metadata for one plan
   automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML
-  automations pair start|redeem Verify a workload without copying its proof
+  automations pair start|redeem|aws|google Verify a workload without copying its proof
   secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)
   automations grant create|activate|member|revoke Manage a plan grant
   plans list [--limit n] [--all] [--cursor c] [--organization id]
@@ -37,8 +37,9 @@ inheriti <command>
   plans reveal [id] [--field asset.field ...]
                      Copy one or more selected fields without printing their values.
                      Whether approval is needed is read from the plan.
-  plans download [id] --asset code-or-id --output path
-                     Save one authorized media asset to a new restricted file.
+  plans download [id] --asset code-or-id --output path [--open-limit n]
+                     Save one authorized media asset. The Business deployment decides whether output is .inheriti.
+  plans open path    Open a saved .inheriti file in Inheriti Workspace.
   ${'plans use [id] [--stdin asset.field] [--env NAME=asset.field ...] [--fd N=asset.field ...] ' +
     '[--temp-file NAME=asset.field ...] [--socket NAME=asset.field ...] [--ttl 30s] ' +
     '[--output suppress|inherit] -- command [args]'}
@@ -83,6 +84,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `automatically using the installed Google Cloud CLI. Alternatively pass --subject NUMERIC_ID. ` +
       `AWS: --region REGION --cluster CLUSTER --service SERVICE reads taskRoleArn automatically ` +
       `using the installed AWS CLI; --task-definition ARN can replace --service. Alternatively ` +
+      `--region REGION --instance INSTANCE_ID reads the attached EC2 instance profile role, or ` +
       `pass --role-arn TASK_ROLE_ARN, never executionRoleArn. For multi-container workloads, ` +
       `also pass --container NAME. PORTABLE: --key-id ID ` +
       `--public-key 'MULTILINE_PEM_PUBLIC_KEY' --subject NAME --environment NAME must match the runner ` +
@@ -92,9 +94,11 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `from the running workload. You must already have a secure way to transfer that proof: this command ` +
       `opens the window but does not collect proof from Cloud Run or ECS. Never pass proof on the command line or ` +
       `print it in logs.`,
-    'automations pair': `Usage: inheriti automations pair <start|redeem>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
+    'automations pair': `Usage: inheriti automations pair <start|redeem|aws|google>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
     'automations pair start': `Usage: inheriti automations pair start [--connection ID]\n\nOpen a ten-minute pairing window for the selected connection. No ticket or proof is printed. Run pair redeem inside that workload before expiry.`,
     'automations pair redeem': `Usage: inheriti automations pair redeem\n\nRun inside the configured workload during its pairing window with the usual provider identity settings. Obtains a fresh native proof and verifies the connection directly; no operator login is needed inside the workload.`,
+    'automations pair aws': `Usage: inheriti automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE --image IMAGE_DIGEST [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]\n\nRun one temporary ECS task with the service task role to verify the connection. The immutable image must include Inheriti CLI. The service is not changed. Review the task revision before noninteractive use.`,
+    'automations pair google': `Usage: inheriti automations pair google --connection ID --project PROJECT --region REGION (--service SERVICE | --job JOB) [--expect-revision GENERATION]\n\nRun one temporary Cloud Run job with the source workload identity to verify the connection. Its immutable image must include Inheriti CLI at /usr/local/bin/inheriti. The source workload is not changed. Review its generation before noninteractive use.`,
     'automations trust': `Usage: inheriti automations trust [--connection ID] --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
       `PROVIDER_FIELDS\n\nReplace nonsecret trust fields using the same provider fields as create. ` +
       `Reverification may be required.`,
@@ -118,9 +122,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     'automations setup': `Usage: inheriti automations setup --plan PLAN_ID [--connection CONNECTION_ID] ` +
       `(--map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ... | --map NAME=ASSET.FIELD ... | --field ASSET.FIELD --env-name NAME) ` +
       `[--project PROJECT --region REGION (--job JOB | --service SERVICE) | --region REGION --cluster CLUSTER ` +
-      `(--service SERVICE | --task-definition ARN)] [--container NAME] [--script-path ABSOLUTE_PATH] ` +
+      `(--service SERVICE | --task-definition ARN) | --region REGION --instance INSTANCE_ID ` +
+      `--service-name NAME --run-as-user USER -- APP_COMMAND [ARGS...]] [--container NAME] [--script-path ABSOLUTE_PATH] ` +
       `[--cli-path ABSOLUTE_PATH] [--apply --image IMAGE_DIGEST [--expect-revision REVISION]]\n\n` +
-      `Prepare a Cloud Run, ECS, or custom runner launch script for a verified connection and active plan grant. ` +
+      `Prepare a Cloud Run, ECS, EC2, or custom runner launch script for a verified connection and active plan grant. ` +
       `Use --map-all or repeatable --only for generated names; --except omits fields from --map-all. ` +
       `Repeat --map to rename a generated variable or map fields explicitly. Review mappings before applying. ` +
       `Without a managed target, save the launcher for a VM or cluster. ` +
@@ -167,9 +172,12 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `ALL. Each field copy is authorized and audited independently. --clipboard-ttl waits in the ` +
       `foreground and conditionally clears unchanged clipboard content. Cleanup is best effort; ` +
       `clipboard history, synchronization, shutdown and SIGKILL remain outside its control.`,
-    'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save ` +
-      `one media asset to a new file with owner-only permissions. Existing files are never ` +
-      `overwritten.`,
+    'plans open': `Usage: inheriti plans open PATH\n\nOpen a local .inheriti file in the installed Inheriti Workspace. The file path stays on this computer.`,
+    'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH ` +
+      `[--open-limit N]\n\nAuthorize and save one media asset to a new file with owner-only ` +
+      `permissions. The Business deployment determines whether this is a protected .inheriti copy; ` +
+      `when enabled, --output must end in .inheriti and its opening limit defaults to one. ` +
+      `Existing files are never overwritten.`,
     'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd ` +
       `N=ASSET.FIELD ...] [--temp-file NAME=ASSET.FIELD ...] [--socket NAME=ASSET.FIELD ...] [--ttl ` +
       `DURATION] [--output suppress|inherit] -- EXECUTABLE [ARGUMENT ...]\n\nAuthorize and deliver ` +

@@ -6,6 +6,11 @@ const { deliverAssetInBrowser, deliverInBrowser, deliverFieldsInBrowser, deliver
   deliverSelectionInBrowser: vi.fn().mockResolvedValue(undefined),
   deliverInBrowser: vi.fn().mockResolvedValue(undefined),
 }));
+const { chooseProtectedFile, saveProtectedFile } = vi.hoisted(() => ({
+  chooseProtectedFile: vi.fn().mockResolvedValue('/private/report.inheriti'),
+  saveProtectedFile: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../src/runtime/protected-file.js', () => ({ chooseProtectedFile, saveProtectedFile }));
 vi.mock('../src/local-browser.js', () => ({
   deliverInBrowser,
   deliverFieldsInBrowser,
@@ -39,12 +44,41 @@ it('downloads a binary through the local page without returning bytes or a URL t
 
 it('registers the download tool with a status-only MCP result', async () => {
   const handlers = new Map<string, (args: unknown) => Promise<unknown>>();
-  const server = { registerTool: (name: string, _options: unknown, handler: (args: unknown) => Promise<unknown>) => { handlers.set(name, handler); } };
+  const schemas = new Map<string, { safeParse: (args: unknown) => { success: boolean } }>();
+  const server = { registerTool: (name: string, options: { inputSchema: { safeParse: (args: unknown) => { success: boolean } } }, handler: (args: unknown) => Promise<unknown>) => {
+    schemas.set(name, options.inputSchema); handlers.set(name, handler);
+  } };
   const reveal = vi.fn().mockResolvedValue({ jobId: 'job-1', status: 'WAITING', phase: 'STARTING' });
   registerRevealTools(server as never, { reveal, revealStatus: vi.fn() } as never);
   const result = await handlers.get('download_plan_asset')!({ planId: 'plan-1', asset: 'file-1' });
   expect(reveal).toHaveBeenCalledWith('plan-1', 'file-1', 'ASSET');
+  expect(schemas.get('download_plan_asset')!.safeParse({ planId: 'plan-1', asset: 'file-1', protected: false }).success).toBe(false);
   expect(result).toEqual({ content: [{ type: 'text', text: JSON.stringify({ jobId: 'job-1', status: 'WAITING', phase: 'STARTING' }) }] });
+  await handlers.get('download_plan_asset')!({ planId: 'plan-1', asset: 'file-1', openLimit: 3 });
+  expect(reveal).toHaveBeenLastCalledWith('plan-1', 'file-1', 'ASSET', { openLimit: 3 });
+});
+
+it('rejects protected file options when the local flag is off', async () => {
+  const tools = new MetadataTools() as any;
+  tools.config = { deployment: 'local' };
+  tools.selected = async () => ({ organizationId: 'org-1' });
+  await expect(tools.reveal('plan-1', 'file-1', 'ASSET', { openLimit: 2 }))
+    .rejects.toMatchObject({ code: 'protected_file_unavailable' });
+  expect(chooseProtectedFile).not.toHaveBeenCalled();
+  expect(saveProtectedFile).not.toHaveBeenCalled();
+});
+
+it('allows the ordinary binary reveal when protected files are disabled', async () => {
+  const tools = new MetadataTools() as any;
+  tools.config = { deployment: 'local' };
+  const withReveal = vi.fn();
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ assets: [{ id: 'file-1', isBinary: true }], governance: { mode: 'DIRECT' } }),
+    withReveal,
+  } });
+  const started = await tools.revealFields('plan-1', { assets: ['file-1'] });
+  await vi.waitFor(async () => expect((await tools.revealStatus(started.jobId)).status).toBe('DELIVERED'));
+  expect(withReveal).toHaveBeenCalled();
 });
 
 it('reports a named moderation denial without exposing delivered material', async () => {

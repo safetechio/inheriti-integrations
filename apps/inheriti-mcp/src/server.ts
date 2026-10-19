@@ -13,12 +13,15 @@ import { planDetail, planSummary } from './metadata.js';
 import { registerTools } from './tools/index.js';
 import { coded, safeErrorCode } from './runtime/errors.js';
 import { configPath, configuration, lockedDeployment } from './runtime/configuration.js';
+import { authFetch } from './runtime/auth-fetch.js';
 import type { Configuration } from './runtime/configuration.js';
 import {
   listAutomationConnections, listAutomationGrants, githubAutomationUsage, listAutomationMembers,
   createAutomationConnection, changeAutomationTrust, disableAutomationConnection, manageAutomationGrant,
   startAutomationSetup, startAutomationPairing, automationSetupStatus,
 } from './runtime/automation.js';
+import { pairAwsAutomationService, prepareAutomationEc2 } from './runtime/aws-setup.js';
+import { pairGoogleAutomationService } from './runtime/google-pair.js';
 import { createPlanWithAssistant, planCreationStatus } from './runtime/plan-assistant.js';
 import { applyAutomationRuntime, prepareAutomationRuntime } from './runtime/runtime-setup.js';
 import type { CloudTarget } from '@safetech/inheriti-elements-core/node-base';
@@ -48,6 +51,7 @@ export class MetadataTools {
   selectionVersion = 0;
   private login: { authorizationUrl: string } | undefined;
   private loginFailure: string | undefined;
+  private silentAttempted = false;
 
   async updateAccess(onChallenge: (url: string) => void): Promise<NodeIntegrationCore> {
     const initial = await this.ready();
@@ -90,6 +94,7 @@ export class MetadataTools {
         apiUrl: this.config.apiUrl, business: true, environment: this.config.environment,
         liveConfirmation: this.config.environment,
         configuration: this.authConfiguration,
+        authFetchImpl: authFetch,
         sessions: this.sessions,
       });
     }
@@ -121,6 +126,7 @@ export class MetadataTools {
       this.browserLogin = undefined;
       this.login = undefined;
       this.loginFailure = undefined;
+      this.silentAttempted = false;
       return core;
     }
     await this.stopLocalAccess();
@@ -129,6 +135,19 @@ export class MetadataTools {
       const code = this.loginFailure;
       this.loginFailure = undefined;
       throw coded(code);
+    }
+    if (!this.silentAttempted && !process.env.INHERITI_ELEMENTS_NO_BROWSER) {
+      this.silentAttempted = true;
+      try {
+        const silent = await beginBrowserLogin(core.auth, this.authConfiguration!, undefined, { prompt: 'none', timeoutMs: 30_000 });
+        try { this.assertGeneration(generation); }
+        catch (error) { silent.cancel(); throw error; }
+        this.browserLogin = silent;
+        try { await silent.completed; }
+        finally { if (this.browserLogin === silent) this.browserLogin = undefined; }
+        this.assertGeneration(generation);
+        if (await core.getAccessToken()) return core;
+      } catch { this.assertGeneration(generation); }
     }
     if (!this.login) {
       const started = await beginBrowserLogin(core.auth, this.authConfiguration!);
@@ -285,6 +304,7 @@ export class MetadataTools {
     this.login = undefined;
     this.browserLogin = undefined;
     this.loginFailure = undefined;
+    this.silentAttempted = false;
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
     if (retiredScoped) await retiredScoped.core.forgetMasterKey();
@@ -359,6 +379,21 @@ export class MetadataTools {
   }
   async startAutomationSetup(connectionId: string) { return startAutomationSetup.call(this, connectionId); }
   async startAutomationPairing(connectionId: string) { return startAutomationPairing.call(this, connectionId); }
+  async pairAwsAutomationService(input: { connectionId: string; region: string; cluster: string; service: string;
+    container?: string; image: string; cliPath: string; expectedRevision: string }) {
+    return pairAwsAutomationService.call(this, input);
+  }
+  async pairGoogleAutomationService(input: {
+    connectionId: string; project: string; region: string; service: string; expectedRevision: string;
+  }) {
+    return pairGoogleAutomationService.call(this, input);
+  }
+  async prepareAutomationEc2(input: { planId: string; connectionId: string; region: string; instanceId: string;
+    serviceName: string; runAsUser: string; launcherPath: string; applicationCommand: string[];
+    mappings?: ReadonlyArray<{ selector: string; envName: string }>;
+    mapAll?: boolean; onlyFields?: readonly string[]; exceptFields?: readonly string[] }) {
+    return prepareAutomationEc2.call(this, input);
+  }
   async automationSetupStatus(jobId: string, cancel = false) { return automationSetupStatus.call(this, jobId, cancel); }
   async prepareAutomationRuntime(input: { planId: string; connectionId: string; field?: string; environmentVariable?: string;
     mappings?: ReadonlyArray<{ selector: string; envName: string }>;
@@ -371,11 +406,11 @@ export class MetadataTools {
   }
   async createPlanWithAssistant(hints?: LocalPlanHints) { return createPlanWithAssistant.call(this, hints); }
   async planCreationStatus(jobId: string, cancel = false) { return planCreationStatus.call(this, jobId, cancel); }
-  async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD') { return reveal.call(this, planId, selector, kind); }
+  async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD', options?: { openLimit?: number }) { return reveal.call(this, planId, selector, kind, options); }
   async revealFields(planId: string, selection: { selector?: string | undefined; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined }) {
     return revealFields.call(this, planId, selection);
   }
-  async startReveal(planId: string, request: { kind: 'ASSET'; asset: string } | { kind: 'FIELD'; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined; single: boolean; publication?: { provider: 'AWS'; region: string; expectedAccountId: string; mappings: ReadonlyArray<{ selector: string; key: string }>; secretName?: string; parameterPrefix?: string } | { provider: 'GOOGLE_CLOUD'; projectId: string; secretPrefix: string; mappings: ReadonlyArray<{ selector: string; key: string }> } }) {
+  async startReveal(planId: string, request: { kind: 'ASSET'; asset: string; openLimit?: number } | { kind: 'FIELD'; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined; single: boolean; publication?: { provider: 'AWS'; region: string; expectedAccountId: string; mappings: ReadonlyArray<{ selector: string; key: string }>; secretName?: string; parameterPrefix?: string } | { provider: 'GOOGLE_CLOUD'; projectId: string; secretPrefix: string; mappings: ReadonlyArray<{ selector: string; key: string }> } }) {
     return startReveal.call(this, planId, request);
   }
   async revealStatus(jobId: string, cancel = false) { return revealStatus.call(this, jobId, cancel); }

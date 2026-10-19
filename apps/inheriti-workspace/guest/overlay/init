@@ -1,0 +1,66 @@
+#!/bin/sh
+# This is PID 1 of a disposable guest. An optional app disk is read-only.
+set -eu
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs -o size=32m,mode=0700 tmpfs /run
+mount -t tmpfs -o size=8m,mode=1777 tmpfs /tmp
+mkdir -m 0700 /run/session
+mkdir -m 0755 /dev/virtio-ports
+chmod 0711 /run
+chown 65534:65534 /run/session
+
+# The custom PID 1 bypasses Buildroot's S10udevd service. Start and settle
+# eudev explicitly so Xorg/libinput see the virtio keyboard and tablet.
+/sbin/udevd --daemon
+/sbin/udevadm trigger --type=subsystems --action=add
+/sbin/udevadm trigger --type=devices --action=add
+/sbin/udevadm settle --timeout=10
+
+# Authenticate an optional application image against its signed descriptor.
+/usr/sbin/workspace-mount-adapter || poweroff -f
+
+# The unprivileged text viewer needs a private pseudoterminal inside the VM.
+mkdir -p /dev/pts
+mount -t devpts -o mode=0620,ptmxmode=0666 devpts /dev/pts
+ln -sf pts/ptmx /dev/ptmx
+
+# No NIC may be supplied by the host. Fail closed if the VM command changes.
+for interface in /sys/class/net/*; do
+    [ -e "$interface" ] || continue
+    [ "${interface##*/}" = lo ] || poweroff -f
+done
+
+attempt=0
+while [ ! -e /dev/virtio-ports/org.inheriti.workspace ]; do
+    for name_file in /sys/class/virtio-ports/*/name; do
+        [ -r "$name_file" ] || continue
+        IFS= read -r port_name < "$name_file"
+        [ "$port_name" = org.inheriti.workspace ] || continue
+        device="${name_file%/name}"
+        device="${device##*/}"
+        [ -e "/dev/$device" ] || continue
+        ln -s "/dev/$device" /dev/virtio-ports/org.inheriti.workspace
+    done
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 100 ] || poweroff -f
+    sleep 0.05
+done
+
+# Xorg uses virtio-gpu DRM. Its Unix socket is guest-local; TCP is disabled.
+mkdir -m 1777 /tmp/.X11-unix
+/usr/bin/Xorg :0 -ac -nolisten tcp -noreset -logfile /run/Xorg.log &
+xpid=$!
+attempt=0
+while [ ! -S /tmp/.X11-unix/X0 ]; do
+    kill -0 "$xpid" 2>/dev/null || poweroff -f
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 100 ] || poweroff -f
+    sleep 0.05
+done
+export DISPLAY=:0
+/usr/sbin/workspace-agent
+kill "$xpid" 2>/dev/null || true
+/sbin/udevadm control --exit || true
+poweroff -f

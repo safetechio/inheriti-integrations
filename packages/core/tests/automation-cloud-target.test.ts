@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { inspectCloudIdentity, inspectCloudTarget, previewCloudTarget } from '../src/automation-cloud-target.js';
+import { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget } from '../src/automation-cloud-target.js';
 import type { CloudCommandRunner } from '../src/automation-cloud-target.js';
 
 const cloudRun = { provider: 'GOOGLE_CLOUD' as const, project: 'test-project', region: 'us-central1', job: 'backup-job' };
@@ -88,6 +88,31 @@ describe('cloud target inspection', () => {
     expect(result.command).toEqual(['/bin/sh', '-c', 'exec node server.js']);
     expect(result.identity).toBe('arn:aws:iam::123456789012:role/app');
     expect(JSON.stringify(result)).not.toContain('do-not-return');
+  });
+
+  it('pairs an ECS service that inherits its image entry point', async () => {
+    const run: CloudCommandRunner = async (_, args) => args[1] === 'describe-services'
+      ? JSON.stringify({ services: [{ taskDefinition: 'arn:aws:ecs:us-east-1:123456789012:task-definition/app:3' }], failures: [] })
+      : JSON.stringify({ taskDefinition: {
+        taskDefinitionArn: 'arn:aws:ecs:us-east-1:123456789012:task-definition/app:3',
+        taskRoleArn: 'arn:aws:iam::123456789012:role/app',
+        containerDefinitions: [{ name: 'app', image: 'example:3' }],
+      } });
+    await expect(inspectCloudTarget(ecs, run)).rejects.toThrow('automation_cloud_startup_unknown');
+    await expect(inspectCloudTargetForPairing(ecs, run)).resolves.toMatchObject({
+      identity: 'arn:aws:iam::123456789012:role/app',
+      revision: 'arn:aws:ecs:us-east-1:123456789012:task-definition/app:3',
+    });
+  });
+
+  it('inspects a Cloud Run service for pairing without requiring an explicit startup command', async () => {
+    const target = { provider: 'GOOGLE_CLOUD' as const, project: 'test-project', region: 'us-central1', service: 'app' };
+    const run: CloudCommandRunner = async (_, args) => args[0] === 'iam' ? '123456789\n'
+      : cloudRunServiceResponse([{ image: 'example:latest' }]);
+    await expect(inspectCloudTarget(target, run)).rejects.toThrow('automation_cloud_startup_unknown');
+    await expect(inspectCloudTargetForPairing(target, run)).resolves.toMatchObject({
+      revision: '11', identityNumericId: '123456789',
+    });
   });
 
   it('refuses implicit image startup and multiple containers', async () => {

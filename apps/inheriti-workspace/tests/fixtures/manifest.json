@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "file": "sample-image.png",
+      "bytes": 199,
+      "sha256": "84440732fd8261fb7f4306c93bb4eb5f056e7c87d9c46353e424a87064578fe9",
+      "contentType": "image/png",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-document.pdf",
+      "bytes": 602,
+      "sha256": "f4fd122f4c72987188c6673aa89658cc77781b7ea6a6fb0559e595df1b8d3026",
+      "contentType": "application/pdf",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-spreadsheet.xlsx",
+      "bytes": 1388,
+      "sha256": "1ffe4160367ace3e75dc9fddc45edf5782156f604b2ea2e5be2e23f24b4b2b35",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-notes.txt",
+      "bytes": 51,
+      "sha256": "c367d0e2bdf74b6ba1cf2ff16d04fc968d9ab2a9ff43cf0458a21c4511e7f49a",
+      "contentType": "text/plain",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-data.json",
+      "bytes": 58,
+      "sha256": "fca291c25b6657725f2e93d24e73af7c785968a5f619c16abb6219bb2285b2e2",
+      "contentType": "application/json",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-table.csv",
+      "bytes": 40,
+      "sha256": "ee3d5b3366ab29295747d9cf7dbb3c5829565e80121d5139bc5ddb135d2c8d21",
+      "contentType": "text/csv",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-letter.docx",
+      "bytes": 801,
+      "sha256": "5b5feae0f61ecd54f49f400a27ef578fefba72e734805b4b971ed35588675a33",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-letter.odt",
+      "bytes": 641,
+      "sha256": "0160505d2c36e0730444d11f8d80fc908fa33b17415c3c0ecc37dbd6e5826257",
+      "contentType": "application/vnd.oasis.opendocument.text",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-archive.zip",
+      "bytes": 149,
+      "sha256": "aabbc382573f4d0d0cb5a7f81b38e0db2517d570ded063c7d2201fddd539c7fc",
+      "contentType": "application/zip",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": true
+      }
+    },
+    {
+      "file": "sample-video.mp4",
+      "bytes": 8289,
+      "sha256": "19dc8fbb4baa628235633e6c4289dd86332173eb76a0a8b06fb9d75cc9026496",
+      "contentType": "video/mp4",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": false,
+        "guestLaunchAck": false
+      }
+    },
+    {
+      "file": "sample-video.webm",
+      "bytes": 7373,
+      "sha256": "ee2cc12e2158429720f3864ab4bdb619dc9965629ffb946a712a1188322562c1",
+      "contentType": "video/webm",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": false,
+        "guestLaunchAck": false
+      }
+    },
+    {
+      "file": "truncated-image.png",
+      "bytes": 8,
+      "sha256": "4c4b6a3be1314ab86138bef4314dde022e600960d8689a2c8f8631802d20dab6",
+      "contentType": "image/png",
+      "expected": {
+        "portableSessionAdmission": true,
+        "guestAdmission": true,
+        "guestLaunchAck": false
+      }
+    }
+  ]
+}

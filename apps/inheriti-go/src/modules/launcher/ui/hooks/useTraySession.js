@@ -20,6 +20,15 @@ export function useTraySession(messages) {
     }
   }
 
+  async function restore() {
+    try {
+      setError('');
+      setState(await window.inheritiTray.restore());
+    } catch {
+      setError(messages.sessionUnavailable);
+    }
+  }
+
   async function openApp(planId) {
     try {
       await window.inheritiTray.openApp(planId);
@@ -28,5 +37,5 @@ export function useTraySession(messages) {
     }
   }
 
-  return { state, setState, error, setError, signIn, openApp };
+  return { state, setState, error, setError, signIn, restore, openApp };
 }

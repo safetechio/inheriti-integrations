@@ -21,7 +21,7 @@ const PLANS = candidates(
 );
 const SECRETS = candidates(['exec', 'Run a command with Inheriti secrets'], ['resolve', 'Resolve one field'], ['publish', 'Optional one-time copy to cloud secret stores']);
 const ORGANIZATIONS = candidates(['list', 'List organisations'], ['use', 'Select an organisation']);
-const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['usage', 'Print GitHub workflow'], ['setup', 'Prepare workload launcher'], ['grant', 'Manage plan grant']);
+const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['usage', 'Print GitHub workflow'], ['setup', 'Prepare workload launcher'], ['pair', 'Verify workload identity'], ['grant', 'Manage plan grant']);
 
 type Completion =
   | { kind: 'static'; candidates: Candidate[] }
@@ -116,9 +116,11 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
     if (words.length === 2) return { kind: 'static', candidates: AUTOMATIONS };
     if (subcommand === 'grant' && words.length === 3) return { kind: 'static', candidates: ['create', 'activate', 'member', 'revoke'].map(value => ({ value })) };
     if (subcommand === 'grant') return { kind: 'static', candidates: ['--plan', '--grant', '--connection', '--member', '--id', '--help'].map(value => ({ value })) };
-    if (subcommand === 'create' || subcommand === 'trust') return { kind: 'static', candidates: ['--name', '--provider', '--deployment-environment', '--repository', '--environment', '--workflow', '--audience-base', '--subject', '--role-arn', '--key-id', '--public-key', '--connection', '--id', '--help'].map(value => ({ value })) };
+    if (subcommand === 'create' || subcommand === 'trust') return { kind: 'static', candidates: ['--name', '--provider', '--deployment-environment', '--repository', '--environment', '--workflow', '--audience-base', '--subject', '--role-arn', '--region', '--instance', '--key-id', '--public-key', '--connection', '--id', '--help'].map(value => ({ value })) };
     if (subcommand === 'verify' || subcommand === 'disable') return { kind: 'static', candidates: ['--connection', '--help'].map(value => ({ value })) };
-    if (subcommand === 'setup') return { kind: 'static', candidates: ['--plan', '--connection', '--map-all', '--only', '--except', '--map', '--field', '--env-name', '--project', '--region', '--job', '--cluster', '--service', '--task-definition', '--container', '--script-path', '--apply', '--image', '--cli-path', '--expect-revision', '--help'].map(value => ({ value })) };
+    if (subcommand === 'setup') return { kind: 'static', candidates: ['--plan', '--connection', '--map-all', '--only', '--except', '--map', '--field', '--env-name', '--project', '--region', '--job', '--cluster', '--service', '--task-definition', '--instance', '--service-name', '--run-as-user', '--container', '--script-path', '--apply', '--image', '--cli-path', '--expect-revision', '--help'].map(value => ({ value })) };
+    if (subcommand === 'pair' && words.length === 3) return { kind: 'static', candidates: ['start', 'redeem', 'aws', 'google'].map(value => ({ value })) };
+    if (subcommand === 'pair') return { kind: 'static', candidates: (rest[0] === 'aws' ? ['--connection', '--region', '--cluster', '--service', '--container', '--image', '--cli-path', '--expect-revision', '--help'] : rest[0] === 'google' ? ['--connection', '--project', '--region', '--service', '--job', '--expect-revision', '--help'] : ['--connection', '--help']).map(value => ({ value })) };
     return { kind: 'none' };
   }
   if (command === 'secrets' && subcommand === 'publish') {

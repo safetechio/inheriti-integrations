@@ -8,11 +8,12 @@ export function registerDownloadPlanAsset(server: McpServer, tools: MetadataTool
   server.registerTool(
     'download_plan_asset',
     {
-      description: 'Open the secure window to download a plan file. ' + pendingJobInstruction,
-      inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1) }),
+      description: 'Download a plan file. The Business deployment decides whether it is saved as .inheriti; openLimit defaults to 1 when protected. ' + pendingJobInstruction,
+      inputSchema: z.object({ planId: z.string().min(1), asset: z.string().min(1),
+        openLimit: z.number().int().min(1).max(4294967295).optional() }).strict(),
     },
-    safeResult(({ planId, asset }: { planId: string; asset: string }) =>
-      tools.reveal(planId, asset, 'ASSET'),
+    safeResult(({ planId, asset, openLimit }: { planId: string; asset: string; openLimit?: number | undefined }) =>
+      openLimit === undefined ? tools.reveal(planId, asset, 'ASSET') : tools.reveal(planId, asset, 'ASSET', { openLimit }),
     ),
   );
 }

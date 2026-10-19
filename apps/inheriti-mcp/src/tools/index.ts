@@ -3,6 +3,7 @@ import type { MetadataTools } from '../server.js';
 import { registerRevealPlanSecret } from './reveal_plan_secret.js';
 import { registerDownloadPlanAsset } from './download_plan_asset.js';
 import { registerCheckRevealStatus } from './check_reveal_status.js';
+import { registerOpenInheritiFile } from './open_inheriti_file.js';
 import { registerListOrganizations } from './list_organizations.js';
 import { registerCheckUpdate } from './check_update.js';
 import { registerSelectOrganization } from './select_organization.js';
@@ -16,6 +17,10 @@ import { registerCreatePlanWithAssistant } from './create_plan_with_assistant.js
 import { registerCheckPlanCreationStatus } from './check_plan_creation_status.js';
 import { registerStartAutomationSetup } from './start_automation_setup.js';
 import { registerStartAutomationPairing } from './start_automation_pairing.js';
+import { registerPairAwsAutomationService } from './pair_aws_automation_service.js';
+import { registerPairGoogleCloudRun } from './pair_google_cloud_run.js';
+import { registerPrepareAutomationEc2 } from './prepare_automation_ec2.js';
+import { registerInspectAutomationEc2Identity } from './inspect_automation_ec2_identity.js';
 import { registerCheckAutomationSetupStatus } from './check_automation_setup_status.js';
 import { registerListAutomationConnections } from './list_automation_connections.js';
 import { registerListAutomationGrants } from './list_automation_grants.js';
@@ -48,6 +53,10 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
   registerCheckPlanCreationStatus(server, tools);
   registerStartAutomationSetup(server, tools);
   registerStartAutomationPairing(server, tools);
+  registerPairAwsAutomationService(server, tools);
+  registerPairGoogleCloudRun(server, tools);
+  registerPrepareAutomationEc2(server, tools);
+  registerInspectAutomationEc2Identity(server, tools);
   registerCheckAutomationSetupStatus(server, tools);
   registerListAutomationConnections(server, tools);
   registerListAutomationGrants(server, tools);
@@ -68,4 +77,5 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
   registerRevealPlanSecret(server, tools);
   registerDownloadPlanAsset(server, tools);
   registerCheckRevealStatus(server, tools);
+  registerOpenInheritiFile(server);
 }

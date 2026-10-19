@@ -188,6 +188,8 @@ export const trayMessages = Object.freeze({
   cancelSignIn: 'Cancel sign-in',
   chooseOrganization: 'Choose an organisation',
   signedOut: 'Sign in to choose an organisation.',
+  sessionUnavailable: 'Could not check your saved session. Try again.',
+  retrySession: 'Retry session',
   authorizing: 'Waiting for sign-in…',
   signedIn: 'Signed in.',
   signInError: 'Sign-in failed.',

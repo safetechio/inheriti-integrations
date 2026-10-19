@@ -52,6 +52,11 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
 }
 
 describe('help', () => {
+  it('rejects an invalid local Viewer file before loading API configuration', async () => {
+    const terminal = recordingTerminal(false);
+    await expect(run(['plans', 'open', '/missing.inheriti'], {}, terminal)).resolves.toBe(1);
+    expect(terminal.errors).toEqual(['Could not open the file in Inheriti Workspace. Check the file and Workspace installation.']);
+  });
   it('accepts only bounded, catalog-backed plan hints', () => {
     expect(parsePlanHints(['--title', 'AWS access', '--description', 'Console recovery', '--asset', 'USER-PSWD'])).toEqual({ title: 'AWS access', description: 'Console recovery', assetTypes: ['USER-PSWD'] });
     expect(parsePlanHints(['--asset', 'UNKNOWN'])).toBeUndefined();
@@ -106,6 +111,7 @@ describe('help', () => {
     const terminal = recordingTerminal(false);
     await expect(run(['--help'], {}, terminal)).resolves.toBe(0);
     expect(terminal.lines.join('\n')).toContain('plans abort [id]');
+    expect(terminal.lines.join('\n')).toContain('plans open path');
     expect(terminal.lines.join('\n')).toContain('version');
   });
 
@@ -613,6 +619,14 @@ describe('choosing a plan', () => {
   it('explains an unavailable API instead of showing TypeError', () => {
     const error = new TypeError('fetch failed', { cause: Object.assign(new Error(), { code: 'ECONNREFUSED' }) });
     expect(messageFor(error, true)).toBe('Cannot connect to the Inheriti API.');
+    expect(messageFor(new TypeError('fetch failed'), true)).toBe('Cannot connect to the Inheriti API.');
+  });
+
+  it('explains cloud setup failures without exposing provider output', () => {
+    expect(messageFor(new Error('automation_cloud_startup_unknown'))).toContain('container command or entry point');
+    expect(messageFor(new Error('automation_cloud_apply_failed'))).toContain('could not apply');
+    expect(messageFor(new Error('automation_cloud_apply_rollback_unconfirmed'))).toContain('Inspect the service revision');
+    expect(messageFor(new Error('private-secret'))).toBe('The command failed.');
   });
 
   it('refuses a missing plan id in a pipe, with the message an operator can act on', async () => {

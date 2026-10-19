@@ -1,0 +1,5 @@
+config BR2_PACKAGE_WORKSPACE_GNUMERIC
+	bool "Gnumeric XLSX/CSV viewer (optional application)"
+	depends on BR2_PACKAGE_LIBGTK3_X11
+	select BR2_PACKAGE_WORKSPACE_GOFFICE
+	select BR2_PACKAGE_LIBFRIBIDI

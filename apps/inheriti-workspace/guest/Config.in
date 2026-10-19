@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_INHERITI_WORKSPACE_PATH/package/workspace-agent/Config.in"

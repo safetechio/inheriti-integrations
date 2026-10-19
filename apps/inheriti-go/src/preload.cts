@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   selectCustodianDevice: (value: 'SK_MOBILE' | 'SK_PRO'): Promise<TrayState> => ipcRenderer.invoke('tray:select-custodian-device', value),
   submitSafeKeyProPin: (value: string): Promise<TrayState> => ipcRenderer.invoke('tray:submit-safekey-pro-pin', value),
   signIn: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-in'),
+  restore: (): Promise<TrayState> => ipcRenderer.invoke('tray:restore'),
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
   inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
@@ -66,6 +67,9 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   inboxSendFile: (conversationId: string, expiresAt: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-send-file', conversationId, expiresAt),
   inboxOpenText: (conversationId: string, messageId: string): Promise<{ text: string; leaseId: string; leaseExpiresAt: string; acknowledgement: 'ACKNOWLEDGED' | 'PENDING'; suggestion: unknown }> => ipcRenderer.invoke('tray:inbox-open-text', conversationId, messageId),
   inboxOpenFile: (conversationId: string, messageId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-open-file', conversationId, messageId),
+  inboxProtectedPlans: (): Promise<unknown> => ipcRenderer.invoke('tray:inbox-protected-plans'),
+  inboxOpenProtectedFile: (input: { conversationId: string; messageId: string; planId: string;
+    copyId: string; envelopeId: string; openLimit: number | null }): Promise<unknown> => ipcRenderer.invoke('tray:inbox-open-protected-file', input),
   inboxOpenFileForPlan: (conversationId: string, messageId: string): Promise<{ acknowledgement: 'ACKNOWLEDGED' | 'PENDING' }> => ipcRenderer.invoke('tray:inbox-open-file-for-plan', conversationId, messageId),
   inboxAcceptFileForPlan: (conversationId: string, messageId: string): Promise<void> => ipcRenderer.invoke('tray:inbox-accept-file-for-plan', conversationId, messageId),
   onInboxFileForPlan: (callback: (file: { conversationId: string; messageId: string; name: string; mimeType: string; bytes: Uint8Array }) => void): (() => void) => {

@@ -1,0 +1,32 @@
+#!/bin/busybox sh
+set -eu
+/bin/busybox mount -t proc proc /proc
+/bin/busybox mount -t sysfs sysfs /sys
+/bin/busybox mount -t devtmpfs devtmpfs /dev
+/bin/busybox chmod 0666 /dev/null
+/bin/busybox mount -t tmpfs -o size=24m,mode=0700 tmpfs /run
+/bin/busybox mkdir -m 0700 /run/session
+if [ -x /usr/bin/pdftoppm ]; then
+  /bin/busybox chmod 0711 /run
+  /bin/busybox chown 65534:65534 /run/session
+fi
+# devtmpfs creates /dev/vport*, while udev (absent here) normally makes the
+# named /dev/virtio-ports symlink. Resolve the port name from sysfs ourselves.
+/bin/busybox mkdir -m 0755 /dev/virtio-ports
+attempt=0
+while [ ! -e /dev/virtio-ports/org.inheriti.workspace ]; do
+  for name_file in /sys/class/virtio-ports/*/name; do
+    [ -r "$name_file" ] || continue
+    IFS= read -r port_name < "$name_file"
+    [ "$port_name" = org.inheriti.workspace ] || continue
+    device="${name_file%/name}"
+    device="${device##*/}"
+    [ -e "/dev/$device" ] || continue
+    /bin/busybox ln -s "/dev/$device" /dev/virtio-ports/org.inheriti.workspace
+  done
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 100 ] || /bin/busybox poweroff -f
+  /bin/busybox sleep 0.05
+done
+/bin/guest-agent
+/bin/busybox poweroff -f

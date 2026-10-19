@@ -15,11 +15,12 @@ Start with the [automation guide](docs/automation-setup.md#start-here). Choose t
 | GitHub Actions | [Inject a field into a workflow job](docs/automation-setup.md#github-actions) |
 | Google Cloud Run | [Inject plan fields into a job or service](docs/automation-setup.md#google-cloud-run) |
 | AWS ECS | [Inject plan fields into a service process](docs/automation-setup.md#aws-ecs) |
+| AWS EC2 | [Start an instance application through a persistent service](docs/automation-setup.md#aws-ec2-instance) |
 | Custom runner / Ansible | [Use a signed runner identity](docs/automation-setup.md#custom-runner-and-ansible) |
 
 Each route explains the required values, where to find them, the shared [verification and plan access](docs/automation-setup.md#3-verify-identity-then-grant-plan-access) steps, and how to run the job. The guide covers local and dev Business builds. GitHub's generated workflow requires a verified published Action and CLI pair; until that release exists, the CLI cannot print customer YAML.
 
-The CLI takes nonsecret connection and grant settings as arguments or terminal selections. `inheriti automations pair start` opens a ten-minute pairing window; `pair redeem` runs inside the workload and sends its native identity proof directly to Business. No ticket or proof is transferred by the operator. `inheriti automations verify` remains an advanced manual fallback that opens a native window for secure proof transfer. The runner's private key is never requested.
+The CLI takes nonsecret connection and grant settings as arguments or terminal selections. `inheriti automations pair aws` prepares a temporary ECS task and opens the ten-minute pairing window just before it runs. For other workloads, `pair start` opens the window and `pair redeem` runs inside the workload. No ticket or proof is transferred by the operator. `inheriti automations verify` remains an advanced manual fallback that opens a native window for secure proof transfer. The runner's private key is never requested.
 
 For an existing Cloud Run service or job or ECS service, `inheriti automations create` reads the workload identity through your authenticated provider CLI. If you are starting from zero, create the cloud resource and attach its service account or task role first; Inheriti does not create it. You supply the target name, not a copied service account ID or task role ARN. After verification and plan grant activation, `inheriti automations setup` prints a safe preview. With a prepared immutable image containing the Inheriti CLI, `--apply` updates the selected workload. See the [setup guide](docs/automation-setup.md#configure-the-workload-once) for the image prerequisite and revision check.
 

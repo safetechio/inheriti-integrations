@@ -1,5 +1,5 @@
 import * as sdkNode from '@safetech/inheriti-client-sdk/node-base';
-import { createNodeElementsClient, HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node-base';
+import { createNodeElementsClient, HttpElementsApiPort, exportProtectedRevealAsset } from '@safetech/inheriti-client-sdk/node-base';
 import { SocketIoSharedPlanEventListener } from '@safetech/inheriti-core-sdk/shared-configuration/vanilla';
 import { io } from 'socket.io-client';
 import type { DeclaredMasterKeySource, KeyVault, ListPlansInput, MasterKeyResolver, PlanDetail, PlanPage } from '@safetech/inheriti-client-sdk';
@@ -54,21 +54,23 @@ export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): 
     ...(options.masterKey ? { masterKey: options.masterKey } : {}),
     ...(options.fetchImpl ? { transport: options.fetchImpl } : {}),
   });
+  const fileAccessApi = options.business ? new HttpElementsApiPort(options.apiUrl,
+    options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+    options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) : undefined;
   return new ElementsIntegrationCore<ListPlansInput, PlanPage, PlanDetail>({
     environment: options.environment,
     ...(options.liveConfirmation === undefined ? {} : { liveConfirmation: options.liveConfirmation }),
     auth,
     elements: new SdkPlanFacade(elements),
     scopedReveals: elements,
+    ...(fileAccessApi ? { protectedRevealAssets: {
+      exportProtectedRevealAsset: (input) => exportProtectedRevealAsset({ ...input, api: fileAccessApi }),
+    } } : {}),
     masterKeys: { forgetMasterKey: (ref) => elements.forgetMasterKey(ref),
       hasMasterKey: async (ref) => (await elements.keyVault.load(ref)) !== undefined,
       cancelMasterKeyRelaySession: (sessionId) => elements.cancelMasterKeyRelaySession(sessionId) },
-    ...(options.business ? { organizations: { listOrganizations: () => new HttpElementsApiPort(options.apiUrl,
-      options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
-      options.organizationId !== undefined ? { organizationId: options.organizationId } : {}).listBusinessOrganizations() } } : {}),
-    ...(options.business ? { internalBuilds: new HttpElementsApiPort(options.apiUrl,
-      options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
-      options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) } : {}),
+    ...(fileAccessApi ? { organizations: { listOrganizations: () => fileAccessApi.listBusinessOrganizations() } } : {}),
+    ...(fileAccessApi ? { internalBuilds: fileAccessApi } : {}),
     ...composeRevealWorkflows(elements),
   });
 }
@@ -86,6 +88,8 @@ export { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local
 export { LocalPlanDraftValue, localPlanQuestions, localPlanFieldMaxLength } from './local-plan-draft.js';
 export { runLocalPlanBrowser } from './local-plan-browser.js';
 export { createNativeWindowSession } from './node-native-window.js';
+export { chooseInheritiFile, chooseSaveInheritiFile, openInheritiFile } from './node-workspace-launch.js';
+export { saveProtectedFile } from './node-protected-file.js';
 export { LlamaPlanModel } from './llama-plan-model.js';
 export { localAssistantPaths, getLocalAssistantInstallStatus, installLocalAssistant } from './local-assistant-install.js';
 export type { LocalAssistantInstallStatus, LocalAssistantInstallProgress } from './local-assistant-install.js';
@@ -137,7 +141,7 @@ export { custodianShareCopy } from './custodian-copy.js';
 export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
 export { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 export { revealProgressMessage } from './reveal-progress.js';
-export { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
+export { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
 
 export type { OperatorAuthFacade } from './index.js';
 export { MemoryOperatorSessionStore } from './operator-auth.js';
@@ -150,12 +154,17 @@ export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';
 export type { AutomationRuntimeInput, AutomationRuntimeBundle } from './automation-runtime-setup.js';
 export { resolveAutomationFieldMappings } from './automation-field-mappings.js';
 export type { AutomationMappingSelection } from './automation-field-mappings.js';
-export { inspectCloudIdentity, inspectCloudTarget, previewCloudTarget } from './automation-cloud-target.js';
+export { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget } from './automation-cloud-target.js';
 export type { CloudTarget, CloudTargetPreview, CloudTargetInspection } from './automation-cloud-target.js';
+export { inspectEc2AutomationInstance, prepareEc2AutomationService } from './automation-ec2-service.js';
+export type { Ec2Instance, Ec2ServiceInput, Ec2ServicePreparation } from './automation-ec2-service.js';
 export { applyEcsAutomation } from './automation-ecs-apply.js';
+export { pairEcsAutomation } from './automation-ecs-pair.js';
+export { pairCloudRunAutomation } from './automation-cloud-run-pair.js';
 export { createAwsSecretPublisher } from './automation-aws-publisher.js';
 export { createGoogleSecretPublisher } from './google-secret-publisher.js';
 export type { EcsApplyInput, EcsApplyResult } from './automation-ecs-apply.js';
+export type { EcsPairInput, EcsPairResult } from './automation-ecs-pair.js';
 export { applyCloudRunAutomation, applyCloudRunServiceAutomation } from './automation-cloud-run-apply.js';
 export type { CloudRunAutomationInput, CloudRunAutomationResult } from './automation-cloud-run-apply.js';
 export { runLocalAutomationSetupBrowser, runLocalAutomationProofBrowser } from './local-automation-setup-browser.js';

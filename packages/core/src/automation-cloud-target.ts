@@ -138,6 +138,13 @@ export async function inspectCloudTarget(
   return describeCloudTarget(target, run, true);
 }
 
+export async function inspectCloudTargetForPairing(
+  target: CloudTarget,
+  run: CloudCommandRunner = runCloudCommand,
+): Promise<CloudTargetInspection> {
+  return describeCloudTarget(target, run, false);
+}
+
 export async function inspectCloudIdentity(
   target: CloudTarget,
   run: CloudCommandRunner = runCloudCommand,

@@ -1,0 +1,26 @@
+{
+  "productName": "Inheriti Workspace",
+  "version": "0.0.1",
+  "identifier": "com.safetech.inheriti.workspace.local",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "title": "Inheriti® Workspace", "width": 940, "height": 860 }],
+    "security": {
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src ipc: http://ipc.localhost; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "linux": { "deb": { "files": { "/usr/share/mime/packages/inheriti.xml": "inheriti.xml" } } },
+    "fileAssociations": [
+      {
+        "ext": ["inheriti"],
+        "name": "Inheriti protected file",
+        "mimeType": "application/x-inheriti"
+      }
+    ]
+  }
+}

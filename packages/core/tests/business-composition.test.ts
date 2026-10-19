@@ -71,3 +71,18 @@ it('uses the supplied auth for every scoped Node client and bearer request', asy
   await Promise.all([first.listPlans(), second.listPlans()]);
   expect(authorization).toEqual(['Bearer shared-token', 'Bearer shared-token']);
 });
+
+it('keeps a host auth transport separate from Business API requests', async () => {
+  const apiFetch = vi.fn(async () => new Response(JSON.stringify({ ok: true, result: { items: [] } })));
+  const authFetch = vi.fn(async () => new Response(JSON.stringify({
+    issuer: configuration.issuer,
+    authorization_endpoint: `${configuration.issuer}/authorize`,
+    token_endpoint: `${configuration.issuer}/token`,
+  })));
+  const core = createNodeIntegrationCore({ apiUrl: 'https://business.test/integrations/', environment: 'TEST',
+    business: true, configuration, fetchImpl: apiFetch, authFetchImpl: authFetch });
+
+  await core.auth.beginAuthorizationCode();
+  expect(authFetch).toHaveBeenCalledOnce();
+  expect(apiFetch).not.toHaveBeenCalled();
+});

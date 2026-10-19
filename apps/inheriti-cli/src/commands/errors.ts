@@ -12,6 +12,9 @@ export function messageFor(error: unknown, business = false): string {
     return 'Cannot connect to the Inheriti API.';
   }
   const name = (error as { name?: unknown })?.name;
+  if (name === 'TypeError' && (error as { message?: unknown })?.message === 'fetch failed') {
+    return 'Cannot connect to the Inheriti API.';
+  }
   if (name === 'MasterKeyRequired') {
     const system = (error as { ref?: { system?: unknown } }).ref?.system;
     return system === 'INHERITI_BUSINESS'
@@ -93,6 +96,40 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_setup_authentication_required: 'Sign in again to manage automation.',
   automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
   automation_setup_request_failed: 'Business did not accept this automation request. Check your access and entries.',
+  automation_cloud_startup_unknown: 'The workload has no explicit startup command. Set the container command or entry point before preparing automation.',
+  automation_cloud_apply_startup_unknown: 'The Cloud Run service has no explicit startup command. Set its container command before applying automation.',
+  automation_cloud_apply_failed: 'Cloud Run could not apply the update. Check the service deployment and try again.',
+  automation_cloud_apply_unconfirmed: 'Cloud Run did not confirm the update. Inspect the service revision before retrying.',
+  automation_cloud_apply_rollback_unconfirmed: 'Cloud Run could not confirm rollback. Inspect the service revision before retrying.',
+  automation_ecs_startup_unknown: 'The ECS container has no explicit startup command. Set its entry point before preparing automation.',
+  automation_ecs_deployment_failed: 'ECS could not deploy the update. Inspect the service before retrying.',
+  automation_ecs_rollback_failed: 'ECS could not restore the previous task definition. Inspect the service before retrying.',
+  automation_ecs_rollback_unconfirmed: 'ECS could not confirm rollback. Inspect the service task definition before retrying.',
+  automation_ec2_input_invalid: 'Check the EC2 instance, service name, application command and service user.',
+  automation_ec2_identity_invalid: 'The EC2 instance needs exactly one attached instance profile role. Check its IAM configuration.',
+  automation_ecs_pair_input_invalid: 'Check the ECS pairing image digest, service and task role.',
+  automation_ecs_pair_service_invalid: 'The ECS service is unavailable or its task definition changed. Inspect it again.',
+  automation_ecs_pair_identity_changed: 'The ECS task role changed. Inspect the service and connection before retrying.',
+  automation_ecs_pair_placement_unknown: 'The ECS service launch type or capacity provider could not be copied safely.',
+  automation_ecs_pair_network_unknown: 'The ECS service network settings could not be copied safely.',
+  automation_ecs_pair_container_ambiguous: 'Select the ECS application container with --container.',
+  automation_ecs_pair_provider_failed: 'AWS could not run the temporary pairing task. Check local AWS access and ECS permissions.',
+  automation_ecs_pair_registration_invalid: 'AWS did not return a usable temporary task definition.',
+  automation_ecs_pair_response_invalid: 'AWS returned an unexpected ECS response. Inspect the service before retrying.',
+  automation_ecs_pair_window_failed: 'Business could not open the pairing window. No temporary task was started.',
+  automation_ecs_pair_start_failed: 'ECS could not start the temporary pairing task.',
+  automation_ecs_pair_wait_failed: 'The temporary ECS task did not finish in time. Inspect its status before retrying.',
+  automation_ecs_pair_stop_failed: 'The temporary ECS task could not be stopped. Inspect it in AWS before retrying.',
+  automation_ecs_pair_failed: 'The temporary ECS task did not verify the connection. Check its exit status and workload connectivity.',
+  automation_cloud_run_pair_input_invalid: 'Check the Cloud Run workload, connection and expected generation.',
+  automation_cloud_run_pair_response_invalid: 'Google Cloud returned an unexpected Cloud Run response.',
+  automation_cloud_run_pair_provider_failed: 'Google Cloud could not run the temporary pairing job. Check local gcloud access and Cloud Run permissions.',
+  automation_cloud_run_pair_source_invalid: 'The Cloud Run workload has an unsupported container configuration.',
+  automation_cloud_run_pair_source_changed: 'The Cloud Run workload changed. Inspect it again before pairing.',
+  automation_cloud_run_pair_identity_changed: 'The Cloud Run service account changed or does not match the connection.',
+  automation_cloud_run_pair_network_unsupported: 'This Cloud Run workload uses network or volume settings the temporary pairing job cannot safely copy.',
+  automation_cloud_run_pair_image_unpinned: 'The workload image has no immutable digest. Deploy a pinned image before pairing.',
+  automation_cloud_run_pair_window_failed: 'Business could not open the pairing window. The temporary job was removed.',
   automation_verified_release_unavailable: 'A verified GitHub Action and CLI release is not available yet. No workflow was generated.',
   automation_github_workflow_ref_invalid: 'The verified GitHub connection has an invalid or mismatched workflow file or branch. Correct its ' +
     'trust settings and verify again.',

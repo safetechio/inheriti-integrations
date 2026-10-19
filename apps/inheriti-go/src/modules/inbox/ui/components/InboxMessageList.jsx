@@ -21,8 +21,30 @@ function NormalMessageCard({ message, name, avatarUrl, own, names, avatars }) {
   </article>;
 }
 
-function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, revealSeconds, openingMessageId, transfer, busy, onView, onSaveFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
+function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, revealSeconds, openingMessageId, transfer, busy, protectedFileEnabled, onView, onSaveFile, onSaveProtectedFile, onSaveFileAsPlan, onCreatePlanFromFile, onHide, onRetryAck, onCancelTransfer, onCreatePlanFromSecret }) {
   const [confirm, setConfirm] = useState(false);
+  const [protectedPlans, setProtectedPlans] = useState(null);
+  const [protectedPlanId, setProtectedPlanId] = useState('');
+  const [protectedOpenings, setProtectedOpenings] = useState('1');
+  const [unlimited, setUnlimited] = useState(false);
+  const [planError, setPlanError] = useState('');
+  async function chooseProtectedCopy() {
+    setPlanError('');
+    try {
+      const page = await window.inheritiTray.inboxProtectedPlans();
+      setProtectedPlans(page.items);
+      setProtectedPlanId(page.items[0]?.id || '');
+    } catch { setPlanError('Could not load plans. Try again.'); }
+  }
+  function saveProtected(event) {
+    event.preventDefault();
+    const count = Number(protectedOpenings);
+    if (!protectedPlanId || (!unlimited && (!/^[1-9][0-9]*$/.test(protectedOpenings) ||
+      !Number.isSafeInteger(count) || count > 4294967295))) return;
+    setConfirm(false);
+    setProtectedPlans(null);
+    onSaveProtectedFile(message.id, protectedPlanId, unlimited ? null : count);
+  }
   const state = useInboxMessageState(message, own);
   const isFile = message.contentKind === 'FILE';
   const visible = !own && revealed?.messageId === message.id;
@@ -30,7 +52,7 @@ function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, 
   const hasOpenedContent = visible && (revealed.text || revealed.fileName);
   const displayState = opening ? { kind: 'opening', label: 'Opening' }
     : hasOpenedContent ? { kind: 'revealed', label: isFile ? 'Saved' : 'Revealed' } : state;
-  const action = isFile ? onSaveFile : onView;
+  const action = isFile ? (protectedFileEnabled ? chooseProtectedCopy : onSaveFile) : onView;
   const label = isFile ? 'Open file once' : 'View once';
   const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return <article className={`inbox-thread-message ${own ? 'is-own' : ''} ${opening ? 'is-opening' : ''}`}>
@@ -47,7 +69,12 @@ function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, 
           {(revealed.text || revealed.fileName) && <button type="button" className="button-secondary" onClick={onHide}>Hide now</button>}</div>
         : opening ? isFile ? <div className="inbox-opening" role="status"><span className="inbox-setup-spinner" aria-hidden="true" />Opening protected file…<span className={`inbox-progress-track ${transfer?.stage === 'DOWNLOADING' ? '' : 'is-indeterminate'}`}><span style={transfer?.stage === 'DOWNLOADING' ? { width: `${Math.min(100, Math.round(transfer.completed / Math.max(1, transfer.total) * 100))}%` } : undefined} /></span><small>{transfer?.stage === 'DOWNLOADING' ? `${transfer.completed} of ${transfer.total} encrypted shares` : 'Verifying on this computer'}</small><button type="button" className="inbox-link" onClick={onCancelTransfer}>Cancel transfer</button></div>
           : <InboxRevealProgress />
-        : state.canView ? confirm ? <div className="inbox-reveal-confirm"><p>{isFile ? 'Open this file once. Choose how to use it.' : `Reveal this message once? It hides after ${INBOX_REVEAL_SECONDS} ${INBOX_REVEAL_SECONDS === 1 ? 'second' : 'seconds'}.`}</p><div className={isFile ? 'inbox-file-actions' : undefined}><button type="button" disabled={!!busy} onClick={() => { setConfirm(false); action(message.id); }}>{isFile ? 'Save to computer' : 'Reveal now'}</button>{isFile && onSaveFileAsPlan && <button type="button" className="button-secondary" disabled={!!busy} onClick={() => { setConfirm(false); onSaveFileAsPlan(message.id, onCreatePlanFromFile); }}>Create Quick Plan</button>}<button type="button" className="button-secondary" onClick={() => setConfirm(false)}>Not now</button></div></div>
+        : state.canView ? confirm ? <div className="inbox-reveal-confirm"><p>{isFile ? protectedFileEnabled ? 'Save this file as an .inheriti copy.' : 'Open this file once.' : `Reveal this message once? It hides after ${INBOX_REVEAL_SECONDS} ${INBOX_REVEAL_SECONDS === 1 ? 'second' : 'seconds'}.`}</p>{isFile && protectedPlans ? <form onSubmit={saveProtected}>
+          <label>Plan <select value={protectedPlanId} onChange={event => setProtectedPlanId(event.target.value)} required>{protectedPlans.map(plan => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></label>
+          <label>Openings <input type="number" min="1" max="4294967295" value={protectedOpenings} disabled={unlimited} onChange={event => setProtectedOpenings(event.target.value)} /></label>
+          <label><input type="checkbox" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} /> Unlimited openings</label>
+          <div className="inbox-file-actions"><button type="submit" disabled={!protectedPlanId || !!busy}>Save .inheriti</button><button type="button" className="button-secondary" onClick={() => setProtectedPlans(null)}>Back</button></div>
+        </form> : <div className={isFile ? 'inbox-file-actions' : undefined}><button type="button" disabled={!!busy} onClick={() => { if (!protectedFileEnabled) setConfirm(false); action(message.id); }}>{isFile ? protectedFileEnabled ? 'Save .inheriti' : 'Save to computer' : 'Reveal now'}</button>{isFile && onSaveFileAsPlan && <button type="button" className="button-secondary" disabled={!!busy} onClick={() => { setConfirm(false); onSaveFileAsPlan(message.id, onCreatePlanFromFile); }}>Create Quick Plan</button>}<button type="button" className="button-secondary" onClick={() => setConfirm(false)}>Not now</button></div>}{planError && <p role="alert">{planError}</p>}</div>
         : <button type="button" disabled={!!busy} onClick={() => setConfirm(true)}>{label}</button>
         : <p className="inbox-sealed-copy">{own ? state.label === 'Failed' ? 'This message could not be delivered.' : message.status === 'PREPARING' ? `This ${isFile ? 'file' : 'message'} has not finished sending.` : isFile ? 'File sealed for recipients.' : 'Message sealed for recipients.' : state.label === 'Read' ? 'This message has been opened.' : message.status === 'PREPARING' ? `This ${isFile ? 'file' : 'message'} has not finished sending. Ask the sender to retry if it persists.` : 'Encrypted content is unavailable.'}</p>}
       </div>
@@ -58,7 +85,7 @@ function MessageCard({ message, name, avatarUrl, own, names, avatars, revealed, 
 
 export function InboxMessageList({ conversationId, messages, normalMessages = [], normalUnreadCount = 0, parentMessages = [], parentUnreadCount = 0, unitReveals,
   mode = 'PROTECTED', setMode = () => {}, marks = [], onMark = () => {}, onUnmark = () => {},
-  names, avatars = {}, ownMemberId, revealed, revealSeconds, openingMessageId, onHide, onRetryAck, onRefresh, onView, onSaveFile,
+  names, avatars = {}, ownMemberId, revealed, revealSeconds, openingMessageId, protectedFileEnabled = false, onHide, onRetryAck, onRefresh, onView, onSaveFile, onSaveProtectedFile,
   onSend, onRetrySend, onSendFile, onCancelTransfer, onCreatePlanFromSecret, onCreatePlanFromFile, onSaveFileAsPlan, transfer, draft, setDraft, sendError, busy, pendingMessages = [], acceptedMessages = [] }) {
   const scroll = useRef(null);
   const previous = useRef({ conversationId: '', newestMessageId: '' });
@@ -96,7 +123,7 @@ export function InboxMessageList({ conversationId, messages, normalMessages = []
             units={unitReveals?.units || new Map()} now={unitReveals?.now || Date.now()} openingUnitId={unitReveals?.openingUnitId || ''} openingProgress={unitReveals?.openingProgress}
             summary={unitReveals?.summary} busy={busy} onReveal={unitReveals?.reveal} onRevealAll={unitReveals?.revealAll} onRetry={unitReveals?.retry} onHide={unitReveals?.hide} onCreatePlanFromSecret={onCreatePlanFromSecret} names={names} avatars={avatars} />
         : kind === 'NORMAL' ? <NormalMessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} own={message.senderMemberId === ownMemberId} names={names} avatars={avatars} />
-        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} avatars={avatars} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} onView={onView} onSaveFile={onSaveFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
+        : <MessageCard key={id} message={message} name={names[message.senderMemberId] || 'Member'} avatarUrl={avatars[message.senderMemberId]} names={names} avatars={avatars} own={message.senderMemberId === ownMemberId} revealed={revealed} revealSeconds={revealSeconds} openingMessageId={openingMessageId} transfer={transfer} busy={busy} protectedFileEnabled={protectedFileEnabled} onView={onView} onSaveFile={onSaveFile} onSaveProtectedFile={onSaveProtectedFile} onSaveFileAsPlan={onSaveFileAsPlan} onCreatePlanFromFile={onCreatePlanFromFile} onHide={onHide} onRetryAck={onRetryAck} onCancelTransfer={onCancelTransfer} onCreatePlanFromSecret={onCreatePlanFromSecret} />)}
       {visiblePendingMessages.map(pendingMessage =>
         <article key={pendingMessage.clientId || pendingMessage.parentId} className="inbox-thread-message is-own inbox-pending-message" aria-live="polite">
           <div className="inbox-thread-message-content"><small>You</small>

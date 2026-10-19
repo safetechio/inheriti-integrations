@@ -9,7 +9,7 @@ const runtimeEnvironment = readEnvironment(environment, root);
 
 await runPnpm(['exec', 'tsc', '-b'], { cwd: root });
 await runPnpm(['exec', 'vite', 'build', '--mode', environment], { cwd: root });
-await copyFile(path.join(root, 'src/assets/fonts/font-app.ttf'), path.join(root, 'dist/font-app.ttf'));
+await copyFile(path.join(root, '../../packages/core/assets/font-app.ttf'), path.join(root, 'dist/font-app.ttf'));
 await writeFile(
   path.join(root, 'dist', 'runtime-environment.json'),
   `${JSON.stringify(runtimeEnvironment, null, 2)}\n`,

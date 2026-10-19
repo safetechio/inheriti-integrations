@@ -1,0 +1,5 @@
+config BR2_PACKAGE_WORKSPACE_LIBGSF
+	bool "libGSF (optional application dependency)"
+	depends on BR2_USE_MMU
+	select BR2_PACKAGE_LIBGLIB2
+	select BR2_PACKAGE_LIBXML2

@@ -14,6 +14,7 @@ export async function beginBrowserLogin(
   auth: Pick<OperatorAuthFacade, 'beginAuthorizationCode' | 'completeAuthorizationCode'>,
   configuration: { redirectUri: string },
   open = openBrowser,
+  options: { prompt?: 'none'; timeoutMs?: number } = {},
 ): Promise<{ authorizationUrl: string; completed: Promise<void>; cancel: () => void }> {
   const redirect = new URL(configuration.redirectUri);
   if (redirect.protocol !== 'http:' || redirect.hostname !== '127.0.0.1' || redirect.username || redirect.password || redirect.hash) {
@@ -34,14 +35,19 @@ export async function beginBrowserLogin(
     if (settled || handling) { response.writeHead(400).end(); return; }
     if (!callback.searchParams.has('code') && !callback.searchParams.has('error')) { response.writeHead(404).end(); return; }
     handling = true;
+    clearTimeout(timeout);
     response.once('finish', () => server.closeAllConnections());
     void (async () => {
       try {
-        if (callback.searchParams.has('error')) throw new Error('access_denied');
         await auth.completeAuthorizationCode(callback.toString());
         response.writeHead(200, callbackHeaders).end('<h1>Signed in</h1><p>Return to your MCP client.</p>');
         finish(undefined, true);
       } catch (error) {
+        if (options.prompt === 'none' && ['login_required', 'interaction_required'].includes((error as { code?: unknown } | null)?.code as string)) {
+          response.writeHead(200, callbackHeaders).end('<h1>Continue sign-in</h1><p>Return to your MCP client.</p>');
+          finish(error, true);
+          return;
+        }
         response.writeHead(400, callbackHeaders).end('<h1>Sign-in failed</h1><p>Return to your MCP client and try again.</p>');
         finish(error, true);
       }
@@ -56,7 +62,7 @@ export async function beginBrowserLogin(
     if (error === undefined) resolveCompletion();
     else rejectCompletion(error);
   };
-  const timeout = setTimeout(() => finish(new Error('login_browser_callback_timed_out')), 300_000);
+  const timeout = setTimeout(() => finish(new Error('login_browser_callback_timed_out')), options.timeoutMs ?? 300_000);
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -67,7 +73,7 @@ export async function beginBrowserLogin(
     if (!address || typeof address === 'string') throw new Error('login_invalid_callback_address');
     redirect.port = String(address.port);
     configuration.redirectUri = redirect.toString();
-    const { authorizationUrl } = await auth.beginAuthorizationCode();
+    const { authorizationUrl } = await auth.beginAuthorizationCode(options.prompt ? { prompt: options.prompt } : undefined);
     open(authorizationUrl);
     return { authorizationUrl, completed, cancel: () => finish(new Error('login_canceled')) };
   } catch (error) {

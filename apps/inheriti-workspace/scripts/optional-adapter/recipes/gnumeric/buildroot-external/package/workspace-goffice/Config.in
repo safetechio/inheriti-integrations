@@ -1,0 +1,8 @@
+config BR2_PACKAGE_WORKSPACE_GOFFICE
+	bool "GOffice (optional application dependency)"
+	depends on BR2_PACKAGE_LIBGTK3_X11
+	select BR2_PACKAGE_WORKSPACE_LIBGSF
+	select BR2_PACKAGE_LIBXSLT
+	select BR2_PACKAGE_GDK_PIXBUF
+	select BR2_PACKAGE_PANGO
+	select BR2_PACKAGE_CAIRO

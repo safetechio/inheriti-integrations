@@ -1,0 +1,16 @@
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -189,8 +189,7 @@ static void sdl_update_caption(struct sdl2_console *scon)
+ 
+     if (qemu_name) {
+-        snprintf(win_title, sizeof(win_title), "QEMU (%s-%d)%s", qemu_name,
+-                 scon->idx, status);
+-        snprintf(icon_title, sizeof(icon_title), "QEMU (%s)", qemu_name);
++        snprintf(win_title, sizeof(win_title), "%s%s", qemu_name, status);
++        snprintf(icon_title, sizeof(icon_title), "%s", qemu_name);
+     } else {
+-        snprintf(win_title, sizeof(win_title), "QEMU%s", status);
+-        snprintf(icon_title, sizeof(icon_title), "QEMU");
++        snprintf(win_title, sizeof(win_title), "Inheriti® Workspace%s", status);
++        snprintf(icon_title, sizeof(icon_title), "Inheriti® Workspace");
+     }

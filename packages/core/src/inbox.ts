@@ -1,5 +1,6 @@
 import { HttpElementsApiPort, NodeInboxFile, NodeInboxNormal, NodeInboxParent, NodeInboxText } from '@safetech/inheriti-client-sdk/inbox';
 import type { InboxLocalIdentity, NormalInboxMessagePage, SendNormalInboxTextInput, OpenNormalInboxTextInput, SendInboxFileInput, OpenInboxFileInput, SendInboxParentInput, OpenInboxParentInput } from '@safetech/inheriti-client-sdk/inbox';
+export { generateInheritiFileKey, sealInheritiFile, sealInheritiFileKey } from '@safetech/inheriti-client-sdk/inbox';
 import type { ElementsEnvironment } from './index.js';
 export type { InboxLocalIdentity } from '@safetech/inheriti-client-sdk/inbox';
 export function createNodeInbox(options: {
@@ -16,6 +17,13 @@ export function createNodeInbox(options: {
   const normal = new NodeInboxNormal(api);
   const parent = new NodeInboxParent(api, text);
   return {
+    listPlans: () => api.listPlans({ limit: 100, status: ['ACTIVE', 'CONFIGURED'] }),
+    getFileAccess: (copyId: string, signal?: AbortSignal) => api.getFileAccess(copyId, signal),
+    getOwnFileAccessIdentityKey: (signal?: AbortSignal) => api.getOwnFileAccessIdentityKey(signal),
+    createInboxFileAccess: (conversationId: string, messageId: string, input: Parameters<typeof api.createInboxFileAccess>[2], signal?: AbortSignal) =>
+      api.createInboxFileAccess(conversationId, messageId, input, signal),
+    cancelInboxFileAccess: (conversationId: string, messageId: string, copyId: string, signal?: AbortSignal) =>
+      api.cancelInboxFileAccess(conversationId, messageId, copyId, signal),
     listMembers: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxMembers(input, signal),
     listParticipants: (input?: { q?: string; limit?: number; offset?: number }, signal?: AbortSignal) => api.listInboxParticipants(input, signal),
     createConversation: (title: string, participantMemberIds: string[]) => api.createInboxConversation({ title, participantMemberIds }),

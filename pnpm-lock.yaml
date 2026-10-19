@@ -242,6 +242,12 @@ importers:
         specifier: ^4.4.3
         version: 4.6.5
 
+  apps/inheriti-workspace:
+    dependencies:
+      '@napi-rs/keyring':
+        specifier: 2.1.0
+        version: 2.1.0
+
   packages/brand: {}
 
   packages/core:

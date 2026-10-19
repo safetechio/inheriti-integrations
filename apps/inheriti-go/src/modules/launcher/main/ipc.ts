@@ -25,6 +25,13 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-in', (event) => { trusted(event); void session.signIn(publish, (url) => shell.openExternal(url)); return session.state(); });
+  ipcMain.handle('tray:restore', (event) => {
+    trusted(event);
+    if (session.state().status !== 'session-unavailable') return session.state();
+    void session.restore().then(publish, publish);
+    publish();
+    return session.state();
+  });
   ipcMain.handle('tray:select', async (event, id: unknown) => {
     trusted(event);
     if (typeof id !== 'string') throw new Error(messages.invalidOrganization);

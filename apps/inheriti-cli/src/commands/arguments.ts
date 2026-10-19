@@ -162,11 +162,23 @@ export function parseRevealOptions(argv: readonly string[]): { fields?: string[]
   return parsed;
 }
 
-export function parseDownloadOptions(argv: readonly string[]): { asset: string; output: string } | { error: string } {
-  const state = { asset: undefined as string | undefined, output: undefined as string | undefined };
+export function parseDownloadOptions(argv: readonly string[], protectedCopy = false): { asset: string; output: string; openLimit?: number } | { error: string } {
+  const state = { asset: undefined as string | undefined, output: undefined as string | undefined,
+    openLimit: undefined as number | undefined };
   for (const position = { index: 0 }; position.index < argv.length; position.index += 1) {
     const option = argv[position.index];
     const value = argv[position.index + 1];
+    if (option === '--protected') {
+      return { error: '--protected is controlled by the Business deployment.' };
+    }
+    if (option === '--open-limit') {
+      if (state.openLimit !== undefined || !value || !/^[1-9][0-9]*$/u.test(value)) return { error: '--open-limit expects a positive integer.' };
+      const limit = Number(value);
+      if (!Number.isSafeInteger(limit) || limit > 4294967295) return { error: '--open-limit must be at most 4294967295.' };
+      state.openLimit = limit;
+      position.index += 1;
+      continue;
+    }
     if ((option !== '--asset' && option !== '--output') || !value || value.startsWith('--')) {
       return { error: `Unknown or incomplete download option: ${option}` };
     }
@@ -180,7 +192,11 @@ export function parseDownloadOptions(argv: readonly string[]): { asset: string; 
     state.output = value;
     position.index += 1;
   }
-  return state.asset && state.output ? { asset: state.asset, output: state.output } : { error: 'plans download requires --asset and --output.' };
+  if (!state.asset || !state.output) return { error: 'plans download requires --asset and --output.' };
+  if (state.openLimit !== undefined && !protectedCopy) return { error: '--open-limit requires protected file downloads.' };
+  if (protectedCopy && !state.output.endsWith('.inheriti')) return { error: 'Protected downloads require an .inheriti output path.' };
+  return { asset: state.asset, output: state.output,
+    ...(state.openLimit === undefined ? {} : { openLimit: state.openLimit }) };
 }
 
 export function parseUseOptions(argv: readonly string[], commandName = 'plans use'): Omit<import('./use.js').UsePlanOptions, 'signal'> | { error: string } {

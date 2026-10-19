@@ -1,0 +1,11 @@
+{
+  "app": {
+    "windows": [{
+      "title": "Inheriti® Workspace",
+      "width": 960,
+      "height": 700,
+      "decorations": false,
+      "transparent": true
+    }]
+  }
+}

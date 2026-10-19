@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
         '@main-components': path.resolve(__dirname, 'src/modules/_shared/ui/components'),
         '@utils': path.resolve(__dirname, 'src/modules/_shared/domain/utils'),
         '@assets': path.resolve(__dirname, 'src/assets'),
+        '@brand-assets': path.resolve(__dirname, '../../packages/core/assets/brand'),
         'react-native': 'react-native-web',
         // Test-only: see tests/stubs/safekey-sdk.ts. Vite's real `build`
         // resolves the real package's extensionless internal imports fine;

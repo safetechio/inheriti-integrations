@@ -347,6 +347,29 @@ export function useInboxMessages(onClose) {
     }
   }
 
+  async function saveProtectedFile(messageId, planId, openLimit) {
+    if (busy || !conversationId) return;
+    const current = generation.current;
+    setBusy('opening-file');
+    setOpeningMessageId(messageId);
+    setTransfer(null);
+    setError('');
+    try {
+      const result = await window.inheritiTray.inboxOpenProtectedFile({ conversationId, messageId, planId,
+        copyId: crypto.randomUUID(), envelopeId: crypto.randomUUID(), openLimit });
+      if (generation.current === current) {
+        setRevealed({ messageId, fileName: `${result.name}.inheriti`, acknowledgement: result.acknowledgement });
+        await refresh();
+      }
+    } catch (failure) {
+      if (generation.current === current && !String(failure).includes('inbox_file_save_cancelled') && !String(failure).includes('AbortError'))
+        setError(isOrganisationKeyUnavailable(failure) ? ORGANISATION_KEY_UNAVAILABLE
+          : 'Could not save the protected .inheriti file. Try again while the message is available.');
+    } finally {
+      if (generation.current === current) { setBusy(''); setTransfer(null); setOpeningMessageId(''); }
+    }
+  }
+
   async function saveFileAsPlan(messageId, onCreatePlanFromFile) {
     if (busy || !conversationId) return;
     const current = generation.current;
@@ -425,5 +448,5 @@ export function useInboxMessages(onClose) {
   return { conversationId, items, normalItems, normalUnreadCount, parentItems, parentUnreadCount, mode, setMode: updateMode,
     draft, setDraft: updateDraft, marks, markSelection, unmarkSelection, unitReveals,
     segments: draftSegments(draft, marks, mode), revealed, revealSeconds, openingMessageId, busy, error, sendError, transfer, pendingMessages, acceptedMessages,
-    select, refresh, clearHistory, send, retrySend: deliver, sendFile, saveFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning, leave };
+    select, refresh, clearHistory, send, retrySend: deliver, sendFile, saveFile, saveProtectedFile, saveFileAsPlan, cancelTransfer, view, retryAck: retryPlanAck, hide: hideWithPlanWarning, leave };
 }

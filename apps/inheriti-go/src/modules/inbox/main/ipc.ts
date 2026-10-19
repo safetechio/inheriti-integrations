@@ -170,6 +170,20 @@ export function registerInboxIpc(session: TraySession, trusted: (event: Electron
     return session.openInboxFile(inboxId(conversationId), inboxId(messageId),
       (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
   });
+  handle('tray:inbox-protected-plans', (event) => { trusted(event); return session.listInboxProtectedFilePlans(); });
+  handle('tray:inbox-open-protected-file', (event, input: unknown) => {
+    trusted(event);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid protected file request');
+    const selected = input as Record<string, unknown>;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!['conversationId', 'messageId', 'planId', 'copyId', 'envelopeId'].every(key =>
+      typeof selected[key] === 'string' && uuid.test(selected[key] as string)) ||
+      (selected.openLimit !== null && (!Number.isSafeInteger(selected.openLimit) || (selected.openLimit as number) < 1 ||
+        (selected.openLimit as number) > 4294967295))) throw new Error('Invalid protected file request');
+    return session.openInboxProtectedFile(selected as { conversationId: string; messageId: string; planId: string;
+      copyId: string; envelopeId: string; openLimit: number | null },
+    (completed, total, stage) => { if (!event.sender.isDestroyed()) event.sender.send('tray:inbox-transfer-progress', { completed, total, stage }); });
+  });
   handle('tray:inbox-open-file-for-plan', async (event, conversationId: unknown, messageId: unknown) => {
     trusted(event);
     const conversation = inboxId(conversationId);

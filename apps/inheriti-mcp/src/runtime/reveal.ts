@@ -4,6 +4,8 @@ import {
   createGoogleSecretPublisher,
   revealModeOf,
   revealProgressMessage,
+  PROTECTED_FILE_FLAGS,
+  businessDeployment,
 } from '@safetech/inheriti-elements-core/node-base';
 import {
   deliverAssetInBrowser,
@@ -16,6 +18,7 @@ import { pendingJobInstruction } from '../tools/reveal-instruction.js';
 import type { MetadataTools } from '../server.js';
 import type { RevealActionDestination } from '@safetech/inheriti-elements-core';
 import { coded, lifecycleMessages, safeErrorCode } from './errors.js';
+import { chooseProtectedFile, saveProtectedFile } from './protected-file.js';
 
 const publishedValue = (value: unknown): string => {
   if (typeof value === 'string') return value;
@@ -26,10 +29,10 @@ const publishedValue = (value: unknown): string => {
 // The installed Client SDK destination union predates these server-supported AWS destinations.
 const publicationDestination = (value: 'AWS_SECRETS_MANAGER' | 'AWS_PARAMETER_STORE' | 'GOOGLE_CLOUD_SECRET_MANAGER') => value as RevealActionDestination;
 
-export async function reveal(this: MetadataTools, planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD') {
+export async function reveal(this: MetadataTools, planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD', options?: { openLimit?: number }) {
   return this.startReveal(
     planId,
-    kind === 'ASSET' ? { kind, asset: selector } : { kind, selectors: [selector], single: true },
+    kind === 'ASSET' ? { kind, asset: selector, ...options } : { kind, selectors: [selector], single: true },
   );
 }
 export async function revealFields(
@@ -60,7 +63,7 @@ export async function startReveal(
   this: MetadataTools,
   planId: string,
   request:
-    | { kind: 'ASSET'; asset: string }
+    | { kind: 'ASSET'; asset: string; openLimit?: number }
     | {
         kind: 'FIELD';
         selectors?: string[] | undefined;
@@ -91,6 +94,9 @@ export async function startReveal(
   const version = this.selectionVersion;
   const selected = await this.selected();
   if (!('organizationId' in selected)) return selected;
+  const deployment = businessDeployment(this.config?.deployment);
+  const protectedCopy = deployment !== undefined && PROTECTED_FILE_FLAGS[deployment];
+  if (request.kind === 'ASSET' && request.openLimit !== undefined && !protectedCopy) throw coded('protected_file_unavailable');
   if (version !== this.selectionVersion) throw coded('organization_selection_changed');
   if (this.job?.status === 'WAITING') throw coded('reveal_in_progress');
   const controller = new AbortController();
@@ -132,6 +138,7 @@ export async function startReveal(
           )
         : [];
     if (request.kind === 'FIELD') {
+      if (protectedCopy && assets.length) throw coded('protected_file_required');
       if (!selectors.length && !assets.length) throw coded('asset_selector_invalid');
       if (plan.assets && selectors.some((selector) => !knownSelectors.includes(selector)))
         throw coded('asset_field_not_found');
@@ -172,6 +179,7 @@ export async function startReveal(
         planId,
         {
           mode: revealModeOf(plan),
+          ...(request.kind === 'ASSET' && protectedCopy ? { protectedCopy: true } : {}),
           signal: controller.signal,
           selectCustodianDevice: prompt.selectCustodianDevice,
           ...(prompt.proDevice ? { proDevice: prompt.proDevice } : {}),
@@ -252,6 +260,20 @@ export async function startReveal(
             return timeoutMs;
           };
           if (kind === 'ASSET') {
+            if (request.kind === 'ASSET' && protectedCopy) {
+              const output = await chooseProtectedFile();
+              job.message = 'Saving the protected file locally.';
+              await selected.core.exportProtectedRevealAsset({
+                reveal,
+                selector,
+                copyId: crypto.randomUUID(),
+                envelopeId: crypto.randomUUID(),
+                openLimit: request.openLimit ?? 1,
+                signal: controller.signal,
+                save: ({ fileBytes }) => saveProtectedFile(output, fileBytes, controller.signal),
+              });
+              return;
+            }
             await reveal.exportAsset(selector, async (asset) => {
               if (controller.signal.aborted || version !== this.selectionVersion || this.job !== job)
                 throw coded('local_delivery_canceled');

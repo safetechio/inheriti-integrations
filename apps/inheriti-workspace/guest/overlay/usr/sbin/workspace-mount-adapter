@@ -1,0 +1,80 @@
+#!/bin/sh
+# Authenticate an optional app image before mounting it.
+set -eu
+device=/dev/vda
+key=/etc/workspace-adapter-pubkey.pem
+cmdline=/proc/cmdline
+target=/opt/workspace/apps
+[ -r "$cmdline" ] || exit 1
+manifest64=
+signature64=
+for token in $(cat "$cmdline"); do
+    case "$token" in
+        workspace.adapter.manifest=*)
+            [ -z "$manifest64" ] || exit 1
+            manifest64=${token#workspace.adapter.manifest=} ;;
+        workspace.adapter.signature=*)
+            [ -z "$signature64" ] || exit 1
+            signature64=${token#workspace.adapter.signature=} ;;
+    esac
+done
+if [ ! -e "$device" ]; then
+    if [ -z "$manifest64" ] && [ -z "$signature64" ]; then
+        exit 0
+    fi
+    exit 1
+fi
+[ -r "$key" ] || exit 1
+[ -n "$manifest64" ] && [ -n "$signature64" ] || exit 1
+case "$manifest64" in *[!A-Za-z0-9+/=]* ) exit 1 ;; esac
+case "$signature64" in *[!A-Za-z0-9+/=]* ) exit 1 ;; esac
+manifest=/run/workspace-adapter.manifest
+signature=/run/workspace-adapter.signature
+trap 'rm -f "$manifest" "$signature"' EXIT HUP INT TERM
+printf '%s' "$manifest64" | base64 -d > "$manifest" || exit 1
+printf '%s' "$signature64" | base64 -d > "$signature" || exit 1
+[ "$(wc -c < "$signature")" -eq 64 ] || exit 1
+[ "$(wc -c < "$manifest")" -le 1024 ] || exit 1
+openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$manifest" -sigfile "$signature" >/dev/null 2>&1 || exit 1
+[ "$(wc -l < "$manifest")" -eq 8 ] || exit 1
+[ "$(tail -c 1 "$manifest" | od -An -tu1 | tr -d ' ')" = 10 ] || exit 1
+[ "$(sed -n '1p' "$manifest")" = workspace-adapter-v1 ] || exit 1
+id=$(sed -n '2s/^id=//p' "$manifest")
+version=$(sed -n '3s/^version=//p' "$manifest")
+arch=$(sed -n '4s/^arch=//p' "$manifest")
+family=$(sed -n '5s/^family=//p' "$manifest")
+expected=$(sed -n '6s/^sha256=//p' "$manifest")
+maximum=$(sed -n '7s/^max_bytes=//p' "$manifest")
+url=$(sed -n '8s/^url=//p' "$manifest")
+for value in "$id" "$version" "$family"; do
+    printf '%s\n' "$value" | grep -Eq '^[a-z0-9][a-z0-9._-]{0,63}$' || exit 1
+done
+case "$arch" in x86_64|aarch64) ;; *) exit 1 ;; esac
+[ "$arch" = "$(uname -m)" ] || exit 1
+printf '%s\n' "$expected" | grep -Eq '^[0-9a-f]{64}$' || exit 1
+printf '%s\n' "$maximum" | grep -Eq '^[1-9][0-9]{0,11}$' || exit 1
+[ "$maximum" -le 536870912 ] || exit 1
+case "$url" in https://*) ;; *) exit 1 ;; esac
+printf '%s\n' "$url" | LC_ALL=C grep -Eq '^https://[[:graph:]]+$' || exit 1
+if [ -r /sys/class/block/vda/size ]; then
+    sectors=$(cat /sys/class/block/vda/size)
+    case "$sectors" in ''|*[!0-9]*) exit 1 ;; esac
+    size=$((sectors * 512))
+else
+    # The regular-file branch is exercised by the local gate test.
+    size=$(stat -c %s "$device") || exit 1
+fi
+[ "$size" -gt 0 ] && [ "$size" -le "$maximum" ] || exit 1
+actual=$(sha256sum "$device") || exit 1
+[ "${actual%% *}" = "$expected" ] || exit 1
+mkdir -p "$target"
+mount -t ext4 -o ro,noload,nosuid,nodev "$device" "$target"
+[ -f "$target/family" ] && [ "$(cat "$target/family")" = "$family" ] || {
+    umount "$target" || true
+    exit 1
+}
+[ -f "$target/bin/launch" ] && [ ! -L "$target/bin/launch" ] &&
+    [ -x "$target/bin/launch" ] || {
+    umount "$target" || true
+    exit 1
+}

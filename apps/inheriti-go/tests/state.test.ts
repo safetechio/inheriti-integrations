@@ -17,6 +17,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
     stg: { apiUrl: 'https://stg.example.test/', issuer: 'https://stg.issuer.test/', environment: 'TEST' },
     prod: { apiUrl: 'https://prod.example.test/', issuer: 'https://prod.issuer.test/', environment: 'LIVE' },
   },
+  PROTECTED_FILE_FLAGS: { local: false, dev: false, stg: false, prod: false },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
@@ -49,6 +50,17 @@ describe('TraySession', () => {
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
     mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+
+  it('disables protected Inbox file output for every deployment', () => {
+    const local = new TraySession('local');
+    expect(local.inboxState().protectedFileEnabled).toBe(false);
+    expect(() => local.listInboxProtectedFilePlans()).toThrow('protected_file_unavailable');
+    const dev = new TraySession('dev');
+    expect(dev.inboxState().protectedFileEnabled).toBe(false);
+    expect(() => dev.listInboxProtectedFilePlans()).toThrow('protected_file_unavailable');
+    expect(() => dev.openInboxProtectedFile({ conversationId: 'a', messageId: 'b', planId: 'c',
+      copyId: 'd', envelopeId: 'e', openLimit: 1 })).toThrow('protected_file_unavailable');
   });
 
   it('validates Chat access on entry, caches it, and cancels it on organization switch', async () => {
@@ -146,6 +158,7 @@ describe('TraySession', () => {
 
   it('retries with a normal session when Keycloak rejects offline_access', async () => {
     const session = new TraySession('dev');
+    await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     mock.complete.mockResolvedValue({});
@@ -163,6 +176,7 @@ describe('TraySession', () => {
 
   it('does not retry when the operator declines authorisation', async () => {
     const session = new TraySession('dev');
+    await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     await session.signIn(() => {}, async (authorizationUrl) => {
@@ -175,6 +189,7 @@ describe('TraySession', () => {
 
   it.each(['dev', 'prod'] as const)('uses the bound callback URI throughout %s sign-in', async (deployment) => {
     const session = new TraySession(deployment);
+    await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     let redirectUri = '';
     mock.begin.mockImplementation(async () => {
@@ -213,6 +228,7 @@ describe('TraySession', () => {
     mock.begin.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
     mock.clear.mockResolvedValue(undefined);
     const session = new TraySession('dev');
+    await session.restore();
     const openBrowser = vi.fn().mockResolvedValue(undefined);
     const signingIn = session.signIn(() => {}, openBrowser);
     await vi.waitFor(() => expect(mock.begin).toHaveBeenCalledTimes(1));
@@ -232,6 +248,7 @@ describe('TraySession', () => {
     mock.begin.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }))
       .mockRejectedValueOnce(new Error('retry_failed'));
     const session = new TraySession('dev');
+    await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     const openBrowser = vi.fn().mockResolvedValue(undefined);
     const first = session.signIn(() => {}, openBrowser);
@@ -284,6 +301,33 @@ describe('TraySession', () => {
     await session.restore();
     expect(session.state().status).toBe('signed-out');
     expect(session.state().organizations).toEqual([]);
+  });
+
+  it('keeps a saved session available for retry after a temporary restore failure', async () => {
+    const session = new TraySession('dev');
+    const options = mock.core.mock.calls[0]![0];
+    await options.sessions.save({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: options.configuration.issuer, subject: 'member' } });
+    mock.token.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+
+    await session.restore();
+    expect(session.state()).toMatchObject({ status: 'session-unavailable', organizations: [] });
+    expect(await options.sessions.load()).toMatchObject({ accessToken: 'access-token' });
+
+    await session.restore();
+    expect(session.state()).toMatchObject({ status: 'signed-in', selectedId: 'org-1' });
+  });
+
+  it('does not start browser sign-in during session restoration', async () => {
+    let release!: (token: string) => void;
+    mock.token.mockReturnValue(new Promise<string>((resolve) => { release = resolve; }));
+    const session = new TraySession('dev');
+    const restoring = session.restore();
+    await session.signIn(() => {}, vi.fn());
+    expect(mock.begin).not.toHaveBeenCalled();
+    release('access-token');
+    await restoring;
   });
 
   it('retains the server plan ID for a retry and uses a new one after Ready', async () => {

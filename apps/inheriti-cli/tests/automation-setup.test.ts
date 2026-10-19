@@ -1,10 +1,12 @@
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 
-const { getConnection, listConnections, listGrants, inspectCloudTarget, generateAutomationRuntimeBundle, applyEcsAutomation, applyCloudRunServiceAutomation } = vi.hoisted(() => ({
+const { getConnection, listConnections, listGrants, inspectCloudTarget, inspectEc2AutomationInstance, prepareEc2AutomationService, generateAutomationRuntimeBundle, applyEcsAutomation, applyCloudRunServiceAutomation } = vi.hoisted(() => ({
   getConnection: vi.fn(async () => ({ id: 'connection-1', provider: 'AWS', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } })),
   listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'ECS', provider: 'AWS', status: 'VERIFIED' }]),
   listGrants: vi.fn(async () => [{ connectionId: 'connection-1', status: 'ACTIVE' }]),
   inspectCloudTarget: vi.fn(async () => ({ target: { provider: 'AWS', region: 'us-east-1', cluster: 'jobs', service: 'worker' }, image: 'image:tag', identity: 'arn:aws:iam::123456789012:role/task', revision: 'rev:1', command: ['--secret=NEVER_PRINT'], environmentNames: ['EXISTING_SECRET'] })),
+  inspectEc2AutomationInstance: vi.fn(async () => ({ region: 'us-east-1', instanceId: 'i-123', roleArn: 'arn:aws:iam::123456789012:role/task' })),
+  prepareEc2AutomationService: vi.fn(() => ({ runScriptPath: '/opt/inheriti/run.sh', unitName: 'inheriti-worker.service', instructions: ['Install the launcher'], runScript: '#!/bin/sh', unit: '[Service]' })),
   generateAutomationRuntimeBundle: vi.fn(() => ({ provider: 'AWS', target: 'ECS task', script: '#!/bin/sh\nexec inheriti secrets exec "$@"', environment: { INHERITI_AUTOMATION_PROVIDER: 'AWS' }, requiredEnvironment: ['AWS_REGION'], instructions: ['Install CLI in image'] })),
   applyEcsAutomation: vi.fn(async () => ({ status: 'deployed', revision: 'rev:2', previousRevision: 'rev:1' })),
   applyCloudRunServiceAutomation: vi.fn(async () => ({ status: 'updated', revision: 'rev:2', previousRevision: 'rev:1' })),
@@ -13,6 +15,8 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
   ...(await original<object>()),
   createAutomationSetupOperations: () => ({ getConnection, listConnections, listGrants }),
   inspectCloudTarget,
+  inspectEc2AutomationInstance,
+  prepareEc2AutomationService,
   generateAutomationRuntimeBundle,
   applyEcsAutomation,
   applyCloudRunServiceAutomation,
@@ -26,6 +30,8 @@ const getPlan = vi.fn(async () => ({ assets: [{ id: 'asset-1', code: 'asset', is
 const context = { organization: { id: 'org-1' }, core: { getAccessToken: async () => 'token', getPlan } };
 const configuration = { apiUrl: 'http://business.localhost:3400/integrations/' };
 const args = ['--plan', '485384e3-b685-4142-b1ca-95a0b90e56ba', '--connection', 'connection-1', '--field', 'asset.password', '--env-name', 'APP_SECRET', '--region', 'us-east-1', '--cluster', 'jobs', '--service', 'worker', '--script-path', '/opt/inheriti/launch.sh'];
+
+beforeEach(() => vi.clearAllMocks());
 
 it('prints only a safe preview and script, without raw provider startup arguments', async () => {
   const output = terminal();
@@ -87,6 +93,41 @@ it('prints a launcher for a VM or cluster without inspecting or changing a manag
   expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
   expect(inspectCloudTarget).not.toHaveBeenCalled();
   expect(output.write.mock.calls.flat().join('\n')).toContain('manual_setup_required');
+});
+
+it('prepares a persistent EC2 launcher with the attached role and application command', async () => {
+  const output = terminal();
+  const ec2Args = [
+    '--plan', '485384e3-b685-4142-b1ca-95a0b90e56ba', '--connection', 'connection-1',
+    '--field', 'asset.password', '--env-name', 'APP_SECRET', '--region', 'us-east-1',
+    '--instance', 'i-123', '--service-name', 'worker', '--run-as-user', 'ubuntu',
+    '--script-path', '/opt/inheriti/run.sh', '--', '/usr/bin/node', 'server.js',
+  ];
+  expect(await automationSetup(context as never, configuration as never, output, ec2Args)).toBe(0);
+  expect(inspectEc2AutomationInstance).toHaveBeenCalledWith({ region: 'us-east-1', instanceId: 'i-123' });
+  expect(inspectCloudTarget).not.toHaveBeenCalled();
+  expect(prepareEc2AutomationService).toHaveBeenCalledWith(expect.objectContaining({
+    serviceName: 'worker', runAsUser: 'ubuntu', launcherPath: '/opt/inheriti/run.sh',
+    applicationCommand: ['/usr/bin/node', 'server.js'],
+    bundle: expect.objectContaining({ environment: expect.objectContaining({ AWS_REGION: 'us-east-1' }) }),
+  }));
+  const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('installation_required');
+  expect(printed).toContain('inheriti-worker.service');
+});
+
+it('rejects an EC2 launcher when the instance role differs from the connection', async () => {
+  inspectEc2AutomationInstance.mockResolvedValueOnce({ region: 'us-east-1', instanceId: 'i-123', roleArn: 'arn:aws:iam::123456789012:role/other' });
+  const output = terminal();
+  const ec2Args = [
+    '--plan', '485384e3-b685-4142-b1ca-95a0b90e56ba', '--connection', 'connection-1',
+    '--field', 'asset.password', '--env-name', 'APP_SECRET', '--region', 'us-east-1',
+    '--instance', 'i-123', '--service-name', 'worker', '--run-as-user', 'ubuntu',
+    '--', '/usr/bin/node', 'server.js',
+  ];
+  expect(await automationSetup(context as never, configuration as never, output, ec2Args)).toBe(1);
+  expect(output.writeError.mock.calls.flat().join('\n')).toContain('does not match');
+  expect(prepareEc2AutomationService).not.toHaveBeenCalled();
 });
 
 it('accepts a Cloud Run service target and dispatches its apply operation', async () => {

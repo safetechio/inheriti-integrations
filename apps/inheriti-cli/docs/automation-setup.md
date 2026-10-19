@@ -7,7 +7,7 @@ This guide covers the local and dev TEST builds. A Business operator configures 
 This walkthrough uses a plan with fields such as `database.username` and `database.password`. These selectors are **not** secret values. Map each field to the environment variable your application already reads, for example `DB_USER=database.username` and `DB_PASSWORD=database.password`. Inheriti supplies the values to the application process when it starts; the values do not belong in the cloud service configuration. Choose real fields from your plan's **Data** tab.
 
 1. [Check Business permissions](#1-check-access-before-collecting-provider-details).
-2. Choose where the command will actually run: [GitHub Actions](#github-actions), [Google Cloud Run](#google-cloud-run), [AWS ECS](#aws-ecs), or a [custom runner / Ansible](#custom-runner-and-ansible). Create a connection for that workload's identity.
+2. Choose where the command will actually run: [GitHub Actions](#github-actions), [Google Cloud Run](#google-cloud-run), [AWS ECS](#aws-ecs), an [AWS EC2 instance](#aws-ec2-instance), or a [custom runner / Ansible](#custom-runner-and-ansible). Create a connection for that workload's identity.
 3. [Verify the connection and grant it access to a plan](#3-verify-identity-then-grant-plan-access).
 4. [Run the provider's example and check the plan logs](#4-execute-and-check-the-result). An approval in SafeKey Mobile may be required by the plan's reveal policy.
 
@@ -82,6 +82,8 @@ The CLI prints the connection ID and exact expected audience. It does not create
 
 ### AWS ECS
 
+This path covers ECS services on **Fargate and EC2 capacity**. Both use the same task role, task definition, and service update mechanism.
+
 **Already have an ECS service?** Use its region, cluster, and name; confirm that its task definition has a **task role**, separate from the execution role. **Starting new?** [Register a task definition](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-task-definition.html) with that role and an explicit application entry point, then [create the service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-service-console-v2.html) in a cluster. The image used for pairing must contain Inheriti CLI. `automations setup --apply` requires a stable service with at least one running task and preserves the existing entry point; it cannot bootstrap a zero-task service or an app that needs plan values to start. For those apps, generate the launcher after pairing and grant activation, then install it in your own deployment.
 
 Sign in to AWS locally once with your usual AWS CLI profile or SSO session. Inheriti inspects the existing service and resolves its `taskRoleArn` automatically; you do not need to copy the ARN or run a separate `aws` command. A task definition ARN may be used instead of `--service` for a standalone task; keep `--cluster` for the target context.
@@ -96,6 +98,27 @@ inheriti automations create --name 'ECS task' --provider AWS \
 ```
 
 The CLI prints the connection ID. It reads the **task role**, never the execution role or an access key, and does not create or edit the ECS service. The AWS session needs permission to inspect the service and task definition. [AWS task roles](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) describes the distinction.
+
+### AWS EC2 instance
+
+For an application running directly on an EC2 instance, attach an instance profile with the intended IAM role first. The operator's AWS CLI needs `ec2:DescribeInstances` and `iam:GetInstanceProfile`; Inheriti reads the actual attached role instead of guessing it from the profile name.
+
+```bash
+inheriti automations create --name 'EC2 application' --provider AWS \
+  --deployment-environment TEST --region REGION --instance i-INSTANCE_ID
+```
+
+This creates the pending connection. The instance later obtains its own temporary credentials through IMDSv2. It must be able to reach the Business API, and its service user must have access to the installed Inheriti CLI. The CLI does not change the EC2 instance or its application at this step.
+
+For the initial identity check, open the pairing window on the operator's computer with `inheriti automations pair start --connection CONNECTION_ID`. Within ten minutes, run this **once on that EC2 instance** (not on the operator's computer):
+
+```bash
+INHERITI_AUTOMATION_PROVIDER=AWS \
+INHERITI_AUTOMATION_CONNECTION_ID=CONNECTION_ID \
+AWS_REGION=REGION inheriti automations pair redeem
+```
+
+The instance profile supplies the AWS proof; the command sends it directly to Business without printing credentials. After Business shows the connection as verified, continue with the plan grant and systemd preparation below.
 
 ### Custom runner and Ansible
 
@@ -115,15 +138,25 @@ This command reads only the public key. Its PEM content is an argument, so use t
 
 ## 3. Verify identity, then grant plan access
 
-The connection created in step 2 is initially pending. Prepare the one-off workload described below, then open a ten-minute pairing window from the operator's authenticated CLI:
+The connection created in step 2 is initially pending. The Cloud Run and ECS wrappers below open the ten-minute pairing window themselves. For GitHub or plain EC2, prepare the one-off workload and open the window from the operator's authenticated CLI:
 
 ```bash
 inheriti automations pair start --connection CONNECTION_ID
 ```
 
-Prepare a **one-off pairing execution** before opening the window. Its image must already contain Inheriti CLI and be able to reach Business. A Cloud Run service has no shell to execute this command: create a temporary [Cloud Run job](https://docs.cloud.google.com/run/docs/create-jobs) with the **same image and attached service account** as the service. Set its entry point and command to run `inheriti automations pair redeem`, then [execute the job](https://docs.cloud.google.com/run/docs/execute/jobs) during the window. For an existing Cloud Run job, use a separate temporary job with that job's image and service account so its normal command remains intact. For ECS, [register a one-off task definition](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-task-definition.html) with an image containing the CLI, the service's **same task role**, and an entry point that runs `inheriti automations pair redeem`; then [launch a standalone task](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) with the required launch type or capacity provider and network configuration. A RunTask `command` override changes CMD, **not ENTRYPOINT**, so the service's existing task definition may run its application instead of the CLI. Do not use your desktop's `gcloud` or `aws` identity to redeem.
+The image must already contain Inheriti CLI and be able to reach Business. The Cloud Run wrapper reads the selected service or job, creates a temporary job with its pinned image and service account, opens the pairing window, executes it once, and deletes it. It does not change the source workload. It refuses network or volume settings it cannot safely carry over. The ECS wrapper registers a temporary task definition with the service task role and network settings, then removes it. For plain EC2, run `pair redeem` once on the instance during the window. Do not use your desktop's `gcloud` or `aws` identity to redeem.
 
-In that one-off execution set the nonsecret `INHERITI_AUTOMATION_CONNECTION_ID` and provider settings: `INHERITI_AUTOMATION_PROVIDER=GOOGLE_CLOUD` with the exact `INHERITI_AUTOMATION_AUDIENCE`, or `INHERITI_AUTOMATION_PROVIDER=AWS` with `AWS_REGION`. The job/task must run with the configured identity; GitHub Actions uses its native OIDC variables and expected audience without setting the provider variable. The CLI obtains a fresh native proof and sends it directly to Business; the proof never belongs in command arguments, chat, logs, or source control. If the window expires, open it again with `pair start`. The normal service is configured in the next section, after verification and grant activation.
+```bash
+# Cloud Run service (use --job JOB for an existing Cloud Run job).
+inheriti automations pair google --connection CONNECTION_ID --project PROJECT \
+  --region REGION --service SERVICE
+
+# ECS Fargate or ECS on EC2: the image must already contain Inheriti CLI.
+inheriti automations pair aws --connection CONNECTION_ID --region REGION \
+  --cluster CLUSTER --service SERVICE --image IMAGE@sha256:DIGEST
+```
+
+The wrappers set the nonsecret provider and connection settings, including the exact Google Cloud audience. The job/task must run with the configured identity; GitHub Actions uses its native OIDC variables and expected audience without setting the provider variable. The CLI obtains a fresh native proof and sends it directly to Business; the proof never belongs in command arguments, chat, logs, or source control. If the window expires, retry the appropriate pairing command. The normal service is configured in the next section, after verification and grant activation.
 
 After the connection is verified, run these commands on the **operator's desktop** with the same organization selected in step 1. The CLI shows a selector whenever an ID is omitted; it does not automatically choose a plan, connection, member, or grant.
 
@@ -164,6 +197,16 @@ The example includes every eligible text field and names the two database variab
 Choose the verified connection when prompted, or pass `--connection CONNECTION_ID`. For ECS, replace the target flags with `--region REGION --cluster CLUSTER --service SERVICE`. Review the preview's revision and the prepared image, then apply the same command with `--image IMAGE@sha256:DIGEST --expect-revision REVISION --apply`. The revision must be copied from the preview; a changed workload is rejected. Bulk field selection always requires an interactive confirmation; noninteractive automation needs explicit `--map` entries and `--expect-revision`. The CLI uses the already authenticated `gcloud` or `aws` session, updates the selected service, and returns the new revision without secret values. Cloud Run jobs remain available with `--job JOB` for batch workloads; job execution and scheduling are separate.
 
 For ECS, the CLI registers a new task definition, updates the service, waits for stability, and restores the previous task definition if rollout fails. Cloud Run service updates create a persistent service revision. Each new task or instance starts the application through the launcher, which obtains the current approved field values and injects the mapped variables into that process. A running process keeps its startup values; deploy or restart it to pick up changed values. To prepare a VM or Kubernetes workload, omit the managed target flags: the CLI prints a launcher and nonsecret configuration, but does not install them on the server or cluster. A standalone ECS task definition and a custom runner still need their scheduler or service configured by their owner. Use `inheriti help automations setup` for the exact flags and [AWS ECS task definition permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html) or [Cloud Run service permissions](https://docs.cloud.google.com/run/docs/reference/iam/permissions) for the deployment account.
+
+For a **plain EC2 instance**, run the one-time preparation after its AWS connection is verified and its grant is active:
+
+```bash
+inheriti automations setup --plan PLAN_ID --connection CONNECTION_ID --map-all \
+  --region REGION --instance i-INSTANCE_ID --service-name my-app \
+  --run-as-user app -- /usr/bin/node /opt/my-app/server.js
+```
+
+The CLI checks that the attached instance profile role matches the connection, then prints a launcher, an application run script, and a `systemd` unit. Review the field mappings and command. Install the CLI and launcher on the instance, save the run script and unit at the printed paths, then run `sudo systemctl daemon-reload` and `sudo systemctl enable --now my-app.service` when ready to switch from the old application service. Disable the old service first so it cannot start a second copy. The setup command does not remotely change EC2. From then on, each boot or service restart runs `inheriti secrets exec` and waits for the existing Business authorization, Organisation Key and custodian share flow before starting the application. A running process retains its startup values until restarted.
 
 ## 4. Execute and check the result
 
