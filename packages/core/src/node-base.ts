@@ -141,7 +141,7 @@ export { custodianShareCopy } from './custodian-copy.js';
 export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
 export { createNodeSafeKeyProDevice } from '@safetech/inheriti-core-sdk/node';
 export { revealProgressMessage } from './reveal-progress.js';
-export { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
+export { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
 
 export type { OperatorAuthFacade } from './index.js';
 export { MemoryOperatorSessionStore } from './operator-auth.js';

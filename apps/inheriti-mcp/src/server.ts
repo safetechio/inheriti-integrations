@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  BUSINESS_DEPLOYMENTS, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
+  HOST_FEATURE_FLAGS, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
   MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher, createGoogleSecretPublisher,
 } from '@safetech/inheriti-elements-core/node-base';
 import type { LocalPlanHints, AutomationProvider, AutomationTrust } from '@safetech/inheriti-elements-core/node-base';
@@ -352,10 +352,8 @@ export class MetadataTools {
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
   }
   localAutomation() {
-    const url = this.config?.apiUrl;
-    const parsed = url ? new URL(url) : undefined;
-    const hostname = parsed?.hostname ?? '';
-    if (!['localhost', '127.0.0.1'].includes(hostname) && !hostname.endsWith('.localhost') && parsed?.href !== BUSINESS_DEPLOYMENTS.dev.apiUrl) throw coded('automation_local_only');
+    const deployment = businessDeployment(this.config?.deployment);
+    if (!deployment || !HOST_FEATURE_FLAGS[deployment].automation) throw coded('automation_local_only');
   }
   async automationOperations() {
     const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
@@ -404,8 +402,16 @@ export class MetadataTools {
     target: CloudTarget; image: string; cliPath: string; expectedRevision: string }) {
     return applyAutomationRuntime.call(this, input);
   }
-  async createPlanWithAssistant(hints?: LocalPlanHints) { return createPlanWithAssistant.call(this, hints); }
-  async planCreationStatus(jobId: string, cancel = false) { return planCreationStatus.call(this, jobId, cancel); }
+  async createPlanWithAssistant(hints?: LocalPlanHints) {
+    const deployment = businessDeployment(this.config?.deployment);
+    if (!deployment || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
+    return createPlanWithAssistant.call(this, hints);
+  }
+  async planCreationStatus(jobId: string, cancel = false) {
+    const deployment = businessDeployment(this.config?.deployment);
+    if (!deployment || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
+    return planCreationStatus.call(this, jobId, cancel);
+  }
   async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD', options?: { openLimit?: number }) { return reveal.call(this, planId, selector, kind, options); }
   async revealFields(planId: string, selection: { selector?: string | undefined; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined }) {
     return revealFields.call(this, planId, selection);

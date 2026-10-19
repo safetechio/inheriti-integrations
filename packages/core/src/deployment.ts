@@ -29,6 +29,12 @@ export const PROTECTED_FILE_FLAGS = {
   stg: false,
   prod: false,
 } as const satisfies Record<BusinessDeployment, boolean>;
+export const HOST_FEATURE_FLAGS = {
+  local: { planCreation: false, automation: false },
+  dev: { planCreation: false, automation: false },
+  stg: { planCreation: false, automation: false },
+  prod: { planCreation: false, automation: false },
+} as const satisfies Record<BusinessDeployment, { planCreation: boolean; automation: boolean }>;
 export const BUSINESS_DEVICE_CLIENT_ID = 'inheriti-business-integrations-device';
 export const BUSINESS_INTERACTIVE_CLIENT_ID = 'inheriti-business-integrations-interactive';
 

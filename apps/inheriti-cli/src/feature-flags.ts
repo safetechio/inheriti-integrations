@@ -1,8 +1,3 @@
-import { BUSINESS_DEPLOYMENTS } from '@safetech/inheriti-elements-core/node-base';
+import { HOST_FEATURE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
-export const CLI_FEATURE_FLAGS = {
-  local: { automation: true },
-  dev: { automation: true },
-  stg: { automation: false },
-  prod: { automation: false },
-} as const satisfies Record<keyof typeof BUSINESS_DEPLOYMENTS, { automation: boolean }>;
+export const CLI_FEATURE_FLAGS = HOST_FEATURE_FLAGS;

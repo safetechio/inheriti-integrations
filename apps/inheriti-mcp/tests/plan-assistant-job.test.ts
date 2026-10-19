@@ -6,6 +6,7 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
   ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
+  HOST_FEATURE_FLAGS: { local: { planCreation: true, automation: false }, dev: { planCreation: false, automation: false }, stg: { planCreation: false, automation: false }, prod: { planCreation: false, automation: false } },
   createQuickPlanOperations: () => ({
     teams: async () => ({ teams: [] }), createContext: mock.createContext,
     acquireKey: mock.acquireKey, createMany: mock.createMany, abandon: vi.fn(),
@@ -23,7 +24,7 @@ import { MetadataTools } from '../src/server.js';
 
 it('reuses the plan context and master key source when browser creation is retried', async () => {
   const tools = new MetadataTools() as any;
-  tools.config = { apiUrl: 'https://example.test', environment: 'TEST' };
+  tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const input = { title: 'Plan', assets: [{ type: 'PLAIN-TEXT', meta: { name: 'Note' }, secret: { text: 'private' } }] };
   mock.createContext.mockResolvedValue({ planId: 'plan', storage: { activeDataStorageLayerCount: 1 } });
@@ -51,7 +52,7 @@ it('cancels plan creation when the native window closes', async () => {
   }));
   mock.nativeSession.close.mockClear();
   const tools = new MetadataTools() as any;
-  tools.config = { apiUrl: 'https://example.test', environment: 'TEST' };
+  tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const { jobId } = await tools.createPlanWithAssistant();
   await vi.waitFor(() => expect(mock.runBrowser).toHaveBeenCalledOnce());
@@ -70,7 +71,7 @@ it('waits for an in-flight create before reporting cancellation', async () => {
     signal.addEventListener('abort', () => reject(new Error('local_plan_canceled')), { once: true });
   }));
   const tools = new MetadataTools() as any;
-  tools.config = { apiUrl: 'https://example.test', environment: 'TEST' };
+  tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const { jobId } = await tools.createPlanWithAssistant();
   await vi.waitFor(() => expect(mock.createMany).toHaveBeenCalledOnce());

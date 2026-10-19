@@ -10,6 +10,7 @@ import { usePlan } from './use.js';
 import { parseFormat, parseListOptions, parseLogOptions, parseRevealOptions, parseDownloadOptions, parseUseOptions } from './arguments.js';
 import { parsePlanHints } from './arguments.js';
 import { PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
+import { CLI_FEATURE_FLAGS } from '../feature-flags.js';
 
 export async function plans(
   context: Awaited<ReturnType<typeof createCliContext>>,
@@ -19,6 +20,9 @@ export async function plans(
 ): Promise<number> {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'create') {
+    if (!configuration?.deployment || !CLI_FEATURE_FLAGS[configuration.deployment].planCreation) {
+      terminal.writeError('Plan creation is unavailable.'); return 1;
+    }
     const hints = parsePlanHints(rest);
     if (!hints) { terminal.writeError('Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]'); return 1; }
     const controller = new AbortController();

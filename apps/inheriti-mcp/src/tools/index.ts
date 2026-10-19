@@ -1,3 +1,5 @@
+import { lockedDeployment } from '../runtime/configuration.js';
+import { PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MetadataTools } from '../server.js';
 import { registerRevealPlanSecret } from './reveal_plan_secret.js';
@@ -49,33 +51,39 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
   registerListMemberLogs(server, tools);
   registerLogout(server, tools);
   registerAbortPlanAccess(server, tools);
-  registerCreatePlanWithAssistant(server, tools);
-  registerCheckPlanCreationStatus(server, tools);
-  registerStartAutomationSetup(server, tools);
-  registerStartAutomationPairing(server, tools);
-  registerPairAwsAutomationService(server, tools);
-  registerPairGoogleCloudRun(server, tools);
-  registerPrepareAutomationEc2(server, tools);
-  registerInspectAutomationEc2Identity(server, tools);
-  registerCheckAutomationSetupStatus(server, tools);
-  registerListAutomationConnections(server, tools);
-  registerListAutomationGrants(server, tools);
-  registerGithubAutomationUsage(server, tools);
-  registerListAutomationMembers(server, tools);
-  registerCreateAutomationConnection(server, tools);
-  registerChangeAutomationTrust(server, tools);
-  registerDisableAutomationConnection(server, tools);
-  registerCreateAutomationGrant(server, tools);
-  registerActivateAutomationGrant(server, tools);
-  registerReplaceAutomationResponsibleMember(server, tools);
-  registerRevokeAutomationGrant(server, tools);
-  registerPrepareAutomationRuntime(server, tools);
-  registerApplyAutomationRuntime(server, tools);
-  registerInspectAutomationCloudIdentity(server, tools);
-  registerPublishPlanFieldsToAws(server, tools);
-  registerPublishPlanFieldsToGoogleCloud(server, tools);
   registerRevealPlanSecret(server, tools);
   registerDownloadPlanAsset(server, tools);
   registerCheckRevealStatus(server, tools);
-  registerOpenInheritiFile(server);
+  if (lockedDeployment && HOST_FEATURE_FLAGS[lockedDeployment].planCreation) {
+    registerCreatePlanWithAssistant(server, tools);
+    registerCheckPlanCreationStatus(server, tools);
+  }
+  if (lockedDeployment && HOST_FEATURE_FLAGS[lockedDeployment].automation) {
+    registerStartAutomationSetup(server, tools);
+    registerStartAutomationPairing(server, tools);
+    registerPairAwsAutomationService(server, tools);
+    registerPairGoogleCloudRun(server, tools);
+    registerPrepareAutomationEc2(server, tools);
+    registerInspectAutomationEc2Identity(server, tools);
+    registerCheckAutomationSetupStatus(server, tools);
+    registerListAutomationConnections(server, tools);
+    registerListAutomationGrants(server, tools);
+    registerGithubAutomationUsage(server, tools);
+    registerListAutomationMembers(server, tools);
+    registerCreateAutomationConnection(server, tools);
+    registerChangeAutomationTrust(server, tools);
+    registerDisableAutomationConnection(server, tools);
+    registerCreateAutomationGrant(server, tools);
+    registerActivateAutomationGrant(server, tools);
+    registerReplaceAutomationResponsibleMember(server, tools);
+    registerRevokeAutomationGrant(server, tools);
+    registerPrepareAutomationRuntime(server, tools);
+    registerApplyAutomationRuntime(server, tools);
+    registerInspectAutomationCloudIdentity(server, tools);
+    registerPublishPlanFieldsToAws(server, tools);
+    registerPublishPlanFieldsToGoogleCloud(server, tools);
+  }
+  if (lockedDeployment && PROTECTED_FILE_FLAGS[lockedDeployment]) {
+    registerOpenInheritiFile(server);
+  }
 }

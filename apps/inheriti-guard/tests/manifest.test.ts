@@ -48,7 +48,7 @@ describe('Chrome MV3 manifest', () => {
       .join('');
 
     expect(extensionId).toBe('gfkgipdabdcjnpobppfcbbaimpjefnnn');
-    expect(extensionId).not.toBe('kebghapddpgnfjpkecphjecbffdhodln');
+    expect(extensionId).not.toBe('gldejmpoefneccgpmiblhjghoocdlajf');
   });
 
   it('combines Guard permissions while keeping overlay authorization exact-origin', async () => {

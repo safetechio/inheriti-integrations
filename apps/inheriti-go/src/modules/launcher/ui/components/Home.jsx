@@ -2,7 +2,7 @@ import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { useAppVersion } from '../hooks/useAppVersion.js';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
   const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
@@ -26,12 +26,12 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
       <div className="tray-home-section">
         <h2>Plan management</h2>
         <div className="tray-home-actions">
-          <button id="save-plan" type="button" disabled={!canCreate} onClick={onCreate}>
+          {showPlanActions && <button id="save-plan" type="button" disabled={!canCreate} onClick={onCreate}>
             <span className="tray-action-icon"><PlusIcon /></span><span><strong>{messages.savePlan}</strong><small>Protect a secret in a new plan</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
-          </button>
-          <button id="add-asset" type="button" disabled={!canEdit} onClick={onEdit}>
+          </button>}
+          {showPlanActions && <button id="add-asset" type="button" disabled={!canEdit} onClick={onEdit}>
             <span className="tray-action-icon"><EditIcon /></span><span><strong>{messages.addOrEditAsset}</strong><small>Update a plan that's already protected</small></span><span className="tray-action-arrow"><ChevronRightIcon /></span>
-          </button>
+          </button>}
           <button id="app" type="button" onClick={onOpenApp}>
             <img src="tray.png" alt="" /><span><strong>{messages.openApp}</strong><small>Manage plans, teams and members</small></span><span className="tray-external-arrow"><ExternalLinkIcon /></span>
           </button>

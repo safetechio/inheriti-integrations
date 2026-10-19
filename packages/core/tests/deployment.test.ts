@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BUSINESS_DEPLOYMENTS, businessDeployment } from '../src/deployment.js';
+import { BUSINESS_DEPLOYMENTS, HOST_FEATURE_FLAGS, PROTECTED_FILE_FLAGS, businessDeployment } from '../src/deployment.js';
 
 describe('Business deployment selection', () => {
+  it('keeps host features disabled in every deployment', () => {
+    for (const deployment of Object.keys(BUSINESS_DEPLOYMENTS) as Array<keyof typeof BUSINESS_DEPLOYMENTS>) {
+      expect(HOST_FEATURE_FLAGS[deployment]).toEqual({ planCreation: false, automation: false });
+      expect(PROTECTED_FILE_FLAGS[deployment]).toBe(false);
+    }
+  });
   it('resolves only the four owned API and issuer pairs', () => {
     expect(Object.keys(BUSINESS_DEPLOYMENTS)).toEqual(['local', 'dev', 'stg', 'prod']);
     expect(BUSINESS_DEPLOYMENTS).toEqual({

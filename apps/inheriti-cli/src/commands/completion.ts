@@ -3,6 +3,8 @@ import type { Terminal } from '../output.js';
 import { COMPLETION_SHELLS, completionScript, type CompletionShell } from '../completion/shell.js';
 import { cached, completionCachePath } from '../completion/cache.js';
 import { assetCandidates, fieldCandidates, organizationCandidates, planCandidates, type Candidate } from '../completion/candidates.js';
+import { BUILD_DEPLOYMENT } from '../configuration.js';
+import { CLI_FEATURE_FLAGS } from '../feature-flags.js';
 
 const PLAN_ID_COMMANDS = new Set(['show', 'logs', 'reveal', 'download', 'use', 'abort']);
 const candidates = (...values: readonly (readonly [string, string])[]): Candidate[] =>
@@ -69,7 +71,10 @@ async function candidatesFor(
   environmentVariables: Readonly<Record<string, string | undefined>>,
 ): Promise<Candidate[]> {
   const completion = completionFor(context, words);
-  if (completion.kind === 'static') return completion.candidates;
+  if (completion.kind === 'static') return completion.candidates.filter(candidate =>
+    (candidate.value !== 'automations' || Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) &&
+    (candidate.value !== 'create' || words[0] !== 'plans' || Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation)) &&
+    (candidate.value !== 'publish' || words[0] !== 'secrets' || Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)));
   if (completion.kind === 'none') return [];
   if (!(await context.core.getAccessToken())) return [];
 
@@ -102,6 +107,9 @@ export function completionNeedsPlanContext(words: readonly string[]): boolean {
 
 function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words: readonly string[]): Completion {
   const [command, subcommand, ...rest] = words;
+  if (command === 'automations' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) return { kind: 'none' };
+  if (command === 'plans' && subcommand === 'create' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation)) return { kind: 'none' };
+  if (command === 'secrets' && subcommand === 'publish' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) return { kind: 'none' };
   if (words.length <= 1) return { kind: 'static', candidates: ROOT };
   if (command === 'setup') {
     const values = words.at(-2) === '--shell' ? COMPLETION_SHELLS : ['--yes', '--no-completion', '--shell', '--help'];

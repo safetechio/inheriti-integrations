@@ -39,12 +39,12 @@ export function LauncherApp({ messages }) {
   useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
-    if (action === messages.savePrivately || action === messages.shareWithTeam) setPendingPlanAction(action);
+    if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(action);
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
       setPendingInboxAction(action);
     }
-  }), [messages]);
+  }), [messages, state?.assetCatalog?.length]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
     rememberInboxPresence(signal);
     if (signal?.kind === 'NEW_MESSAGE' && !inboxOpen) setInboxHasNew(true);
@@ -56,7 +56,7 @@ export function LauncherApp({ messages }) {
   }, [inboxRequested, state?.status, state?.selectedId]);
   const editFlow = usePlanEditFlow({ state, setState: session.setState, messages });
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
-    canHandleAction: !editFlow.editing,
+    canHandleAction: !editFlow.editing && !!state?.assetCatalog?.length,
     onEditAction: () => { if (state?.edit?.available && !editFlow.busy) void editFlow.open(); },
     onReturnToInbox: () => setInboxOpen(true),
   });
@@ -131,13 +131,14 @@ export function LauncherApp({ messages }) {
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
     identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
-    onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
+    onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
+    showPlanActions={state.assetCatalog?.length > 0}
     onOrganizationChange={(id) => { closeInbox(); setInboxHasNew(false); editFlow.close(); void flow.selectOrganization(id); }}
-    canCreate={canCreate && !editFlow.busy}
-    canEdit={!!state.selectedId && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
+    canCreate={canCreate && state.assetCatalog?.length > 0 && !editFlow.busy}
+    canEdit={!!state.selectedId && state.assetCatalog?.length > 0 && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
     onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
     onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); void flow.signOut(); }}

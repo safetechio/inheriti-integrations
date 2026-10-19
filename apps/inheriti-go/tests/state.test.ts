@@ -18,6 +18,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
     prod: { apiUrl: 'https://prod.example.test/', issuer: 'https://prod.issuer.test/', environment: 'LIVE' },
   },
   PROTECTED_FILE_FLAGS: { local: false, dev: false, stg: false, prod: false },
+  HOST_FEATURE_FLAGS: { local: { planCreation: true, automation: false }, dev: { planCreation: true, automation: false }, stg: { planCreation: true, automation: false }, prod: { planCreation: true, automation: false } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,

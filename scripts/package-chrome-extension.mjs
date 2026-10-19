@@ -18,7 +18,7 @@ if (builtManifest.version !== packageManifest.version) {
 const version = packageVersionForDeployment(packageManifest.version, deployment);
 if (builtManifest.version_name !== version) throw new Error(`Refusing to package version drift: expected ${version}, got ${builtManifest.version_name}`);
 
-const EXPECTED_PRODUCTION_ID = 'kebghapddpgnfjpkecphjecbffdhodln';
+const EXPECTED_PRODUCTION_ID = 'gldejmpoefneccgpmiblhjghoocdlajf';
 const extensionId = chromeExtensionId(builtManifest.key);
 if (deployment === 'prod' && extensionId !== EXPECTED_PRODUCTION_ID) {
   throw new Error(

@@ -31,7 +31,7 @@ import { secrets, requiredAutomationPlanId } from './commands/secrets.js';
 import { plans } from './commands/plan-command.js';
 import { messageFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
-import { openInheritiFile } from '@safetech/inheriti-elements-core/node-base';
+import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
 export async function run(
   argv: readonly string[],
@@ -46,11 +46,22 @@ export async function run(
   }
   if (command === '--help') { terminal.write(usage(environmentVariables)); return 0; }
   const topic = helpTopic(argv);
-  if (topic) { terminal.write(commandUsage(topic, environmentVariables)); return 0; }
+  if (topic) {
+    if ((topic[0] === 'automations' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) ||
+        (topic[0] === 'plans' && topic[1] === 'create' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation)) ||
+        (topic[0] === 'plans' && topic[1] === 'open' && !Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT])) ||
+        (topic[0] === 'secrets' && topic[1] === 'publish' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))) {
+      terminal.writeError('This feature is unavailable.'); return 1;
+    }
+    terminal.write(commandUsage(topic, environmentVariables)); return 0;
+  }
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
   if (command === 'setup') return await setup(rest, environmentVariables, terminal);
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
   if (command === 'plans' && rest[0] === 'open') {
+    if (!BUILD_DEPLOYMENT || !PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]) {
+      terminal.writeError('Inheriti Workspace is unavailable.'); return 1;
+    }
     if (rest.length !== 2 || !rest[1]) { terminal.writeError(commandUsage(['plans', 'open'], environmentVariables)); return 1; }
     try { await openInheritiFile(rest[1]); terminal.write('Opened in Inheriti Workspace.\n'); return 0; }
     catch { terminal.writeError('Could not open the file in Inheriti Workspace. Check the file and Workspace installation.'); return 1; }
@@ -142,8 +153,8 @@ export async function run(
       finally { unregister(); }
     }
     if (command === 'secrets' && rest[0] === 'publish') {
-      if (rest[1] !== 'aws' && rest[1] !== 'google') { terminal.writeError(commandUsage(['secrets', 'publish'], environmentVariables)); return 1; }
       if (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation) throw new Error('automation_disabled');
+      if (rest[1] !== 'aws' && rest[1] !== 'google') { terminal.writeError(commandUsage(['secrets', 'publish'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);

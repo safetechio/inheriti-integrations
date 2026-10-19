@@ -1,6 +1,7 @@
 import { BUILD_DEPLOYMENT } from '../configuration.js';
+import { CLI_FEATURE_FLAGS } from '../feature-flags.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
-import { quickPlanAssetCatalog, localPlanAssetLimit } from '@safetech/inheriti-elements-core/node-base';
+import { quickPlanAssetCatalog, localPlanAssetLimit, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
 export function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const configuration = BUILD_DEPLOYMENT
@@ -10,6 +11,9 @@ export function usage(environmentVariables: Readonly<Record<string, string | und
              standalone plans. For Business set business: true and deployment to
              local, dev or stg; prod requires a production build.
              Environment defaults to TEST. Existing environment overrides still work.`;
+  const automationEnabled = Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation);
+  const planCreationEnabled = Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation);
+  const protectedEnabled = Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]);
   return `${terminalWordmark({ noColor: noColorFromEnvironment(environmentVariables) })}
 
 inheriti <command>
@@ -18,16 +22,15 @@ inheriti <command>
   logout             Clear the local session
   organizations list List Business organisations and the selected one
   organizations use [id] Select a Business organisation
-  automations list   List safe connection metadata
-  automations grants PLAN_ID List safe grant metadata for one plan
-  automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML
-  automations pair start|redeem|aws|google Verify a workload without copying its proof
-  secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)
-  automations grant create|activate|member|revoke Manage a plan grant
+  ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
+  ${automationEnabled ? 'automations grants PLAN_ID List safe grant metadata for one plan' : ''}
+  ${automationEnabled ? 'automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML' : ''}
+  ${automationEnabled ? 'automations pair start|redeem|aws|google Verify a workload without copying its proof' : ''}
+  ${automationEnabled ? 'secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)' : ''}
+  ${automationEnabled ? 'automations grant create|activate|member|revoke Manage a plan grant' : ''}
   plans list [--limit n] [--all] [--cursor c] [--organization id]
                      List plans in the selected context
-  plans create [--title NAME] [--description TEXT] [--asset TYPE ...]
-                     Prefill the desktop assistant with plan metadata and likely asset types
+  ${planCreationEnabled ? 'plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n                     Prefill the desktop assistant with plan metadata and likely asset types' : ''}
   plans show [id]    Show one plan, its assets and its participants
   plans abort [id]   Abandon the current access request for a plan
   plans logs [id] [--limit n] [--offset n] [--json|--table]
@@ -37,9 +40,9 @@ inheriti <command>
   plans reveal [id] [--field asset.field ...]
                      Copy one or more selected fields without printing their values.
                      Whether approval is needed is read from the plan.
-  plans download [id] --asset code-or-id --output path [--open-limit n]
-                     Save one authorized media asset. The Business deployment decides whether output is .inheriti.
-  plans open path    Open a saved .inheriti file in Inheriti Workspace.
+  plans download [id] --asset code-or-id --output path${protectedEnabled ? ' [--open-limit n]' : ''}
+                     Save one authorized media asset.
+  ${protectedEnabled ? 'plans open path    Open a saved .inheriti file in Inheriti Workspace.' : ''}
   ${'plans use [id] [--stdin asset.field] [--env NAME=asset.field ...] [--fd N=asset.field ...] ' +
     '[--temp-file NAME=asset.field ...] [--socket NAME=asset.field ...] [--ttl 30s] ' +
     '[--output suppress|inherit] -- command [args]'}
@@ -65,6 +68,12 @@ ${configuration}`;
 
 export function commandUsage(topic: readonly string[], environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const command = topic.join(' ');
+  if (command === 'plans' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation))
+    return 'Usage: inheriti plans <list|show|logs|reveal|download|use|abort>';
+  if (command === 'plans download' && !Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]))
+    return 'Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.';
+  if (command === 'secrets' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
+    return 'Usage: inheriti secrets <exec|resolve>\n\nRun reveal-authorized secret delivery.';
   const details: Readonly<Record<string, string>> = {
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
