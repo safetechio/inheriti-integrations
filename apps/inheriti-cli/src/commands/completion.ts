@@ -23,7 +23,7 @@ const PLANS = candidates(
 );
 const SECRETS = candidates(['exec', 'Run a command with Inheriti secrets'], ['resolve', 'Resolve one field'], ['publish', 'Optional one-time copy to cloud secret stores']);
 const ORGANIZATIONS = candidates(['list', 'List organisations'], ['use', 'Select an organisation']);
-const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['usage', 'Print GitHub workflow'], ['setup', 'Prepare workload launcher'], ['pair', 'Verify workload identity'], ['grant', 'Manage plan grant']);
+const AUTOMATIONS = candidates(['list', 'List connections'], ['grants', 'List plan grants'], ['create', 'Create connection'], ['verify', 'Verify identity'], ['trust', 'Change trust'], ['disable', 'Disable connection'], ['usage', 'Print GitHub workflow'], ['runtime', 'Show verified runtime installation'], ['setup', 'Prepare workload launcher'], ['pair', 'Verify workload identity'], ['grant', 'Manage plan grant']);
 
 type Completion =
   | { kind: 'static'; candidates: Candidate[] }
@@ -122,6 +122,7 @@ function completionFor(context: Pick<CliContext, 'keyOwner'> | undefined, words:
   }
   if (command === 'automations') {
     if (words.length === 2) return { kind: 'static', candidates: AUTOMATIONS };
+    if (subcommand === 'runtime' && words.length === 3) return { kind: 'static', candidates: [{ value: 'install-instructions' }] };
     if (subcommand === 'grant' && words.length === 3) return { kind: 'static', candidates: ['create', 'activate', 'member', 'revoke'].map(value => ({ value })) };
     if (subcommand === 'grant') return { kind: 'static', candidates: ['--plan', '--grant', '--connection', '--member', '--id', '--help'].map(value => ({ value })) };
     if (subcommand === 'create' || subcommand === 'trust') return { kind: 'static', candidates: ['--name', '--provider', '--deployment-environment', '--repository', '--environment', '--workflow', '--audience-base', '--subject', '--role-arn', '--region', '--instance', '--key-id', '--public-key', '--connection', '--id', '--help'].map(value => ({ value })) };

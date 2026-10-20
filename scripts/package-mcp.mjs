@@ -10,6 +10,8 @@ await requireNativeWindow(resolve(root, 'dist'));
 const artifacts = resolve(root, process.argv.find((value) => value.startsWith('--artifacts-dir='))?.slice(16) ?? 'artifacts');
 const stage = resolve(artifacts, 'stage');
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const nodeEngine = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).engines?.node;
+if (typeof nodeEngine !== 'string' || !nodeEngine.trim()) throw new Error('Workspace Node.js engine is required');
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await cp(resolve(root, 'dist'), resolve(stage, 'dist'), { recursive: true });
@@ -19,7 +21,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   type: 'module',
   bin: manifest.bin,
   files: ['dist'],
-  engines: { node: '>=22' },
+  engines: { node: nodeEngine },
   dependencies: { '@google-cloud/secret-manager': manifest.dependencies['@google-cloud/secret-manager'] },
   private: false,
 }, null, 2)}\n`);

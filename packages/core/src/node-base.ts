@@ -147,7 +147,7 @@ export type { OperatorAuthFacade } from './index.js';
 export { MemoryOperatorSessionStore } from './operator-auth.js';
 export { createNodeAutomationRevealClient } from '@safetech/inheriti-client-sdk/node-base';
 export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';
-export { createAutomationSetupOperations, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector } from './automation-setup.js';
+export { createAutomationSetupOperations, automationRuntimeInstallInstructions, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector } from './automation-setup.js';
 export type { AutomationSetupOperations, AutomationConnection, AutomationGrant, AutomationTrust, AutomationProvider, AutomationPlan, AutomationMember, VerifiedGithubRelease } from './automation-setup.js';
 export { AUTOMATION_PROVIDERS, AutomationProviderValue } from './automation-provider.js';
 export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';

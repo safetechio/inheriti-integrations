@@ -16,6 +16,7 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
 }));
 
 import { MetadataTools, createServer, safeResult } from '../src/server.js';
+import { registerGetAutomationRuntimeInstallInstructions } from '../src/tools/get_automation_runtime_install_instructions.js';
 
 const setup = (apiUrl = 'http://business.localhost:3400') => {
   const tools = new MetadataTools() as any;
@@ -66,6 +67,37 @@ it('registers GitHub usage tool and returns verified workflow destination and YA
   expect(JSON.parse(text)).toMatchObject({ location: { repository: 'owner/repo', path: '.github/workflows/deploy.yml', branch: 'release/v2' }, workflow: expect.stringContaining('INHERITI_SECRET=123-asset.password') });
   expect(text).toContain('github-actions@' + 'a'.repeat(40));
   expect(text).not.toContain('private-token');
+});
+
+it('returns verified runtime installation instructions without release channel input', async () => {
+  mock.getVerifiedGithubRelease.mockResolvedValueOnce({ actionRepository: 'safetechio/inheriti-integrations', actionRef: 'a'.repeat(40), cliVersion: '1.2.3-stg.4' });
+  const operations = vi.spyOn(MetadataTools.prototype as never, 'automationOperations').mockResolvedValue({ organizationId: 'org', operations: { getVerifiedGithubRelease: mock.getVerifiedGithubRelease } } as never);
+  try {
+    const result = await setup().getAutomationRuntimeInstallInstructions();
+    expect(result).toMatchObject({ organizationId: 'org', packageSpec: '@safetech/inheriti-cli@1.2.3-stg.4', prerequisite: expect.stringContaining('engines metadata'), dockerfile: expect.stringContaining('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4'), instruction: expect.stringContaining('IMAGE@sha256:DIGEST') });
+    expect(JSON.stringify(result)).not.toContain('private-token');
+    mock.getVerifiedGithubRelease.mockRejectedValueOnce(new Error('automation_verified_release_unavailable'));
+    await expect(setup().getAutomationRuntimeInstallInstructions()).rejects.toThrow('automation_verified_release_unavailable');
+  } finally { operations.mockRestore(); }
+});
+
+it('keeps runtime installation tool hidden while automation is disabled', () => {
+  const names: string[] = [];
+  const registration = vi.spyOn(McpServer.prototype, 'registerTool').mockImplementation(((name: string) => { names.push(name); return {} as never; }) as never);
+  try { createServer(); } finally { registration.mockRestore(); }
+  expect(names).not.toContain('get_automation_runtime_install_instructions');
+});
+
+it('registers a zero-input runtime installation tool', () => {
+  const registerTool = vi.fn();
+  registerGetAutomationRuntimeInstallInstructions({ registerTool } as never, setup());
+  expect(registerTool).toHaveBeenCalledWith(
+    'get_automation_runtime_install_instructions',
+    expect.objectContaining({ inputSchema: expect.any(Object) }),
+    expect.any(Function),
+  );
+  expect(registerTool.mock.calls[0]?.[1].inputSchema.safeParse({}).success).toBe(true);
+  expect(registerTool.mock.calls[0]?.[1].inputSchema.safeParse({ deployment: 'prod' }).success).toBe(false);
 });
 
 it('cancels an active window and reports safe status', async () => {

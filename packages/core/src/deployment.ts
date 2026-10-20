@@ -30,7 +30,7 @@ export const PROTECTED_FILE_FLAGS = {
   prod: false,
 } as const satisfies Record<BusinessDeployment, boolean>;
 export const HOST_FEATURE_FLAGS = {
-  local: { planCreation: false, automation: false },
+  local: { planCreation: false, automation: true },
   dev: { planCreation: false, automation: false },
   stg: { planCreation: false, automation: false },
   prod: { planCreation: false, automation: false },

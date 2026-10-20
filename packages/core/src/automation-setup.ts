@@ -14,7 +14,18 @@ export type AutomationGrant = { id: string; planId: string; connectionId: string
 export type AutomationPlan = { id: string; title?: string; name?: string };
 export type AutomationMember = { id: string; firstName?: string; lastName?: string; email?: string; status?: string; masterKeyStatus?: string };
 export type VerifiedGithubRelease = { actionRepository: string; actionRef: string; cliVersion: string };
-const VERIFIED_CLI_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-dev\.(0|[1-9]\d*))?$/;
+const VERIFIED_CLI_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:dev|stg)\.(0|[1-9]\d*))?$/;
+export function automationRuntimeInstallInstructions(release: VerifiedGithubRelease) {
+  if (!VERIFIED_CLI_VERSION.test(release.cliVersion)) throw new Error('Invalid verified CLI version');
+  const packageSpec = `@safetech/inheriti-cli@${release.cliVersion}`;
+  return {
+    packageSpec,
+    prerequisite: "Add to your application's Dockerfile. The build needs npm, and the final image needs a Node.js runtime. npm checks the published package's engines metadata:",
+    dockerfile: `RUN npm install --engine-strict --global ${packageSpec} \\
+    && test "$(inheriti --version)" = '${release.cliVersion}'`,
+    instruction: 'Build and publish the container, then pass its IMAGE@sha256:DIGEST reference to inheriti automations setup --apply. The image must provide /usr/local/bin/inheriti, or use --cli-path for another absolute path.',
+  };
+}
 export type AutomationSetupOperations = {
   getVerifiedGithubRelease(): Promise<VerifiedGithubRelease>;
   listConnections(): Promise<AutomationConnection[]>;

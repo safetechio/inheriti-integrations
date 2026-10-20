@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   AutomationProviderValue,
+  automationRuntimeInstallInstructions,
   createAutomationSetupOperations,
   createNativeWindowSession,
   githubAutomationWorkflow,
@@ -50,10 +51,11 @@ export async function automationManage(
   const [verb, maybeAction, ...tail] = argv;
   const grant = verb === 'grant';
   const pair = verb === 'pair';
-  const action = grant || pair ? maybeAction : verb;
-  const options = flags(grant || pair ? tail : argv.slice(1));
-  const usage = 'Usage: inheriti automations create|verify|trust|disable|usage|pair start|grant create|activate|member|revoke [nonsecret flags]';
-  const actions = grant ? ['create', 'activate', 'member', 'revoke'] : pair ? ['start'] : ['create', 'verify', 'trust', 'disable', 'usage'];
+  const runtime = verb === 'runtime';
+  const action = grant || pair || runtime ? maybeAction : verb;
+  const options = flags(grant || pair || runtime ? tail : argv.slice(1));
+  const usage = 'Usage: inheriti automations create|verify|trust|disable|usage|runtime install-instructions|pair start|grant create|activate|member|revoke [nonsecret flags]';
+  const actions = grant ? ['create', 'activate', 'member', 'revoke'] : pair ? ['start'] : runtime ? ['install-instructions'] : ['create', 'verify', 'trust', 'disable', 'usage'];
   if (!options || !action || !actions.includes(action)) {
     terminal.writeError(usage);
     return 1;
@@ -67,6 +69,14 @@ export async function automationManage(
     organizationId: context.organization!.id,
     getBearerToken: () => context.core.getAccessToken(),
   });
+  if (runtime) {
+    if (Object.keys(options).length) { terminal.writeError(usage); return 1; }
+    const instructions = automationRuntimeInstallInstructions(await operations.getVerifiedGithubRelease());
+    terminal.write(`Verified Inheriti CLI runtime: ${instructions.packageSpec}`);
+    terminal.write(`${instructions.prerequisite}\n${instructions.dockerfile}`);
+    terminal.write(instructions.instruction);
+    return 0;
+  }
   if (pair) {
     if (Object.keys(options).some(key => key !== '--connection')) {
       terminal.writeError(usage);

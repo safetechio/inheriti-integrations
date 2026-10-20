@@ -24,7 +24,7 @@ inheriti <command>
   organizations use [id] Select a Business organisation
   ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
   ${automationEnabled ? 'automations grants PLAN_ID List safe grant metadata for one plan' : ''}
-  ${automationEnabled ? 'automations create|verify|trust|disable|usage Manage a connection or print GitHub YAML' : ''}
+  ${automationEnabled ? 'automations create|verify|trust|disable|usage|runtime Manage connections and runtime guidance' : ''}
   ${automationEnabled ? 'automations pair start|redeem|aws|google Verify a workload without copying its proof' : ''}
   ${automationEnabled ? 'secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)' : ''}
   ${automationEnabled ? 'automations grant create|activate|member|revoke Manage a plan grant' : ''}
@@ -78,7 +78,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
-    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|setup|pair|grant ` +
+    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|setup|pair|grant ` +
       `create|activate|member|revoke>\n\nManage Business automation connections and grants locally. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
@@ -117,6 +117,8 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `connection. Find ASSET.FIELD in the plan Data tab. The generated command only checks that the ` +
       `injected value is present. The Action reference and CLI version come from Business's verified ` +
       `release; if unavailable, no workflow is printed.`,
+    'automations runtime': `Usage: inheriti automations runtime install-instructions\n\nPrint the exact verified CLI package version and Dockerfile instruction for an ECS or Cloud Run container. The version comes from the configured Business API. Prompts for sign-in and Organisation selection when needed; fails if no verified release is available.`,
+    'automations runtime install-instructions': `Usage: inheriti automations runtime install-instructions\n\nPrint the exact verified CLI package version and Dockerfile instruction for an ECS or Cloud Run container. The version comes from the configured Business API. Prompts for sign-in and Organisation selection when needed; fails if no verified release is available.`,
     'secrets publish': `Usage: inheriti secrets publish <aws|google> [OPTIONS]\n\nOptional one-time copy for existing cloud-store consumers; use secrets exec for direct Inheriti runtime access. After publication, reads use provider IAM. Plan changes or revocation do not update or delete the copy; there is no automatic synchronization or rotation. Preview cloud destinations by default. ` +
       `Use inheriti help secrets publish aws or inheriti help secrets publish google for provider options.`,
     'secrets publish aws': `Usage: inheriti secrets publish aws --plan PLAN_ID --region AWS_REGION --account-id 12_DIGITS ` +

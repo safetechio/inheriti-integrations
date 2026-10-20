@@ -35,9 +35,9 @@ beforeEach(() => {
 });
 
 describe('automation feature flag', () => {
-  it('disables automation and plan creation in every build', () => {
+  it('enables automation only for local and disables plan creation in every build', () => {
     expect(CLI_FEATURE_FLAGS).toEqual({
-      local: { automation: false, planCreation: false },
+      local: { automation: true, planCreation: false },
       dev: { automation: false, planCreation: false },
       stg: { automation: false, planCreation: false },
       prod: { automation: false, planCreation: false },

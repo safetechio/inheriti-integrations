@@ -16,7 +16,7 @@ import { configPath, configuration, lockedDeployment } from './runtime/configura
 import { authFetch } from './runtime/auth-fetch.js';
 import type { Configuration } from './runtime/configuration.js';
 import {
-  listAutomationConnections, listAutomationGrants, githubAutomationUsage, listAutomationMembers,
+  listAutomationConnections, listAutomationGrants, githubAutomationUsage, getAutomationRuntimeInstallInstructions, listAutomationMembers,
   createAutomationConnection, changeAutomationTrust, disableAutomationConnection, manageAutomationGrant,
   startAutomationSetup, startAutomationPairing, automationSetupStatus,
 } from './runtime/automation.js';
@@ -362,6 +362,7 @@ export class MetadataTools {
       organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() }) };
   }
   async listAutomationConnections() { return listAutomationConnections.call(this); }
+  async getAutomationRuntimeInstallInstructions() { return getAutomationRuntimeInstallInstructions.call(this); }
   async listAutomationGrants(planId: string) { return listAutomationGrants.call(this, planId); }
   async githubAutomationUsage(planId: string, connectionId: string, selector: string) {
     return githubAutomationUsage.call(this, planId, connectionId, selector);
