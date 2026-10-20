@@ -26,6 +26,7 @@ enum Request {
         runtime: PlatformRuntime,
         name: &'static str,
         authorize: Box<dyn FnOnce() -> Result<Vec<u8>, String> + Send>,
+        check: Box<dyn FnOnce() -> Result<(), String> + Send>,
         reply: Reply,
     },
     #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
@@ -102,11 +103,13 @@ impl GuestSession {
         runtime: PlatformRuntime,
         name: &'static str,
         authorize: impl FnOnce() -> Result<Vec<u8>, String> + Send + 'static,
+        check: impl FnOnce() -> Result<(), String> + Send + 'static,
     ) -> Result<(), String> {
         self.request(|reply| Request::Open {
             runtime,
             name,
             authorize: Box::new(authorize),
+            check: Box::new(check),
             reply,
         })
     }
@@ -150,6 +153,7 @@ fn run_guest_owner(receiver: mpsc::Receiver<Request>) {
                 runtime,
                 name,
                 authorize,
+                check,
                 reply,
             } => {
                 let _ = reply.send(open_authorized_session(
@@ -157,6 +161,7 @@ fn run_guest_owner(receiver: mpsc::Receiver<Request>) {
                     runtime,
                     name,
                     authorize,
+                    check,
                 ));
             }
             #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
@@ -183,12 +188,13 @@ fn open_authorized_session<R: GuestRuntime>(
     runtime: R,
     name: &str,
     authorize: impl FnOnce() -> Result<Vec<u8>, String>,
+    check: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
     if session.is_some() {
         return Err("workspace already open".into());
     }
     let mut current = Workspace::new(runtime);
-    match current.open_authorized(name, authorize) {
+    match current.open_authorized_checked(name, authorize, check) {
         Ok(()) => {
             *session = Some(current);
             Ok(())

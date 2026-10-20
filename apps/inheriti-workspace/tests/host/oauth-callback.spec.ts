@@ -30,7 +30,7 @@ describe('Workspace system browser', () => {
 
 describe('Workspace OAuth loopback', () => {
   it.each([
-    ['code=private-code&state=expected', 200, 'Continue in Inheriti Workspace', null],
+    ['code=private-code&state=expected', 200, 'Continue in Inheriti® Workspace', null],
     ['error=login_required&state=expected', 400, 'Sign-in failed', 'login_required'],
     ['code=private-code', 400, 'Sign-in failed', 'invalid_callback'],
   ] as const)('returns a branded callback for %s', async (query, status, heading, failure) => {
@@ -46,7 +46,7 @@ describe('Workspace OAuth loopback', () => {
     expect(response.status).toBe(status);
     expect(response.headers.get('content-type')).toContain('text/html');
     expect(html).toContain(heading);
-    expect(html).toContain('Inheriti Workspace');
+    expect(html).toContain('Inheriti® Workspace');
     expect(html).not.toContain('private-code');
   });
 

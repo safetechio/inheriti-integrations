@@ -38,13 +38,7 @@ pub async fn viewer_sign_in(app: tauri::AppHandle) -> Result<AuthStatus, String>
 }
 #[tauri::command]
 pub async fn viewer_sign_out(app: tauri::AppHandle) -> Result<AuthStatus, String> {
-    super::preview::viewer_cancel_opening(app.state::<HostState>());
-    #[cfg(target_os = "linux")]
-    app.state::<HostState>()
-        .pdf
-        .lock()
-        .map_err(|_| "host unavailable")?
-        .take();
+    super::file::viewer_clear_startup_file(app.clone()).await?;
     tauri::async_runtime::spawn_blocking(move || {
         invoke(&app, &app.state::<HostState>(), "signOut", None, None)
     })

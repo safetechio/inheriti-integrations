@@ -82,7 +82,7 @@ const callbackHeaders = {
 };
 
 function callbackPage(success: boolean): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${success ? 'Continue in Inheriti Workspace' : 'Sign-in failed'} · Inheriti Workspace</title><style>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${success ? 'Continue in Inheriti® Workspace' : 'Sign-in failed'} · Inheriti® Workspace</title><style>
     @font-face{font-family:AppFont;src:url(data:font/ttf;base64,${font}) format('truetype');font-display:swap}
     :root{color-scheme:light;--ground:#f9fafb;--card:#fff;--ink:#101828;--muted:#475467;--line:#eaecf0;--danger:#c21e2e}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--ground);color:var(--ink);font:16px/1.5 AppFont,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -90,5 +90,5 @@ function callbackPage(success: boolean): string {
     .brand{display:flex;align-items:center;gap:12px;padding:24px 32px;border-bottom:1px solid var(--line);font-weight:700;color:#101828}.brand img{display:block;width:40px;height:40px;object-fit:contain}
     .content{padding:32px}.eyebrow{margin:0 0 8px;color:#1642ba;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}h1{margin:0 0 8px;font-size:24px;line-height:1.3}h1.failed{color:var(--danger)}.message{margin:0;color:var(--muted)}
     @media(max-width:420px){.brand{padding:20px 24px}.content{padding:24px}}
-  </style></head><body><main class="card"><header class="brand"><img src="data:image/svg+xml;base64,${logo}" alt="" />Inheriti Workspace</header><div class="content"><p class="eyebrow">${success ? 'Browser step complete' : 'Sign-in error'}</p><h1${success ? '' : ' class="failed"'}>${success ? 'Continue in Inheriti Workspace' : 'Sign-in failed'}</h1><p class="message">${success ? 'You can close this tab and return to Inheriti Workspace to finish signing in.' : 'Return to Inheriti Workspace and try signing in again.'}</p></div></main></body></html>`;
+  </style></head><body><main class="card"><header class="brand"><img src="data:image/svg+xml;base64,${logo}" alt="" />Inheriti® Workspace</header><div class="content"><p class="eyebrow">${success ? 'Browser step complete' : 'Sign-in error'}</p><h1${success ? '' : ' class="failed"'}>${success ? 'Continue in Inheriti® Workspace' : 'Sign-in failed'}</h1><p class="message">${success ? 'You can close this tab and return to Inheriti® Workspace to finish signing in.' : 'Return to Inheriti® Workspace and try signing in again.'}</p></div></main></body></html>`;
 }

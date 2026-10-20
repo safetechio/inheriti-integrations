@@ -55,6 +55,8 @@ pub struct HostState {
     pub(super) child: Mutex<Option<Child>>,
     pub(super) child_pid: AtomicI32,
     pub(super) opening_active: AtomicBool,
+    pub(super) resetting: AtomicBool,
+    pub(super) reset_active: AtomicBool,
     pub(super) cancel_requested: Arc<AtomicBool>,
     pub(super) opening_gate: Mutex<()>,
     pub(super) startup_file: Mutex<Result<Option<StartupFile>, String>>,
@@ -81,6 +83,8 @@ impl HostState {
             child: Mutex::new(None),
             child_pid: AtomicI32::new(0),
             opening_active: AtomicBool::new(false),
+            resetting: AtomicBool::new(false),
+            reset_active: AtomicBool::new(false),
             cancel_requested: Arc::new(AtomicBool::new(false)),
             opening_gate: Mutex::new(()),
             startup_file: Mutex::new(StartupFile::from_args(std::env::args_os().skip(1))),
@@ -98,10 +102,31 @@ impl HostState {
         self.guest.shutdown()
     }
 
+    pub(super) fn cancel_host_process(&self) {
+        self.cancel_requested.store(true, Ordering::Release);
+        let gate = match self.opening_gate.try_lock() {
+            Ok(gate) => gate,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                platform::cancel_child(self.child_pid.load(Ordering::Acquire));
+                match self.opening_gate.lock() {
+                    Ok(gate) => gate,
+                    Err(_) => return,
+                }
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                platform::cancel_child(self.child_pid.load(Ordering::Acquire));
+                return;
+            }
+        };
+        self.cancel_requested.store(true, Ordering::Release);
+        platform::cancel_child(self.child_pid.load(Ordering::Acquire));
+        drop(gate);
+    }
+
     pub(super) fn opened_file(&self, path: PathBuf) -> Result<bool, String> {
         let file = StartupFile::from_path(path)?;
         let mut child = self.child.lock().map_err(|_| "host unavailable")?;
-        if self.opening_active.load(Ordering::Acquire) {
+        if self.resetting.load(Ordering::Acquire) || self.opening_active.load(Ordering::Acquire) {
             return Err("opening_in_progress".into());
         }
         let mut current = self.startup_file.lock().map_err(|_| "host unavailable")?;
@@ -117,6 +142,9 @@ impl HostState {
         #[cfg(target_os = "linux")]
         {
             self.pdf.lock().map_err(|_| "host unavailable")?.take();
+        }
+        if self.resetting.load(Ordering::Acquire) {
+            return Err("opening_in_progress".into());
         }
         Ok(true)
     }
@@ -155,7 +183,14 @@ pub(super) fn invoke<T: for<'de> Deserialize<'de>>(
     organization_id: Option<&str>,
     copy_id: Option<&str>,
 ) -> Result<T, String> {
-    invoke_inner(app, state, op, organization_id, copy_id, None)
+    invoke_inner(
+        app,
+        state,
+        op,
+        organization_id,
+        copy_id,
+        Some(&state.cancel_requested),
+    )
 }
 
 pub(super) fn invoke_cancelable<T: for<'de> Deserialize<'de>>(
@@ -342,5 +377,35 @@ mod cancellation_tests {
     fn cancelled_response_discards_sidecar_before_retry() {
         assert!(must_restart_host("opening_cancelled"));
         assert!(!must_restart_host("organization_required"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_terminates_non_opening_host_process() {
+        let state = HostState::new();
+        let mut process = Command::new("sleep").arg("30").spawn().unwrap();
+        state
+            .child_pid
+            .store(process.id() as i32, Ordering::Release);
+        state.cancel_host_process();
+        assert!(state.cancel_requested.load(Ordering::Acquire));
+        assert!(!process.wait().unwrap().success());
+    }
+
+    #[test]
+    fn cancellation_cannot_be_cleared_by_opening_while_gate_is_held() {
+        let state = Arc::new(HostState::new());
+        let gate = state.opening_gate.lock().unwrap();
+        let pending = state.clone();
+        let thread = std::thread::spawn(move || pending.cancel_host_process());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !state.cancel_requested.load(Ordering::Acquire) {
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        state.cancel_requested.store(false, Ordering::Release);
+        drop(gate);
+        thread.join().unwrap();
+        assert!(state.cancel_requested.load(Ordering::Acquire));
     }
 }

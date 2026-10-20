@@ -1,6 +1,6 @@
-# Inheriti Workspace
+# Inheriti® Workspace
 
-Inheriti Workspace opens protected `.inheriti` files after checking that you are allowed to access them. A saved protected file remains encrypted between openings.
+Inheriti® Workspace opens protected `.inheriti` files after checking that you are allowed to access them. A saved protected file remains encrypted between openings.
 
 ## How opening a file works
 
@@ -12,7 +12,7 @@ Business plan with a file
   → isolated opening of supported content
 ```
 
-Double-click the saved file and choose **Inheriti Workspace** if your computer asks which app to use. Workspace checks your access for each opening. An active Reveal may already cover the SafeKey Mobile approval.
+Double-click the saved file and choose **Inheriti® Workspace** if your computer asks which app to use. Workspace checks your access for each opening and requests SafeKey Mobile approval when needed.
 
 The virtual machine is a disposable computer running inside your computer. Its viewer and temporary file live together in one session:
 

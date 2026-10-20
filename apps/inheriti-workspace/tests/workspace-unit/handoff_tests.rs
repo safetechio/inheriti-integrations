@@ -61,7 +61,7 @@ fn fixture() -> (Workspace<Fake>, Rc<RefCell<State>>) {
 }
 
 #[test]
-fn starts_before_authorization_and_opens_without_file_type_branch() {
+fn authorizes_before_start_and_opens_without_file_type_branch() {
     let (mut workspace, state) = fixture();
     assert_eq!(
         workspace.open_authorized("model.unknown", || {
@@ -72,27 +72,47 @@ fn starts_before_authorization_and_opens_without_file_type_branch() {
     );
     assert_eq!(
         state.borrow().calls,
-        ["start", "authorize", "ingress", "launch"]
+        ["authorize", "start", "ingress", "launch"]
     );
     assert_eq!(state.borrow().observed_plaintext, b"secret");
     assert_eq!(workspace.close(), Ok(()));
 }
 
 #[test]
-fn start_failure_never_calls_authorization() {
+fn start_failure_follows_authorization_and_tears_down() {
     let (mut workspace, state) = fixture();
     state.borrow_mut().fail = Some("start");
     assert_eq!(
         workspace.open_authorized("a.pdf", || -> Result<Vec<u8>, &'static str> {
-            panic!("authorization must not run")
+            state.borrow_mut().calls.push("authorize");
+            Ok(b"secret".to_vec())
         }),
         Err(HandoffError::Failure(HandoffFailure::Runtime("start")))
     );
-    assert_eq!(state.borrow().calls, ["start", "teardown"]);
+    assert_eq!(state.borrow().calls, ["authorize", "start", "teardown"]);
 }
 
 #[test]
-fn authorization_and_invalid_plaintext_close_guest() {
+fn invalidated_during_start_never_ingresses_plaintext() {
+    let (mut workspace, state) = fixture();
+    assert_eq!(
+        workspace.open_authorized_checked(
+            "a.pdf",
+            || Ok::<_, &'static str>(b"secret".to_vec()),
+            || {
+                state.borrow_mut().calls.push("check");
+                Err("opening_cancelled")
+            },
+        ),
+        Err(HandoffError::Failure(HandoffFailure::Authorization(
+            "opening_cancelled"
+        )))
+    );
+    assert_eq!(state.borrow().calls, ["start", "check", "teardown"]);
+}
+
+#[test]
+fn authorization_and_invalid_plaintext_never_start_guest() {
     let (mut workspace, state) = fixture();
     assert_eq!(
         workspace.open_authorized("a.pdf", || Err::<Vec<u8>, _>("denied")),
@@ -100,15 +120,12 @@ fn authorization_and_invalid_plaintext_close_guest() {
             "denied"
         )))
     );
-    assert_eq!(state.borrow().calls, ["start", "teardown"]);
+    assert!(state.borrow().calls.is_empty());
     assert_eq!(
         workspace.open_authorized("a.pdf", || Ok::<_, &'static str>(Vec::new())),
         Err(HandoffError::Failure(HandoffFailure::InvalidFile))
     );
-    assert_eq!(
-        state.borrow().calls,
-        ["start", "teardown", "start", "teardown"]
-    );
+    assert!(state.borrow().calls.is_empty());
 }
 
 #[test]
@@ -132,23 +149,20 @@ fn ingress_failure_wipes_before_teardown_and_preserves_cleanup_pending() {
 }
 
 #[test]
-fn authorization_cleanup_failure_blocks_new_open_until_retry() {
+fn authorization_failure_does_not_attempt_cleanup_or_block_retry() {
     let (mut workspace, state) = fixture();
     state.borrow_mut().teardown_failures = 1;
     assert_eq!(
         workspace.open_authorized("a.pdf", || Err::<Vec<u8>, _>("denied")),
-        Err(HandoffError::Cleanup {
-            operation: HandoffFailure::Authorization("denied"),
-            cleanup: "teardown",
-        })
+        Err(HandoffError::Failure(HandoffFailure::Authorization(
+            "denied"
+        )))
     );
+    assert!(state.borrow().calls.is_empty());
     assert_eq!(
-        workspace.open_authorized("b.pdf", || -> Result<Vec<u8>, &'static str> {
-            panic!("authorization must not run while cleanup is pending")
-        }),
-        Err(HandoffError::AlreadyOpen)
+        workspace.open_authorized("b.pdf", || Ok::<_, &'static str>(b"x".to_vec())),
+        Ok(())
     );
-    assert_eq!(workspace.close(), Ok(()));
 }
 
 #[test]

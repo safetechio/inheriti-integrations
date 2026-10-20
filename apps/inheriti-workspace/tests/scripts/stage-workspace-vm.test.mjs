@@ -13,12 +13,12 @@ function fixture() {
   const source = join(root, 'source');
   const output = join(root, 'output');
   mkdirSync(join(source, 'LICENSES'), { recursive: true });
-  writeFileSync(join(source, 'qemu-system-x86_64'), 'qemu', { mode: 0o755 });
+  writeFileSync(join(source, 'qemu-system-x86_64'), 'Inheriti® Workspace', { mode: 0o755 });
   writeFileSync(join(source, 'vmlinuz'), 'kernel');
   writeFileSync(join(source, 'initramfs'), 'guest');
   writeFileSync(join(source, 'LICENSES', 'QEMU.txt'), 'license');
   const files = {
-    'qemu-system-x86_64': digest('qemu'),
+    'qemu-system-x86_64': digest('Inheriti® Workspace'),
     vmlinuz: digest('kernel'),
     initramfs: digest('guest'),
     'LICENSES/QEMU.txt': digest('license'),
@@ -100,6 +100,33 @@ test('requires the host-specific QEMU executable', () => {
   try {
     assert.throws(() => stageWorkspaceVm(source, 'win32', 'x64', output, pin), /qemu-system-x86_64.exe/);
     assert.throws(() => stageWorkspaceVm(source, 'darwin', 'arm64', output, pin), /qemu-system-aarch64/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('rejects unbranded and stock SDL window titles', () => {
+  const { root, source, output } = fixture();
+  try {
+    for (const caption of ['qemu', 'Inheriti® Workspace QEMU (%s-%d)%s']) {
+      writeFileSync(join(source, 'qemu-system-x86_64'), caption, { mode: 0o755 });
+      const manifest = JSON.parse(readFileSync(join(source, 'manifest.sha256.json'), 'utf8'));
+      manifest.files['qemu-system-x86_64'] = digest(caption);
+      const content = JSON.stringify(manifest);
+      writeFileSync(join(source, 'manifest.sha256.json'), content);
+      assert.throws(() => stageWorkspaceVm(source, 'linux', 'x64', output, digest(content)), /branded SDL window title/);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('rejects a stock SDL module beside a branded executable', () => {
+  const { root, source, output } = fixture();
+  try {
+    mkdirSync(join(source, 'qemu'), { recursive: true });
+    writeFileSync(join(source, 'qemu', 'ui-sdl.so'), 'QEMU (%s-%d)%s');
+    const manifest = JSON.parse(readFileSync(join(source, 'manifest.sha256.json'), 'utf8'));
+    manifest.files['qemu/ui-sdl.so'] = digest('QEMU (%s-%d)%s');
+    const content = JSON.stringify(manifest);
+    writeFileSync(join(source, 'manifest.sha256.json'), content);
+    assert.throws(() => stageWorkspaceVm(source, 'linux', 'x64', output, digest(content)), /branded SDL window title/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

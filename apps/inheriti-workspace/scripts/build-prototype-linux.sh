@@ -26,7 +26,8 @@ pnpm build:host
 cargo build --offline --manifest-path src-tauri/Cargo.toml --bins
 runtime=src-tauri/target/debug/workspace-host
 mkdir -p "$runtime"
-cp -L "$node_binary" "$runtime/node"
+cp -L "$node_binary" "$runtime/node.next"
+mv -f "$runtime/node.next" "$runtime/node"
 cp dist/host.cjs "$runtime/host.cjs"
 rm -rf "$runtime/node_modules"
 cp -a dist/node_modules "$runtime/node_modules"

@@ -44,7 +44,7 @@ cp "$node_license" src-tauri/binaries/NODE-LICENSE
 
 # The helper is added after Tauri builds the app, so the DMG must use that staged app.
 cargo tauri build --bundles app --ci --config '{"identifier":"com.safetech.inheriti.workspace.'"$deployment"'","bundle":{"active":true,"resources":{"../dist/host.cjs":"host.cjs","../dist/node_modules":"node_modules","binaries/node-'"$target"'":"node","binaries/NODE-LICENSE":"NODE-LICENSE","workspace-vm/":"workspace-vm/"}}}'
-app='src-tauri/target/release/bundle/macos/Inheriti Workspace.app'
+app='src-tauri/target/release/bundle/macos/Inheriti® Workspace.app'
 if [[ ! -d "$app" ]]; then
   echo 'Tauri app bundle unavailable' >&2
   exit 1
@@ -57,8 +57,8 @@ bash scripts/package-preview-macos.sh "$app"
 version="$(node -p 'require("./package.json").version')"
 arch="$(uname -m)"
 mkdir -p src-tauri/target/release/bundle/dmg
-dmg="src-tauri/target/release/bundle/dmg/Inheriti Workspace_${version}_${arch}.dmg"
+dmg="src-tauri/target/release/bundle/dmg/Inheriti® Workspace_${version}_${arch}.dmg"
 rm -f "$dmg"
-hdiutil create -volname 'Inheriti Workspace' -srcfolder "$app" -ov -format UDZO "$dmg"
+hdiutil create -volname 'Inheriti® Workspace' -srcfolder "$app" -ov -format UDZO "$dmg"
 codesign --force --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
 codesign --verify "$dmg"

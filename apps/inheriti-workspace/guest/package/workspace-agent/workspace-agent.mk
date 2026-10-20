@@ -1,5 +1,5 @@
 ################################################################################
-# Inheriti Workspace guest agent; source stays in this br2-external tree.
+# Inheriti® Workspace guest agent; source stays in this br2-external tree.
 ################################################################################
 
 WORKSPACE_AGENT_VERSION = 1

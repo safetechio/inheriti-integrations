@@ -145,11 +145,15 @@ export class WorkspaceSession {
     return this.apiForOrganization(this.selectedId).getFileAccess(copyId);
   }
 
-  /** Resolve access against the currently selected organization; raw file bytes stay in access. */
+  /** Resolve the file against authorized organizations before selecting its server-verified owner. */
   async inspectStartupFile(): Promise<FileAccessStatus> {
     await this.requireSignIn();
-    if (!this.selectedId) throw new Error('organization_required');
-    return inspectStartupFileAccess(this.startupPath, this.apiForOrganization(this.selectedId));
+    const organizations = await this.core.listOrganizations();
+    const candidates = [...organizations].sort((a, b) => Number(b.id === this.selectedId) - Number(a.id === this.selectedId));
+    const match = await inspectStartupFileAccess(this.startupPath, candidates.map(({ id }) => id), this.apiForOrganization);
+    this.organizations = organizations;
+    this.selectedId = match.id;
+    return match.access;
   }
 
   async inspectStartupFileMime(): Promise<string> {
