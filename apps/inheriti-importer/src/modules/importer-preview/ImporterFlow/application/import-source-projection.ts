@@ -4,6 +4,7 @@ import type { ImportFile } from '../../SourceImportStatus';
 
 const formatLabels: Record<VaultSourceKind, string> = {
   keepass: 'KeePass',
+  onepassword: '1Password',
   passbolt: 'Passbolt',
   kubernetes: 'Kubernetes',
   vault: 'Vault',
@@ -14,6 +15,7 @@ const formatLabels: Record<VaultSourceKind, string> = {
 function pendingFormat(source: ImportSourceRecord): string {
   const extension = source.file.name.split('.').pop()?.toLowerCase();
   if (extension === 'kdbx') return 'KeePass';
+  if (extension === '1pux') return '1Password';
   if (extension === 'yaml' || extension === 'yml') return 'YAML';
   if (extension === 'env') return 'dotenv';
   if (extension === 'csv') return 'CSV';

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { detectVaultKind } from '@modules/import/infrastructure/parsers/detect';
+import { detectVaultKind } from '@modules/import/infrastructure/parsers/utils/detect';
+import { zipSync, strToU8 } from 'fflate';
 import { VaultFormatError } from '@modules/import/domain/vault';
 
 function buffer(text: string): ArrayBuffer {
@@ -37,6 +38,16 @@ describe('detectVaultKind', () => {
         buffer(JSON.stringify([{ name: 'GitHub', username: 'ada', secret: 'x' }])),
       ),
     ).toBe('passbolt');
+  });
+
+  it('recognises ZIP signature before decoding text', () => {
+    const zip = zipSync({ 'export.data': strToU8('{}') });
+    expect(
+      detectVaultKind(
+        'backup.zip',
+        zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+      ),
+    ).toBe('onepassword');
   });
 
   it('rejects unknown files', () => {

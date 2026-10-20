@@ -2,8 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { SensitiveValue, createEmptyImportSession } from '@modules/import/domain/import-model';
 import { validatePlanForExecution } from '@modules/plans/domain/workspace-validation';
 import { makePlanDraft } from '@modules/plans/domain/workspace-model';
+import { validateAssetEditorValues } from '@modules/plans/domain/asset-metadata';
 
 describe('validatePlanForExecution', () => {
+  it('reports the length limit for an oversized email', () => {
+    expect(
+      validateAssetEditorValues('USER-PSWD', {
+        meta: {},
+        secret: { email: `${'a'.repeat(250)}@example.com` },
+      })['secret.email'],
+    ).toBe('Please enter a value of max 254 chars');
+  });
+
   it('rejects a source binding that no longer exists', () => {
     const plan = makePlanDraft('plan-1', 'Imported Plan');
     plan.assets.push({

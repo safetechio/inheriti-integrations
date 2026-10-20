@@ -6,6 +6,13 @@ import { SensitiveValue, type ImportSession } from '@modules/import/domain/impor
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
 import { createEmptyWorkspace } from '@modules/plans/domain/workspace-model';
 import { createPlan } from '@modules/plans/domain/workspace-commands';
+import { materialiseAsset } from '@modules/plans/domain/asset-materializer';
+import { buildStagedAssetInput } from '@modules/batch/infrastructure/importer-tool-repo';
+import { hasIncludedSchemaField } from '@modules/importer-preview/AssetReviewQueue/types';
+import {
+  assetMatchesSuggestion,
+  sourceSuggestions,
+} from '@modules/importer-preview/ImporterFlow/application/importer-workspace-suggestions';
 import {
   createHistory,
   pushHistory,
@@ -63,6 +70,626 @@ function importSession(): ImportSession {
 }
 
 describe('useImporterWorkspace schema mapping lifecycle', () => {
+  it('moves native notes between Plain Text metadata and source text in review and assigned drafts', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.fieldsById['field-token'].name = 'extra:private key';
+    session.fieldsById['field-other'].name = 'notes';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const asset = () => result.current.importer.assets[0]!;
+    const suggested = () => result.current.importer.suggestions[0]!;
+    expect(suggested().fieldBindings['meta.notes']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'field-other',
+    });
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', undefined));
+    expect(suggested().fieldBindings['meta.notes']).toBeUndefined();
+    expect(
+      materialiseAsset(
+        {
+          id: 'draft',
+          type: 'PLAIN-TEXT',
+          name: 'Partner',
+          fieldBindings: suggested().fieldBindings,
+        },
+        session,
+      ).asset.secret.text,
+    ).toContain('notes: second-token');
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-other'));
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('first-token');
+    expect(materialiseAsset(draft, session).asset.meta.notes).toBe('second-token');
+    expect(suggested().fieldBindings['secret.text']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'field-token',
+    });
+  });
+  it('preserves edited Plain Text while changing its note mapping', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.fieldsById['field-token'].name = 'extra:private key';
+    session.fieldsById['field-other'].name = 'notes';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const asset = () => result.current.importer.assets[0]!;
+    act(() => result.current.importer.editPlainText(asset(), 'Edited value'));
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', undefined));
+    expect(result.current.importer.suggestions[0]!.fieldBindings['secret.text']).toMatchObject({
+      kind: 'literal',
+    });
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-other'));
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('Edited value');
+    expect(materialiseAsset(draft, session).asset.meta.notes).toBe('second-token');
+  });
+  it('returns the old note to Plain Text when replacing its note source', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.fieldsById['field-token'].name = 'extra:private key';
+    session.fieldsById['field-other'].name = 'notes';
+    session.nodesById['entry-1']!.fieldIds.push('field-new-note');
+    session.fieldsById['field-new-note'] = {
+      id: 'field-new-note',
+      sourceId: 'source-1',
+      parentNodeId: 'entry-1',
+      sourcePath: ['entry-1', 'new note'],
+      name: 'extra:new note',
+      value: new SensitiveValue('Replacement instructions'),
+      metadata: {},
+    };
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const asset = () => result.current.importer.assets[0]!;
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-new-note'));
+    const reviewed = result.current.importer.suggestions[0]!;
+    const reviewedAsset = materialiseAsset(
+      {
+        id: 'reviewed',
+        type: 'PLAIN-TEXT',
+        name: 'Partner',
+        fieldBindings: reviewed.fieldBindings,
+      },
+      session,
+    ).asset;
+    expect(reviewedAsset.meta.notes).toBe('Replacement instructions');
+    expect(reviewedAsset.secret.text).toContain('notes: second-token');
+    expect(reviewedAsset.secret.text).not.toContain('Replacement instructions');
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(materialiseAsset(draft, session).asset).toMatchObject({
+      meta: reviewedAsset.meta,
+      secret: reviewedAsset.secret,
+    });
+    act(() => result.current.importer.mapAssetField(asset(), 'secret.text', 'field-new-note'));
+    act(() => result.current.importer.mapAssetField(asset(), 'secret.text', undefined));
+    const reset = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    const projected = result.current.importer.suggestions[0]!;
+    expect(materialiseAsset(reset, session).asset).toMatchObject({
+      meta: materialiseAsset({ ...reset, fieldBindings: projected.fieldBindings }, session).asset
+        .meta,
+      secret: materialiseAsset({ ...reset, fieldBindings: projected.fieldBindings }, session).asset
+        .secret,
+    });
+    expect(materialiseAsset(reset, session).asset.secret.text).toContain('notes: second-token');
+    expect(materialiseAsset(reset, session).asset.secret.text).not.toContain(
+      'Replacement instructions',
+    );
+  });
+  it('restores converted note source after structured remap without changing the companion', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.fieldsById['field-token'].name = 'password';
+    session.fieldsById['field-other'].name = 'notes';
+    session.nodesById['entry-1']!.fieldIds.push('field-new-note');
+    session.fieldsById['field-new-note'] = {
+      id: 'field-new-note',
+      sourceId: 'source-1',
+      parentNodeId: 'entry-1',
+      sourcePath: ['entry-1', 'new note'],
+      name: 'extra:new note',
+      value: new SensitiveValue('Replacement instructions'),
+      metadata: {},
+    };
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const primary = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT')!;
+    act(() =>
+      result.current.importer.mapAssetField(
+        result.current.importer.assets.find((asset) => asset.type === 'USER-PSWD')!,
+        'meta.notes',
+        'field-new-note',
+      ),
+    );
+    act(() =>
+      result.current.importer.reviewAsset(
+        'alternate:PLAIN-TEXT',
+        result.current.importer.assets.find((asset) => asset.type === 'USER-PSWD')!,
+      ),
+    );
+    act(() => result.current.importer.reviewAsset('accept', primary()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned.find((asset) => asset.id === primary().id)!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(primary(), 'meta.notes', undefined));
+    const reviewed = result.current.importer.suggestions.find(
+      (asset) => asset.type === 'PLAIN-TEXT' && !asset.variant,
+    )!;
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    const reviewedValue = materialiseAsset(
+      { ...draft, fieldBindings: reviewed.fieldBindings },
+      session,
+    ).asset;
+    const assignedValue = materialiseAsset(draft, session).asset;
+    expect(reviewedValue.meta.notes).toBeUndefined();
+    expect(reviewedValue.secret.text).toContain('new note: Replacement instructions');
+    expect(assignedValue.secret).toEqual(reviewedValue.secret);
+    expect(assignedValue.meta.notes).toBeUndefined();
+    const companion = result.current.importer.suggestions.find(
+      (asset) => asset.variant === 'additional-fields',
+    )!;
+    const companionValue = materialiseAsset(
+      {
+        id: 'companion',
+        type: 'PLAIN-TEXT',
+        name: companion.name,
+        fieldBindings: companion.fieldBindings,
+      },
+      session,
+    ).asset;
+    expect(companionValue.secret.text).toBe('second-token');
+  });
+  it('still matches a single generic suggestion to a legacy source-bound draft', () => {
+    const session = importSession();
+    const suggestion = sourceSuggestions(session)[0]!;
+    expect(
+      assetMatchesSuggestion(
+        session,
+        {
+          id: 'legacy-asset',
+          type: 'API-KEY',
+          name: 'Partner',
+          fieldBindings: {
+            'secret.apiKey': { kind: 'source', sourceFieldId: 'field-token' },
+          },
+        },
+        suggestion,
+      ),
+    ).toBe(true);
+  });
+  it('keeps generic notes companions independent after overlapping remaps', () => {
+    const session = importSession();
+    session.fieldsById['field-other'].name = 'notes';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const primaryId = 'entry-1:API-KEY';
+    const companionId = 'entry-1:PLAIN-TEXT-ADDITIONAL';
+    for (const id of [primaryId, companionId]) {
+      const asset = result.current.importer.assets.find((item) => item.id === id)!;
+      act(() => result.current.importer.reviewAsset('accept', asset));
+      act(() =>
+        result.current.importer.assignAsset(
+          result.current.importer.unassigned.find((item) => item.id === id)!,
+          result.current.importer.plans[0]!,
+        ),
+      );
+    }
+    expect(
+      result.current.workspace.plansByClientId['plan-1']!.assets.map((item) => item.id),
+    ).toEqual([primaryId, companionId]);
+    act(() =>
+      result.current.importer.mapAssetField(
+        result.current.importer.assets.find((item) => item.id === primaryId)!,
+        'secret.apiKey',
+        'field-other',
+      ),
+    );
+    const companion = result.current.importer.assets.find((item) => item.id === companionId)!;
+    expect(companion.status).toBe('accepted');
+    act(() => result.current.importer.reviewAsset('exclude', companion));
+    expect(
+      result.current.workspace.plansByClientId['plan-1']!.assets.map((item) => item.id),
+    ).toEqual([primaryId]);
+  });
+  it('reviews and stages notes without treating notes as a secret field', () => {
+    const session = importSession();
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const asset = () => result.current.importer.assets[0]!;
+    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-other'));
+    expect(asset().schemaFields?.find((field) => field.key === 'meta.notes')).toEqual(
+      expect.objectContaining({
+        label: 'Notes or guidelines',
+        sourceFieldId: 'field-other',
+      }),
+    );
+    expect(JSON.stringify(asset())).not.toContain('second-token');
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(draft.fieldBindings['meta.notes']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'field-other',
+    });
+    expect(buildStagedAssetInput(materialiseAsset(draft, session).asset).fields).toContainEqual({
+      fieldId: 'meta.notes',
+      value: 'second-token',
+    });
+    const notesOnly = {
+      ...asset(),
+      schemaFields: asset().schemaFields?.filter((field) => field.key === 'meta.notes'),
+    };
+    expect(hasIncludedSchemaField(notesOnly)).toBe(false);
+  });
+  it('restores only primary fields after remapping converted 1Password text', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.nodesById['entry-1']!.fieldIds.push('field-notes');
+    session.fieldsById['field-notes'] = {
+      id: 'field-notes',
+      sourceId: 'source-1',
+      parentNodeId: 'entry-1',
+      sourcePath: ['entry-1', 'notes'],
+      name: 'notes',
+      value: new SensitiveValue('Instructions'),
+      metadata: {},
+    };
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    act(() =>
+      result.current.importer.reviewAsset(
+        'alternate:PLAIN-TEXT',
+        result.current.importer.assets.find((asset) => asset.type === 'API-KEY')!,
+      ),
+    );
+    const primary = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT')!;
+    act(() => result.current.importer.reviewAsset('accept', primary()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned.find((asset) => asset.id === primary().id)!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(primary(), 'secret.text', 'field-other'));
+    act(() => result.current.importer.mapAssetField(primary(), 'secret.text', undefined));
+
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    const reviewed = result.current.importer.suggestions.find(
+      (item) => item.fromNodeId === 'entry-1' && item.type === 'PLAIN-TEXT' && !item.variant,
+    )!;
+    expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('first-token');
+    expect(draft.fieldBindings['meta.notes']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'field-notes',
+    });
+    expect(materialiseAsset(draft, session).asset.meta.notes).toBe('Instructions');
+  });
+  it('resets companion mapping from structured fields after the primary becomes edited Plain Text', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const primary = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT')!;
+    const companion = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
+    act(() =>
+      result.current.importer.reviewAsset(
+        'alternate:PLAIN-TEXT',
+        result.current.importer.assets[0]!,
+      ),
+    );
+    act(() => result.current.importer.editPlainText(primary(), 'Edited credential'));
+    act(() => result.current.importer.reviewAsset('accept', companion()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned.find((asset) => asset.id === companion().id)!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(companion(), 'secret.text', 'field-token'));
+    act(() => result.current.importer.mapAssetField(companion(), 'secret.text', undefined));
+
+    const reviewed = result.current.importer.suggestions.find(
+      (item) => item.variant === 'additional-fields',
+    )!;
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('second-token');
+  });
+  it('resets an assigned companion mapping to its unmatched fields only', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const companion = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
+    act(() => result.current.importer.reviewAsset('accept', companion()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() => result.current.importer.mapAssetField(companion(), 'secret.text', 'field-token'));
+    act(() => result.current.importer.mapAssetField(companion(), 'secret.text', undefined));
+
+    const reviewed = result.current.importer.suggestions.find(
+      (item) => item.variant === 'additional-fields',
+    )!;
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('second-token');
+  });
+  it('preserves an edited companion value when the structured mapping changes', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    const companion = () =>
+      result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
+    act(() => result.current.importer.editPlainText(companion(), 'Reviewed additional context'));
+    act(() => result.current.importer.reviewAsset('accept', companion()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() =>
+      result.current.importer.mapAssetField(
+        result.current.importer.assets.find((asset) => asset.type === 'API-KEY')!,
+        'secret.apiKey',
+        'field-other',
+      ),
+    );
+
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    expect(companion().plainTextValue?.reveal()).toBe('Reviewed additional context');
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('Reviewed additional context');
+  });
+  it('moves a displaced 1Password field into the reviewed and assigned companion', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    for (const asset of result.current.importer.assets) {
+      act(() => result.current.importer.reviewAsset('accept', asset));
+    }
+    for (const asset of [...result.current.importer.unassigned]) {
+      act(() => result.current.importer.assignAsset(asset, result.current.importer.plans[0]!));
+    }
+    act(() =>
+      result.current.importer.mapAssetField(
+        result.current.importer.assets.find((asset) => asset.type === 'API-KEY')!,
+        'secret.apiKey',
+        'field-other',
+      ),
+    );
+
+    const companion = result.current.importer.suggestions.find(
+      (item) => item.variant === 'additional-fields',
+    )!;
+    expect(companion.fieldBindings['secret.text']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'field-token',
+    });
+    const drafts = result.current.workspace.plansByClientId['plan-1']!.assets;
+    expect(
+      drafts.map((draft) => [draft.id, materialiseAsset(draft, session).asset.secret]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['entry-1:API-KEY', expect.objectContaining({ apiKey: 'second-token' })],
+        ['entry-1:PLAIN-TEXT-ADDITIONAL', { text: 'first-token' }],
+      ]),
+    );
+  });
+  it('keeps a remapped 1Password conversion equal to its assigned draft', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    const initialWorkspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Partner Plan',
+    });
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+    });
+    act(() =>
+      result.current.importer.mapAssetField(
+        result.current.importer.assets[0]!,
+        'secret.apiKey',
+        'field-other',
+      ),
+    );
+    act(() => result.current.importer.reviewAsset('accept', result.current.importer.assets[0]!));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    act(() =>
+      result.current.importer.reviewAsset(
+        'alternate:PLAIN-TEXT',
+        result.current.importer.assets[0]!,
+      ),
+    );
+
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    const reviewed = result.current.importer.suggestions.find(
+      (item) => item.fromNodeId === 'entry-1' && item.type === 'PLAIN-TEXT' && !item.variant,
+    )!;
+    expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe('second-token');
+  });
+  for (const companionFirst of [false, true]) {
+    it(`keeps 1Password additional fields separate when converting with companion ${companionFirst ? 'first' : 'second'}`, () => {
+      const session = importSession();
+      session.sources[0]!.kind = 'onepassword';
+      const initialWorkspace = createPlan(createEmptyWorkspace(), {
+        clientId: 'plan-1',
+        name: 'Partner Plan',
+      });
+      const { result } = renderHook(() => {
+        const [workspace, setWorkspace] = useState(initialWorkspace);
+        return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+      });
+      expect(result.current.importer.assets.map((asset) => asset.id)).toEqual([
+        'entry-1:API-KEY',
+        'entry-1:PLAIN-TEXT-ADDITIONAL',
+      ]);
+      const assign = (id: string) => {
+        const asset = result.current.importer.assets.find((item) => item.id === id)!;
+        act(() => result.current.importer.reviewAsset('accept', asset));
+        const unassigned = result.current.importer.unassigned.find((item) => item.id === id)!;
+        act(() =>
+          result.current.importer.assignAsset(unassigned, result.current.importer.plans[0]!),
+        );
+      };
+      const companionId = 'entry-1:PLAIN-TEXT-ADDITIONAL';
+      if (companionFirst) assign(companionId);
+      assign('entry-1:API-KEY');
+      if (!companionFirst) assign(companionId);
+      act(() =>
+        result.current.importer.reviewAsset(
+          'alternate:PLAIN-TEXT',
+          result.current.importer.assets.find((item) => item.type === 'API-KEY')!,
+        ),
+      );
+
+      const drafts = result.current.workspace.plansByClientId['plan-1']!.assets;
+      expect(drafts.map((draft) => draft.id).sort()).toEqual(
+        ['entry-1:PLAIN-TEXT', companionId].sort(),
+      );
+      expect(
+        drafts.find((draft) => draft.id === 'entry-1:PLAIN-TEXT')?.fieldBindings['secret.text'],
+      ).toEqual({
+        kind: 'source',
+        sourceFieldId: 'field-token',
+      });
+      expect(
+        drafts.find((draft) => draft.id === companionId)?.fieldBindings['secret.text'],
+      ).toEqual({
+        kind: 'source',
+        sourceFieldId: 'field-other',
+      });
+      expect(
+        drafts.map((draft) => [draft.id, materialiseAsset(draft, session).asset.secret.text]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['entry-1:PLAIN-TEXT', 'first-token'],
+          [companionId, 'second-token'],
+        ]),
+      );
+      act(() =>
+        result.current.importer.reviewAsset(
+          'restore-suggestion',
+          result.current.importer.assets.find((item) => item.id === 'entry-1:PLAIN-TEXT')!,
+        ),
+      );
+      expect(
+        result.current.workspace.plansByClientId['plan-1']!.assets.map((draft) => draft.id).sort(),
+      ).toEqual(['entry-1:API-KEY', companionId].sort());
+    });
+  }
   it('removes an empty production draft without blocking the remaining plan', () => {
     const initialWorkspace = createPlan(
       createPlan(createEmptyWorkspace(), { clientId: 'plan-1', name: 'First' }),

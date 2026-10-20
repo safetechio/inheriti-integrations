@@ -49,8 +49,12 @@ handle('vault:openFiles', async () => {
     title: 'Import password database',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Supported vaults', extensions: ['kdbx', 'json', 'csv', 'yaml', 'yml', 'env'] },
+      {
+        name: 'Supported vaults',
+        extensions: ['kdbx', '1pux', 'json', 'csv', 'yaml', 'yml', 'env'],
+      },
       { name: 'KeePass', extensions: ['kdbx'] },
+      { name: '1Password', extensions: ['1pux'] },
       { name: 'Passbolt', extensions: ['json', 'csv'] },
       { name: 'Kubernetes', extensions: ['yaml', 'yml', 'json'] },
       { name: 'HashiCorp Vault', extensions: ['json', 'yaml', 'yml'] },

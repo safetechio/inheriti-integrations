@@ -9,6 +9,12 @@ export function detectVaultKind(fileName: string, data: ArrayBuffer): VaultSourc
   if (lower.endsWith('.kdbx') || hasKdbxSignature(data)) {
     return 'keepass';
   }
+  if (
+    lower.endsWith('.1pux') ||
+    (data.byteLength >= 4 && new DataView(data).getUint32(0, true) === 0x04034b50)
+  ) {
+    return 'onepassword';
+  }
 
   const text = decodeText(data);
   const json = tryParseJson(text);

@@ -1,216 +1,65 @@
 # Inheriti® Importer
 
-Desktop importer for password vaults and secret exports. Files are parsed locally so you can review and edit entries before any later push into Inheriti® Business.
+Desktop app for reviewing external secrets and preparing Inheriti® Business Protection Plans. Drop a file on the window or use **Choose files**. The app parses files locally and keeps imported values in memory while you review and edit entries. When you choose **Encrypt and stage**, it encrypts asset fields locally and sends the encrypted fields and plan draft to Inheriti® Business for staging.
 
 ```bash
-pnpm install
-pnpm dev:dev
+yarn dev:dev
 ```
 
-Drop a file on the window or use **Choose files**. The format is detected from the contents, not only the extension.
+The importer detects formats from file contents as well as file names. Imported entries can be edited before staging: title, username, password, URL, group, tags, notes, and extra fields.
 
-## Supported parsers
+## Supported files and fields
 
-| Parser          | Typical files            | What it reads                                                      |
-| --------------- | ------------------------ | ------------------------------------------------------------------ |
-| KeePass         | `.kdbx`                  | KeePass / KeePassXC databases (password and optional key file)     |
-| Passbolt        | `.json`, `.csv`          | Password export with secrets included                              |
-| Kubernetes      | `.yaml`, `.yml`, `.json` | `Secret` and `ConfigMap` (including Lists and multi-document YAML) |
-| HashiCorp Vault | `.json`, `.yaml`         | KV v1 and v2 `vault kv get` output, and multi-path dumps           |
-| dotenv          | `.env`, `*.env`          | `KEY=value` environment files                                      |
-| Cloud           | `.json`                  | AWS Secrets Manager, Azure Key Vault, Google Secret Manager        |
+### KeePass / KeePassXC `.kdbx`
 
-`username`, `password`, `url`, and similar keys are mapped to the standard entry fields. Other keys become extra fields.
+Import a KeePass 2.x database directly. Enter its master password and provide a key file when prompted. The importer preserves the group path and reads title, username, password, URL, notes, tags, and nonempty custom text fields.
 
----
+### 1Password `.1pux`
 
-## KeePass
+Import a 1Password `.1pux` export. Items with readable fields become entries grouped by vault name. The importer reads titles, URLs, notes, tags, designated login fields, and readable values from item sections. Field labels and values remain available for mapping to Plan assets. Review the resulting entries and field mappings before staging.
 
-Use the database file itself. No separate export step.
+### Passbolt `.json` or `.csv`
 
-1. In KeePass or KeePassXC, save the database (`.kdbx`).
-2. Import that file here.
-3. If the database is locked, enter the master password. Add the key file when the database uses one.
+Export passwords with secrets from Passbolt. JSON can contain a resource array, a single resource, or a `resources` array nested under `export`, `body`, or `data`. CSV uses a header row. The importer reads name/title, username, secret/password, URI/URL, description/notes, folder/group, tags, scalar extra fields, and additional scalar fields inside a JSON secret object.
 
-Compatible with KeePass 2.x / KeePassXC `.kdbx` files. Recycle-bin entries are skipped.
+Dedicated notes from KeePass, 1Password, and Passbolt fill **Notes or guidelines**, including on Plain Text fallbacks that also contain a secret value. These notes are asset metadata, so review them before staging. Notes found inside secret payloads stay in protected Plain Text assets for review.
 
----
+### Kubernetes `.yaml`, `.yml`, or `.json`
 
-## Passbolt
+Import `Secret` and `ConfigMap` resources as individual entries. The importer reads single objects, `List` objects with `items`, and multi-document YAML. Resource name becomes the title and namespace becomes the group. It reads `data`, `stringData`, and `binaryData`; text base64 values are decoded, and binary values are retained as base64 extra fields. Recognized keys such as username, password, URL, and notes fill standard fields; other keys become extra fields. Docker registry secrets also map the first registry's URL, username, and password.
 
-Export from the Passbolt web app so the file contains decrypted secrets.
+### HashiCorp Vault `.json` or `.yaml`
 
-1. Open the password workspace.
-2. Select the passwords to export (or all passwords you are allowed to export).
-3. Choose **Export**.
-4. Pick **JSON** or **CSV**.
-5. Include secrets / passwords in the export (you will be asked for your passphrase).
-6. Save the file and import it here.
+Import `vault kv get -format=json` or `-format=yaml` output for KV v1 and KV v2, arrays of responses, or path-keyed multi-secret dumps. Each secret becomes an entry. A path supplies the title, group, and notes when present. Secret keys such as username, password, URL, and notes fill standard fields; other keys become extra fields.
 
-JSON may be a resource array, `{ "resources": [ ... ] }`, or a similar nested export. CSV should include columns such as `Name`, `Username`, `URI`, `Description`, and `Secret` / `Password`.
+### dotenv `.env`, `.env.*`, or `*.env`
 
-If passwords are missing after import, the export was created without secrets. Export again and include them.
+Import `KEY=value` assignments, including `export` prefixes, quoted values, and multiline quoted values. Each nonempty variable becomes an entry titled with its key; the key and value are stored as an extra field. The file name supplies the group.
 
----
+### Cloud secret `.json`
 
-## Kubernetes
+- **AWS Secrets Manager:** `get-secret-value` and `batch-get-secret-value` JSON with `SecretString` or `SecretBinary`. The secret name becomes the title and the ARN region becomes the group.
+- **Azure Key Vault:** `az keyvault secret show --output json` with a secret `value`. The secret name becomes the title and the vault name becomes the group.
+- **Google Secret Manager:** `gcloud secrets versions access --format=json` with `name` and base64 `payload.data`. The secret name becomes the title and the project path becomes the group.
 
-Export Secret (or ConfigMap) objects with `kubectl`. Base64 `data` is decoded automatically.
+For these cloud formats, a JSON object inside the secret value is expanded into fields. Recognized keys such as username, password, URL, and notes fill standard fields; other keys become extra fields. A plain text value is kept as an extra field named for the secret.
 
-One secret:
+## Desktop environments and releases
+
+The app has `dev`, `stg`, and `prod` environment definitions for its Business API and SafeID connections. Local development uses the ignored `.env.local` file.
 
 ```bash
-kubectl get secret db-credentials -n production -o yaml > db-credentials.yaml
-kubectl get secret db-credentials -n production -o json > db-credentials.json
+yarn dev:dev
+yarn dev:stg
+yarn dev:prod
 ```
 
-Every secret in a namespace:
+To build an installer for the current operating system:
 
 ```bash
-kubectl get secrets -n production -o yaml > secrets.yaml
+yarn release:dev
+yarn release:stg
+yarn release:prod
 ```
 
-Every secret in the cluster:
-
-```bash
-kubectl get secrets -A -o json > all-secrets.json
-```
-
-Supported shapes:
-
-- Single `Secret` or `ConfigMap`
-- `kind: List` / `items` from `kubectl get secrets`
-- Multi-document YAML (`---` separators)
-- `Opaque`, `kubernetes.io/tls`, `kubernetes.io/dockerconfigjson`, and `kubernetes.io/basic-auth`
-- `stringData` as well as `data`
-
-Do not import SealedSecrets (they are still encrypted). Decrypt or unseal first, then export the resulting Secret.
-
----
-
-## HashiCorp Vault
-
-Export a KV secret as JSON (YAML is also accepted).
-
-KV v2 (current default):
-
-```bash
-vault kv get -format=json secret/myapp > myapp.json
-```
-
-KV v1:
-
-```bash
-vault kv get -format=json secret/myapp > myapp.json
-```
-
-YAML:
-
-```bash
-vault kv get -format=yaml secret/myapp > myapp.yaml
-```
-
-`vault kv list` only lists names and cannot be imported. To dump several paths, get each secret and combine the JSON objects, for example:
-
-```json
-{
-  "secret/ops/db": { "username": "root", "password": "..." },
-  "secret/ops/vpn": { "password": "..." }
-}
-```
-
-Or keep an array of `vault kv get -format=json` responses. KV v2 payloads (`data.data` + `metadata`) and KV v1 flat `data` maps are both recognised.
-
----
-
-## dotenv
-
-Import an environment file from the project or host.
-
-Typical names: `.env`, `.env.local`, `.env.production`, `app.env`.
-
-Expected lines:
-
-```bash
-DATABASE_URL=postgres://ada:s3cret@db/app
-export API_KEY="abc 123"
-HOST=example.com
-```
-
-Comments (`#`) and quoted values are supported. Each variable becomes its own entry (title = key, password = value).
-
-macOS file dialogs often hide files that start with a dot. Drag `.env` onto the window, or rename a copy to `app.env` before using **Choose files**.
-
----
-
-## Cloud vaults
-
-Import the JSON from a **get/show/access** call that includes the secret value. List-only APIs (`list-secrets`, `secret list`) do not include values and cannot be imported.
-
-### AWS Secrets Manager
-
-```bash
-aws secretsmanager get-secret-value \
-  --secret-id prod/db \
-  --output json > aws-secret.json
-```
-
-Several secrets at once:
-
-```bash
-aws secretsmanager batch-get-secret-value \
-  --secret-id-list prod/db prod/api \
-  --output json > aws-secrets.json
-```
-
-If `SecretString` is itself JSON (for example `{"username":"...","password":"..."}`), those keys are mapped onto the entry.
-
-### Azure Key Vault
-
-```bash
-az keyvault secret show \
-  --vault-name ops-vault \
-  --name smtp \
-  --output json > azure-secret.json
-```
-
-`az keyvault secret list` omits values. Use `secret show` for each secret you need.
-
-### Google Secret Manager
-
-```bash
-gcloud secrets versions access latest \
-  --secret=api-key \
-  --project=my-project \
-  --format=json > gcp-secret.json
-```
-
-The access payload should include `name` and `payload.data` (base64). Plaintext-only access output is not enough; keep `--format=json`.
-
----
-
-## After import
-
-Entries stay on this machine. You can edit title, username, password, URL, group, tags, notes, and extra fields, then revert local changes if needed. Nothing is uploaded until a later Inheriti® Business push is added.
-
-## Environments and desktop releases
-
-The importer has committed `dev`, `stg`, and `prod` environment definitions. Their Business API and SafeID settings mirror the corresponding Inheriti Business UI environments. Local development continues to use the ignored `.env.local` file.
-
-Run the desktop app against a deployed environment:
-
-```bash
-pnpm dev:dev
-pnpm dev:stg
-pnpm dev:prod
-```
-
-Create an installer for the current operating system:
-
-```bash
-pnpm release:dev
-pnpm release:stg
-pnpm release:prod
-```
-
-Each command validates the required API, SafeID, and Business web CTA variables, builds both renderer and main-process configuration for that environment, and writes installers to `release/<environment>/`. Linux produces an AppImage, macOS a DMG, and Windows an NSIS installer.
+Installers are written to `release/<environment>/`: AppImage on Linux, DMG on macOS, and NSIS on Windows.

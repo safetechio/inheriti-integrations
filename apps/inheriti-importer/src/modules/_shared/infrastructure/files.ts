@@ -28,7 +28,7 @@ function pickWithInput(): Promise<OpenedVaultFile[]> {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = '.kdbx,.json,.csv,.yaml,.yml,.env,application/json,text/csv,text/yaml';
+    input.accept = '.kdbx,.1pux,.json,.csv,.yaml,.yml,.env,application/json,text/csv,text/yaml';
     input.addEventListener('change', async () => {
       if (!input.files?.length) {
         resolve([]);

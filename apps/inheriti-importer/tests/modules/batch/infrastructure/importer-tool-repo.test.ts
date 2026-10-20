@@ -153,7 +153,7 @@ describe('ImporterToolRepo', () => {
     const asset: MaterialisedAsset = {
       id: 'asset-1',
       type: 'PLAIN-TEXT',
-      meta: { name: 'Secret' },
+      meta: { name: 'Secret', notes: 'private guidance' },
       secret: { value: 's3cr3t' },
     };
     const result = await repo.stage({
@@ -181,7 +181,12 @@ describe('ImporterToolRepo', () => {
       description: 'Imported plan description',
     });
     expect(JSON.stringify(sentBody)).not.toContain('s3cr3t');
+    expect(JSON.stringify(sentBody)).not.toContain('private guidance');
     expect(sentBody.assetDrafts[0].fields[0].envelope.algorithm).toBe('AES-GCM-256');
+    const notesField = sentBody.assetDrafts[0].fields.find(
+      (field: { fieldId: string }) => field.fieldId === 'meta.notes',
+    );
+    expect(notesField.envelope.algorithm).toBe('AES-GCM-256');
     await expect(repo.isStaged('org-1', 'plan-1')).resolves.toBe(false);
     expect(reconciledPath.endsWith(`/${sentBody.id}`)).toBe(true);
   });
