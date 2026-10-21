@@ -7,7 +7,7 @@ export function registerGetAutomationRuntimeInstallInstructions(server: McpServe
   server.registerTool(
     'get_automation_runtime_install_instructions',
     {
-      description: 'Get the exact verified Inheriti CLI runtime package and Dockerfile installation snippet for AWS ECS or Google Cloud Run. Use this before preparing the workload image; do not ask the user to run a separate local CLI command or choose a deployment channel.',
+      description: 'Get the exact verified Inheriti CLI runtime package, Linux EC2 host command, and Dockerfile installation snippet for AWS ECS or Google Cloud Run. Use the Linux host command before pairing plain EC2; use the Dockerfile snippet before building a container. Do not ask the user to choose a deployment channel.',
       inputSchema: z.strictObject({}),
     },
     safeResult(() => tools.getAutomationRuntimeInstallInstructions()),

@@ -105,6 +105,8 @@ The CLI prints the connection ID. It reads the **task role**, never the executio
 
 For an application running directly on an EC2 instance, attach an instance profile with the intended IAM role first. The operator's AWS CLI needs `ec2:DescribeInstances` and `iam:GetInstanceProfile`; Inheriti reads the actual attached role instead of guessing it from the profile name.
 
+On your computer, run `inheriti automations runtime install-instructions` and sign in to Inheriti® Business if prompted. The command prints a **Linux EC2 instance** command using the exact verified **Inheriti® CLI** version for that Business deployment. Run that printed command on the EC2 instance with permission to install npm packages globally, before pairing. Ensure the systemd run-as user can execute `inheriti`. The package's Node.js `engines` metadata is checked during installation; the command fails if Business has no verified release.
+
 ```bash
 inheriti automations create --name 'EC2 application' --provider AWS \
   --deployment-environment TEST --region REGION --instance i-INSTANCE_ID

@@ -53,11 +53,13 @@ it('does not print a guessed workflow when the verified release is unavailable',
   expect(output.write).not.toHaveBeenCalled();
 });
 
-it('prints the exact verified runtime package and Dockerfile instruction', async () => {
+it('prints the exact verified runtime package for Linux EC2 and Dockerfile', async () => {
   getVerifiedGithubRelease.mockResolvedValueOnce({ actionRepository: 'safetechio/inheriti-integrations', actionRef: 'a'.repeat(40), cliVersion: '1.2.3-stg.4' });
   const output = terminal(false);
   expect(await automationManage(context as never, configuration as never, output, new AbortController().signal, ['runtime', 'install-instructions'])).toBe(0);
   const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('For a plain Linux EC2 instance');
+  expect(printed).toContain('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4');
   expect(printed).toContain('RUN npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4');
   expect(printed).toContain(`&& test "$(inheriti --version)" = '1.2.3-stg.4'`);
   expect(printed).toContain('IMAGE@sha256:DIGEST');

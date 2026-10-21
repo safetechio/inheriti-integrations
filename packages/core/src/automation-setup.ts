@@ -20,6 +20,8 @@ export function automationRuntimeInstallInstructions(release: VerifiedGithubRele
   const packageSpec = `@safetech/inheriti-cli@${release.cliVersion}`;
   return {
     packageSpec,
+    linuxHost: `npm install --engine-strict --global ${packageSpec} \\
+    && test "$(inheriti --version)" = '${release.cliVersion}'`,
     prerequisite: "Add to your application's Dockerfile. The build needs npm, and the final image needs a Node.js runtime. npm checks the published package's engines metadata:",
     dockerfile: `RUN npm install --engine-strict --global ${packageSpec} \\
     && test "$(inheriti --version)" = '${release.cliVersion}'`,

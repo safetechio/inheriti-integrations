@@ -73,6 +73,7 @@ export async function automationManage(
     if (Object.keys(options).length) { terminal.writeError(usage); return 1; }
     const instructions = automationRuntimeInstallInstructions(await operations.getVerifiedGithubRelease());
     terminal.write(`Verified Inheriti CLI runtime: ${instructions.packageSpec}`);
+    terminal.write(`For a plain Linux EC2 instance, run on the instance with permissions for a system-wide npm installation. npm checks the package's Node.js engines metadata; confirm the systemd run-as user can execute inheriti:\n${instructions.linuxHost}`);
     terminal.write(`${instructions.prerequisite}\n${instructions.dockerfile}`);
     terminal.write(instructions.instruction);
     return 0;
