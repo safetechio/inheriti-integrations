@@ -1,4 +1,5 @@
-import { createGoogleSecretPublisher, resolveAutomationFieldMappings } from '@safetech/inheriti-elements-core/node-base';
+import { resolveAutomationFieldMappings } from '@safetech/inheriti-elements-core/node-base';
+import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { renderJson } from '../output.js';

@@ -6,8 +6,8 @@ const { inspectSecret, publishSecret, consumeFields, withReveal } = vi.hoisted((
   consumeFields: vi.fn(async (fields, callback) => callback(fields.map((field: { selector: string }) => ({ selector: field.selector, value: 'VALUE_NEVER_PRINT' })))),
   withReveal: vi.fn(async (_id, _options, callback) => callback({ consumeFields })),
 }));
-vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
-  ...(await original<object>()), createGoogleSecretPublisher: () => ({ inspectSecret, publishSecret }),
+vi.mock('@safetech/inheriti-elements-core/google-secret-publisher', () => ({
+  createGoogleSecretPublisher: () => ({ inspectSecret, publishSecret }),
 }));
 vi.mock('../src/commands/reveal.js', async original => ({
   ...(await original<object>()), loadRevealPlan: async () => ({ assets: [{ id: 'id', code: 'asset', fieldNames: ['one'] }] }),

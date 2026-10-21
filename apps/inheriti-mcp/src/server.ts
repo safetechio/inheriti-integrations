@@ -4,8 +4,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   HOST_FEATURE_FLAGS, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
-  MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher, createGoogleSecretPublisher,
+  MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher,
 } from '@safetech/inheriti-elements-core/node-base';
+import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import type { LocalPlanHints, AutomationProvider, AutomationTrust } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import { beginBrowserLogin } from './browser-login.js';

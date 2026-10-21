@@ -162,7 +162,6 @@ export { applyEcsAutomation } from './automation-ecs-apply.js';
 export { pairEcsAutomation } from './automation-ecs-pair.js';
 export { pairCloudRunAutomation } from './automation-cloud-run-pair.js';
 export { createAwsSecretPublisher } from './automation-aws-publisher.js';
-export { createGoogleSecretPublisher } from './google-secret-publisher.js';
 export type { EcsApplyInput, EcsApplyResult } from './automation-ecs-apply.js';
 export type { EcsPairInput, EcsPairResult } from './automation-ecs-pair.js';
 export { applyCloudRunAutomation, applyCloudRunServiceAutomation } from './automation-cloud-run-apply.js';
