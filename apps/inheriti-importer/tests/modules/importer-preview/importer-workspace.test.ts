@@ -74,6 +74,78 @@ function usernamePasswordSession(): ImportSession {
 }
 
 describe('projectImporterWorkspace', () => {
+  it('reviews a 1Password structured asset and unmatched Plain Text independently', () => {
+    const imported = usernamePasswordSession();
+    imported.sources[0]!.kind = 'onepassword';
+    imported.nodesById['entry-1']!.fieldIds.push('entry-1:notes');
+    imported.fieldsById['entry-1:notes'] = {
+      id: 'entry-1:notes',
+      sourceId: 'source-1',
+      parentNodeId: 'entry-1',
+      sourcePath: ['entry-1', 'notes'],
+      name: 'extra:notes',
+      value: new SensitiveValue('Private recovery details'),
+      metadata: {},
+    };
+    let workspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Imported Plan',
+    });
+    workspace = createAsset(workspace, {
+      planClientId: 'plan-1',
+      asset: {
+        id: 'entry-1:USER-PSWD',
+        type: 'USER-PSWD',
+        name: 'Stripe',
+        fieldBindings: { 'secret.password': { kind: 'source', sourceFieldId: 'entry-1:password' } },
+      },
+    });
+
+    const result = projectImporterWorkspace(imported, workspace);
+    expect(result.assets.map((asset) => [asset.type, asset.status])).toEqual([
+      ['USER-PSWD', 'accepted'],
+      ['PLAIN-TEXT', 'fallback'],
+    ]);
+    expect(result.suggestions[1]?.fieldBindings['secret.text']).toEqual({
+      kind: 'source',
+      sourceFieldId: 'entry-1:notes',
+    });
+    expect(result.assets[1]?.mapped).toEqual(['extra:notes']);
+    expect(result.assets[1]?.unmapped).toEqual([]);
+  });
+
+  it('matches 1Password suggestions by ID even when Plain Text bindings overlap', () => {
+    const imported = usernamePasswordSession();
+    imported.sources[0]!.kind = 'onepassword';
+    imported.nodesById['entry-1']!.fieldIds.push('entry-1:notes');
+    imported.fieldsById['entry-1:notes'] = {
+      id: 'entry-1:notes',
+      sourceId: 'source-1',
+      parentNodeId: 'entry-1',
+      sourcePath: ['entry-1', 'notes'],
+      name: 'extra:notes',
+      value: new SensitiveValue('Private notes'),
+      metadata: {},
+    };
+    let workspace = createPlan(createEmptyWorkspace(), {
+      clientId: 'plan-1',
+      name: 'Imported Plan',
+    });
+    workspace = createAsset(workspace, {
+      planClientId: 'plan-1',
+      asset: {
+        id: 'entry-1:PLAIN-TEXT',
+        type: 'PLAIN-TEXT',
+        name: 'Converted',
+        fieldBindings: { 'secret.text': { kind: 'source', sourceFieldId: 'entry-1:notes' } },
+      },
+    });
+
+    const result = projectImporterWorkspace(imported, workspace);
+    expect(
+      result.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')?.status,
+    ).toBe('fallback');
+  });
   it('initializes single-field entries as Plain Text fallbacks', () => {
     const result = projectImporterWorkspace(session(), createEmptyWorkspace());
 

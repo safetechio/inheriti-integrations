@@ -32,11 +32,18 @@ real string is an explicit `.reveal()` call, so every read site is auditable.
 
 ## Adapters
 
-`modules/import/infrastructure/vault-file-import-parser.ts` wraps the existing,
-tested parser pipeline (`src/modules/import/infrastructure/parsers`) (`detectVaultKind` + the six format parsers).
+`modules/import/infrastructure/vault-file-import-parser.ts` wraps the parser
+pipeline (`src/modules/import/infrastructure/parsers`) (`detectVaultKind` and the
+format parsers).
 For each `ParseResult` it builds: one root group per source, a nested group per
 `entry.group` path segment, one `entry` node per record, and one `ImportedField`
 per non-empty field (`username` / `password` / `url` / `notes` / extra fields).
+
+The supported file shapes and imported fields are described in the
+[README](../README.md#supported-files-and-fields). Each parser returns credential
+records with standard fields (`title`, `username`, `password`, `url`, `notes`),
+`group`, `tags`, and `extraFields`. The adapter includes populated fields in the
+normalized tree for review and mapping.
 
 Adding a format: add a parser under `src/modules/import/infrastructure/parsers/` with its tests, wire it
 into `detectVaultKind` and `parseVaultFile`, and the adapter maps it for free. A

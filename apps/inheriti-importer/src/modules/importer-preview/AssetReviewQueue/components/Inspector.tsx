@@ -32,9 +32,15 @@ export function Inspector({
     <Card tone="default" className="asset-inspector-card">
       <Stack gap="m">
         <Box flexDirection="row" justifyContent="space-between" alignItems="flex-start">
-          <Box gap="xxs">
-            <Text variant="importerAssetTitle">{asset.name}</Text>
-            <Text variant="importerSourceMeta" color="gray">
+          <Box gap="xxs" className="asset-inspector-heading">
+            <Text variant="importerAssetTitle" className="asset-inspector-heading-text">
+              {asset.name}
+            </Text>
+            <Text
+              variant="importerSourceMeta"
+              color="gray"
+              className="asset-inspector-heading-text"
+            >
               {asset.source}
             </Text>
           </Box>

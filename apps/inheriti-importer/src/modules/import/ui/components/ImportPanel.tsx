@@ -128,6 +128,9 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
           <SourceCard kind="keepass" title="KeePass" heading=".kdbx databases">
             Locked or unlocked. Master password and key files are prompted when needed.
           </SourceCard>
+          <SourceCard kind="onepassword" title="1Password" heading=".1pux export">
+            Import text fields from a 1Password export for review and editing.
+          </SourceCard>
           <SourceCard kind="passbolt" title="Passbolt" heading="JSON or CSV export">
             Use Passbolt’s password export. Secrets in the file become editable entries.
           </SourceCard>
@@ -171,6 +174,7 @@ function SourceCard({
   const uiTheme = useTheme();
   const kindColors: Record<string, string> = {
     keepass: uiTheme.colors.primary120,
+    onepassword: uiTheme.colors.primary,
     passbolt: uiTheme.colors.primary150,
     kubernetes: '#326CE5',
     vault: '#8A6D00',

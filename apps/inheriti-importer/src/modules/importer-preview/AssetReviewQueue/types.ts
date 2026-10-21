@@ -60,7 +60,8 @@ export function hasIncludedSchemaField(asset: ReviewAsset): boolean {
     );
   if (!asset.schemaFields) return true;
   return (
-    asset.schemaFields.some((field) => Boolean(field.sourceFieldId)) &&
-    asset.schemaFields.every((field) => !field.validationError)
+    asset.schemaFields.some(
+      (field) => field.key.startsWith('secret.') && Boolean(field.sourceFieldId),
+    ) && asset.schemaFields.every((field) => !field.validationError)
   );
 }

@@ -316,6 +316,52 @@ describe('main.cjs socket bridge', () => {
 });
 
 describe('main.cjs auth lifecycle', () => {
+  async function finishLogin(harness: Awaited<ReturnType<typeof loadMain>>) {
+    const event = fakeEvent(harness.windows[0].webContents.id);
+    const pending = harness.ipcHandlers.get('auth:login')!(event);
+    // The callback can reject before fetch resolves; attach a handler immediately.
+    void pending.catch(() => {});
+    await vi.waitFor(() => expect(harness.shell.openExternal).toHaveBeenCalledOnce());
+    const authorization = new URL(harness.shell.openExternal.mock.calls[0][0]);
+    const callback = new URL(authorization.searchParams.get('redirect_uri')!);
+    callback.searchParams.set('state', authorization.searchParams.get('state')!);
+    callback.searchParams.set('code', 'authorization-code');
+    const response = await fetch(callback);
+    return { pending, response };
+  }
+
+  it('checks Importer access with the new API cookie before accepting login', async () => {
+    const harness = await loadMain();
+    const claims = Buffer.from(JSON.stringify({ sub: 'user-1' })).toString('base64url');
+    harness.queueNetResponse({ status: 200, body: JSON.stringify({ access_token: 'access-token', id_token: `x.${claims}.x` }) });
+    harness.queueNetResponse({ status: 200, body: JSON.stringify({ result: { token: 'csrf' } }) });
+    harness.queueNetResponse({ status: 200, headers: { 'set-cookie': 'token=session-cookie; Path=/' }, body: JSON.stringify({ result: { session: { id: 'user-1' } } }) });
+    harness.queueNetResponse({ status: 200, body: JSON.stringify({ result: true }) });
+
+    const { pending, response } = await finishLogin(harness);
+    expect(response.status).toBe(200);
+    await expect(pending).resolves.toEqual({ id: 'user-1' });
+    const check = harness.netRequests.at(-1)!;
+    expect(check.url).toBe(`${ORIGIN}/integrations/tester-access`);
+    expect(check.request.headers.Cookie).toContain('token=session-cookie');
+  });
+
+  it('clears the API session and explains denied Importer access', async () => {
+    const harness = await loadMain();
+    const claims = Buffer.from(JSON.stringify({ sub: 'user-1' })).toString('base64url');
+    harness.queueNetResponse({ status: 200, body: JSON.stringify({ access_token: 'access-token', id_token: `x.${claims}.x` }) });
+    harness.queueNetResponse({ status: 200, body: JSON.stringify({ result: { token: 'csrf' } }) });
+    harness.queueNetResponse({ status: 200, headers: { 'set-cookie': 'token=session-cookie; Path=/' }, body: JSON.stringify({ result: { session: { id: 'user-1' } } }) });
+    harness.queueNetResponse({ status: 403, body: JSON.stringify({ error: 'integration_tester_required' }) });
+
+    const { pending, response } = await finishLogin(harness);
+    expect(response.status).toBe(400);
+    await expect(pending).rejects.toThrow('You are not an integration tester. Contact developer support.');
+    const partition = harness.partitions.get('persist:inheriti-api')!;
+    expect(partition.clearStorageData).toHaveBeenCalledWith({ storages: ['cookies'] });
+    expect(partition._cookies.size).toBe(0);
+  });
+
   it('renders the branded callback card on sign-in failure', async () => {
     const harness = await loadMain();
     const event = fakeEvent(harness.windows[0].webContents.id);

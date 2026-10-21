@@ -167,6 +167,17 @@ export class TraySession {
       await this.discover(authorization.signal);
     } catch (error) {
       if (authorization.signal.aborted) return;
+      if ((error as { status?: unknown; code?: unknown })?.status === 403
+        && (error as { code?: unknown }).code === 'integration_tester_required') {
+        try { await this.core.auth.clear(); } catch { /* Clear the saved session even if SDK cleanup fails. */ }
+        await this.operatorSessions.clear();
+        this.accountName = undefined;
+        this.status = 'error';
+        this.message = 'You are not an integration tester. Contact developer support.';
+        if (this.authorization === authorization) this.authorization = undefined;
+        onChange();
+        return;
+      }
       this.status = 'error';
       this.message = error instanceof Error ? error.message : messages.signInFailed;
     }

@@ -1,4 +1,5 @@
 const ASSET_FIELD_LABELS: Record<string, string> = {
+  'meta.notes': 'Notes or guidelines',
   'secret.appOrWebsite': 'App or website',
   'secret.email': 'Email',
   'secret.username': 'Username',

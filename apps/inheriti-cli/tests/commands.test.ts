@@ -38,10 +38,12 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
       load: async () => ({ principal: { issuer: 'issuer', environment: 'TEST', subject: 'operator' } }),
     },
     cleared,
+    keyOwner: 'Organisation',
     authConfiguration: { redirectUri: 'http://127.0.0.1:53682/oauth/callback' },
     core: {
       auth,
       getAccessToken: () => auth.getAccessToken(),
+      listOrganizations: async () => [],
       listPlans: async () => ({ items: [], nextCursor: null }),
       listPlanLogs: async () => ({ items: [], total: 0 }),
       abortPlanAccess: async () => ({ aborted: true }),
@@ -146,6 +148,34 @@ describe('plan logs', () => {
 });
 
 describe('login', () => {
+  it('clears a denied tester session and shows the admission message', async () => {
+    process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
+    let redirect = '';
+    let authorizationReady!: () => void;
+    const ready = new Promise<void>((resolve) => { authorizationReady = resolve; });
+    const context = contextWith({
+      auth: {
+        beginAuthorizationCode: async () => {
+          redirect = (context as unknown as { authConfiguration: { redirectUri: string } }).authConfiguration.redirectUri;
+          authorizationReady();
+          return { authorizationUrl: 'https://issuer.test/authorize', expiresAt: 0 };
+        },
+        completeAuthorizationCode: async () => undefined,
+        clear: async () => { (context as unknown as { cleared: string[] }).cleared.push('auth'); },
+      },
+      listOrganizations: async () => { throw Object.assign(new Error('denied'), { status: 403, code: 'integration_tester_required' }); },
+    });
+    try {
+      const signingIn = login(context, recordingTerminal(true));
+      const denied = expect(signingIn).rejects.toThrow('integration_tester_required');
+      await ready;
+      await fetch(`${redirect}?code=code&state=state`);
+      await denied;
+      expect((context as unknown as { cleared: string[] }).cleared).toEqual(['auth', 'sessions']);
+      expect(messageFor(new Error('integration_tester_required'))).toBe('You are not an integration tester. Contact developer support.');
+    } finally { delete process.env.INHERITI_ELEMENTS_NO_BROWSER; }
+  });
+
   it('signs in through the browser and hands the whole callback back to the SDK', async () => {
     process.env.INHERITI_ELEMENTS_NO_BROWSER = '1';
     const occupied = createServer();
@@ -224,6 +254,7 @@ describe('login', () => {
           validateIdToken: async () => Object.assign({}, principal, { audience: configuration.clientId, nonce }),
         },
         fetchImpl: async (input, init) => {
+          if (String(input).endsWith('/integrations/v1/organizations')) return Response.json({ ok: true, result: { items: [] } });
           if (String(input).endsWith('/.well-known/openid-configuration')) {
             return Response.json({ issuer: configuration.issuer, authorization_endpoint: 'https://issuer.test/authorize', token_endpoint: 'https://issuer.test/token' });
           }
@@ -239,7 +270,7 @@ describe('login', () => {
         terminal.lines.push(line);
         if (line.startsWith('Waiting for the browser')) published(new URL(line.split('\n  ')[1]!));
       };
-      const context = { core, authConfiguration: configuration, sessions } as unknown as Parameters<typeof login>[0];
+      const context = { core, authConfiguration: configuration, sessions, keyOwner: 'Organisation' } as unknown as Parameters<typeof login>[0];
       const signingIn = login(context, terminal);
       const authorization = await ready;
       expect(authorization.searchParams.get('redirect_uri')).toBe(configuration.redirectUri);

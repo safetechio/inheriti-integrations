@@ -3,6 +3,34 @@ import { projectImportSources } from '@modules/importer-preview/ImporterFlow/app
 import { initialVaultState } from '@modules/import/infrastructure/stores/vault-store';
 
 describe('projectImportSources', () => {
+  it('labels 1Password exports before and after parsing', () => {
+    const source = {
+      id: 'source-1',
+      file: { name: 'vault.1pux', data: new ArrayBuffer(0) },
+      status: 'pending' as const,
+      warnings: [],
+      entries: 0,
+    };
+    const pending = projectImportSources({ ...initialVaultState, sources: [source] });
+    expect(pending[0].format).toBe('1Password');
+
+    const loaded = projectImportSources({
+      ...initialVaultState,
+      sources: [{ ...source, status: 'ready', vaultId: 'source-1' }],
+      vaults: [
+        {
+          id: 'source-1',
+          name: 'Vault',
+          kind: 'onepassword',
+          fileName: 'vault.1pux',
+          importedAt: '2026-09-08T00:00:00.000Z',
+          warnings: [],
+        },
+      ],
+    });
+    expect(loaded[0].format).toBe('1Password');
+  });
+
   it('projects stable source identity, parser warnings, and actual entry counts', () => {
     const files = projectImportSources({
       ...initialVaultState,

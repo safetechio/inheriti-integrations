@@ -81,6 +81,7 @@ const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 export const MESSAGES: Readonly<Record<string, string>> = {
+  integration_tester_required: 'You are not an integration tester. Contact developer support.',
   operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',
   automation_disabled: 'Automation is unavailable.',

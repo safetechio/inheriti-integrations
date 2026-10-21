@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseKubernetes } from '@modules/import/infrastructure/parsers/kubernetes';
-import { decodeBase64 } from '@modules/import/infrastructure/parsers/secret-fields';
+import { decodeBase64 } from '@modules/import/infrastructure/parsers/utils/secret-fields';
 
 function buffer(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer;

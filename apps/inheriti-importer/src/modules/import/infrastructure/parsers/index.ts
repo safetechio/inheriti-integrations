@@ -1,10 +1,11 @@
-import { detectVaultKind } from './detect';
+import { detectVaultKind } from './utils/detect';
 import { parseCloud } from './cloud';
 import { parseDotenv } from './dotenv';
 import { parseKeepass } from './keepass';
 import { parseKubernetes } from './kubernetes';
 import { parsePassbolt } from './passbolt';
 import { parseVault } from './vault';
+import { parseOnePassword } from './onepassword';
 import { VaultFormatError, type ParseResult } from '@modules/import/domain/vault';
 import {
   assertWithinFileSize,
@@ -26,6 +27,7 @@ export async function parseVaultFile(
     if (kind === 'vault') return parseVault(data, fileName);
     if (kind === 'dotenv') return parseDotenv(data, fileName);
     if (kind === 'cloud') return parseCloud(data, fileName);
+    if (kind === 'onepassword') return parseOnePassword(data, fileName);
     throw new VaultFormatError(`Unsupported vault type for “${fileName}”.`);
   };
 
@@ -50,3 +52,4 @@ export { parseKeepass } from './keepass';
 export { parseKubernetes } from './kubernetes';
 export { parsePassbolt } from './passbolt';
 export { parseVault } from './vault';
+export { parseOnePassword } from './onepassword';
