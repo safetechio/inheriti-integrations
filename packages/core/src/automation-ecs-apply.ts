@@ -116,14 +116,14 @@ export async function applyEcsAutomation(input: EcsApplyInput, run: EcsApplyRunn
   const alreadyWrapped = entryPoint[0] === input.cliPath && entryPoint[1] === 'secrets' && entryPoint[2] === 'exec';
   if (alreadyWrapped) {
     if (environmentNames.some(name => mappedNames.includes(name))) throw new Error('automation_ecs_environment_conflict');
-    if (entryPoint.slice(0, prefix.length).join('\0') !== prefix.join('\0') || container.image !== input.image ||
+    if (entryPoint.slice(0, prefix.length).join('\0') !== prefix.join('\0') ||
         addedEnvironment.some(item => !environment.some(existing => existing.name === item.name && existing.value === item.value))) {
       throw new Error('automation_ecs_existing_setup_conflict');
     }
-    return { previousRevision, revision: previousRevision, image: input.image, status: 'unchanged' };
+    if (container.image === input.image) return { previousRevision, revision: previousRevision, image: input.image, status: 'unchanged' };
   }
   if (environmentNames.some(name => mappedNames.includes(name))) throw new Error('automation_ecs_environment_conflict');
-  const updatedContainer = { ...container, image: input.image, entryPoint: [...prefix, ...entryPoint],
+  const updatedContainer = { ...container, image: input.image, entryPoint: alreadyWrapped ? entryPoint : [...prefix, ...entryPoint],
     environment: [...environment, ...addedEnvironment.filter(item => !environment.some(existing => existing.name === item.name))] };
   const registration: Record<string, unknown> = {};
   for (const field of TASK_FIELDS) {

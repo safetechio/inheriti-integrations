@@ -16,6 +16,10 @@
       "types": "./dist/node-base.d.ts",
       "import": "./dist/node-base.js"
     },
+    "./google-secret-publisher": {
+      "types": "./dist/google-secret-publisher.d.ts",
+      "import": "./dist/google-secret-publisher.js"
+    },
     "./inbox": {
       "types": "./dist/inbox.d.ts",
       "import": "./dist/inbox.js"

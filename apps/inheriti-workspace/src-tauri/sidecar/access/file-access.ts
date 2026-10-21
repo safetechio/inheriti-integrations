@@ -3,17 +3,29 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { FileAccessStatus } from '../../../../../../inheriti-client-sdk/sdk/src/elements/elements-api-port.js';
+import { ElementsApiRequestFailed } from '../../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
 import { inspectInheritiFileAccess, openInheritiFileAccess, readInheritiFileHeader, MAX_INHERITI_FILE_BYTES } from '../../../../../../inheriti-client-sdk/sdk/node.js';
 import type { WorkspaceApi } from '../session/workspace-session.js';
 import { readStartupFile } from './startup-file.js';
 import { checkGuestPolicy, checkOpenedPreview, checkPreviewPolicy } from './policy.js';
 import type { GuestMime, PreviewMime } from './policy.js';
 
-export async function inspectStartupFileAccess(path: string | undefined, api: WorkspaceApi): Promise<FileAccessStatus> {
+export async function inspectStartupFileAccess(path: string | undefined, organizationIds: string[], apiForOrganization: (id: string) => WorkspaceApi): Promise<{ id: string; access: FileAccessStatus }> {
   const bytes = await readStartupFile(path, MAX_INHERITI_FILE_BYTES);
   try {
-    const { access } = await inspectInheritiFileAccess({ fileBytes: bytes, api });
-    return access;
+    let match: { id: string; access: FileAccessStatus } | undefined;
+    for (const id of organizationIds) {
+      try {
+        const { access } = await inspectInheritiFileAccess({ fileBytes: bytes, api: apiForOrganization(id) });
+        if (match) throw new Error('file_access_unavailable');
+        match = { id, access };
+      } catch (error) {
+        if (error instanceof ElementsApiRequestFailed && error.code === 'file_access_not_allowed') continue;
+        throw error;
+      }
+    }
+    if (!match) throw new Error('file_access_unavailable');
+    return match;
   } finally { bytes.fill(0); }
 }
 

@@ -23,7 +23,10 @@ describe('automation setup', () => {
     const devRelease = { ...release, cliVersion: '0.0.14-dev.0' };
     expect(githubAutomationWorkflow({ release: devRelease, environment: 'test', planId: id, connectionId: id, selector: 'account.password' })).toContain('cli-version: "0.0.14-dev.0"');
     await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: devRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(devRelease);
-    for (const cliVersion of ['0.0.14-dev.01', '0.0.14-stg.0', '0.0.14-dev.0;echo secret']) {
+    const stgRelease = { ...release, cliVersion: '0.0.14-stg.0' };
+    expect(githubAutomationWorkflow({ release: stgRelease, environment: 'staging', planId: id, connectionId: id, selector: 'account.password' })).toContain('cli-version: "0.0.14-stg.0"');
+    await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: stgRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(stgRelease);
+    for (const cliVersion of ['0.0.14-dev.01', '0.0.14-stg.01', '0.0.14-stg.0;echo secret', '0.0.14-dev.0;echo secret', 'latest', '0.0.14-stg']) {
       expect(() => githubAutomationWorkflow({ release: { ...release, cliVersion }, environment: 'test', planId: id, connectionId: id, selector: 'account.password' })).toThrow('Invalid GitHub workflow input');
     }
     expect(githubAutomationWorkflow({ release, environment: 'production', planId: id, connectionId: id, selector: '123-asset.password' })).toContain('INHERITI_SECRET=123-asset.password');

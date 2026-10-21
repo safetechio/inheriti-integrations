@@ -29,6 +29,14 @@
   background: var(--importer-color-surface) !important;
   box-shadow: var(--importer-shadow-card);
 }
+.asset-inspector-heading {
+  flex: 1;
+  min-width: 0;
+}
+.asset-inspector-heading-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .asset-preview-block {
   padding: 12px;
   border: 1px solid var(--line);
@@ -72,6 +80,18 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--importer-color-surface);
+}
+.asset-metadata-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.asset-metadata-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.asset-metadata-source {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 .asset-source-picker {
   padding-top: 4px;

@@ -2,13 +2,18 @@ use super::*;
 
 struct RetryRuntime {
     teardown_attempts: u8,
+    fail_start: bool,
 }
 
 impl GuestRuntime for RetryRuntime {
     type Error = &'static str;
 
     fn start(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+        if self.fail_start {
+            Err("start")
+        } else {
+            Ok(())
+        }
     }
 
     fn ingress(&mut self, _name: &str, _bytes: &[u8]) -> Result<(), Self::Error> {
@@ -33,6 +38,7 @@ impl GuestRuntime for RetryRuntime {
 fn failed_cleanup_retains_session_until_retry_succeeds() {
     let mut workspace = Workspace::new(RetryRuntime {
         teardown_attempts: 0,
+        fail_start: false,
     });
     workspace.open("fixture.txt", b"test").unwrap();
     let mut session = Some(workspace);
@@ -44,7 +50,7 @@ fn failed_cleanup_retains_session_until_retry_succeeds() {
 }
 
 #[test]
-fn production_open_authorizes_after_guest_start_and_hands_bytes_to_workspace() {
+fn production_open_authorizes_before_guest_start_and_hands_bytes_to_workspace() {
     use std::sync::{Arc, Mutex};
     struct Runtime(Arc<Mutex<Vec<&'static str>>>);
     impl GuestRuntime for Runtime {
@@ -69,14 +75,20 @@ fn production_open_authorizes_after_guest_start_and_hands_bytes_to_workspace() {
     }
     let order = Arc::new(Mutex::new(Vec::new()));
     let mut session = None;
-    open_authorized_session(&mut session, Runtime(order.clone()), "document.pdf", || {
-        order.lock().unwrap().push("authorize");
-        Ok(b"authorized".to_vec())
-    })
+    open_authorized_session(
+        &mut session,
+        Runtime(order.clone()),
+        "document.pdf",
+        || {
+            order.lock().unwrap().push("authorize");
+            Ok(b"authorized".to_vec())
+        },
+        || Ok(()),
+    )
     .unwrap();
     assert_eq!(
         *order.lock().unwrap(),
-        ["start", "authorize", "ingress", "launch"]
+        ["authorize", "start", "ingress", "launch"]
     );
     assert!(session.is_some());
 }
@@ -88,9 +100,11 @@ fn failed_open_cleanup_remains_owned_for_close_retry() {
         &mut session,
         RetryRuntime {
             teardown_attempts: 0,
+            fail_start: true,
         },
         "fixture.txt",
-        || Err("authorization failed".into()),
+        || Ok(b"authorized".to_vec()),
+        || Ok(()),
     );
     assert_eq!(result.unwrap_err(), "workspace cleanup pending");
     assert!(session.is_some());

@@ -189,8 +189,10 @@ body:not(.custom-chrome) .window-controls { display: none; }
   border-left: 1px solid var(--border);
 }
 .version-label {
-  display: inline-block;
-  margin-top: 24px;
+  position: fixed;
+  top: 58px;
+  right: 44px;
+  z-index: 1;
   padding: 5px 10px;
   border: 1px solid #cbe7ff;
   border-radius: 999px;
@@ -198,6 +200,11 @@ body:not(.custom-chrome) .window-controls { display: none; }
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+#file-step[hidden] + .version-label { display: none; }
+body:not(.custom-chrome) .version-label {
+  top: 20px;
+  right: 24px;
 }
 
 .close-status {
@@ -321,9 +328,28 @@ h1 em {
 
 .file-area {
   padding: 24px;
-  border: 1px dashed #75a9ff;
+  border: 1px dashed #a7c6ff;
   border-radius: 16px;
   background: #fafcff;
+  transition: border-color 180ms ease, border-width 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+.file-area.drag-over {
+  border-width: 2px;
+  border-color: var(--primary);
+  background: #eef4ff;
+  box-shadow: 0 0 0 5px rgba(41, 98, 255, 0.12);
+}
+.file-area #choose-file {
+  margin-top: 22px;
+}
+.file-error {
+  margin: 18px auto 0;
+  color: #9b1c1c;
+  font-size: 14px;
+}
+.file-area #reset-file {
+  display: block;
+  margin: 12px auto 0;
 }
 .file-title {
   margin-bottom: 4px;
@@ -468,7 +494,7 @@ body.result-stage .workspace-card {
   box-shadow: none;
 }
 body.result-stage .hero-mark,
-body.result-stage #viewer-title,
+body.result-stage #workspace-title,
 body.result-stage .intro {
   display: none;
 }
@@ -555,6 +581,9 @@ h2 {
     width: 100%;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .file-area { transition: none; }
+}
 
 #opening-step {
   max-width: 480px;
@@ -563,6 +592,9 @@ h2 {
 #opening-step .account-status {
   margin-top: 24px;
   font-size: 16px;
+}
+#opening-step #cancel-opening {
+  margin-top: 8px;
 }
 body.result-stage main,
 body.result-stage .workspace-card,

@@ -35,7 +35,7 @@ impl StartupFile {
     pub(super) fn from_path(path: PathBuf) -> Result<Self, String> {
         if path
             .extension()
-            .is_none_or(|extension| extension != "inheriti")
+            .is_none_or(|extension| !extension.to_string_lossy().eq_ignore_ascii_case("inheriti"))
         {
             return Err("invalid_startup_file".into());
         }

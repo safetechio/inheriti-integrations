@@ -236,6 +236,10 @@ fn opened_file_replaces_only_valid_idle_file() {
     fs::write(&path, b"protected").unwrap();
     let state = HostState::new();
     assert_eq!(state.opened_file(path.clone()), Ok(true));
+    let uppercase = path.with_extension("INHERITI");
+    fs::write(&uppercase, b"protected").unwrap();
+    assert_eq!(state.opened_file(uppercase.clone()), Ok(true));
+    assert_eq!(state.opened_file(path.clone()), Ok(true));
     assert_eq!(state.opened_file(path.clone()), Ok(false));
     state.opening_active.store(true, Ordering::Release);
     assert_eq!(
@@ -243,6 +247,9 @@ fn opened_file_replaces_only_valid_idle_file() {
         Err("opening_in_progress".into())
     );
     state.opening_active.store(false, Ordering::Release);
+    state.resetting.store(true, Ordering::Release);
+    assert_eq!(state.opened_file(path.clone()), Err("opening_in_progress".into()));
+    state.resetting.store(false, Ordering::Release);
     let invalid = path.with_extension("txt");
     assert_eq!(
         state.opened_file(invalid),
@@ -261,6 +268,7 @@ fn opened_file_replaces_only_valid_idle_file() {
         path.as_path()
     );
     fs::remove_file(path).unwrap();
+    fs::remove_file(uppercase).unwrap();
 }
 #[test]
 fn binding_rejects_unexpected_fields() {

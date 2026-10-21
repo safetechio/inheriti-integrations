@@ -97,6 +97,12 @@ export function stageWorkspaceVm(source, platform = process.platform, arch = pro
       throw new Error(`Workspace VM SHA-256 mismatch: ${name}`);
     }
   }
+  const displayBinaries = actualFiles.filter((name) => name === qemuName || /(?:^|\/)ui-sdl\.(?:so|dll|dylib)$/.test(name));
+  const displayBytes = displayBinaries.map((name) => readFileSync(join(source, name)));
+  if (!displayBytes.some((bytes) => bytes.includes(Buffer.from('Inheriti® Workspace'))) ||
+      displayBytes.some((bytes) => bytes.includes(Buffer.from('QEMU (%s-%d)%s')))) {
+    throw new Error('Workspace VM must use the branded SDL window title');
+  }
   const staging = `${output}.staging-${process.pid}`;
   rmSync(staging, { recursive: true, force: true });
   try {

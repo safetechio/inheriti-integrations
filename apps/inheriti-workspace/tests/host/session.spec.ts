@@ -6,6 +6,7 @@ import { mkdtemp, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sealInheritiFile } from '../../../../../inheriti-client-sdk/sdk/src/elements/inheriti-file.js';
+import { ElementsApiRequestFailed } from '../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
 import { encryptRSAOAEP } from '../../../../../../inheriti-core-sdk/crypto.js';
 import { checkGuestPolicy, checkPreviewPolicy } from '../../src-tauri/sidecar/access/policy.js';
 
@@ -216,7 +217,7 @@ it('inspects a bounded startup file and rejects a changed server binding or syml
   try {
     const sealed = await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: 'text/plain' });
     await writeFile(path, sealed.fileBytes);
-    await expect(host.inspectStartupFile()).rejects.toThrow('organization_required');
+    await expect(host.inspectStartupFile()).resolves.toMatchObject(binding);
     await host.listOrganizations();
     await host.selectOrganization(organizationId);
     await expect(host.inspectStartupFile()).resolves.toMatchObject(binding);
@@ -231,6 +232,55 @@ it('inspects a bounded startup file and rejects a changed server binding or syml
     await linkedHost.listOrganizations();
     await linkedHost.selectOrganization(organizationId);
     await expect(linkedHost.inspectStartupFile()).rejects.toThrow();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('resolves a V1 file to its authorized organization without consuming an opening', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-workspace-'));
+  const path = join(directory, 'copy.inheriti');
+  const otherId = '32e0d643-e031-46b0-8f9e-e34334a50e3c';
+  const binding = { deployment: 'dev', origin: 'REVEAL' as const, copyId, recipient: 'member', expiresAt: null, allowedUses: 5 };
+  const organizations = [{ id: organizationId, name: 'Wrong' }, { id: otherId, name: 'Correct' }];
+  const getFileAccess = vi.fn(async (id: string) => {
+    if (id !== otherId) throw new ElementsApiRequestFailed(403, 'file_access_not_allowed');
+    return { ...binding, status: 'READY' as const };
+  });
+  const requestFileAccessOpening = vi.fn();
+  const core = {
+    auth: { getAccessToken: vi.fn(async () => 'private-token') },
+    listOrganizations: vi.fn(async () => organizations),
+  } as unknown as WorkspaceCore;
+  const host = new WorkspaceSession('dev', {
+    core,
+    apiForOrganization: (id) => ({ getFileAccess: () => getFileAccess(id), requestFileAccessOpening }) as unknown as WorkspaceApi,
+    configuration: { issuer: 'https://issuer.test', clientId: 'client', audience: 'audience', environment: 'TEST', redirectUri: 'http://127.0.0.1/oauth/callback', scopes: [] },
+  }, path);
+  try {
+    await writeFile(path, (await sealInheritiFile({ plaintext: new Uint8Array([1]), binding, mimeType: 'text/plain' })).fileBytes);
+    await host.listOrganizations();
+    await host.selectOrganization(organizationId);
+    await expect(host.inspectStartupFile()).resolves.toMatchObject(binding);
+    expect(await host.status()).toMatchObject({ selectedOrganizationId: otherId });
+    expect(getFileAccess.mock.calls.map(([id]) => id)).toEqual([organizationId, otherId]);
+    expect(requestFileAccessOpening).not.toHaveBeenCalled();
+
+    getFileAccess.mockImplementation(async () => { throw new ElementsApiRequestFailed(403, 'file_access_not_allowed'); });
+    await expect(host.inspectStartupFile()).rejects.toThrow('file_access_unavailable');
+    expect(await host.status()).toMatchObject({ selectedOrganizationId: otherId });
+
+    getFileAccess.mockImplementation(async () => { throw new Error('network_down'); });
+    await expect(host.inspectStartupFile()).rejects.toThrow('network_down');
+    expect(await host.status()).toMatchObject({ selectedOrganizationId: otherId });
+
+    getFileAccess.mockImplementation(async () => ({ ...binding, status: 'READY' as const }));
+    await expect(host.inspectStartupFile()).rejects.toThrow('file_access_unavailable');
+    expect(await host.status()).toMatchObject({ selectedOrganizationId: otherId });
+
+    getFileAccess.mockClear();
+    await writeFile(path, new Uint8Array([1, 2, 3]));
+    await expect(host.inspectStartupFile()).rejects.toThrow();
+    expect(getFileAccess).not.toHaveBeenCalled();
+    expect(await host.status()).toMatchObject({ selectedOrganizationId: otherId });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

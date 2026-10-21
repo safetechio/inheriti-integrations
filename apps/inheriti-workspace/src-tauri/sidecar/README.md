@@ -1,6 +1,6 @@
 # Workspace Node host
 
-The host is the transport adapter between the desktop UI and the shared Inheriti SDK. It does not isolate opened content.
+The host is the transport adapter between the desktop UI and the shared Inheriti® SDK. It does not isolate opened content.
 
 - `main.ts` and `protocol.ts`: launch the host and validate UI requests.
 - `session/`: authenticate the operator, select an organization, and keep the credential in the OS keyring. `workspace-session.ts` coordinates one file opening at a time.

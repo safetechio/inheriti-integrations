@@ -1,6 +1,7 @@
 export const coded = (code: string) => Object.assign(new Error(code), { code });
 
 export const lifecycleMessages: Record<string, string> = {
+  integration_tester_required: 'You are not an integration tester. Contact developer support.',
   local_window_unavailable:
     'The secure window could not open. Check the desktop installation, then start a new reveal.',
   local_delivery_expired:

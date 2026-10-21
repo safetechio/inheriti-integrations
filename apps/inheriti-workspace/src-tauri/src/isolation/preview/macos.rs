@@ -14,7 +14,7 @@ fn paths() -> Result<(PathBuf, PathBuf), String> {
     if app.extension() != Some(std::ffi::OsStr::new("app")) {
         return Err("viewer bundle unavailable".into());
     }
-    let helper = app.join("Contents/Helpers/Inheriti Preview.app/Contents/MacOS/preview-helper");
+    let helper = app.join("Contents/Helpers/Inheriti® Preview.app/Contents/MacOS/preview-helper");
     Ok((app.to_path_buf(), helper))
 }
 

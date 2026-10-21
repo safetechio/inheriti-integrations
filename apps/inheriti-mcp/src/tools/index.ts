@@ -27,6 +27,7 @@ import { registerCheckAutomationSetupStatus } from './check_automation_setup_sta
 import { registerListAutomationConnections } from './list_automation_connections.js';
 import { registerListAutomationGrants } from './list_automation_grants.js';
 import { registerGithubAutomationUsage } from './github_automation_usage.js';
+import { registerGetAutomationRuntimeInstallInstructions } from './get_automation_runtime_install_instructions.js';
 import { registerListAutomationMembers } from './list_automation_members.js';
 import { registerCreateAutomationConnection } from './create_automation_connection.js';
 import { registerChangeAutomationTrust } from './change_automation_trust.js';
@@ -69,6 +70,7 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
     registerListAutomationConnections(server, tools);
     registerListAutomationGrants(server, tools);
     registerGithubAutomationUsage(server, tools);
+    registerGetAutomationRuntimeInstallInstructions(server, tools);
     registerListAutomationMembers(server, tools);
     registerCreateAutomationConnection(server, tools);
     registerChangeAutomationTrust(server, tools);

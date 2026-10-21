@@ -1,4 +1,4 @@
-From: Inheriti Workspace <workspace@inheriti.example>
+From: Inheriti® Workspace <workspace@inheriti.example>
 Subject: [PATCH] modesetting: link GBM directly for glamor
 
 The modesetting module calls gbm_bo_get_offset when glamor is enabled.

@@ -188,6 +188,23 @@ describe('TraySession', () => {
     expect(session.state().status).toBe('error');
   });
 
+  it('clears a rejected tester session and shows the support message', async () => {
+    const session = new TraySession('dev');
+    await session.restore();
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
+    mock.complete.mockResolvedValue({});
+    mock.organizations.mockRejectedValue(Object.assign(new Error('elements_api_request_failed_403'), {
+      status: 403, code: 'integration_tester_required',
+    }));
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(mock.clear).toHaveBeenCalledOnce();
+    expect(session.state()).toMatchObject({ status: 'error', message: 'You are not an integration tester. Contact developer support.' });
+  });
+
   it.each(['dev', 'prod'] as const)('uses the bound callback URI throughout %s sign-in', async (deployment) => {
     const session = new TraySession(deployment);
     await session.restore();

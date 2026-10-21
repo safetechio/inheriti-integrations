@@ -1,5 +1,5 @@
 config BR2_PACKAGE_WORKSPACE_AGENT
-	bool "Inheriti Workspace guest agent"
+	bool "Inheriti® Workspace guest agent"
 	depends on BR2_USE_MMU
 	select BR2_PACKAGE_FEH
 	select BR2_PACKAGE_XTERM

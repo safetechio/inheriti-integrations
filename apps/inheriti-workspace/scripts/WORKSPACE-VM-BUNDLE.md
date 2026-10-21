@@ -26,8 +26,10 @@ QEMU's SDL caption includes a hard-coded `QEMU` prefix even when `-name` is
 supplied. Build the bundled QEMU with
 [`qemu/sdl-workspace-title.patch`](qemu/sdl-workspace-title.patch) applied to
 `ui/sdl2.c` so the VM window uses `Inheriti® Workspace` on Linux, Windows and
-macOS. The patch changes only the caption. An unpatched system QEMU used for
-local VM probes will still show the QEMU prefix.
+macOS. The patch changes only the caption. Release packaging rejects an
+unbranded display binary. Local Linux GUI probes prepared with
+`tests/workspace-guest/prepare-local-qemu.sh --gui` also replace the known SDL
+caption and stop if that module differs from the expected build.
 
 On macOS, Developer ID signing changes the bytes of QEMU and any bundled
 Mach-O plugins. Packaging first verifies the copied bundle against the pinned

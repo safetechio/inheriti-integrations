@@ -1,4 +1,5 @@
-export type VaultSourceKind = 'keepass' | 'passbolt' | 'kubernetes' | 'vault' | 'dotenv' | 'cloud';
+export type VaultSourceKind =
+  'keepass' | 'passbolt' | 'kubernetes' | 'vault' | 'dotenv' | 'cloud' | 'onepassword';
 
 export type ExtraField = {
   key: string;

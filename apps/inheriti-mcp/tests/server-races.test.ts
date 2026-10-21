@@ -87,6 +87,48 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+it('clears an admitted OAuth token when tester access is denied', async () => {
+  const tools = new MetadataTools() as any;
+  const clear = vi.fn();
+  tools.client = async () => ({
+    getAccessToken: async () => 'token',
+    listOrganizations: async () => { throw Object.assign(new Error('denied'), { status: 403, code: 'integration_tester_required' }); },
+  });
+  tools.sessions = { load: async () => ({ principal: {} }), clear };
+  expect(await safeResult(() => tools.authorized())({})).toEqual({
+    isError: true, content: [{ type: 'text', text: 'You are not an integration tester. Contact developer support.' }],
+  });
+  expect(clear).toHaveBeenCalledOnce();
+});
+
+it('keeps network errors distinct from tester denial', async () => {
+  const tools = new MetadataTools() as any;
+  const clear = vi.fn();
+  tools.client = async () => ({ getAccessToken: async () => 'token', listOrganizations: async () => { throw new Error('network unavailable'); } });
+  tools.sessions = { load: async () => ({ principal: {} }), clear };
+  await expect(tools.authorized()).rejects.toThrow('network unavailable');
+  expect(clear).not.toHaveBeenCalled();
+});
+
+it('does not clear a newer login after an older admission check rejects', async () => {
+  const tools = new MetadataTools() as any;
+  const admission = deferred<never>();
+  const entered = deferred<void>();
+  const oldClear = vi.fn();
+  const newClear = vi.fn();
+  tools.client = async () => ({ getAccessToken: async () => 'old-token', listOrganizations: () => { entered.resolve(); return admission.promise; } });
+  tools.sessions = { load: async () => ({ principal: {} }), clear: oldClear };
+  const pending = tools.authorized();
+  await entered.promise;
+  await tools.logout();
+  tools.sessions = { load: async () => ({ principal: {} }), clear: newClear };
+  tools.client = async () => ({ getAccessToken: async () => 'new-token', listOrganizations: async () => [] });
+  admission.reject(Object.assign(new Error('denied'), { status: 403, code: 'integration_tester_required' }));
+  await expect(pending).rejects.toMatchObject({ code: 'operator_reauthentication_required' });
+  expect(await tools.authorized()).toHaveProperty('listOrganizations');
+  expect(newClear).not.toHaveBeenCalled();
+});
+
 it('starts a fresh browser login after successful login and later session loss', async () => {
   const tools = new MetadataTools() as any;
   tools.silentAttempted = true;
@@ -96,7 +138,7 @@ it('starts a fresh browser login after successful login and later session loss',
   const begin = vi.mocked(beginBrowserLogin).mockReset().mockResolvedValueOnce({ authorizationUrl: 'https://login/first', completed: first.promise, cancel: vi.fn() })
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/second', completed: second.promise, cancel: vi.fn() });
   tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
-  tools.client = async () => ({ getAccessToken: async () => authenticated ? 'token' : undefined, auth: {} });
+  tools.client = async () => ({ getAccessToken: async () => authenticated ? 'token' : undefined, listOrganizations: async () => [], auth: {} });
   expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/first');
   authenticated = true;
   expect(await tools.authorized()).toHaveProperty('auth');
@@ -134,7 +176,7 @@ it('uses an existing browser session without presenting an interactive challenge
     return { authorizationUrl: 'https://login/silent', completed: Promise.resolve(), cancel: vi.fn() };
   });
   tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
-  const core = { getAccessToken: async () => authenticated ? 'token' : undefined, auth: {} };
+  const core = { getAccessToken: async () => authenticated ? 'token' : undefined, listOrganizations: async () => [], auth: {} };
   tools.client = async () => core;
   expect(await tools.authorized()).toBe(core);
   expect(begin).toHaveBeenCalledExactlyOnceWith(core.auth, tools.authConfiguration, undefined, { prompt: 'none', timeoutMs: 30_000 });
@@ -151,6 +193,17 @@ it('falls back to one interactive challenge after silent login is unavailable', 
   expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/interactive');
   expect(begin).toHaveBeenCalledTimes(2);
   expect(begin.mock.calls[1]?.[3]).toBeUndefined();
+});
+
+it('falls back to interactive login after the silent browser callback times out', async () => {
+  const tools = new MetadataTools() as any;
+  const begin = vi.mocked(beginBrowserLogin).mockReset()
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/silent', completed: Promise.reject(new Error('login_browser_callback_timed_out')), cancel: vi.fn() })
+    .mockResolvedValueOnce({ authorizationUrl: 'https://login/interactive', completed: new Promise(() => undefined), cancel: vi.fn() });
+  tools.authConfiguration = { redirectUri: 'http://127.0.0.1/oauth/callback' };
+  tools.client = async () => ({ getAccessToken: async () => undefined, auth: {} });
+  expect((await tools.authorized()).login.authorizationUrl).toBe('https://login/interactive');
+  expect(begin).toHaveBeenCalledTimes(2);
 });
 
 it('reserves a reveal before plan detail and blocks delivery after organization switch', async () => {

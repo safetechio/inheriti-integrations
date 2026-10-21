@@ -1,10 +1,10 @@
 # The Workspace virtual machine
 
-This folder builds the small Linux computer that Inheriti Workspace starts inside your computer. In the code, **guest** means that virtual computer; **host** means your Windows, macOS, or Linux computer.
+This folder builds the small Linux computer that Inheriti® Workspace starts inside your computer. In the code, **guest** means that virtual computer; **host** means your Windows, macOS, or Linux computer.
 
 ```text
 Your computer (host)
-  └─ Inheriti Workspace
+  └─ Inheriti® Workspace
        └─ Temporary virtual computer (guest)
             └─ Viewer opens the file here
 ```

@@ -1,4 +1,4 @@
-//! Authorized plaintext handoff into an already started isolated guest.
+//! Authorized plaintext handoff into an isolated guest.
 //!
 //! The caller supplies authorization and decrypted bytes through a closure. Rust
 //! does not decrypt here. This layer wipes its owned copy after guest ingress.
@@ -43,7 +43,7 @@ fn wipe(bytes: &mut [u8]) {
 }
 
 impl<R: GuestRuntime> Workspace<R> {
-    /// Open one file after guest readiness, using the closure as the authorization/decryption port.
+    /// Authorize one file before starting the guest, using the closure as the authorization/decryption port.
     /// The returned bytes are wiped before this method returns, including failure paths.
     pub fn open_authorized<A, F>(
         &mut self,
@@ -53,6 +53,20 @@ impl<R: GuestRuntime> Workspace<R> {
     where
         F: FnOnce() -> Result<Vec<u8>, A>,
     {
+        self.open_authorized_checked(name, authorize, || Ok(()))
+    }
+
+    /// Recheck authorization validity after guest startup, before plaintext ingress.
+    pub fn open_authorized_checked<A, F, C>(
+        &mut self,
+        name: &str,
+        authorize: F,
+        check: C,
+    ) -> Result<(), HandoffError<A, R::Error>>
+    where
+        F: FnOnce() -> Result<Vec<u8>, A>,
+        C: FnOnce() -> Result<(), A>,
+    {
         if self.active {
             return Err(HandoffError::AlreadyOpen);
         }
@@ -60,20 +74,24 @@ impl<R: GuestRuntime> Workspace<R> {
             return Err(HandoffError::Failure(HandoffFailure::InvalidFile));
         }
 
+        let plaintext = match authorize() {
+            Ok(bytes) => SensitiveBytes(bytes),
+            Err(error) => return Err(HandoffError::Failure(HandoffFailure::Authorization(error))),
+        };
+        if plaintext.0.is_empty() || plaintext.0.len() > MAX_FILE_BYTES {
+            return Err(HandoffError::Failure(HandoffFailure::InvalidFile));
+        }
+
         // A start error can still leave resources behind, so every path after this
         // point attempts teardown and retains cleanup_pending if teardown fails.
         self.active = true;
         if let Err(error) = self.runtime.start() {
+            drop(plaintext);
             return Err(self.fail_handoff(HandoffFailure::Runtime(error)));
         }
-
-        let plaintext = match authorize() {
-            Ok(bytes) => SensitiveBytes(bytes),
-            Err(error) => return Err(self.fail_handoff(HandoffFailure::Authorization(error))),
-        };
-        if plaintext.0.is_empty() || plaintext.0.len() > MAX_FILE_BYTES {
+        if let Err(error) = check() {
             drop(plaintext);
-            return Err(self.fail_handoff(HandoffFailure::InvalidFile));
+            return Err(self.fail_handoff(HandoffFailure::Authorization(error)));
         }
 
         let length = plaintext.0.len();

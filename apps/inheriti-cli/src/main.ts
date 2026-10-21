@@ -120,7 +120,7 @@ export async function run(
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
     }
     if (command === 'automations') {
-      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'grant', 'setup', 'publish', 'pair'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
+      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'runtime', 'grant', 'setup', 'publish', 'pair'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       if (rest[0] === 'pair' && rest[1] === 'redeem' && rest.length === 2) {
         await pairAutomationIdentity(configuration.apiUrl, environmentVariables);
@@ -130,6 +130,8 @@ export async function run(
       if ((rest[0] === 'list' && rest.length !== 1) || (rest[0] === 'grants' && (rest.length !== 2 || !rest[1] || rest[1].startsWith('--')))) {
         terminal.writeError(commandUsage(['automations', rest[0]!], environmentVariables)); return 1;
       }
+      if (rest[0] === 'runtime' && rest[1] === 'install-instructions' && rest.length === 2 &&
+          !(await context.core.getAccessToken())) await login(context, terminal);
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;

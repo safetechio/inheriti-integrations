@@ -90,7 +90,8 @@ export function getPlanAssetFormFields(type?: string): PlanAssetFieldDefinition[
   const sources = [
     'meta.name',
     ...definition.fields.map((name) => `secret.${name}`),
-    ...(type === 'PLAIN-TEXT' ? [] : ['meta.additionalNotesCheck', 'meta.notes']),
+    'meta.additionalNotesCheck',
+    'meta.notes',
   ];
   return sources.map(field);
 }
@@ -139,6 +140,10 @@ const maxLengths: Record<string, number> = {
   'PAYMENT-DEBIT-CARD.secret.code': 4,
 };
 
+export function isValidUserPasswordEmail(value: string): boolean {
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function valueAt(values: AssetValidationValues, source: string): unknown {
   const [scope, ...parts] = source.split('.');
   if (scope !== 'meta' && scope !== 'secret') return undefined;
@@ -182,7 +187,8 @@ export function validateAssetEditorValues(
   if (
     type === 'USER-PSWD' &&
     present(email) &&
-    (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    !errors['secret.email'] &&
+    (typeof email !== 'string' || !isValidUserPasswordEmail(email))
   )
     errors['secret.email'] = 'Invalid email';
   const card = valueAt(values, 'secret.cardNumber');

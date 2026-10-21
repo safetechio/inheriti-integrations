@@ -1,5 +1,6 @@
 import {
   AutomationProviderValue,
+  automationRuntimeInstallInstructions,
   createAutomationSetupOperations,
   createNativeWindowSession,
   githubAutomationWorkflow,
@@ -26,6 +27,14 @@ export async function listAutomationConnections(this: MetadataTools) {
   return {
     organizationId: selected.organizationId,
     items: items.map(({ id, name, provider, environment, status }) => ({ id, name, provider, environment, status })),
+  };
+}
+export async function getAutomationRuntimeInstallInstructions(this: MetadataTools) {
+  const selected = await this.automationOperations();
+  if (!('operations' in selected)) return selected;
+  return {
+    organizationId: selected.organizationId,
+    ...automationRuntimeInstallInstructions(await selected.operations.getVerifiedGithubRelease()),
   };
 }
 export async function listAutomationGrants(this: MetadataTools, planId: string) {

@@ -1,12 +1,12 @@
 import {
   createNativeWindowSession,
   createAwsSecretPublisher,
-  createGoogleSecretPublisher,
   revealModeOf,
   revealProgressMessage,
   PROTECTED_FILE_FLAGS,
   businessDeployment,
 } from '@safetech/inheriti-elements-core/node-base';
+import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import {
   deliverAssetInBrowser,
   deliverFieldsInBrowser,

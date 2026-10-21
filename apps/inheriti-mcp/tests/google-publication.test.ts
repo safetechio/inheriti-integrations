@@ -2,8 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { MetadataTools } from '../src/server.js';
 
 const publisher = vi.hoisted(() => ({ inspectSecret: vi.fn(), publishSecret: vi.fn() }));
-vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
-  ...await original<typeof import('@safetech/inheriti-elements-core/node-base')>(),
+vi.mock('@safetech/inheriti-elements-core/google-secret-publisher', () => ({
   createGoogleSecretPublisher: () => publisher,
 }));
 vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));

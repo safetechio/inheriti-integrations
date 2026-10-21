@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { net } = require('electron');
 const { apiSession } = require('./api-session.cjs');
-const { apiFetch, ensureCsrf, authCookieNames } = require('./api-transport.cjs');
+const { apiFetch, ensureCsrf, resetCsrfToken, authCookieNames } = require('./api-transport.cjs');
 
 const API_ORIGIN = process.env.INHERITI_API_ORIGIN || '';
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || '';
@@ -132,6 +132,20 @@ async function handleAuthCallback(callbackUrl) {
       const apiError =
         response.body?.message || response.body?.error || `API_LOGIN_${response.status}`;
       throw new Error(typeof apiError === 'string' ? apiError : `API_LOGIN_${response.status}`);
+    }
+    try {
+      const access = await apiFetch({ method: 'GET', path: '/integrations/tester-access' });
+      if (access.status !== 200) {
+        throw new Error(
+          access.status === 403 && access.body?.error === 'integration_tester_required'
+            ? 'You are not an integration tester. Contact developer support.'
+            : 'Could not verify Inheriti Importer access. Please try again.',
+        );
+      }
+    } catch (error) {
+      resetCsrfToken();
+      await apiSession().clearStorageData({ storages: ['cookies'] });
+      throw error;
     }
     await apiSession().cookies.flushStore();
     console.info('[auth] session cookies stored:', await authCookieNames());

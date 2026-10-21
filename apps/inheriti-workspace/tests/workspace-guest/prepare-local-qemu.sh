@@ -36,6 +36,28 @@ docker export "$container_id" | tar --no-same-owner -xf - -C "$output/rootfs"
 docker rm "$container_id" >/dev/null
 container_id=""
 ln -sfn ../seabios/bios-256k.bin "$output/rootfs/usr/share/qemu/bios-256k.bin"
+if [ -n "$gui_package" ]; then
+  # The local Ubuntu SDL module hardcodes a QEMU caption; keep GUI probes branded.
+  python3 - "$output/rootfs/usr/lib/x86_64-linux-gnu/qemu/ui-sdl.so" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+module = Path(sys.argv[1])
+data = module.read_bytes()
+for old, new in (
+    (b'QEMU (%s-%d)%s\0', b'%s%*s\0'),
+    (b'QEMU (%s)\0', b'%s\0'),
+):
+    if data.count(old) != 1:
+        raise SystemExit('Unsupported local SDL module; cannot guarantee Workspace window title')
+    data = data.replace(old, new.ljust(len(old), b'\0'))
+temporary = module.with_name('ui-sdl.branded.so')
+temporary.write_bytes(data)
+temporary.chmod(module.stat().st_mode)
+os.replace(temporary, module)
+PY
+fi
 
 iso="$output/alpine-virt-3.24.2-x86_64.iso"
 iso_hash=3ab424762af704b2c2a9e57df1dc37f982af260071504d977f2fb96822e7130b

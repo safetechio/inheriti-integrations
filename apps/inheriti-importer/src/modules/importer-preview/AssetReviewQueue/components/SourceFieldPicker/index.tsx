@@ -5,9 +5,11 @@ import type { ReviewAssetField, ReviewAssetSourceCandidate } from '../../types';
 export function SourceFieldPicker({
   field,
   onChange,
+  compactWhenUnmapped = false,
 }: {
   field: ReviewAssetField;
   onChange: (sourceFieldId?: string) => void;
+  compactWhenUnmapped?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const candidates = field.candidates ?? [];
@@ -29,14 +31,16 @@ export function SourceFieldPicker({
         gap="s"
         style={{ flexWrap: 'wrap' }}
       >
-        <Box gap="xxs">
-          <Text variant="smallUppercase" color="gray">
-            Imported source
-          </Text>
-          <Text variant="bodySmall" semibold>
-            {field.sourceFieldName ? displayName(field.sourceFieldName) : 'Not included'}
-          </Text>
-        </Box>
+        {field.sourceFieldId || !compactWhenUnmapped ? (
+          <Box gap="xxs">
+            <Text variant="smallUppercase" color="gray">
+              Imported source
+            </Text>
+            <Text variant="bodySmall" semibold>
+              {field.sourceFieldName ? displayName(field.sourceFieldName) : 'Not included'}
+            </Text>
+          </Box>
+        ) : null}
         <Box flexDirection="row" gap="xs">
           {field.sourceFieldId ? (
             <Button

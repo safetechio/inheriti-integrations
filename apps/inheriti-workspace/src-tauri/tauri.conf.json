@@ -1,5 +1,5 @@
 {
-  "productName": "Inheriti Workspace",
+  "productName": "Inheriti® Workspace",
   "version": "0.0.1",
   "identifier": "com.safetech.inheriti.workspace.local",
   "build": { "frontendDist": "../ui" },
@@ -22,7 +22,7 @@
     "fileAssociations": [
       {
         "ext": ["inheriti"],
-        "name": "Inheriti protected file",
+        "name": "Inheriti® protected file",
         "mimeType": "application/x-inheriti"
       }
     ]

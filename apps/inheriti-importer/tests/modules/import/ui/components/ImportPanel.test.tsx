@@ -21,6 +21,15 @@ afterEach(() => {
 });
 
 describe('ImportPanel', () => {
+  it('lists 1Password .1pux exports as a source', () => {
+    const { getByText } = render(<ImportPanel busy={false} error={null} onImport={vi.fn()} />);
+    expect(getByText('1Password')).toBeTruthy();
+    expect(getByText('.1pux export')).toBeTruthy();
+    expect(
+      getByText('Import text fields from a 1Password export for review and editing.'),
+    ).toBeTruthy();
+  });
+
   it('imports a dropped file exactly once', async () => {
     const onImport = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<ImportPanel busy={false} error={null} onImport={onImport} />);

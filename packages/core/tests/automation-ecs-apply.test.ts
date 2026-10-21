@@ -88,7 +88,7 @@ describe('ECS automation apply', () => {
     await expect(applyEcsAutomation(input, runner)).resolves.toMatchObject({ status: 'deployed', revision: newRevision });
   });
 
-  it('does not register another task definition when the target is already configured', async () => {
+  it('keeps a configured task unchanged for the same image and redeploys a new digest without another wrapper', async () => {
     const wrapped = {
       ...definition,
       taskDefinition: {
@@ -109,6 +109,37 @@ describe('ECS automation apply', () => {
       ? JSON.stringify(service) : JSON.stringify(wrapped));
     await expect(applyEcsAutomation(input, run)).resolves.toMatchObject({ status: 'unchanged', revision: oldRevision });
     expect(run).toHaveBeenCalledTimes(2);
+    const conflicting = { ...wrapped, taskDefinition: { ...wrapped.taskDefinition,
+      containerDefinitions: [{ ...wrapped.taskDefinition.containerDefinitions[0],
+        entryPoint: [input.cliPath, 'secrets', 'exec', input.planId, '--automation', '--env',
+          'APP_USERNAME=A1.password', '--', '/bin/server'] }] } };
+    const conflictRun = vi.fn<EcsApplyRunner>(async args => args[1] === 'describe-services'
+      ? JSON.stringify(service) : JSON.stringify(conflicting));
+    await expect(applyEcsAutomation({ ...input, image: `example@sha256:${'b'.repeat(64)}` }, conflictRun))
+      .rejects.toThrow('automation_ecs_existing_setup_conflict');
+    expect(conflictRun).toHaveBeenCalledTimes(2);
+
+    const calls: string[][] = [];
+    const nextImage = `example@sha256:${'b'.repeat(64)}`;
+    const redeploy: EcsApplyRunner = async args => {
+      calls.push(args);
+      if (args[1] === 'describe-services') return JSON.stringify(calls.filter(call => call[1] === 'describe-services').length <= 2 ? service : deployedService);
+      if (args[1] === 'describe-task-definition') return JSON.stringify(wrapped);
+      if (args[1] === 'register-task-definition') {
+        const file = args[args.indexOf('--cli-input-json') + 1]!.slice(7);
+        const container = JSON.parse(await readFile(file, 'utf8')).containerDefinitions[0];
+        expect(container.image).toBe(nextImage);
+        expect(container.entryPoint).toEqual(wrapped.taskDefinition.containerDefinitions[0]!.entryPoint);
+        expect(container.entryPoint.filter((part: string) => part === 'secrets')).toHaveLength(1);
+        return JSON.stringify({ taskDefinition: { taskDefinitionArn: newRevision } });
+      }
+      return '{}';
+    };
+    await expect(applyEcsAutomation({ ...input, image: nextImage }, redeploy)).resolves.toEqual({
+      previousRevision: oldRevision, revision: newRevision, image: nextImage, status: 'deployed',
+    });
+    expect(calls.filter(args => args[1] === 'update-service').map(args => args[args.indexOf('--task-definition') + 1]))
+      .toEqual([newRevision]);
   });
 
   it('rolls the service back when stabilization fails', async () => {

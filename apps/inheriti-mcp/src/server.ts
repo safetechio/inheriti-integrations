@@ -4,19 +4,20 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   HOST_FEATURE_FLAGS, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
-  MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher, createGoogleSecretPublisher,
+  MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher,
 } from '@safetech/inheriti-elements-core/node-base';
+import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import type { LocalPlanHints, AutomationProvider, AutomationTrust } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import { beginBrowserLogin } from './browser-login.js';
 import { planDetail, planSummary } from './metadata.js';
 import { registerTools } from './tools/index.js';
-import { coded, safeErrorCode } from './runtime/errors.js';
+import { coded, lifecycleMessages, safeErrorCode } from './runtime/errors.js';
 import { configPath, configuration, lockedDeployment } from './runtime/configuration.js';
 import { authFetch } from './runtime/auth-fetch.js';
 import type { Configuration } from './runtime/configuration.js';
 import {
-  listAutomationConnections, listAutomationGrants, githubAutomationUsage, listAutomationMembers,
+  listAutomationConnections, listAutomationGrants, githubAutomationUsage, getAutomationRuntimeInstallInstructions, listAutomationMembers,
   createAutomationConnection, changeAutomationTrust, disableAutomationConnection, manageAutomationGrant,
   startAutomationSetup, startAutomationPairing, automationSetupStatus,
 } from './runtime/automation.js';
@@ -59,7 +60,10 @@ export class MetadataTools {
     onChallenge(initial.login.authorizationUrl);
     const core = await this.client();
     for (let attempt = 0; attempt < 120; attempt++) {
-      if (await core.getAccessToken()) return core;
+      if (await core.getAccessToken()) {
+        const authorized = await this.authorized();
+        if (!('login' in authorized)) return authorized;
+      }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
     throw coded('authorization_timed_out');
@@ -122,6 +126,16 @@ export class MetadataTools {
     }
     this.assertGeneration(generation);
     if (accessToken) {
+      try { await core.listOrganizations(); this.assertGeneration(generation); }
+      catch (error) {
+        this.assertGeneration(generation);
+        if ((error as { status?: unknown; code?: unknown })?.status === 403
+          && (error as { code?: unknown }).code === 'integration_tester_required') {
+          await this.logout();
+          throw coded('integration_tester_required');
+        }
+        throw error;
+      }
       this.browserLogin?.cancel();
       this.browserLogin = undefined;
       this.login = undefined;
@@ -138,6 +152,7 @@ export class MetadataTools {
     }
     if (!this.silentAttempted && !process.env.INHERITI_ELEMENTS_NO_BROWSER) {
       this.silentAttempted = true;
+      let silentToken: string | undefined;
       try {
         const silent = await beginBrowserLogin(core.auth, this.authConfiguration!, undefined, { prompt: 'none', timeoutMs: 30_000 });
         try { this.assertGeneration(generation); }
@@ -146,8 +161,23 @@ export class MetadataTools {
         try { await silent.completed; }
         finally { if (this.browserLogin === silent) this.browserLogin = undefined; }
         this.assertGeneration(generation);
-        if (await core.getAccessToken()) return core;
-      } catch { this.assertGeneration(generation); }
+        silentToken = await core.getAccessToken();
+      } catch (error) {
+        this.assertGeneration(generation);
+      }
+      if (silentToken) {
+        try { await core.listOrganizations(); this.assertGeneration(generation); }
+        catch (error) {
+          this.assertGeneration(generation);
+          if ((error as { status?: unknown; code?: unknown })?.status === 403
+            && (error as { code?: unknown }).code === 'integration_tester_required') {
+            await this.logout();
+            throw coded('integration_tester_required');
+          }
+          throw error;
+        }
+        return core;
+      }
     }
     if (!this.login) {
       const started = await beginBrowserLogin(core.auth, this.authConfiguration!);
@@ -362,6 +392,7 @@ export class MetadataTools {
       organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() }) };
   }
   async listAutomationConnections() { return listAutomationConnections.call(this); }
+  async getAutomationRuntimeInstallInstructions() { return getAutomationRuntimeInstallInstructions.call(this); }
   async listAutomationGrants(planId: string) { return listAutomationGrants.call(this, planId); }
   async githubAutomationUsage(planId: string, connectionId: string, selector: string) {
     return githubAutomationUsage.call(this, planId, connectionId, selector);
@@ -475,7 +506,7 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
     try { return { content: [{ type: 'text' as const, text: JSON.stringify(await work(args)) }] }; }
     catch (error) {
       const safe = safeErrorCode(error);
-      return { isError: true, content: [{ type: 'text' as const, text: safe }] };
+      return { isError: true, content: [{ type: 'text' as const, text: safe === 'integration_tester_required' ? lifecycleMessages[safe]! : safe }] };
     }
   };
 }

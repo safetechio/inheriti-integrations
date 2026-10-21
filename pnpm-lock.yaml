@@ -120,6 +120,9 @@ importers:
 
   apps/inheriti-importer:
     dependencies:
+      fflate:
+        specifier: 0.7.5
+        version: 0.7.5
       '@expo/vector-icons':
         specifier: ^15.0.3
         version: 15.1.1(expo-font@57.0.4(expo@57.0.28)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)

@@ -185,6 +185,7 @@ export function entriesFromParse(result: ParseResult, sourceId: string): VaultEn
   return result.entries.map((entry) =>
     createEmptyEntry({
       ...entry,
+      id: result.kind === 'onepassword' ? `${sourceId}:${entry.id}` : entry.id,
       sourceId,
     }),
   );

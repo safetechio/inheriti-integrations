@@ -174,6 +174,9 @@ fn remaining_guest_time(deadline: Instant) -> Duration {
 
 fn begin_guest_opening(state: &HostState) -> Result<(), String> {
     let _gate = state.opening_gate.lock().map_err(|_| "host unavailable")?;
+    if state.resetting.load(Ordering::Acquire) {
+        return Err("opening_in_progress".into());
+    }
     if state.opening_active.swap(true, Ordering::AcqRel) {
         return Err("opening_in_progress".into());
     }
@@ -182,17 +185,7 @@ fn begin_guest_opening(state: &HostState) -> Result<(), String> {
 }
 
 fn cancel_active_opening(state: &HostState) {
-    let pid = {
-        let Ok(_gate) = state.opening_gate.lock() else {
-            return;
-        };
-        if !state.opening_active.load(Ordering::Acquire) {
-            return;
-        }
-        state.cancel_requested.store(true, Ordering::Release);
-        state.child_pid.load(Ordering::Acquire)
-    };
-    platform::cancel_child(pid);
+    state.cancel_host_process();
 }
 
 fn guest_runtime(
@@ -347,46 +340,57 @@ pub async fn viewer_open_startup_file_in_guest(
             ensure_opening_not_cancelled(&state.cancel_requested)?;
             let expiration = std::sync::Arc::new(std::sync::Mutex::new(None));
             let delivered = expiration.clone();
+            let validity = expiration.clone();
             let callback_app = app.clone();
-            state.guest.open(runtime, name, move || {
-                let callback_state = callback_app.state::<HostState>();
-                ensure_opening_not_cancelled(&callback_state.cancel_requested)?;
-                let opened: OpenedFile = invoke_cancelable(
-                    &callback_app,
-                    &callback_state,
-                    if from_reveal {
-                        "openStartupFileFromRevealInGuest"
-                    } else {
-                        "openStartupFileInGuest"
-                    },
-                )?;
-                if opened.mime_type != mime {
-                    return Err("invalid host response".into());
-                }
-                let mut bytes = decode_guest(&opened)?;
-                if let Err(error) = ensure_opening_not_cancelled(&callback_state.cancel_requested) {
-                    bytes.fill(0);
-                    return Err(error);
-                }
-                let (ttl, effective_expiration) = match pdf_expiration(opened.expires_at.as_deref())
-                {
-                    Ok(value) => value,
-                    Err(error) => {
+            let cancelled = state.cancel_requested.clone();
+            state.guest.open(
+                runtime,
+                name,
+                move || {
+                    let callback_state = callback_app.state::<HostState>();
+                    ensure_opening_not_cancelled(&callback_state.cancel_requested)?;
+                    let opened: OpenedFile = invoke_cancelable(
+                        &callback_app,
+                        &callback_state,
+                        if from_reveal {
+                            "openStartupFileFromRevealInGuest"
+                        } else {
+                            "openStartupFileInGuest"
+                        },
+                    )?;
+                    if opened.mime_type != mime {
+                        return Err("invalid host response".into());
+                    }
+                    let mut bytes = decode_guest(&opened)?;
+                    if let Err(error) =
+                        ensure_opening_not_cancelled(&callback_state.cancel_requested)
+                    {
                         bytes.fill(0);
                         return Err(error);
                     }
-                };
-                let Ok(mut guard) = delivered.lock() else {
-                    bytes.fill(0);
-                    return Err("workspace unavailable".into());
-                };
-                if let Err(error) = ensure_opening_not_cancelled(&callback_state.cancel_requested) {
-                    bytes.fill(0);
-                    return Err(error);
-                }
-                *guard = Some((Instant::now() + ttl, effective_expiration));
-                Ok(bytes)
-            })?;
+                    let (ttl, effective_expiration) =
+                        match pdf_expiration(opened.expires_at.as_deref()) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                bytes.fill(0);
+                                return Err(error);
+                            }
+                        };
+                    let Ok(mut guard) = delivered.lock() else {
+                        bytes.fill(0);
+                        return Err("workspace unavailable".into());
+                    };
+                    if let Err(error) =
+                        ensure_opening_not_cancelled(&callback_state.cancel_requested)
+                    {
+                        bytes.fill(0);
+                        return Err(error);
+                    }
+                    *guard = Some((Instant::now() + ttl, effective_expiration));
+                    Ok(bytes)
+                },
+                move || ensure_guest_open_valid(&cancelled, &validity),
+            )?;
             if state.cancel_requested.load(Ordering::Acquire) {
                 state
                     .guest
@@ -489,6 +493,9 @@ async fn open_startup_file(
 ) -> Result<Preview, String> {
     let state = app.state::<HostState>();
     let child = state.child.lock().map_err(|_| "host unavailable")?;
+    if state.resetting.load(Ordering::Acquire) {
+        return Err("opening_in_progress".into());
+    }
     if state.opening_active.swap(true, Ordering::AcqRel) {
         return Err("opening_in_progress".into());
     }
@@ -698,6 +705,20 @@ fn ensure_opening_not_cancelled(
     }
 }
 
+fn ensure_guest_open_valid(
+    cancelled: &AtomicBool,
+    expiration: &std::sync::Mutex<Option<(Instant, String)>>,
+) -> Result<(), String> {
+    ensure_opening_not_cancelled(cancelled)?;
+    let guard = expiration.lock().map_err(|_| "workspace unavailable")?;
+    let (deadline, _) = guard.as_ref().ok_or("workspace unavailable")?;
+    if Instant::now() >= *deadline {
+        Err("file expired".into())
+    } else {
+        ensure_opening_not_cancelled(cancelled)
+    }
+}
+
 #[cfg(test)]
 mod guest_deadline_tests {
     use super::*;
@@ -712,6 +733,12 @@ mod guest_deadline_tests {
     #[test]
     fn cancelled_vm_startup_cannot_authorize_file() {
         let state = HostState::new();
+        state.resetting.store(true, Ordering::Release);
+        assert_eq!(
+            begin_guest_opening(&state),
+            Err("opening_in_progress".into())
+        );
+        state.resetting.store(false, Ordering::Release);
         begin_guest_opening(&state).unwrap();
         assert!(ensure_opening_not_cancelled(&state.cancel_requested).is_ok());
         cancel_active_opening(&state);
@@ -724,5 +751,27 @@ mod guest_deadline_tests {
             Err("opening_in_progress".into())
         );
         assert!(state.cancel_requested.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn post_start_check_rejects_cancelled_or_expired_opening() {
+        let cancelled = AtomicBool::new(false);
+        let expiration = std::sync::Mutex::new(Some((
+            Instant::now() + Duration::from_secs(60),
+            "future".into(),
+        )));
+        assert_eq!(ensure_guest_open_valid(&cancelled, &expiration), Ok(()));
+        cancelled.store(true, Ordering::Release);
+        assert_eq!(
+            ensure_guest_open_valid(&cancelled, &expiration),
+            Err("opening_cancelled".into())
+        );
+        cancelled.store(false, Ordering::Release);
+        *expiration.lock().unwrap() =
+            Some((Instant::now() - Duration::from_secs(1), "past".into()));
+        assert_eq!(
+            ensure_guest_open_valid(&cancelled, &expiration),
+            Err("file expired".into())
+        );
     }
 }

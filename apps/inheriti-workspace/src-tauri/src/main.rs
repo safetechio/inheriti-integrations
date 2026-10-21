@@ -18,6 +18,7 @@ fn main() {
             }
         }));
     let builder = builder
+        .plugin(tauri_plugin_dialog::init())
         .manage(host::HostState::new())
         .setup(|app| {
             #[cfg(all(feature = "workspace-test-harness", debug_assertions))]
@@ -51,6 +52,10 @@ fn main() {
             host::commands::viewer_select_organization,
             host::commands::viewer_file_access,
             host::commands::viewer_inspect_startup_file,
+            host::commands::viewer_has_startup_file,
+            host::commands::viewer_clear_startup_file,
+            host::commands::viewer_choose_file,
+            host::commands::viewer_accept_file,
             host::commands::viewer_open_startup_file,
             host::commands::viewer_open_startup_file_from_reveal,
             host::commands::viewer_guest_preflight,
@@ -66,7 +71,7 @@ fn main() {
         ]);
     builder
         .build(tauri::generate_context!())
-        .expect("could not open Inheriti Workspace")
+        .expect("could not open Inheriti® Workspace")
         .run(|app, event| {
             if let tauri::RunEvent::WindowEvent {
                 label,

@@ -11,7 +11,7 @@ if [[ "$(uname -s)" != Darwin ]]; then
   exit 1
 fi
 if [[ $# -ne 1 || ! -d "$1/Contents/MacOS" ]]; then
-  echo 'usage: package-preview-macos.sh /path/to/Inheriti Workspace.app' >&2
+  echo 'usage: package-preview-macos.sh /path/to/Inheriti® Workspace.app' >&2
   exit 1
 fi
 if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
@@ -61,7 +61,7 @@ codesign --verify --strict "$qemu"
 # matching the signed bytes inside the final VM bundle.
 node scripts/seal-signed-vm.mjs seal "$vm" "${INHERITI_WORKSPACE_VM_MANIFEST_SHA256:-}" \
   "$app/Contents/Resources/workspace-vm-input-manifest.sha256.json"
-helper_app="$app/Contents/Helpers/Inheriti Preview.app"
+helper_app="$app/Contents/Helpers/Inheriti® Preview.app"
 mkdir -p "$helper_app/Contents/MacOS"
 cp src-tauri/target/release/preview-helper "$helper_app/Contents/MacOS/preview-helper"
 cat > "$helper_app/Contents/Info.plist" <<'PLIST'
@@ -70,7 +70,7 @@ cat > "$helper_app/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
   <key>CFBundleIdentifier</key><string>com.safetech.inheriti.workspace.preview</string>
   <key>CFBundleExecutable</key><string>preview-helper</string>
-  <key>CFBundleName</key><string>Inheriti Preview</string>
+  <key>CFBundleName</key><string>Inheriti® Preview</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>1</string>
 </dict></plist>

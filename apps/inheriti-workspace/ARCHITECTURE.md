@@ -1,4 +1,4 @@
-# Inheriti Workspace architecture
+# Inheriti® Workspace architecture
 
 Workspace has three core responsibilities. Their names indicate where a rule or failure belongs.
 

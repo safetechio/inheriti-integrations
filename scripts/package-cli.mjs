@@ -17,6 +17,8 @@ const artifacts = resolve(root, process.argv.find((value) => value.startsWith('-
 const stage = resolve(artifacts, 'stage');
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const nodeEngine = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).engines?.node;
+if (typeof nodeEngine !== 'string' || !nodeEngine.trim()) throw new Error('Workspace Node.js engine is required');
 const packageVersion = packageVersionForDeployment(manifest.version, deployment);
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
@@ -38,7 +40,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
   type: manifest.type,
   bin: manifest.bin,
   files: ['dist', 'fallbacks'],
-  engines: { node: '>=22' },
+  engines: { node: nodeEngine },
   scripts: { postinstall: `node -e "console.log('Run inheriti setup to enable shell autocomplete (Yes is the default).')"` },
   dependencies: { '@napi-rs/keyring': manifest.dependencies['@napi-rs/keyring'],
     '@google-cloud/secret-manager': manifest.dependencies['@google-cloud/secret-manager'] },
