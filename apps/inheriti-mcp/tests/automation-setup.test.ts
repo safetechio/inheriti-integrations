@@ -17,27 +17,37 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
 
 import { MetadataTools, createServer, safeResult } from '../src/server.js';
 import { registerGetAutomationRuntimeInstallInstructions } from '../src/tools/get_automation_runtime_install_instructions.js';
+import { registerGithubAutomationUsage } from '../src/tools/github_automation_usage.js';
 
-const setup = (apiUrl = 'http://business.localhost:3400') => {
+const setup = (apiUrl = 'http://business.localhost:3400', deployment = 'local') => {
   const tools = new MetadataTools() as any;
-  tools.config = { apiUrl, environment: 'TEST' };
+  tools.config = { apiUrl, deployment, environment: 'TEST' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'private-token' } });
   return tools;
 };
 
-it('rejects nonlocal automation without opening a window', async () => {
-  const tools = setup('https://business.example.com');
+it('rejects disabled automation without opening a window', async () => {
+  const tools = setup('https://business-api.inheriti.com/integrations/', 'prod');
   expect(await safeResult(() => tools.startAutomationSetup('connection'))({})).toEqual({ isError: true, content: [{ type: 'text', text: 'automation_local_only' }] });
   expect(await safeResult(() => tools.createAutomationConnection({ name: 'Runner', provider: 'AWS', environment: 'TEST', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn' } }))({})).toEqual({ isError: true, content: [{ type: 'text', text: 'automation_local_only' }] });
   expect(mock.browser).not.toHaveBeenCalled();
   expect(mock.createConnection).not.toHaveBeenCalled();
 });
 
-it('allows only the exact Business dev API endpoint outside local hosts', async () => {
+it('allows automation only in local and dev deployments', async () => {
   mock.connections.mockResolvedValue([]);
-  await expect(setup('https://business-api-dev.inheriti.com/integrations/').listAutomationConnections()).resolves.toEqual({ organizationId: 'org', items: [] });
-  for (const url of ['https://business-api-stg.inheriti.com/integrations/', 'https://business-api.inheriti.com/integrations/', 'http://business-api-dev.inheriti.com/integrations/', 'https://business-api-dev.inheriti.com.attacker.test/integrations/']) {
-    await expect(setup(url).listAutomationConnections()).rejects.toMatchObject({ code: 'automation_local_only' });
+  for (const [deployment, apiUrl] of [
+    ['local', 'http://business.localhost:3400/integrations/'],
+    ['dev', 'https://business-api-dev.inheriti.com/integrations/'],
+  ]) {
+    await expect(setup(apiUrl, deployment).listAutomationConnections()).resolves.toEqual({ organizationId: 'org', items: [] });
+  }
+  for (const [deployment, apiUrl] of [
+    ['stg', 'https://business-api-stg.inheriti.com/integrations/'],
+    ['prod', 'https://business-api.inheriti.com/integrations/'],
+    ['invalid', 'https://business.example.com'],
+  ]) {
+    await expect(setup(apiUrl, deployment).listAutomationConnections()).rejects.toMatchObject({ code: 'automation_local_only' });
   }
 });
 
@@ -60,7 +70,7 @@ it('registers GitHub usage tool and returns verified workflow destination and YA
   const registration = vi.spyOn(McpServer.prototype, 'registerTool').mockImplementation(((name: string, _schema: unknown, handler: (input: unknown) => Promise<unknown>) => { registered.set(name, handler); return {} as never; }) as never);
   let result: unknown;
   try {
-    createServer();
+    registerGithubAutomationUsage(new McpServer({ name: 'test', version: '0' }), setup());
     result = await registered.get('github_automation_usage')!({ planId: 'plan', connectionId: 'connection', field: '123-asset.password' });
   } finally { operations.mockRestore(); registration.mockRestore(); }
   const text = (result as { content: { text: string }[] }).content[0]!.text;
