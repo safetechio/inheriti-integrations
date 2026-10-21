@@ -31,6 +31,18 @@ export async function login(context: CliContext, terminal: Terminal): Promise<nu
   if (await context.sessions.load()) await context.keyVault?.clear();
   const callbackUrl = await waitForCallback(context, terminal);
   await context.core.auth.completeAuthorizationCode(callbackUrl);
+  if (context.keyOwner === 'Organisation') {
+    try {
+      await context.core.listOrganizations();
+    } catch (error) {
+      if ((error as { status?: unknown; code?: unknown })?.status === 403
+        && (error as { code?: unknown }).code === 'integration_tester_required') {
+        try { await context.core.auth.clear(); } finally { await context.sessions.clear(); }
+        throw new Error('integration_tester_required');
+      }
+      throw error;
+    }
+  }
   if (!(await context.sessions.load())) throw new SessionStoreUnreadable('session_file_unreadable');
   terminal.write('Signed in.');
   return 0;

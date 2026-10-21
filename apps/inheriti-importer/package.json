@@ -2,7 +2,7 @@
   "name": "inheriti-import",
   "productName": "Inheriti\u00ae Importer",
   "desktopName": "inheriti-importer",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "description": "Import KeePass, Passbolt, Kubernetes, Vault, and cloud secrets, review entries, and prepare them for Inheriti\u00ae Business.",
   "author": "Inheriti",
