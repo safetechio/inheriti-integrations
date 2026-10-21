@@ -27,7 +27,7 @@ export function registerTrayEvents(appUrl?: string, deployment = 'prod', onCheck
   tray.on('click', () => showLauncher());
   tray.on('double-click', () => showLauncher());
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: `${messages.appName} ${deployment.toUpperCase()} · v${app.getVersion()}`, enabled: false },
+    { label: `${messages.appName}${deployment === 'prod' ? '' : ` ${deployment.toUpperCase()}`} · v${app.getVersion()}`, enabled: false },
     { type: 'separator' },
     { label: messages.openLauncher, click: () => showLauncher() },
     { type: 'separator' },
