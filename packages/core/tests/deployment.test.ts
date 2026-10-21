@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BUSINESS_DEPLOYMENTS, HOST_FEATURE_FLAGS, PROTECTED_FILE_FLAGS, businessDeployment } from '../src/deployment.js';
 
 describe('Business deployment selection', () => {
-  it('enables host automation only for local deployment', () => {
+  it('enables host automation only for local and dev deployments', () => {
     for (const deployment of Object.keys(BUSINESS_DEPLOYMENTS) as Array<keyof typeof BUSINESS_DEPLOYMENTS>) {
-      expect(HOST_FEATURE_FLAGS[deployment]).toEqual({ planCreation: false, automation: deployment === 'local' });
+      expect(HOST_FEATURE_FLAGS[deployment]).toEqual({ planCreation: false, automation: deployment === 'local' || deployment === 'dev' });
       expect(PROTECTED_FILE_FLAGS[deployment]).toBe(false);
     }
   });
