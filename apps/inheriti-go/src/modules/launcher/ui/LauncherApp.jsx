@@ -39,12 +39,12 @@ export function LauncherApp({ messages }) {
   useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(true);
-    if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(action);
+    if (action === messages.savePrivately || action === messages.shareWithTeam) setPendingPlanAction(action);
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
       setPendingInboxAction(action);
     }
-  }), [messages, state?.assetCatalog?.length]);
+  }), [messages]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
     rememberInboxPresence(signal);
     if (signal?.kind === 'NEW_MESSAGE' && !inboxOpen) setInboxHasNew(true);
@@ -56,7 +56,7 @@ export function LauncherApp({ messages }) {
   }, [inboxRequested, state?.status, state?.selectedId]);
   const editFlow = usePlanEditFlow({ state, setState: session.setState, messages });
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
-    canHandleAction: !editFlow.editing && !!state?.assetCatalog?.length,
+    canHandleAction: !editFlow.editing,
     onEditAction: () => { if (state?.edit?.available && !editFlow.busy) void editFlow.open(); },
     onReturnToInbox: () => setInboxOpen(true),
   });
@@ -131,7 +131,7 @@ export function LauncherApp({ messages }) {
 
   if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
     identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
-    onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />;
+    onCreatePlanFromSecret={createPlanFromSecret} onCreatePlanFromFile={createPlanFromFile} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
