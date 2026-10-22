@@ -21,12 +21,12 @@ editing both `preload.cjs` (exposure) and `main.cjs` (`ipcMain.handle`).
 
 The committed `.env.dev`, `.env.stg`, and `.env.prod` files configure
 `INHERITI_API_ORIGIN`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, and
-`KEYCLOAK_CLIENT_ID` from their matching Business UI environments. `WEB_APP_URL`
-configures the matching Business web CTA. Environment builds validate those
-values and bundle the selected configuration for the main process. Local
-development reads `.env.local` unless `INHERITI_ENV` selects one of the deployed
-environments. The registered `INHERITI_AUTH_REDIRECT_URI` defaults to
-`inheriti://auth/callback`.
+`KEYCLOAK_CLIENT_ID` with the shared Business integrations interactive client
+used by Inheriti Go. `WEB_APP_URL` configures the matching Business web CTA.
+Environment builds validate those values and bundle the selected configuration
+for the main process. Local development reads `.env.local` unless `INHERITI_ENV`
+selects one of the deployed environments. Authentication uses a temporary
+`http://127.0.0.1:<port>/oauth/callback` redirect.
 
 ## Rules
 
