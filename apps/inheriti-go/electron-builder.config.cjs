@@ -24,7 +24,7 @@ module.exports = {
       'fi\nexec "$binary" "$@"\n', { mode: 0o755 });
   },
   icon: resolve(__dirname, deployment === 'prod' ? 'build/icon.svg' : `build/icon-${deployment}.svg`),
-  artifactName: `Inheriti-Go-${deployment}-\${version}-\${os}-\${arch}.\${ext}`,
+  artifactName: `Inheriti-Go-${deployment === 'prod' ? '' : `${deployment}-`}\${version}-\${os}-\${arch}.\${ext}`,
   directories: { output: process.env.INHERITI_ARTIFACTS_DIR ?? `artifacts/${deployment}` },
   files: ['dist/**/*', 'package.json'],
   asar: false,

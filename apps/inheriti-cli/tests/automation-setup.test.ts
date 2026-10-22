@@ -1,27 +1,34 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const { getConnection, listConnections, listGrants, inspectCloudTarget, inspectEc2AutomationInstance, prepareEc2AutomationService, generateAutomationRuntimeBundle, applyEcsAutomation, applyCloudRunServiceAutomation } = vi.hoisted(() => ({
+const { getConnection, listConnections, listGrants, inspectCloudTarget, inspectEc2AutomationInstance, installEc2AutomationService, prepareEc2AutomationService, generateAutomationRuntimeBundle, applyEcsAutomation, applyCloudRunServiceAutomation, resolveAutomationImage } = vi.hoisted(() => ({
   getConnection: vi.fn(async () => ({ id: 'connection-1', provider: 'AWS', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } })),
   listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'ECS', provider: 'AWS', status: 'VERIFIED' }]),
   listGrants: vi.fn(async () => [{ connectionId: 'connection-1', status: 'ACTIVE' }]),
   inspectCloudTarget: vi.fn(async () => ({ target: { provider: 'AWS', region: 'us-east-1', cluster: 'jobs', service: 'worker' }, image: 'image:tag', identity: 'arn:aws:iam::123456789012:role/task', revision: 'rev:1', command: ['--secret=NEVER_PRINT'], environmentNames: ['EXISTING_SECRET'] })),
   inspectEc2AutomationInstance: vi.fn(async () => ({ region: 'us-east-1', instanceId: 'i-123', roleArn: 'arn:aws:iam::123456789012:role/task' })),
+  installEc2AutomationService: vi.fn(async () => ({ commandId: 'command-1', unitName: 'inheriti-worker.service' })),
   prepareEc2AutomationService: vi.fn(() => ({ runScriptPath: '/opt/inheriti/run.sh', unitName: 'inheriti-worker.service', instructions: ['Install the launcher'], runScript: '#!/bin/sh', unit: '[Service]' })),
   generateAutomationRuntimeBundle: vi.fn(() => ({ provider: 'AWS', target: 'ECS task', script: '#!/bin/sh\nexec inheriti secrets exec "$@"', environment: { INHERITI_AUTOMATION_PROVIDER: 'AWS' }, requiredEnvironment: ['AWS_REGION'], instructions: ['Install CLI in image'] })),
   applyEcsAutomation: vi.fn(async () => ({ status: 'deployed', revision: 'rev:2', previousRevision: 'rev:1' })),
   applyCloudRunServiceAutomation: vi.fn(async () => ({ status: 'updated', revision: 'rev:2', previousRevision: 'rev:1' })),
+  resolveAutomationImage: vi.fn(async (image: string) => image),
 }));
 vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
   ...(await original<object>()),
   createAutomationSetupOperations: () => ({ getConnection, listConnections, listGrants }),
   inspectCloudTarget,
   inspectEc2AutomationInstance,
+  installEc2AutomationService,
   prepareEc2AutomationService,
   generateAutomationRuntimeBundle,
   applyEcsAutomation,
   applyCloudRunServiceAutomation,
+  resolveAutomationImage,
 }));
-vi.mock('../src/render/select.js', () => ({ promptSelect: vi.fn(async () => 'connection-1') }));
+vi.mock('../src/render/select.js', () => ({ promptSelect: vi.fn(async () => 'connection-1'), promptText: vi.fn() }));
 
 import { automationSetup } from '../src/commands/automation-setup.js';
 
@@ -95,6 +102,42 @@ it('prints a launcher for a VM or cluster without inspecting or changing a manag
   expect(output.write.mock.calls.flat().join('\n')).toContain('manual_setup_required');
 });
 
+it('saves a new launcher in the build context and prints Dockerfile lines using its chosen path', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-setup-'));
+  const previous = process.cwd();
+  try {
+    process.chdir(directory);
+    const output = terminal();
+    const manual = [...args.slice(0, 8), '--save', 'launch.sh'];
+    expect(await automationSetup(context as never, configuration as never, output, manual)).toBe(0);
+    expect(await readFile(join(directory, 'launch.sh'), 'utf8')).toBe('#!/bin/sh\nexec inheriti secrets exec "$@"\n');
+    expect((await stat(join(directory, 'launch.sh'))).mode & 0o111).toBeTruthy();
+    const printed = output.write.mock.calls.flat().join('\n');
+    expect(printed).toContain('COPY ["./launch.sh","/usr/local/bin/inheriti-automation"]');
+    expect(printed).toContain('RUN chmod +x /usr/local/bin/inheriti-automation');
+    expect(printed).toContain('ENTRYPOINT ["/usr/local/bin/inheriti-automation"]');
+    expect(printed).toContain('Remove any ECS entryPoint or Cloud Run command override');
+    expect(await automationSetup(context as never, configuration as never, output, manual)).toBe(1);
+    expect(await automationSetup(context as never, configuration as never, output,
+      [...args.slice(0, 8), '--save', '../escape.sh'])).toBe(1);
+    expect(await automationSetup(context as never, configuration as never, output,
+      [...args.slice(0, 8), '--save', 'launch[1].sh'])).toBe(1);
+  } finally {
+    process.chdir(previous);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('offers print or save when manual setup is interactive', async () => {
+  const { promptSelect, promptText } = await import('../src/render/select.js');
+  vi.mocked(promptSelect).mockResolvedValueOnce('print');
+  const output = { ...terminal(), interactive: true };
+  expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
+  expect(promptSelect).toHaveBeenCalledWith('How should the launcher be delivered?', expect.any(Array));
+  expect(promptText).not.toHaveBeenCalled();
+  expect(output.write.mock.calls.flat().join('\n')).toContain('--- Launcher script');
+});
+
 it('prepares a persistent EC2 launcher with the attached role and application command', async () => {
   const output = terminal();
   const ec2Args = [
@@ -114,6 +157,34 @@ it('prepares a persistent EC2 launcher with the attached role and application co
   const printed = output.write.mock.calls.flat().join('\n');
   expect(printed).toContain('installation_required');
   expect(printed).toContain('inheriti-worker.service');
+});
+
+it('confirms EC2 installation before sending files and leaves the service stopped', async () => {
+  const ec2Args = [
+    '--plan', '485384e3-b685-4142-b1ca-95a0b90e56ba', '--connection', 'connection-1',
+    '--field', 'asset.password', '--env-name', 'APP_SECRET', '--region', 'us-east-1',
+    '--instance', 'i-123', '--service-name', 'worker.service', '--run-as-user', 'ubuntu',
+    '--install', '--', '/usr/bin/node', 'server.js',
+  ];
+  const noninteractive = terminal();
+  expect(await automationSetup(context as never, configuration as never, noninteractive, ec2Args)).toBe(1);
+  expect(installEc2AutomationService).not.toHaveBeenCalled();
+  const { promptSelect } = await import('../src/render/select.js');
+  vi.mocked(promptSelect).mockResolvedValueOnce('cancel');
+  expect(await automationSetup(context as never, configuration as never, { ...terminal(), interactive: true }, ec2Args)).toBe(1);
+  expect(installEc2AutomationService).not.toHaveBeenCalled();
+  vi.mocked(promptSelect).mockResolvedValueOnce('install');
+  const output = { ...terminal(), interactive: true };
+  expect(await automationSetup(context as never, configuration as never, output, ec2Args)).toBe(0);
+  expect(installEc2AutomationService).toHaveBeenCalledWith(expect.objectContaining({
+    region: 'us-east-1', instanceId: 'i-123', runAsUser: 'ubuntu', launcher: expect.stringContaining('inheriti'),
+    applicationCommand: ['/usr/bin/node', 'server.js'], replace: false,
+  }));
+  expect(output.write.mock.calls.flat().join('\n')).toContain('The service will not be enabled or started');
+  vi.mocked(promptSelect).mockResolvedValueOnce('install');
+  expect(await automationSetup(context as never, configuration as never, output,
+    [...ec2Args.slice(0, -3), '--replace', ...ec2Args.slice(-3)])).toBe(0);
+  expect(installEc2AutomationService).toHaveBeenLastCalledWith(expect.objectContaining({ replace: true }));
 });
 
 it('rejects an EC2 launcher when the instance role differs from the connection', async () => {
@@ -190,6 +261,16 @@ it('defaults the managed preview and apply to the documented CLI path', async ()
   expect(await automationSetup(context as never, configuration as never, stale,
     [...applyArgs.slice(0, -1), 'rev:0'])).toBe(1);
   expect(applyEcsAutomation).toHaveBeenCalledTimes(1);
+});
+
+it('passes and reports the resolved image on apply', async () => {
+  const image = '123456789012.dkr.ecr.eu-west-1.amazonaws.com/worker@sha256:' + 'b'.repeat(64);
+  resolveAutomationImage.mockResolvedValueOnce(image);
+  const output = terminal();
+  expect(await automationSetup(context as never, configuration as never, output,
+    [...args.slice(0, -2), '--apply', '--image', '123456789012.dkr.ecr.eu-west-1.amazonaws.com/worker:v1', '--expect-revision', 'rev:1'])).toBe(0);
+  expect(applyEcsAutomation).toHaveBeenCalledWith(expect.objectContaining({ image }));
+  expect(output.write.mock.calls.flat().join('\n')).toContain(image);
 });
 
 it('accepts an absolute CLI override and rejects a relative override', async () => {

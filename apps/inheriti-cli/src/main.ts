@@ -18,9 +18,11 @@ import { notifyCliUpdate, updateCli } from './commands/update.js';
 import type { Terminal } from './output.js';
 import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
-import { automationManage, automationMetadata } from './commands/automations.js';
+import { automationManage, automationMetadata, automationRuntimeInstructions, automationRuntimeInstallEc2 } from './commands/automations.js';
+import { automationRuntimeImage } from './commands/automation-runtime-image.js';
 import { automationSetup } from './commands/automation-setup.js';
 import { pairAwsAutomationService } from './commands/automation-pair-aws.js';
+import { pairEc2AutomationInstance } from './commands/automation-pair-ec2.js';
 import { pairGoogleAutomationWorkload } from './commands/automation-pair-google.js';
 import { publishAwsSecrets } from './commands/secrets-publish-aws.js';
 import { publishGoogleSecrets } from './commands/secrets-publish-google.js';
@@ -29,7 +31,7 @@ import { usage, commandUsage, helpTopic } from './commands/help.js';
 import { extractOrganization, parseResolveOptions, parseMemberLogOptions } from './commands/arguments.js';
 import { secrets, requiredAutomationPlanId } from './commands/secrets.js';
 import { plans } from './commands/plan-command.js';
-import { messageFor, MESSAGES } from './commands/errors.js';
+import { isExplicitAutomationDenial, messageFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
@@ -39,6 +41,7 @@ export async function run(
   terminal: Terminal,
 ): Promise<number> {
   const [command, ...rest] = argv;
+  let automationSecretDelivery = false;
   if (command === undefined) { terminal.write(usage(environmentVariables)); return 1; }
   if (command === '--version' || command === 'version') {
     terminal.write(`${JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version}\n`);
@@ -82,6 +85,7 @@ export async function run(
     const separator = rest.indexOf('--');
     const markerIndex = secretDelivery ? rest.slice(0, separator < 0 ? undefined : separator).indexOf('--automation') : -1;
     const automation = markerIndex >= 0;
+    automationSecretDelivery = secretDelivery && automation;
     if (secretDelivery && (automation || automationSecretsRequested(environmentVariables)) &&
         (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) {
       throw new Error('automation_disabled');
@@ -130,8 +134,24 @@ export async function run(
       if ((rest[0] === 'list' && rest.length !== 1) || (rest[0] === 'grants' && (rest.length !== 2 || !rest[1] || rest[1].startsWith('--')))) {
         terminal.writeError(commandUsage(['automations', rest[0]!], environmentVariables)); return 1;
       }
-      if (rest[0] === 'runtime' && rest[1] === 'install-instructions' && rest.length === 2 &&
-          !(await context.core.getAccessToken())) await login(context, terminal);
+      if (rest[0] === 'runtime') {
+        const cliVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+        if (rest[1] === 'install-instructions')
+          return await automationRuntimeInstructions(terminal, cliVersion, rest.slice(2));
+        if (rest[1] === 'install' && rest[2] === 'ec2') {
+          const controller = new AbortController();
+          const unregister = registerCliCancel(controller);
+          try { return await automationRuntimeInstallEc2(terminal, cliVersion, rest.slice(3), configuration, controller.signal); }
+          finally { unregister(); }
+        }
+        if (rest[1] === 'image') {
+          const controller = new AbortController();
+          const unregister = registerCliCancel(controller);
+          try { return await automationRuntimeImage(terminal, cliVersion, rest.slice(2), controller.signal); }
+          finally { unregister(); }
+        }
+        terminal.writeError(commandUsage(['automations', 'runtime'], environmentVariables)); return 1;
+      }
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;
@@ -141,6 +161,12 @@ export async function run(
         const controller = new AbortController();
         const unregister = registerCliCancel(controller);
         try { return await pairAwsAutomationService(scoped, configuration, terminal, rest.slice(2), controller.signal); }
+        finally { unregister(); }
+      }
+      if (rest[0] === 'pair' && rest[1] === 'ec2') {
+        const controller = new AbortController();
+        const unregister = registerCliCancel(controller);
+        try { return await pairEc2AutomationInstance(scoped, configuration, terminal, rest.slice(2), controller.signal); }
         finally { unregister(); }
       }
       if (rest[0] === 'pair' && rest[1] === 'google') {
@@ -204,7 +230,7 @@ export async function run(
   } catch (error) {
     if (command === '__complete') return 0;
     terminal.writeError(messageFor(error, routing.business));
-    return 1;
+    return automationSecretDelivery && isExplicitAutomationDenial(error) ? 77 : 1;
   }
 }
 

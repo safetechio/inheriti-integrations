@@ -69,7 +69,7 @@ export type Ec2ServicePreparation = {
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 export function prepareEc2AutomationService(input: Ec2ServiceInput): Ec2ServicePreparation {
-  const serviceName = identifier(input.serviceName, /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/);
+  const serviceName = identifier(input.serviceName.replace(/\.service$/, ''), /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/);
   const runAsUser = identifier(input.runAsUser, /^[a-z_][a-z0-9_-]{0,31}$/);
   const launcherPath = identifier(input.launcherPath, /^\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+$/);
   if (input.bundle.provider !== 'AWS' || !input.applicationCommand.length ||
@@ -84,6 +84,7 @@ export function prepareEc2AutomationService(input: Ec2ServiceInput): Ec2ServiceP
   const runScript = [
     '#!/bin/sh',
     'set -eu',
+    'export PATH=/usr/local/bin:/usr/bin:/bin:${PATH:-}',
     ...environment.map(([name, value]) => `export ${name}=${shellQuote(value)}`),
     `exec ${[launcherPath, ...input.applicationCommand].map(shellQuote).join(' ')}`,
     '',
@@ -98,6 +99,7 @@ export function prepareEc2AutomationService(input: Ec2ServiceInput): Ec2ServiceP
     `User=${runAsUser}`,
     `ExecStart=/bin/sh ${runScriptPath}`,
     'Restart=on-failure',
+    'RestartPreventExitStatus=77',
     'RestartSec=5',
     '',
     '[Install]',

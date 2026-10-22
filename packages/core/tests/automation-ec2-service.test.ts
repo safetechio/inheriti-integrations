@@ -36,7 +36,19 @@ describe('EC2 automation preparation', () => {
     expect(prepared.runScript).toContain("exec '/opt/inheriti/launch.sh' '/usr/bin/node' '/srv/app/main.js' 'user'\\''s arg'");
     expect(prepared.runScript).toContain("export INHERITI_AUTOMATION_PROVIDER='AWS'");
     expect(prepared.unit).toContain('User=app\nExecStart=/bin/sh /opt/inheriti/my-app-run.sh\nRestart=on-failure');
+    expect(prepared.unit).toContain('Restart=on-failure\nRestartPreventExitStatus=77\nRestartSec=5');
     expect(prepared.unit).toContain('WantedBy=multi-user.target');
+    expect(prepared.runScript).toContain('export PATH=/usr/local/bin:/usr/bin:/bin:${PATH:-}');
+  });
+
+  it('accepts a service name with its systemd suffix only once', () => {
+    const prepared = prepareEc2AutomationService({
+      bundle: { provider: 'AWS', target: 'ECS task', script: '', environment: {}, requiredEnvironment: [], instructions: [] },
+      applicationCommand: ['/usr/bin/node'], serviceName: 'my-app.service', runAsUser: 'app',
+      launcherPath: '/usr/local/bin/inheriti-automation',
+    });
+    expect(prepared.unitName).toBe('my-app.service');
+    expect(prepared.runScriptPath).toBe('/opt/inheriti/my-app-run.sh');
   });
 
   it('rejects commands and service names that could inject shell or unit directives', () => {

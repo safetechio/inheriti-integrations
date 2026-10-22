@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { providerCliError } from './provider-cli-error.js';
 
 const execFileAsync = promisify(execFile);
 export type EcsPairInput = {
@@ -24,8 +25,8 @@ const runAws: EcsPairRunner = async (args, signal) => {
       maxBuffer: 4 * 1024 * 1024, timeout: args[1] === 'wait' ? 720_000 : 120_000, windowsHide: true, signal,
     });
     return stdout;
-  } catch {
-    throw new Error('automation_ecs_pair_provider_failed');
+  } catch (error) {
+    throw providerCliError('aws', error, 'automation_ecs_pair_provider_failed');
   }
 };
 const record = (value: unknown): Record<string, unknown> => {
@@ -45,6 +46,12 @@ const role = (value: unknown): value is string =>
   typeof value === 'string' && /^arn:aws(?:-[a-z]+)?:iam::\d{12}:role\/[a-zA-Z0-9+=,.@_/-]+$/.test(value);
 const imageDigest = (value: unknown): value is string =>
   typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[a-f0-9]{64}$/i.test(value);
+const registryHost = (image: string): string => {
+  if (!image.includes('/')) return 'docker.io';
+  const first = image.split('/')[0]!.toLowerCase();
+  if (!first.includes('.') && !first.includes(':') && first !== 'localhost') return 'docker.io';
+  return first === 'index.docker.io' ? 'docker.io' : first;
+};
 const inputValid = (input: EcsPairInput): boolean =>
   input.target.provider === 'AWS' && name(input.target.region) && name(input.target.cluster) &&
   name(input.target.service) && (!input.target.container || name(input.target.container)) &&
@@ -78,6 +85,11 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
   const containers = items(definition.containerDefinitions).map(record);
   const selected = containers.filter(container => target.container ? container.name === target.container : true);
   if (selected.length !== 1 || !name(selected[0]!.name)) throw new Error('automation_ecs_pair_container_ambiguous');
+  const repositoryCredentials = selected[0]!.repositoryCredentials === undefined ? undefined
+    : record(selected[0]!.repositoryCredentials);
+  if (repositoryCredentials && (typeof repositoryCredentials.credentialsParameter !== 'string' ||
+      !repositoryCredentials.credentialsParameter || /[\x00-\x1f\x7f]/.test(repositoryCredentials.credentialsParameter)))
+    throw new Error('automation_ecs_pair_source_invalid');
   const launchType = service.launchType;
   const capacity = service.capacityProviderStrategy;
   if (!!launchType === !!(Array.isArray(capacity) && capacity.length)) throw new Error('automation_ecs_pair_placement_unknown');
@@ -96,6 +108,9 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
     ...(definition.memory ? { memory: definition.memory } : {}),
     ...(definition.runtimePlatform ? { runtimePlatform: definition.runtimePlatform } : {}),
     containerDefinitions: [{ name: selected[0]!.name, image: input.image, essential: true,
+      ...(repositoryCredentials && typeof selected[0]!.image === 'string' &&
+        registryHost(selected[0]!.image) === registryHost(input.image)
+        ? { repositoryCredentials: { credentialsParameter: repositoryCredentials.credentialsParameter } } : {}),
       ...(selected[0]!.memory !== undefined ? { memory: selected[0]!.memory } : {}),
       ...(selected[0]!.memoryReservation !== undefined ? { memoryReservation: selected[0]!.memoryReservation } : {}),
       entryPoint: [input.cliPath], command: ['automations', 'pair', 'redeem'],

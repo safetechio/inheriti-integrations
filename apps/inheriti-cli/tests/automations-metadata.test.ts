@@ -1,22 +1,32 @@
-import { expect, it, vi } from 'vitest';
-import { generateKeyPairSync } from 'node:crypto';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const { listConnections, listGrants, proofBrowser, createConnection, createGrant, activateGrant, getVerifiedGithubRelease, close, complete, windowClosed } = vi.hoisted(() => ({
+const { listConnections, listGrants, proofBrowser, createConnection, createGrant, activateGrant, disableConnection, changeTrust, revokeGrant, replaceResponsibleMember, getVerifiedGithubRelease, close, complete, windowClosed, select, installEc2Cli } = vi.hoisted(() => ({
   listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'CI', provider: 'GITHUB', environment: 'TEST', status: 'ACTIVE', trust: { privateKey: 'NEVER_PRINT' }, verifiedIdentity: 'NEVER_PRINT' }]),
   listGrants: vi.fn(async () => [{ id: 'grant-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE', proof: 'NEVER_PRINT' }]),
   close: vi.fn(), complete: vi.fn(), windowClosed: { callback: undefined as undefined | ((reason: 'unavailable' | 'closed') => void) },
   proofBrowser: vi.fn(async (_options: { signal: AbortSignal }) => ({ action: 'verified' })),
   createConnection: vi.fn(async () => {}), createGrant: vi.fn(async () => {}), activateGrant: vi.fn(async () => {}),
+  disableConnection: vi.fn(async () => {}), changeTrust: vi.fn(async () => {}),
+  revokeGrant: vi.fn(async () => {}), replaceResponsibleMember: vi.fn(async () => {}),
   getVerifiedGithubRelease: vi.fn(async () => ({ actionRepository: 'safetechio/inheriti-integrations', actionRef: 'a'.repeat(40), cliVersion: '1.2.3' })),
+  select: vi.fn(async () => 'ec2'),
+  installEc2Cli: vi.fn(async () => ({ instanceId: 'i-09ce8440ae7294ab9', commandId: '11111111-1111-4111-8111-111111111111' })),
 }));
+vi.mock('../src/render/select.js', async original => ({ ...(await original<object>()), promptSelect: select }));
 vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
   ...(await original<object>()),
-  createAutomationSetupOperations: () => ({ listConnections, listGrants, createConnection, createGrant, activateGrant, getVerifiedGithubRelease }),
+  createAutomationSetupOperations: () => ({ listConnections, listGrants, createConnection, createGrant, activateGrant,
+    disableConnection, changeTrust, revokeGrant, replaceResponsibleMember, getVerifiedGithubRelease }),
   createNativeWindowSession: (callback: (reason: 'unavailable' | 'closed') => void) => { windowClosed.callback = callback; return { open: vi.fn(), close, complete }; },
   runLocalAutomationProofBrowser: proofBrowser,
+  installEc2Cli,
 }));
 
-import { automationManage, automationMetadata } from '../src/commands/automations.js';
+import { automationManage, automationMetadata, automationRuntimeInstructions, automationRuntimeInstallEc2 } from '../src/commands/automations.js';
 
 const terminal = (interactive = true) => ({ interactive, stdoutIsTTY: interactive, columns: 80, write: vi.fn(), writeError: vi.fn() });
 const context = { organization: { id: 'org-1', name: 'Acme' }, core: { getAccessToken: vi.fn(async () => 'human-token') } };
@@ -53,24 +63,292 @@ it('does not print a guessed workflow when the verified release is unavailable',
   expect(output.write).not.toHaveBeenCalled();
 });
 
-it('prints the exact verified runtime package for Linux EC2 and Dockerfile', async () => {
-  getVerifiedGithubRelease.mockResolvedValueOnce({ actionRepository: 'safetechio/inheriti-integrations', actionRef: 'a'.repeat(40), cliVersion: '1.2.3-stg.4' });
+it('prints spaced EC2 and Dockerfile instructions for a noninteractive terminal', async () => {
   const output = terminal(false);
-  expect(await automationManage(context as never, configuration as never, output, new AbortController().signal, ['runtime', 'install-instructions'])).toBe(0);
+  expect(await automationRuntimeInstructions(output, '1.2.3-dev.4')).toBe(0);
   const printed = output.write.mock.calls.flat().join('\n');
-  expect(printed).toContain('For a plain Linux EC2 instance');
-  expect(printed).toContain('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4');
-  expect(printed).toContain('RUN npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4');
-  expect(printed).toContain(`&& test "$(inheriti --version)" = '1.2.3-stg.4'`);
-  expect(printed).toContain('IMAGE@sha256:DIGEST');
+  expect(printed).toContain('this exact version to be published on npm');
+  expect(printed).toContain('\nLinux EC2 instance\n');
+  expect(printed).toContain('\nECS / Cloud Run container\n');
+  expect(printed).toContain('Run from your computer with AWS CLI and SSM');
+  expect(printed).toContain('inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID');
+  expect(printed).toContain('setup --install checks service-user access');
+  expect(printed).not.toContain('Confirm the systemd service user');
+  expect(printed).toContain("1. Add this instruction to your application's final Dockerfile stage");
+  expect(printed).toContain('2. Build and deploy the image');
+  expect(printed).toContain('RUN npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-dev.4');
+  expect(printed).toContain(`&& test "$(inheriti --version)" = '1.2.3-dev.4'`);
+  expect(printed).toContain("project's normal pipeline");
+  expect(printed).not.toContain('runtime image --image');
   expect(printed).not.toContain('NEVER_PRINT');
+  expect(getVerifiedGithubRelease).not.toHaveBeenCalled();
+  expect(select).not.toHaveBeenCalled();
 });
 
-it('does not print installation instructions without a verified release', async () => {
-  getVerifiedGithubRelease.mockRejectedValueOnce(new Error('automation_verified_release_unavailable'));
+it('prints local artifact instructions without claiming the CLI is on npm', async () => {
   const output = terminal(false);
-  await expect(automationManage(context as never, configuration as never, output, new AbortController().signal, ['runtime', 'install-instructions'])).rejects.toThrow('automation_verified_release_unavailable');
+  expect(await automationRuntimeInstructions(output, '0.0.19-local.0')).toBe(0);
+  const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('COPY inheriti-cli.tgz /tmp/inheriti-cli.tgz');
+  expect(printed).toContain('npm install --engine-strict --global --prefix /usr/local /tmp/inheriti-cli.tgz');
+  expect(printed).toContain(`test "$(/usr/local/bin/inheriti --version)" = '0.0.19-local.0'`);
+  expect(printed).toContain('do not commit it');
+  expect(printed).toContain('This local build cannot be installed through the EC2 command');
+  expect(printed).toContain('Keep this tarball change uncommitted');
+  expect(printed).not.toContain('The Dockerfile change persists in later builds');
+  expect(printed).not.toContain('requires this exact version to be published on npm');
+  expect(printed).not.toContain('@safetech/inheriti-cli@0.0.19-local.0');
+});
+
+it('shows only the selected target in an interactive terminal', async () => {
+  const ec2 = terminal();
+  select.mockResolvedValueOnce('ec2');
+  expect(await automationRuntimeInstructions(ec2, '1.2.3-dev.4')).toBe(0);
+  expect(ec2.write.mock.calls.flat().join('\n')).toContain('Linux EC2 instance');
+  expect(ec2.write.mock.calls.flat().join('\n')).not.toContain('Dockerfile');
+  const container = terminal();
+  select.mockResolvedValueOnce('container');
+  expect(await automationRuntimeInstructions(container, '1.2.3-dev.4')).toBe(0);
+  expect(container.write.mock.calls.flat().join('\n')).toContain('Dockerfile');
+  expect(container.write.mock.calls.flat().join('\n')).not.toContain('Linux EC2 instance');
+});
+
+it('prints container instructions directly when --container is passed', async () => {
+  const output = terminal();
+  expect(await automationRuntimeInstructions(output, '1.2.3-dev.4', ['--container'])).toBe(0);
+  const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('Dockerfile');
+  expect(printed).not.toContain('Linux EC2 instance');
+  expect(select).not.toHaveBeenCalled();
+});
+
+it('copies a dev tarball into the Docker build context without using the registry', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-container-'));
+  const source = join(directory, 'source.tgz');
+  const context = join(directory, 'app');
+  const original = process.cwd();
+  await mkdir(context);
+  await writeFile(source, 'local CLI package');
+  try {
+    process.chdir(context);
+    const output = terminal(false);
+    expect(await automationRuntimeInstructions(output, '1.2.3-dev.4', ['--container', '--cli-tarball', source])).toBe(0);
+    expect(await readFile('inheriti-cli.tgz', 'utf8')).toBe('local CLI package');
+    const printed = output.write.mock.calls.flat().join('\n');
+    expect(printed).toContain('COPY inheriti-cli.tgz /tmp/inheriti-cli.tgz');
+    expect(printed).not.toContain('@safetech/inheriti-cli@1.2.3-dev.4');
+    expect(printed).not.toContain('Linux EC2 instance');
+  } finally { process.chdir(original); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('rejects unsupported installation instruction options', async () => {
+  const output = terminal(false);
+  expect(await automationRuntimeInstructions(output, '1.2.3-dev.4', ['--unknown'])).toBe(1);
   expect(output.write).not.toHaveBeenCalled();
+  expect(output.writeError).toHaveBeenCalledWith('Usage: inheriti automations runtime install-instructions [--container [--cli-tarball PATH]]');
+});
+
+it('rejects an unsafe CLI version before printing installation instructions', async () => {
+  const output = terminal(false);
+  await expect(automationRuntimeInstructions(output, 'latest; echo secret')).rejects.toThrow('Invalid CLI version');
+  expect(output.write).not.toHaveBeenCalled();
+});
+
+it('installs EC2 from the operator computer with explicit target', async () => {
+  const output = terminal(false);
+  expect(await automationRuntimeInstallEc2(output, '0.0.19-dev.0',
+    ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9'], configuration as never, undefined)).toBe(0);
+  expect(installEc2Cli).toHaveBeenCalledWith(expect.objectContaining({ region: 'us-east-1',
+    instanceId: 'i-09ce8440ae7294ab9', cliVersion: '0.0.19-dev.0' }));
+  expect(output.write).toHaveBeenCalledWith(expect.stringContaining('is ready on EC2'));
+});
+
+it('closes interactive progress before reporting EC2 success or failure', async () => {
+  const closeRegion = vi.fn();
+  const update = vi.fn();
+  const output = { ...terminal(), createLiveRegion: () => ({ update, close: closeRegion }) };
+  installEc2Cli.mockImplementationOnce((async ({ onProgress }: { onProgress: (phase: string) => void }) => {
+    onProgress('checking'); onProgress('sending'); onProgress('waiting'); onProgress('installing');
+    return { instanceId: 'i-09ce8440ae7294ab9', commandId: '11111111-1111-4111-8111-111111111111' };
+  }) as never);
+  await automationRuntimeInstallEc2(output, '0.0.19-dev.0',
+    ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9'], configuration as never);
+  expect(closeRegion).toHaveBeenCalledOnce();
+  expect(update.mock.calls.flat().join('\n')).toContain('Installing CLI on EC2');
+  expect(output.write).toHaveBeenCalledWith(expect.stringContaining('is ready on EC2'));
+  installEc2Cli.mockRejectedValueOnce(new Error('ssm failed'));
+  await expect(automationRuntimeInstallEc2(output, '0.0.19-dev.0',
+    ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9'], configuration as never)).rejects.toThrow('ssm failed');
+  expect(closeRegion).toHaveBeenCalledTimes(2);
+});
+
+it('prints each noninteractive EC2 stage once', async () => {
+  const output = terminal(false);
+  installEc2Cli.mockImplementationOnce((async ({ onProgress }: { onProgress: (phase: string) => void }) => {
+    onProgress('checking'); onProgress('sending'); onProgress('waiting');
+    onProgress('waiting'); onProgress('installing'); onProgress('installing'); onProgress('verified');
+    return { instanceId: 'i-09ce8440ae7294ab9', commandId: '11111111-1111-4111-8111-111111111111' };
+  }) as never);
+  await automationRuntimeInstallEc2(output, '0.0.19-dev.0',
+    ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9'], configuration as never);
+  expect(output.write.mock.calls.flat()).toEqual([
+    'Checking SSM instance', 'Sending installation command', 'Waiting for EC2 response',
+    'Installing CLI on EC2', 'Installation confirmed',
+    expect.stringContaining('is ready on EC2'),
+  ]);
+});
+
+const testApi = { ...configuration, apiUrl: 'https://business-dev.example/integrations/', deployment: 'dev' };
+const artifactApiOrigin = 'http://127.0.0.1:3400';
+const artifactDownloadOrigin = 'https://local-api-tunnel.example';
+const artifactResponse = { id: 'artifact_1', downloadPath: '/test/cli-artifacts/artifact_1?expires=9999999999&signature=secret',
+  deletePath: '/test/cli-artifacts/artifact_1?expires=9999999999&signature=delete-secret',
+  sha256: '16ac1ea143cf30263883056bf563bf5984d91a980fae7b224a70b2e2b8fe9dbf', expiresInSeconds: 900 };
+const localOptions = (path: string, origin = artifactApiOrigin, download = artifactDownloadOrigin) => ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9', '--cli-tarball', path, '--artifact-api-url', origin, '--artifact-download-origin', download];
+const uploadToken = randomBytes(32).toString('base64url');
+let tokenHome: string;
+let tokenPath: string;
+beforeAll(async () => {
+  tokenHome = await mkdtemp(join(tmpdir(), 'inheriti-cli-home-'));
+  tokenPath = join(tokenHome, '.local/state/inheriti/cli-artifact-upload-token');
+  await mkdir(join(tokenHome, '.local/state/inheriti'), { recursive: true });
+  await writeFile(tokenPath, `${uploadToken}\n`, { mode: 0o600 });
+  vi.stubEnv('HOME', tokenHome);
+});
+afterAll(async () => { vi.unstubAllEnvs(); await rm(tokenHome, { recursive: true, force: true }); });
+
+it('uploads local dev tarball to TEST API, installs, and deletes by ID', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
+    options.method === 'POST' ? JSON.stringify(artifactResponse) : null, { status: options.method === 'POST' ? 200 : 204 }));
+  try {
+    expect(await automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path),
+      testApi as never, undefined, request as typeof fetch)).toBe(0);
+    expect(request.mock.calls.map(([, options]) => options.method)).toEqual(['POST', 'DELETE']);
+    expect(request.mock.calls.map(([url]) => url.origin)).toEqual([artifactApiOrigin, artifactApiOrigin]);
+    expect(request.mock.calls[0]![1].headers).toEqual({ Authorization: `Bearer ${uploadToken}` });
+    expect(request.mock.calls[1]![1].headers).toBeUndefined();
+    expect(request.mock.calls[1]![0].searchParams.get('signature')).toBe('delete-secret');
+    expect(installEc2Cli).toHaveBeenCalledWith(expect.objectContaining({ artifact: {
+      id: 'artifact_1', url: 'https://local-api-tunnel.example/test/cli-artifacts/artifact_1?expires=9999999999&signature=secret',
+      sha256: '16ac1ea143cf30263883056bf563bf5984d91a980fae7b224a70b2e2b8fe9dbf' } }));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('rejects a missing, malformed, or exposed local upload token before POST', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async () => new Response());
+  try {
+    for (const state of ['missing', 'malformed', 'exposed']) {
+      if (state === 'missing') await rm(tokenPath);
+      else await writeFile(tokenPath, state === 'malformed' ? 'invalid' : uploadToken, { mode: 0o600 });
+      if (state === 'exposed') await chmod(tokenPath, 0o644);
+      await expect(automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path),
+        testApi as never, undefined, request as typeof fetch)).rejects.toThrow('automation_ec2_cli_install_artifact_token_invalid');
+    }
+    expect(request).not.toHaveBeenCalled();
+  } finally {
+    await writeFile(tokenPath, uploadToken, { mode: 0o600 });
+    await chmod(tokenPath, 0o600);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('rejects invalid tarball mode before upload', async () => {
+  const request = vi.fn(async () => new Response());
+  const output = terminal(false);
+  expect(await automationRuntimeInstallEc2(output, '0.0.19', localOptions('/missing.tgz'),
+    testApi as never, undefined, request as typeof fetch)).toBe(1);
+  expect(await automationRuntimeInstallEc2(output, '0.0.19-dev.0', localOptions('/missing.tgz'),
+    testApi as never, undefined, request as typeof fetch)).toBe(1);
+  expect(request).not.toHaveBeenCalled();
+});
+
+it('rejects nonlocal upload URLs and invalid tunnel URLs', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async () => new Response());
+  try {
+    for (const origin of ['http://remote.example', 'https://127.0.0.1:3400',
+      'http://user:pass@127.0.0.1:3400', 'http://127.0.0.1:3400/path',
+      'http://127.0.0.1:3400/?token=x', 'http://127.0.0.1:3400/#x']) {
+      await expect(automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path, origin),
+        testApi as never, undefined, request as typeof fetch)).rejects.toThrow('automation_ec2_cli_install_artifact_config_invalid');
+    }
+    for (const origin of ['http://local-api-tunnel.example', 'https://user:pass@local-api-tunnel.example',
+      'https://local-api-tunnel.example/path', 'https://local-api-tunnel.example/?token=x']) {
+      await expect(automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path, artifactApiOrigin, origin),
+        testApi as never, undefined, request as typeof fetch)).rejects.toThrow('automation_ec2_cli_install_artifact_config_invalid');
+    }
+    expect(request).not.toHaveBeenCalled();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('rejects an altered checksum or signed path and deletes the artifact ID', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  try {
+    for (const invalid of [{ ...artifactResponse, sha256: 'b'.repeat(64) },
+      { ...artifactResponse, downloadPath: '/test/cli-artifacts/other?expires=9999999999&signature=secret' }]) {
+      const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
+        options.method === 'POST' ? JSON.stringify(invalid) : null, { status: options.method === 'POST' ? 200 : 204 }));
+      await expect(automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path),
+        testApi as never, undefined, request as typeof fetch)).rejects.toThrow('automation_ec2_cli_install_artifact_response_invalid');
+      expect(request.mock.calls.map(([, options]) => options.method)).toEqual(['POST', 'DELETE']);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('deletes artifact after confirmed SSM failure', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
+    options.method === 'POST' ? JSON.stringify(artifactResponse) : null, { status: options.method === 'POST' ? 200 : 204 }));
+  installEc2Cli.mockRejectedValueOnce(new Error('ssm failed'));
+  try {
+    await expect(automationRuntimeInstallEc2(terminal(false), '0.0.19-dev.0', localOptions(path),
+      testApi as never, undefined, request as typeof fetch)).rejects.toThrow('ssm failed');
+    expect(request.mock.calls.map(([, options]) => options.method)).toEqual(['POST', 'DELETE']);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('retains artifact ID and command ID when SSM completion is uncertain', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async () => new Response(JSON.stringify(artifactResponse)));
+  const output = terminal(false);
+  installEc2Cli.mockRejectedValueOnce(Object.assign(new Error('wait failed'),
+    { artifactPending: true, commandId: '11111111-1111-4111-8111-111111111111' }));
+  try {
+    await expect(automationRuntimeInstallEc2(output, '0.0.19-dev.0', localOptions(path),
+      testApi as never, undefined, request as typeof fetch)).rejects.toThrow('wait failed');
+    expect(request).toHaveBeenCalledOnce();
+    expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('artifact_1; SSM command: 11111111-1111-4111-8111-111111111111'));
+    expect(output.writeError.mock.calls.flat().join('')).not.toContain('signature=secret');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('does not claim success when TEST API cleanup fails', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const path = join(directory, 'cli.tgz');
+  await writeFile(path, 'test tarball');
+  const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
+    options.method === 'POST' ? JSON.stringify(artifactResponse) : 'failed', { status: options.method === 'POST' ? 200 : 500 }));
+  const output = terminal(false);
+  try {
+    await expect(automationRuntimeInstallEc2(output, '0.0.19-dev.0', localOptions(path),
+      testApi as never, undefined, request as typeof fetch)).rejects.toThrow('automation_ec2_cli_install_artifact_cleanup_failed');
+    expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('Temporary CLI artifact cleanup failed: artifact_1'));
+    expect(output.write).not.toHaveBeenCalledWith(expect.stringContaining('is ready on EC2'));
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it('requires human authentication before fetching or managing automation', async () => {
@@ -155,4 +433,19 @@ it('creates and activates a grant with explicit nonsecret IDs', async () => {
   expect(activateGrant).toHaveBeenCalledWith('plan-1', 'grant-2');
   expect(output.write.mock.calls.flat()).toContain('Grant created: grant-2');
   expect(output.write.mock.calls.flat()).toContain('Grant activated: grant-2');
+});
+
+it('offers explicit connection and grant recovery actions', async () => {
+  const output = terminal(false);
+  const run = (args: string[]) => automationManage(context as never, configuration as never, output,
+    new AbortController().signal, args);
+  expect(await run(['trust', '--connection', 'connection-1', '--provider', 'AWS',
+    '--role-arn', 'arn:aws:iam::123456789012:role/app'])).toBe(0);
+  expect(changeTrust).toHaveBeenCalledWith('connection-1', expect.objectContaining({ method: 'AWS_IAM_ROLE' }));
+  expect(await run(['grant', 'member', '--plan', 'plan-1', '--grant', 'grant-1', '--member', 'member-2'])).toBe(0);
+  expect(replaceResponsibleMember).toHaveBeenCalledWith('plan-1', 'grant-1', 'member-2');
+  expect(await run(['grant', 'revoke', '--plan', 'plan-1', '--grant', 'grant-1'])).toBe(0);
+  expect(revokeGrant).toHaveBeenCalledWith('plan-1', 'grant-1');
+  expect(await run(['disable', '--connection', 'connection-1'])).toBe(0);
+  expect(disableConnection).toHaveBeenCalledWith('connection-1');
 });

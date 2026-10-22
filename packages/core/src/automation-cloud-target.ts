@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { providerCliError } from './provider-cli-error.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -33,9 +34,8 @@ export const runCloudCommand: CloudCommandRunner = async (binary, args) => {
   try {
     const { stdout } = await execFileAsync(binary, args, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20_000 });
     return stdout;
-  } catch {
-    // Provider stderr can contain credentials or user data.
-    throw new Error('automation_cloud_inspection_failed');
+  } catch (error) {
+    throw providerCliError(binary, error, 'automation_cloud_inspection_failed');
   }
 };
 
@@ -143,6 +143,52 @@ export async function inspectCloudTargetForPairing(
   run: CloudCommandRunner = runCloudCommand,
 ): Promise<CloudTargetInspection> {
   return describeCloudTarget(target, run, false);
+}
+
+/** Pin the image actually running in the selected ECS service container. */
+export async function runningEcsServiceImage(
+  inspected: CloudTargetInspection,
+  run: CloudCommandRunner = runCloudCommand,
+): Promise<string> {
+  const target = inspected.target;
+  if (target.provider !== 'AWS' || !target.service) throw new Error('automation_cloud_target_invalid');
+  const source = inspected.image;
+  const digestSeparator = source.indexOf('@');
+  const tagSeparator = source.lastIndexOf(':');
+  const repository = digestSeparator >= 0 ? source.slice(0, digestSeparator)
+    : tagSeparator > source.lastIndexOf('/') ? source.slice(0, tagSeparator) : source;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(repository) ||
+      (digestSeparator >= 0 && !/^sha256:[a-f0-9]{64}$/i.test(source.slice(digestSeparator + 1))) ||
+      (digestSeparator < 0 && tagSeparator > source.lastIndexOf('/') &&
+        !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(source.slice(tagSeparator + 1))))
+    throw new Error('automation_image_digest_required');
+  const digests = new Set<string>();
+  let matched = 0;
+  const listed = parsed(await run('aws', ['ecs', 'list-tasks', '--cluster', identifier(target.cluster),
+    '--service-name', identifier(target.service), '--desired-status', 'RUNNING', '--region', identifier(target.region),
+    '--output', 'json']));
+  const arns = list(listed.taskArns).map(item => identifier(string(item)));
+    for (let offset = 0; offset < arns.length; offset += 100) {
+      const described = parsed(await run('aws', ['ecs', 'describe-tasks', '--cluster', identifier(target.cluster),
+        '--tasks', ...arns.slice(offset, offset + 100), '--region', identifier(target.region), '--output', 'json']));
+      if (list(described.failures ?? []).length) throw new Error('automation_ecs_running_image_unavailable');
+      for (const task of list(described.tasks).map(record)) {
+        if (task.taskDefinitionArn !== inspected.revision || task.lastStatus !== 'RUNNING' || task.healthStatus === 'UNHEALTHY') continue;
+        matched++;
+        const container = list(task.containers).map(record).find(item => item.name === inspected.container);
+        if (container?.lastStatus !== undefined && container.lastStatus !== 'RUNNING')
+          throw new Error('automation_ecs_running_image_unavailable');
+        const digest = container?.imageDigest;
+        if (typeof digest !== 'string' || !/^sha256:[a-f0-9]{64}$/i.test(digest))
+          throw new Error('automation_ecs_running_image_unavailable');
+        digests.add(digest.toLowerCase());
+      }
+    }
+  if (!matched || digests.size !== 1) throw new Error('automation_ecs_running_image_unavailable');
+  const digest = [...digests][0]!;
+  if (source.includes('@') && source !== `${repository}@${digest}`)
+    throw new Error('automation_ecs_running_image_unavailable');
+  return `${repository}@${digest}`;
 }
 
 export async function inspectCloudIdentity(

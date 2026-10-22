@@ -21,6 +21,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     if (window && !window.isDestroyed()) window.webContents.send('tray:update-progress', progress);
   };
   let stopLinuxLock: (() => void) | undefined;
+  let refreshOnShow: (() => void) | undefined;
   const seenInboxMessages = new Set<string>();
   const notices = new Set<Notification>();
   const unreadNotices = new Map<string, Notification>();
@@ -82,10 +83,13 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     return;
   }
   app.on('second-instance', (_event, argv: string[]) => { if (!isBackgroundLaunch(argv)) showLauncher(); });
-  app.on('browser-window-created', (_event, window) => window.on('hide', () => {
-    session.clearRevealed();
-    void session.cancelPlanEdit().catch(() => {});
-  }));
+  app.on('browser-window-created', (_event, window) => {
+    window.on('hide', () => {
+      session.clearRevealed();
+      void session.cancelPlanEdit().catch(() => {});
+    });
+    window.on('show', () => refreshOnShow?.());
+  });
   app.whenReady().then(async () => {
     app.setAppUserModelId(`com.safetech.inheriti.go.${deployment}`);
     try { ensureStartAtLogin(deployment, join(import.meta.dirname, deployment === 'prod' ? 'tray.png' : `tray-${deployment}.png`)); }
@@ -95,6 +99,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
       publish(session);
       void refreshBadge();
     };
+    refreshOnShow = () => { void session.refreshOrganizations().then((changed) => { if (changed) publishState(); }).catch(() => {}); };
     session.setPublisher(publishState);
     session.setInboxPublisher((signal) => {
       publishInboxChanged(signal);

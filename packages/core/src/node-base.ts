@@ -153,10 +153,14 @@ export { AUTOMATION_PROVIDERS, AutomationProviderValue } from './automation-prov
 export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';
 export type { AutomationRuntimeInput, AutomationRuntimeBundle } from './automation-runtime-setup.js';
 export { resolveAutomationFieldMappings } from './automation-field-mappings.js';
+export { resolveAutomationImage } from './automation-image.js';
 export type { AutomationMappingSelection } from './automation-field-mappings.js';
-export { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget } from './automation-cloud-target.js';
+export { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget, runningEcsServiceImage } from './automation-cloud-target.js';
 export type { CloudTarget, CloudTargetPreview, CloudTargetInspection } from './automation-cloud-target.js';
 export { inspectEc2AutomationInstance, prepareEc2AutomationService } from './automation-ec2-service.js';
+export { installEc2AutomationService } from './automation-ec2-install.js';
+export { installEc2Cli } from './automation-ec2-cli-install.js';
+export { pairEc2Automation } from './automation-ec2-pair.js';
 export type { Ec2Instance, Ec2ServiceInput, Ec2ServicePreparation } from './automation-ec2-service.js';
 export { applyEcsAutomation } from './automation-ecs-apply.js';
 export { pairEcsAutomation } from './automation-ecs-pair.js';

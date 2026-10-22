@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget } from '../src/automation-cloud-target.js';
+import { inspectCloudIdentity, inspectCloudTarget, inspectCloudTargetForPairing, previewCloudTarget, runningEcsServiceImage } from '../src/automation-cloud-target.js';
 import type { CloudCommandRunner } from '../src/automation-cloud-target.js';
 
 const cloudRun = { provider: 'GOOGLE_CLOUD' as const, project: 'test-project', region: 'us-central1', job: 'backup-job' };
@@ -11,6 +11,47 @@ const cloudRunResponse = (containers: Record<string, unknown>[]) => JSON.stringi
     serviceAccountName: 'job@test-project.iam.gserviceaccount.com',
     containers,
   } } } } },
+});
+
+describe('running ECS service image', () => {
+  const image = '123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:v1';
+  const inspected = { target: ecs, image, container: 'app', revision: 'revision:1', command: [],
+    environmentNames: [], identity: 'role' };
+  const digest = 'sha256:' + 'a'.repeat(64);
+  const running = (containers: Record<string, unknown>[], revision = 'revision:1') => ({
+    taskDefinitionArn: revision, lastStatus: 'RUNNING', healthStatus: 'HEALTHY', containers,
+  });
+  const runner = (tasks: Record<string, unknown>[]): CloudCommandRunner => async (_, args) =>
+    JSON.stringify(args[1] === 'list-tasks' ? { taskArns: ['task-1'] } : { tasks });
+
+  it('uses the running selected container digest even when the registry tag could have moved', async () => {
+    const run = vi.fn(runner([running([{ name: 'sidecar', imageDigest: 'sha256:' + 'b'.repeat(64) },
+      { name: 'app', imageDigest: digest }])]));
+    await expect(runningEcsServiceImage(inspected, run)).resolves.toBe(`${image.slice(0, -3)}@${digest}`);
+    expect(run.mock.calls.map(([, args]) => args[1])).toEqual(['list-tasks', 'describe-tasks']);
+  });
+
+  it.each(['nginx:stable', 'registry.example.test:5000/team/app:v2', 'registry.example.test:5000/team/app',
+    'registry.example.test:5000/team/app@sha256:' + 'a'.repeat(64)])(
+    'pins a running image from %s', async source => {
+      const repository = source.includes('@') ? source.split('@')[0]!
+        : source.lastIndexOf(':') > source.lastIndexOf('/') ? source.slice(0, source.lastIndexOf(':')) : source;
+      await expect(runningEcsServiceImage({ ...inspected, image: source },
+        runner([running([{ name: 'app', lastStatus: 'RUNNING', imageDigest: digest }])])))
+        .resolves.toBe(`${repository}@${digest}`);
+    });
+
+  it('rejects missing, mixed and stale running digests', async () => {
+    await expect(runningEcsServiceImage(inspected, runner([running([{ name: 'app' }])])))
+      .rejects.toThrow('automation_ecs_running_image_unavailable');
+    await expect(runningEcsServiceImage(inspected, runner([running([{ name: 'app', imageDigest: digest }]),
+      running([{ name: 'app', imageDigest: 'sha256:' + 'b'.repeat(64) }])])))
+      .rejects.toThrow('automation_ecs_running_image_unavailable');
+    await expect(runningEcsServiceImage(inspected, runner([running([{ name: 'app', imageDigest: digest }], 'revision:2')])))
+      .rejects.toThrow('automation_ecs_running_image_unavailable');
+    await expect(runningEcsServiceImage(inspected, runner([running([{ name: 'app', lastStatus: 'STOPPED', imageDigest: digest }])])))
+      .rejects.toThrow('automation_ecs_running_image_unavailable');
+  });
 });
 const cloudRunServiceResponse = (containers: Record<string, unknown>[]) => JSON.stringify({
   metadata: { generation: 11 }, spec: { template: { spec: {

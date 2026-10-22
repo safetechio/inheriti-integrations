@@ -2,6 +2,11 @@ import { CliConfigurationInvalid } from '../configuration.js';
 import { OrganizationChoiceRequired } from '../organizations.js';
 import { UsePlanInvalid } from './use.js';
 
+export function isExplicitAutomationDenial(error: unknown): boolean {
+  const value = error as { code?: unknown; message?: unknown } | null;
+  return ['governance_denied', 'reveal_denied'].includes(String(value?.code ?? value?.message ?? ''));
+}
+
 /** Operators see a mapped message; a stable code is kept for support without a stack trace. */
 export function messageFor(error: unknown, business = false): string {
   if (error instanceof OrganizationChoiceRequired) return error.message;
@@ -97,6 +102,10 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_setup_authentication_required: 'Sign in again to manage automation.',
   automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
   automation_setup_request_failed: 'Business did not accept this automation request. Check your access and entries.',
+  aws_cli_required: 'AWS CLI is required for this command. Install it and make sure aws is on your PATH.',
+  aws_authentication_required: 'AWS CLI has no valid credentials. Authenticate locally, then retry this command.',
+  gcloud_cli_required: 'Google Cloud CLI is required for this command. Install it and make sure gcloud is on your PATH.',
+  gcloud_authentication_required: 'Google Cloud CLI has no valid active account. Run gcloud auth login, then retry this command.',
   automation_cloud_startup_unknown: 'The workload has no explicit startup command. Set the container command or entry point before preparing automation.',
   automation_cloud_apply_startup_unknown: 'The Cloud Run service has no explicit startup command. Set its container command before applying automation.',
   automation_cloud_apply_failed: 'Cloud Run could not apply the update. Check the service deployment and try again.',
@@ -108,7 +117,47 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_ecs_rollback_unconfirmed: 'ECS could not confirm rollback. Inspect the service task definition before retrying.',
   automation_ec2_input_invalid: 'Check the EC2 instance, service name, application command and service user.',
   automation_ec2_identity_invalid: 'The EC2 instance needs exactly one attached instance profile role. Check its IAM configuration.',
+  automation_ec2_pair_input_invalid: 'Check the EC2 region, instance ID and connection ID.',
+  automation_ec2_pair_target_unavailable: 'This EC2 instance is not an online SSM managed Linux instance. Check the SSM agent, IAM permissions and network access.',
+  automation_ec2_pair_cli_missing: 'Inheriti CLI is missing from the SSM command PATH on this EC2 instance. From your computer, run inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID, then retry pairing.',
+  automation_ec2_pair_provider_failed: 'AWS CLI could not run the EC2 pairing command. Check local AWS credentials and Systems Manager permissions.',
+  automation_ec2_pair_response_invalid: 'AWS returned an unexpected Systems Manager response. Inspect the instance before retrying.',
+  automation_ec2_pair_failed: 'The remote EC2 pairing command failed. Check that Inheriti CLI is executable on the SSM command PATH, the instance role and Business connectivity. Remote output is withheld.',
+  automation_ec2_pair_wait_failed: 'EC2 pairing did not finish within nine minutes. Check the Systems Manager command status before retrying.',
+  automation_ec2_cli_install_input_invalid: 'Use a valid AWS region and EC2 instance ID.',
+  automation_ec2_cli_install_provider_failed: 'AWS CLI could not install the CLI on EC2. Check local AWS credentials and Systems Manager permissions.',
+  automation_ec2_cli_install_response_invalid: 'AWS returned an unexpected Systems Manager installation response. Check the command status before retrying.',
+  automation_ec2_cli_install_npm_missing: 'EC2 could not prepare Node.js and npm automatically. Check that it runs Amazon Linux 2023 and can install packages from its DNF repositories.',
+  automation_ec2_cli_install_curl_missing: 'curl is unavailable on the EC2 instance. Install it, then retry.',
+  automation_ec2_cli_install_npm_failed: 'EC2 could not install this CLI version from npm. Check that the version is published and the instance can reach npm, then retry.',
+  automation_ec2_cli_install_artifact_failed: 'EC2 could not download or install the CLI tarball. Check artifact access and the SSM command status.',
+  automation_ec2_cli_install_artifact_upload_failed: 'Could not upload the CLI tarball to the local TEST API. Check that the Business harness is running.',
+  automation_ec2_cli_install_artifact_token_invalid: 'Local CLI upload token is unavailable. Start the Business harness and retry.',
+  automation_ec2_cli_install_artifact_config_invalid: 'Local tarball install requires a dev Business connection, a local HTTP artifact API, and an HTTPS tunnel reachable from EC2.',
+  automation_ec2_cli_install_artifact_response_invalid: 'The TEST API returned an invalid CLI artifact response.',
+  automation_ec2_cli_install_checksum_mismatch: 'The CLI tarball checksum did not match on EC2. Retry with a stable local tarball.',
+  automation_ec2_cli_install_artifact_cleanup_failed: 'EC2 installation finished, but the temporary TEST API artifact could not be removed. Remove the reported artifact ID manually.',
+  automation_ec2_cli_install_version_mismatch: 'EC2 installed the CLI but its version does not match this computer. Check the SSM command status before pairing.',
+  automation_ec2_cli_install_failed: 'EC2 CLI installation failed. Check the SSM command status before retrying. Remote output is withheld.',
+  automation_ec2_cli_install_wait_failed: 'EC2 CLI installation did not finish within five minutes. Check the SSM command status before retrying.',
+  automation_ec2_install_cli_missing: 'Inheriti CLI is missing from the SSM command PATH or is not executable by the service user at its resolved absolute path. Install the matching CLI and make it available to that user, then retry setup --install.',
+  automation_ec2_install_user_missing: 'The selected Linux run-as user does not exist on the EC2 instance.',
+  automation_ec2_install_provider_failed: 'AWS CLI could not install the EC2 files. Check local AWS credentials and Systems Manager permissions.',
+  automation_ec2_install_files_exist: 'The EC2 launcher, run script or systemd unit is missing or already exists. Review the target files. Use setup --install --replace only for a stopped, matching installation.',
+  automation_ec2_install_service_active: 'Stop the EC2 service before updating its installation.',
+  automation_ec2_install_files_changed: 'The installed launcher or systemd unit differs from this setup. Review the instance before replacing any files.',
+  automation_ec2_install_application_missing: 'The application executable or script does not exist on this EC2 instance. Replace the sample command after -- with the real application startup command.',
+  automation_ec2_install_response_invalid: 'AWS returned an unexpected Systems Manager installation response. Inspect the instance before retrying.',
+  automation_ec2_install_failed: 'EC2 installation failed. Check the Systems Manager command status and the target files before retrying. Remote output is withheld.',
+  automation_ec2_install_wait_failed: 'EC2 installation did not finish in time. Check the Systems Manager command status before retrying.',
+  automation_aws_metadata_timeout: 'AWS role metadata timed out. Run this on the EC2 instance or ECS task with its IAM role. On EC2, check that IMDSv2 is reachable and 169.254.169.254 bypasses any HTTP proxy.',
   automation_ecs_pair_input_invalid: 'Check the ECS pairing image digest, service and task role.',
+  automation_image_digest_required: 'Pass a published private ECR or Artifact Registry image tag, or an IMAGE@sha256:DIGEST reference.',
+  automation_image_ecr_target_invalid: 'The image tag must use private ECR. Otherwise pass IMAGE@sha256:DIGEST.',
+  automation_image_artifact_target_invalid: 'The image tag must use Artifact Registry. Otherwise pass IMAGE@sha256:DIGEST.',
+  automation_image_lookup_invalid: 'The registry did not return a valid image digest. Check the published tag or pass IMAGE@sha256:DIGEST.',
+  automation_image_lookup_failed: 'The registry image lookup failed. Check local cloud access and image permissions, or pass IMAGE@sha256:DIGEST.',
+  automation_ecs_running_image_unavailable: 'No matching running ECS task has a single confirmed image digest. Wait for the service deployment to finish, or pass --image IMAGE@sha256:DIGEST.',
   automation_ecs_pair_service_invalid: 'The ECS service is unavailable or its task definition changed. Inspect it again.',
   automation_ecs_pair_identity_changed: 'The ECS task role changed. Inspect the service and connection before retrying.',
   automation_ecs_pair_placement_unknown: 'The ECS service launch type or capacity provider could not be copied safely.',

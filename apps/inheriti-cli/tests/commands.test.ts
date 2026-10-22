@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { login } from '../src/commands/login.js';
 import { logout } from '../src/commands/logout.js';
 import { messageFor, parsePlanHints, run } from '../src/main.js';
+import { isExplicitAutomationDenial } from '../src/commands/errors.js';
 import * as session from '../src/session.js';
 import { OperatorNotSignedIn, PlanIdRequired, abortPlanAccess, listPlanLogs, listPlans, resolvePlanId, showPlan } from '../src/commands/plans.js';
 import { completeWords, printCompletionScript } from '../src/commands/completion.js';
@@ -23,6 +24,14 @@ function recordingTerminal(interactive: boolean): Terminal & { lines: string[]; 
   const errors: string[] = [];
   return { lines, errors, stdoutIsTTY: false, interactive, columns: 200, write: (line) => lines.push(line), writeError: (line) => errors.push(line) };
 }
+
+describe('automation denial exit status', () => {
+  it('recognizes explicit reveal rejection but preserves crashes as failures', () => {
+    expect(isExplicitAutomationDenial(Object.assign(new Error('Rejected in SafeKey Mobile'), { code: 'governance_denied' }))).toBe(true);
+    expect(isExplicitAutomationDenial(new Error('reveal_denied'))).toBe(true);
+    expect(isExplicitAutomationDenial(new Error('network failed'))).toBe(false);
+  });
+});
 
 /** Mirrors `ElementsIntegrationCore`, which delegates `getAccessToken` from `auth` to the top level. */
 function contextWith(overrides: Record<string, unknown> = {}): never {
@@ -54,10 +63,10 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
 }
 
 describe('help', () => {
-  it('rejects an invalid local Viewer file before loading API configuration', async () => {
+  it('rejects Viewer access in an unbound build before loading API configuration', async () => {
     const terminal = recordingTerminal(false);
     await expect(run(['plans', 'open', '/missing.inheriti'], {}, terminal)).resolves.toBe(1);
-    expect(terminal.errors).toEqual(['Could not open the file in Inheriti Workspace. Check the file and Workspace installation.']);
+    expect(terminal.errors).toEqual(['Inheriti Workspace is unavailable.']);
   });
   it('accepts only bounded, catalog-backed plan hints', () => {
     expect(parsePlanHints(['--title', 'AWS access', '--description', 'Console recovery', '--asset', 'USER-PSWD'])).toEqual({ title: 'AWS access', description: 'Console recovery', assetTypes: ['USER-PSWD'] });
@@ -69,10 +78,10 @@ describe('help', () => {
     await expect(run(['plans', 'logs', '--help'], {}, terminal)).resolves.toBe(0);
     expect(terminal.lines.join('\n')).toContain('[--limit N] [--offset N]');
   });
-  it('documents Google Cloud service connection creation', async () => {
+  it('hides automation help in an unbound build', async () => {
     const terminal = recordingTerminal(false);
-    await expect(run(['help', 'automations', 'create'], {}, terminal)).resolves.toBe(0);
-    expect(terminal.lines.join('\n')).toContain('(--job JOB | --service SERVICE)');
+    await expect(run(['help', 'automations', 'create'], {}, terminal)).resolves.toBe(1);
+    expect(terminal.errors).toEqual(['This feature is unavailable.']);
   });
   it('explains reveal security and interaction behavior without configuration or sign-in', async () => {
     const terminal = recordingTerminal(true);
@@ -113,7 +122,7 @@ describe('help', () => {
     const terminal = recordingTerminal(false);
     await expect(run(['--help'], {}, terminal)).resolves.toBe(0);
     expect(terminal.lines.join('\n')).toContain('plans abort [id]');
-    expect(terminal.lines.join('\n')).toContain('plans open path');
+    expect(terminal.lines.join('\n')).not.toContain('plans open path');
     expect(terminal.lines.join('\n')).toContain('version');
   });
 
@@ -508,7 +517,7 @@ describe('completion', () => {
     expect(terminal.lines).toContain('plans\tList and use plans');
     terminal.lines.length = 0;
     await completeWords(context, terminal, ['plans', ''], { XDG_STATE_HOME: temporaryState() });
-    expect(terminal.lines).toContain('create\tCreate a plan with the local assistant');
+    expect(terminal.lines).not.toContain('create\tCreate a plan with the local assistant');
     expect(terminal.lines).toContain('show\tShow plan details');
     terminal.lines.length = 0;
     await completeWords(
@@ -519,6 +528,7 @@ describe('completion', () => {
     );
     expect(terminal.lines).toEqual(['plan-1\tFamily vault', 'plan-2\tRecovery kit']);
   });
+
 
   it.each(['logs', 'reveal', 'download', 'use', 'abort'])('offers plan ids after `plans %s`', async (command) => {
     const terminal = recordingTerminal(true);
@@ -651,6 +661,10 @@ describe('choosing a plan', () => {
     const error = new TypeError('fetch failed', { cause: Object.assign(new Error(), { code: 'ECONNREFUSED' }) });
     expect(messageFor(error, true)).toBe('Cannot connect to the Inheriti API.');
     expect(messageFor(new TypeError('fetch failed'), true)).toBe('Cannot connect to the Inheriti API.');
+  });
+
+  it('explains an AWS metadata timeout instead of showing TimeoutError', () => {
+    expect(messageFor(new Error('automation_aws_metadata_timeout'), true)).toContain('IMDSv2 is reachable');
   });
 
   it('explains cloud setup failures without exposing provider output', () => {

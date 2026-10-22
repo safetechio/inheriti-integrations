@@ -59,8 +59,7 @@ it('routes AWS publication through secrets', async () => {
 });
 
 it('shows management help without configuration', async () => {
-  const { run } = await import('../src/main.js');
-  const output = terminal(false);
-  expect(await run(['help', 'automations', 'verify'], {}, output)).toBe(0);
+  const { code, output } = await run('local', ['help', 'automations', 'verify'], false);
+  expect(code).toBe(0);
   expect(output.write).toHaveBeenCalledWith(expect.stringContaining('native window'));
 });

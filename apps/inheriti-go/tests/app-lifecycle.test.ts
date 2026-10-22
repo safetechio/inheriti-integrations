@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
   appEvents: new Map<string, (...args: unknown[]) => void>(),
+  windowEvents: new Map<string, () => void>(),
   powerEvents: new Map<string, () => void>(),
   registerIpc: vi.fn(),
   watchLinuxLock: vi.fn(),
@@ -54,6 +55,7 @@ beforeEach(() => {
   mock.isVisible.mockReturnValue(false);
   mock.isBackgroundLaunch.mockReturnValue(false);
   mock.appEvents.clear();
+  mock.windowEvents.clear();
   mock.powerEvents.clear();
 });
 
@@ -99,6 +101,18 @@ it('opens the launcher while checking the saved session', async () => {
   expect(restore).toHaveBeenCalledOnce();
   finishRestore();
   await vi.waitFor(() => expect(mock.send).toHaveBeenCalledWith('tray:state-changed', { status: 'signed-out' }));
+});
+
+it('refreshes organizations when the launcher is shown again', async () => {
+  const refreshOrganizations = vi.fn().mockResolvedValue(true);
+  const session = { setPublisher: vi.fn(), setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(),
+    restore: vi.fn(), refreshOrganizations, state: () => ({ status: 'signed-in' }) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(mock.showLauncher).toHaveBeenCalledOnce());
+  mock.appEvents.get('browser-window-created')?.(undefined, { on: (name: string, listener: () => void) => mock.windowEvents.set(name, listener) });
+  mock.windowEvents.get('show')?.();
+  await vi.waitFor(() => expect(refreshOrganizations).toHaveBeenCalledOnce());
+  expect(mock.send).toHaveBeenCalledWith('tray:state-changed', { status: 'signed-in' });
 });
 
 it('reconciles unread counts across pages and clears them on organization change and sign-out', async () => {

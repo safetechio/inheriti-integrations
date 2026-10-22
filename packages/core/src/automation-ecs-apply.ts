@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { providerCliError } from './provider-cli-error.js';
 import type { CloudTarget } from './automation-cloud-target.js';
 import { isGithubAutomationSelector } from './automation-setup.js';
 
@@ -26,8 +27,8 @@ const runAws: EcsApplyRunner = async args => {
   try {
     const { stdout } = await execFileAsync('aws', args, { maxBuffer: 4 * 1024 * 1024, timeout: args[1] === 'wait' ? 1_200_000 : 120_000, windowsHide: true });
     return stdout;
-  } catch {
-    throw new Error('automation_ecs_provider_failed');
+  } catch (error) {
+    throw providerCliError('aws', error, 'automation_ecs_provider_failed');
   }
 };
 const valid = (value: unknown): value is string => typeof value === 'string' && !!value && !/[\x00-\x1f\x7f]/.test(value);

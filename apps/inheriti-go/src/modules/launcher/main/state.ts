@@ -43,6 +43,7 @@ export class TraySession {
   private pendingSignIn: Promise<void> | undefined;
   private pendingAuthorization: ReturnType<NodeIntegrationCore['auth']['beginAuthorizationCode']> | undefined;
   private pendingSelections = 0;
+  private organizationRevision = 0;
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
   private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
@@ -186,6 +187,7 @@ export class TraySession {
   }
 
   async restore(): Promise<void> {
+    ++this.organizationRevision;
     this.status = 'restoring';
     let hasSavedSession = false;
     this.cancelInboxAccess();
@@ -215,6 +217,7 @@ export class TraySession {
   async select(id: string): Promise<void> {
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     if (!this.organizations.some((organization) => organization.id === id)) throw new Error('organization_access_denied');
+    ++this.organizationRevision;
     this.pendingSelections += 1;
     try {
       this.quickPlans.assertCanSelectOrganization(id);
@@ -356,6 +359,7 @@ export class TraySession {
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.cancelInboxAccess(); this.validatedInboxOrganization = undefined; void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
+    ++this.organizationRevision;
     this.cancelInboxAccess();
     this.validatedInboxOrganization = undefined;
     this.custodianPrompt.cancel();
@@ -379,6 +383,7 @@ export class TraySession {
   }
 
   private async discover(signal?: AbortSignal): Promise<void> {
+    ++this.organizationRevision;
     const organizations = await this.core.listOrganizations();
     if (signal?.aborted) return;
     this.organizations = organizations;
@@ -403,5 +408,33 @@ export class TraySession {
       await this.planEdit.selectOrganization(this.selectedId);
       this.inbox.listen();
     }
+  }
+
+  async refreshOrganizations(): Promise<boolean> {
+    if (this.status !== 'signed-in' || this.pendingSelections) return false;
+    const revision = ++this.organizationRevision;
+    const selectedId = this.selectedId;
+    const organizations = await this.core.listOrganizations();
+    if (revision !== this.organizationRevision || this.status !== 'signed-in' || this.pendingSelections || this.selectedId !== selectedId) return false;
+    if (selectedId && !organizations.some(({ id }) => id === selectedId)) {
+      try {
+        this.quickPlans.assertIdle();
+        this.planEdit.assertIdle();
+      } catch { // shortcut: defer revocation during active plan work, retry when the tray opens again.
+        return false;
+      }
+    }
+    this.organizations = organizations;
+    this.message = organizations.length === 0 ? messages.noOrganizations : undefined;
+    if (selectedId && !organizations.some(({ id }) => id === selectedId)) {
+      this.quickPlans.clear();
+      this.cancelInboxAccess();
+      this.validatedInboxOrganization = undefined;
+      this.inbox.clear();
+      this.planEdit.reset();
+      this.selectedId = undefined;
+      await this.organizationKeys.clear();
+    }
+    return true;
   }
 }

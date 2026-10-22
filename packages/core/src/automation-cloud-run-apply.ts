@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
+import { providerCliError } from './provider-cli-error.js';
 import { runCloudCommand } from './automation-cloud-target.js';
 import type { CloudCommandRunner, CloudTarget } from './automation-cloud-target.js';
 import { isGithubAutomationSelector } from './automation-setup.js';
@@ -34,9 +35,8 @@ const runCloudMutation: CloudCommandRunner = async (binary, args) => {
       timeout: 900_000, maxBuffer: 1024 * 1024, windowsHide: true,
     });
     return stdout;
-  } catch {
-    // Provider stderr can contain credentials or environment data.
-    throw new Error('automation_cloud_apply_failed');
+  } catch (error) {
+    throw providerCliError(binary, error, 'automation_cloud_apply_failed');
   }
 };
 const record = (value: unknown): Record<string, unknown> => {

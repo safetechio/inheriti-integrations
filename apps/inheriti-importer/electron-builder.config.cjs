@@ -16,7 +16,7 @@ module.exports = {
       : `io.safetech.inheriti.importer.${environment}`,
   productName:
     environment === 'prod' ? 'Inheriti Importer' : `Inheriti Importer ${environment.toUpperCase()}`,
-  artifactName: `Inheriti-Importer-${environment}-\${version}-\${os}-\${arch}.\${ext}`,
+  artifactName: `Inheriti-Importer-${environment === 'prod' ? '' : `${environment}-`}\${version}-\${os}-\${arch}.\${ext}`,
   extraMetadata: {
     version: environment === 'prod' ? baseVersion : `${baseVersion}-${environment}.0`,
   },

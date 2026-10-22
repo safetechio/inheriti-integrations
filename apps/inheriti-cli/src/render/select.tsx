@@ -92,6 +92,30 @@ export async function promptSelect(title: string, candidates: readonly Candidate
   return chosen;
 }
 
+/** Reads one line without handing control of stdin to a second terminal UI. */
+export async function promptText(title: string): Promise<string | undefined> {
+  let answer: string | undefined;
+  let stop = () => {};
+  function Input() {
+    const [value, setValue] = useState('');
+    useInput((input, key) => {
+      if (key.ctrl && input === 'c') { requestCliCancel(); stop(); }
+      else if (key.escape) stop();
+      else if (key.return) { answer = value; stop(); }
+      else if (key.backspace || key.delete) setValue(value.slice(0, -1));
+      else if (input && !key.ctrl && !key.meta) setValue(value + input);
+    });
+    return <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width={72}>
+      <Text bold color="cyan">{title}</Text>
+      <Text>{value || 'Type a path, then press enter · esc to cancel'}</Text>
+    </Box>;
+  }
+  const instance = render(<Input />, { exitOnCtrlC: false });
+  stop = () => { instance.clear(); instance.unmount(); };
+  await instance.waitUntilExit();
+  return answer;
+}
+
 function MultiSelect({ title, candidates, onChoose, onCancel, onInterrupt }: {
   title: string;
   candidates: readonly Candidate[];

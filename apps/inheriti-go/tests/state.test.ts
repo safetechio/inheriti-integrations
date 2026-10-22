@@ -292,6 +292,62 @@ describe('TraySession', () => {
     expect(session.state().selectedId).toBeUndefined();
   });
 
+  it('refreshes organizations without resetting the selected edit', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }])
+      .mockResolvedValueOnce([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }, { id: 'org-c', name: 'C' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    const selectEdit = vi.spyOn(TrayPlanEdit.prototype, 'selectOrganization');
+    expect(await session.refreshOrganizations()).toBe(true);
+    expect(session.state()).toMatchObject({ status: 'signed-in', selectedId: 'org-a', organizations: [
+      { id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }, { id: 'org-c', name: 'C' },
+    ] });
+    expect(selectEdit).not.toHaveBeenCalled();
+    selectEdit.mockRestore();
+  });
+
+  it('drops a refresh result after sign-out', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    let resolve!: (value: { id: string; name: string }[]) => void;
+    mock.organizations.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    const refresh = session.refreshOrganizations();
+    await session.signOut();
+    resolve([{ id: 'org-b', name: 'B' }]);
+    expect(await refresh).toBe(false);
+    expect(session.state()).toMatchObject({ status: 'signed-out', organizations: [] });
+  });
+
+  it('clears a revoked selection and leaves the remaining organization for the picker', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }])
+      .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    expect(await session.refreshOrganizations()).toBe(true);
+    expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [{ id: 'org-b', name: 'B' }] });
+    expect(session.state().selectedId).toBeUndefined();
+    await session.select('org-b');
+    expect(session.state().selectedId).toBe('org-b');
+  });
+
+  it('keeps a revoked selection and its list while an edit is busy', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }])
+      .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    const busy = vi.spyOn(TrayPlanEdit.prototype, 'assertIdle').mockImplementationOnce(() => { throw new Error('edit_in_progress'); });
+    expect(await session.refreshOrganizations()).toBe(false);
+    expect(session.state()).toMatchObject({ selectedId: 'org-a', organizations: [{ id: 'org-a', name: 'A' }] });
+    busy.mockRestore();
+  });
+
   it('restores the last authorised organisation for a multi-organisation session', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);

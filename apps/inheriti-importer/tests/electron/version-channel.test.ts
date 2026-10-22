@@ -22,5 +22,5 @@ it.each([
   delete require.cache[configPath];
   const config = require(configPath);
   expect(config.extraMetadata.version).toBe(version);
-  expect(config.artifactName).toContain(`Importer-${environment}-`);
+  expect(config.artifactName).toBe(`Inheriti-Importer-${environment === 'prod' ? '' : `${environment}-`}\${version}-\${os}-\${arch}.\${ext}`);
 });

@@ -130,4 +130,45 @@ describe('ECS one-off pairing', () => {
     };
     await expect(pairEcsAutomation(input, runner)).resolves.toMatchObject({ status: 'paired' });
   });
+
+  it('carries private registry credentials into the temporary task without copying secrets', async () => {
+    const credentialsParameter = 'arn:aws:secretsmanager:us-east-1:123456789012:secret:registry';
+    const privateDefinition = { taskDefinition: { ...definition.taskDefinition,
+      containerDefinitions: [{ ...definition.taskDefinition.containerDefinitions[0],
+        repositoryCredentials: { credentialsParameter } }] } };
+    const runner: EcsPairRunner = async args => {
+      if (args[1] === 'describe-services') return JSON.stringify(service);
+      if (args[1] === 'describe-task-definition') return JSON.stringify(privateDefinition);
+      if (args[1] === 'register-task-definition') {
+        const body = JSON.parse(await readFile(args[args.indexOf('--cli-input-json') + 1]!.slice(7), 'utf8'));
+        expect(body.containerDefinitions[0].repositoryCredentials).toEqual({ credentialsParameter });
+        expect(JSON.stringify(body)).not.toContain('private-value');
+        return JSON.stringify({ taskDefinition: { taskDefinitionArn: paired } });
+      }
+      if (args[1] === 'run-task') return JSON.stringify({ tasks: [{ taskArn: task }], failures: [] });
+      if (args[1] === 'describe-tasks') return JSON.stringify({ tasks: [{ lastStatus: 'STOPPED', containers: [{ name: 'app', exitCode: 0 }] }], failures: [] });
+      return '{}';
+    };
+    await expect(pairEcsAutomation(input, runner)).resolves.toMatchObject({ status: 'paired' });
+  });
+
+  it('does not send registry credentials to an explicitly selected different registry', async () => {
+    const privateDefinition = { taskDefinition: { ...definition.taskDefinition,
+      containerDefinitions: [{ ...definition.taskDefinition.containerDefinitions[0],
+        image: 'registry.example.test/team/app:v1',
+        repositoryCredentials: { credentialsParameter: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:registry' } }] } };
+    const runner: EcsPairRunner = async args => {
+      if (args[1] === 'describe-services') return JSON.stringify(service);
+      if (args[1] === 'describe-task-definition') return JSON.stringify(privateDefinition);
+      if (args[1] === 'register-task-definition') {
+        const body = JSON.parse(await readFile(args[args.indexOf('--cli-input-json') + 1]!.slice(7), 'utf8'));
+        expect(body.containerDefinitions[0].repositoryCredentials).toBeUndefined();
+        return JSON.stringify({ taskDefinition: { taskDefinitionArn: paired } });
+      }
+      if (args[1] === 'run-task') return JSON.stringify({ tasks: [{ taskArn: task }], failures: [] });
+      if (args[1] === 'describe-tasks') return JSON.stringify({ tasks: [{ lastStatus: 'STOPPED', containers: [{ name: 'app', exitCode: 0 }] }], failures: [] });
+      return '{}';
+    };
+    await expect(pairEcsAutomation(input, runner)).resolves.toMatchObject({ status: 'paired' });
+  });
 });

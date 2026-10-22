@@ -225,6 +225,20 @@ describe('Google Cloud automation secret session', () => {
 });
 
 describe('AWS automation secret session', () => {
+  it('identifies an AWS metadata timeout during pairing', async () => {
+    const calls: string[] = [];
+    const transport = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      calls.push(url.pathname);
+      if (url.hostname === '169.254.169.254') throw new DOMException('Timed out', 'TimeoutError');
+      return Response.json({ ok: true, result: { challenge: 'a'.repeat(43), expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+    });
+    await expect(pairAutomationIdentity('https://business.example/api', {
+      INHERITI_AUTOMATION_PROVIDER: 'AWS', INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1', AWS_REGION: 'us-east-1',
+    }, transport)).rejects.toThrow('automation_aws_metadata_timeout');
+    expect(calls).toEqual(['/automation/jobs/aws-challenge', '/latest/api/token']);
+  });
+
   it('rejects ECS host escapes and oversized metadata without a content length', async () => {
     const base = { INHERITI_AUTOMATION_PROVIDER: 'AWS', INHERITI_AUTOMATION_CONNECTION_ID: 'connection-1', AWS_REGION: 'us-east-1' };
     const challenge = Response.json({ ok: true, result: { challenge: 'a'.repeat(43), expiresAt: new Date(Date.now() + 60_000).toISOString() } });

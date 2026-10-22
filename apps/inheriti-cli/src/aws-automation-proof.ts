@@ -13,7 +13,12 @@ export async function awsAutomationProof(
   transport: Transport,
 ): Promise<string> {
   if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region)) throw new Error('automation_aws_region_invalid');
-  const credentials = await roleCredentials(environment, transport);
+  let credentials: Credentials;
+  try { credentials = await roleCredentials(environment, transport); }
+  catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') throw new Error('automation_aws_metadata_timeout');
+    throw error;
+  }
   if (!credentials.AccessKeyId.startsWith('ASIA') || !credentials.SecretAccessKey || !credentials.Token ||
       !Number.isFinite(Date.parse(credentials.Expiration)) || Date.parse(credentials.Expiration) <= Date.now() + 60_000)
     throw new Error('automation_aws_role_credentials_required');

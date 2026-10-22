@@ -28,7 +28,7 @@ for (const deployment of ['local', 'dev', 'stg', 'prod']) {
       assert.deepEqual(Buffer.from(image, 'base64'), readFileSync(config.linux.icon));
       if (deployment === 'prod') assert.equal(config.linux.icon, require.resolve('../apps/inheriti-go/src/tray.png'));
       assert.equal(config.appId, `com.safetech.inheriti.go.${deployment}`);
-      assert.equal(config.artifactName, 'Inheriti-Go-' + deployment + '-${version}-${os}-${arch}.${ext}');
+      assert.equal(config.artifactName, 'Inheriti-Go-' + (deployment === 'prod' ? '' : `${deployment}-`) + '${version}-${os}-${arch}.${ext}');
       assert.equal(config.linux.executableName, 'inheriti-go');
     } finally {
       if (previous === undefined) delete process.env.INHERITI_BUILD_DEPLOYMENT;

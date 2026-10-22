@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { providerCliError } from './provider-cli-error.js';
 import type { CloudTarget } from './automation-cloud-target.js';
 
 const execFileAsync = promisify(execFile);
@@ -25,8 +26,8 @@ const runGoogle: CloudRunPairRunner = async (args, signal) => {
       windowsHide: true, signal,
     });
     return stdout;
-  } catch {
-    throw new Error('automation_cloud_run_pair_provider_failed');
+  } catch (error) {
+    throw providerCliError('gcloud', error, 'automation_cloud_run_pair_provider_failed');
   }
 };
 const record = (value: unknown): Record<string, unknown> => {

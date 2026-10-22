@@ -78,7 +78,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
-    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|setup|pair|grant ` +
+    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
       `create|activate|member|revoke>\n\nManage Business automation connections and grants locally. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
@@ -103,10 +103,11 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `from the running workload. You must already have a secure way to transfer that proof: this command ` +
       `opens the window but does not collect proof from Cloud Run or ECS. Never pass proof on the command line or ` +
       `print it in logs.`,
-    'automations pair': `Usage: inheriti automations pair <start|redeem|aws|google>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
+    'automations pair': `Usage: inheriti automations pair <start|redeem|aws|ec2|google>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
     'automations pair start': `Usage: inheriti automations pair start [--connection ID]\n\nOpen a ten-minute pairing window for the selected connection. No ticket or proof is printed. Run pair redeem inside that workload before expiry.`,
     'automations pair redeem': `Usage: inheriti automations pair redeem\n\nRun inside the configured workload during its pairing window with the usual provider identity settings. Obtains a fresh native proof and verifies the connection directly; no operator login is needed inside the workload.`,
-    'automations pair aws': `Usage: inheriti automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE --image IMAGE_DIGEST [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]\n\nRun one temporary ECS task with the service task role to verify the connection. The immutable image must include Inheriti CLI. The service is not changed. Review the task revision before noninteractive use.`,
+    'automations pair aws': `Usage: inheriti automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE [--image IMAGE_TAG_OR_DIGEST] [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]\n\nRun one temporary ECS task with the service task role to verify the connection. By default, use the selected container image digest from a running service task; --image overrides it. A private ECR tag override is resolved to its immutable digest. The image must include Inheriti CLI. The service is not changed. Review the task revision before noninteractive use.`,
+    'automations pair ec2': `Usage: inheriti automations pair ec2 --connection ID --region REGION --instance INSTANCE_ID [--expect-role IAM_ROLE_ARN]\n\nFrom your computer, use AWS CLI and Systems Manager to run pair redeem on an SSM managed Linux EC2 instance. The instance must already have an executable Inheriti CLI on the SSM command's PATH. Review the role before running; noninteractive use requires --expect-role. Remote proof and command output are never printed.`,
     'automations pair google': `Usage: inheriti automations pair google --connection ID --project PROJECT --region REGION (--service SERVICE | --job JOB) [--expect-revision GENERATION]\n\nRun one temporary Cloud Run job with the source workload identity to verify the connection. Its immutable image must include Inheriti CLI at /usr/local/bin/inheriti. The source workload is not changed. Review its generation before noninteractive use.`,
     'automations trust': `Usage: inheriti automations trust [--connection ID] --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
       `PROVIDER_FIELDS\n\nReplace nonsecret trust fields using the same provider fields as create. ` +
@@ -117,8 +118,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `connection. Find ASSET.FIELD in the plan Data tab. The generated command only checks that the ` +
       `injected value is present. The Action reference and CLI version come from Business's verified ` +
       `release; if unavailable, no workflow is printed.`,
-    'automations runtime': `Usage: inheriti automations runtime install-instructions\n\nPrint the exact verified CLI package version and installation commands for a Linux EC2 instance or an ECS/Cloud Run container. The version comes from Inheriti® Business. Prompts for sign-in and Organisation selection when needed; fails if no verified release is available.`,
-    'automations runtime install-instructions': `Usage: inheriti automations runtime install-instructions\n\nPrint the exact verified CLI package version and installation commands for a Linux EC2 instance or an ECS/Cloud Run container. The version comes from Inheriti® Business. Prompts for sign-in and Organisation selection when needed; fails if no verified release is available.`,
+    'automations runtime': `Usage: inheriti automations runtime <install-instructions|install ec2|image>\n\nPrint installation guidance, install the CLI on EC2, or prepare a container image.`,
+    'automations runtime install-instructions': `Usage: inheriti automations runtime install-instructions [--container [--cli-tarball PATH]]\n\nUse --container to print the Dockerfile instruction for ECS or Cloud Run directly. For local or dev CLI tests, add --cli-tarball PATH while in your app's Docker build context; the CLI copies it there as inheriti-cli.tgz without using the npm registry. Without --container, choose interactively; a noninteractive terminal prints both.`,
+    'automations runtime install': `Usage: inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID\n\nRun on your computer. AWS CLI uses SSM to install this exact published CLI version on the Linux instance and confirms the executable version.`,
+    'automations runtime image': `Usage: inheriti automations runtime image --image ECR_OR_ARTIFACT_REGISTRY_TAG [--context DIRECTORY] [--dockerfile FILE] [--build | --publish]\n\nPreview by default. --build builds the application Dockerfile, adds this exact Inheriti CLI version to the final image, and verifies it. --publish also pushes the image and prints its immutable digest. The final image needs npm, Node.js and a shell. Docker and registry sign-in are required. Deploy a ready Cloud Run revision before pairing. Updating an ECS or Cloud Run workload remains an explicit automations setup --apply action.`,
     'secrets publish': `Usage: inheriti secrets publish <aws|google> [OPTIONS]\n\nOptional one-time copy for existing cloud-store consumers; use secrets exec for direct Inheriti runtime access. After publication, reads use provider IAM. Plan changes or revocation do not update or delete the copy; there is no automatic synchronization or rotation. Preview cloud destinations by default. ` +
       `Use inheriti help secrets publish aws or inheriti help secrets publish google for provider options.`,
     'secrets publish aws': `Usage: inheriti secrets publish aws --plan PLAN_ID --region AWS_REGION --account-id 12_DIGITS ` +
@@ -134,21 +137,21 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `(--map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ... | --map NAME=ASSET.FIELD ... | --field ASSET.FIELD --env-name NAME) ` +
       `[--project PROJECT --region REGION (--job JOB | --service SERVICE) | --region REGION --cluster CLUSTER ` +
       `(--service SERVICE | --task-definition ARN) | --region REGION --instance INSTANCE_ID ` +
-      `--service-name NAME --run-as-user USER -- APP_COMMAND [ARGS...]] [--container NAME] [--script-path ABSOLUTE_PATH] ` +
-      `[--cli-path ABSOLUTE_PATH] [--apply --image IMAGE_DIGEST [--expect-revision REVISION]]\n\n` +
+      `--service-name NAME --run-as-user USER [--install [--replace]] -- APP_COMMAND [ARGS...]] [--container NAME] [--script-path ABSOLUTE_PATH] ` +
+      `[--cli-path ABSOLUTE_PATH] [--save RELATIVE_PATH] [--apply --image IMAGE_TAG_OR_DIGEST [--expect-revision REVISION]]\n\n` +
       `Prepare a Cloud Run, ECS, EC2, or custom runner launch script for a verified connection and active plan grant. ` +
       `Use --map-all or repeatable --only for generated names; --except omits fields from --map-all. ` +
       `Repeat --map to rename a generated variable or map fields explicitly. Review mappings before applying. ` +
-      `Without a managed target, save the launcher for a VM or cluster. ` +
+      `Without a managed target, choose Print or Save as. --save writes a new executable launcher in the current Docker build context and prints matching Dockerfile COPY and ENTRYPOINT lines. ` +
       `Managed cloud targets require an exact target. The CLI path inside the image defaults to /usr/local/bin/inheriti; ` +
       `use --cli-path for a different absolute path. ` +
-      `By default this prints a safe preview and script. To update an existing Cloud Run job, service, or ECS service, ` +
-      `first build an immutable image containing the CLI, then use --apply with its image digest ` +
+      `By default this prints a safe preview and script. For EC2, --install writes the launcher and systemd unit via SSM after confirmation, without starting the service. Use --install --replace to update a stopped, matching installation; it also upgrades the previous generated unit. To update an existing Cloud Run job, service, or ECS service, ` +
+      `first build and publish an image containing the CLI, then use --apply with its ECR or Artifact Registry tag or immutable digest ` +
       `and the revision from the preview. In an interactive terminal, review the safe preview and confirm ` +
       `instead of passing a revision. It does not build or publish images. Mount any private key only on ` +
       `the custom runner. Never pass secret values as flags.`,
-    'automations grant': `Usage: inheriti automations grant create|activate|member|revoke [--plan PLAN_ID] [--grant ` +
-      `GRANT_ID] [--connection CONNECTION_ID] [--member MEMBER_ID]\n\nCreate requires connection and ` +
+    'automations grant': `Usage: inheriti automations grant create|activate|member|revoke [--plan PLAN_ID] [--id GRANT_ID] [--grant ` +
+      `GRANT_ID] [--connection CONNECTION_ID] [--member MEMBER_ID]\n\nCreate accepts --id and requires connection and ` +
       `responsible member; activate/revoke require grant; member also requires a new responsible ` +
       `member. Missing IDs can be selected in a terminal.`,
     plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or ` +
