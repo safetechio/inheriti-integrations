@@ -43,15 +43,22 @@ it('routes management and setup in dev, rejects stg and prod', async () => {
   expect(manage).not.toHaveBeenCalled();
 });
 
-it('shows the complete AWS CLI error including its operation and permission', async () => {
+it('shows the complete AWS inspection error in the terminal', async () => {
+  const error = new Error('automation_cloud_inspection_failed');
+  Object.defineProperty(error, 'providerDiagnostic', { value: 'AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation: not authorized to perform: ecs:DescribeTaskDefinition' });
+  manage.mockRejectedValueOnce(error);
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('not authorized to perform: ecs:DescribeTaskDefinition'));
+});
+
+it('does not print free-form provider diagnostics that contain secrets', async () => {
   manage.mockRejectedValueOnce(Object.assign(new Error('automation_cloud_inspection_failed'), {
-    providerDiagnostic: 'AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation: User is not authorized to perform: ecs:DescribeTaskDefinition on resource',
+    providerDiagnostic: 'AWS CLI: rejected environment value sentinel-secret',
   }));
   const { code, output } = await run('dev', ['automations', 'create']);
   expect(code).toBe(1);
-  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation'));
-  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('not authorized to perform: ecs:DescribeTaskDefinition'));
-  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('on resource'));
+  expect(output.writeError).not.toHaveBeenCalledWith(expect.stringContaining('sentinel-secret'));
 });
 
 it('keeps unexpected automation error details private while naming the command', async () => {
@@ -63,12 +70,12 @@ it('keeps unexpected automation error details private while naming the command',
 });
 
 it('shows provider diagnostics when publishing automation secrets', async () => {
-  publish.mockRejectedValueOnce(Object.assign(new Error('automation_aws_provider_failed'), {
-    providerDiagnostic: 'AWS CLI: AccessDeniedException in PutSecretValue (permission secretsmanager:PutSecretValue).',
-  }));
+  const error = new Error('automation_aws_provider_failed');
+  Object.defineProperty(error, 'providerDiagnostic', { value: 'AWS CLI: AccessDeniedException in PutSecretValue' });
+  publish.mockRejectedValueOnce(error);
   const { code, output } = await run('dev', ['secrets', 'publish', 'aws', '--plan', 'plan-1']);
   expect(code).toBe(1);
-  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('permission secretsmanager:PutSecretValue'));
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('AWS CLI: AccessDeniedException in PutSecretValue'));
 });
 
 it('routes safe metadata commands and rejects missing plan IDs', async () => {

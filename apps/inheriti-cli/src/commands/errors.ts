@@ -58,8 +58,10 @@ export function messageFor(error: unknown, business = false, automationCommand?:
 }
 
 export function providerDiagnosticFor(error: unknown): string | undefined {
-  const value = (error as { providerDiagnostic?: unknown } | null)?.providerDiagnostic;
-  return typeof value === 'string' && /^(?:AWS|gcloud) CLI: \S/u.test(value) ? value : undefined;
+  const descriptor = error && typeof error === 'object'
+    ? Object.getOwnPropertyDescriptor(error, 'providerDiagnostic') : undefined;
+  const value = descriptor?.value;
+  return descriptor?.enumerable === false && typeof value === 'string' && /^(?:AWS|gcloud) CLI: \S/u.test(value) ? value : undefined;
 }
 
 export function planCreationFailureMessage(stage: 'key' | 'context' | 'save', error: unknown): string {

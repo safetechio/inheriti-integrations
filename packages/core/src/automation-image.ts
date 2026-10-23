@@ -15,7 +15,7 @@ const run: Runner = async (binary, args, signal) => {
     const { stdout } = await execFileAsync(binary, args, { timeout: 120_000, maxBuffer: 1024 * 1024, windowsHide: true, signal });
     return stdout;
   } catch (error) {
-    throw providerCliError(binary, error, 'automation_image_lookup_failed');
+    throw providerCliError(binary, error, 'automation_image_lookup_failed', true);
   }
 };
 

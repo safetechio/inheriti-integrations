@@ -35,7 +35,7 @@ export const runCloudCommand: CloudCommandRunner = async (binary, args) => {
     const { stdout } = await execFileAsync(binary, args, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20_000 });
     return stdout;
   } catch (error) {
-    throw providerCliError(binary, error, 'automation_cloud_inspection_failed');
+    throw providerCliError(binary, error, 'automation_cloud_inspection_failed', true);
   }
 };
 
