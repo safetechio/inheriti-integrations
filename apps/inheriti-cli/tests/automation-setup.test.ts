@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const { getConnection, listConnections, listGrants, inspectCloudTarget, inspectEc2AutomationInstance, installEc2AutomationService, prepareEc2AutomationService, generateAutomationRuntimeBundle, applyEcsAutomation, applyCloudRunServiceAutomation, resolveAutomationImage } = vi.hoisted(() => ({
-  getConnection: vi.fn(async () => ({ id: 'connection-1', provider: 'AWS', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } })),
+  getConnection: vi.fn(async () => ({ id: 'connection-1', name: 'ECS', provider: 'AWS', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } })),
   listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'ECS', provider: 'AWS', status: 'VERIFIED' }]),
   listGrants: vi.fn(async () => [{ connectionId: 'connection-1', status: 'ACTIVE' }]),
   inspectCloudTarget: vi.fn(async () => ({ target: { provider: 'AWS', region: 'us-east-1', cluster: 'jobs', service: 'worker' }, image: 'image:tag', identity: 'arn:aws:iam::123456789012:role/task', revision: 'rev:1', command: ['--secret=NEVER_PRINT'], environmentNames: ['EXISTING_SECRET'] })),
@@ -99,7 +99,25 @@ it('prints a launcher for a VM or cluster without inspecting or changing a manag
   const output = terminal();
   expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
   expect(inspectCloudTarget).not.toHaveBeenCalled();
-  expect(output.write.mock.calls.flat().join('\n')).toContain('manual_setup_required');
+  const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('Connection: ECS (connection-1)');
+  expect(printed).toContain('Before deploying:');
+  expect(printed).not.toContain('manual_setup_required');
+});
+
+it('explains portable manual setup without a JSON preamble', async () => {
+  getConnection.mockResolvedValueOnce({ id: 'connection-1', name: 'Runner', provider: 'PORTABLE', status: 'VERIFIED',
+    trust: { method: 'PORTABLE_SIGNED_ASSERTION', keyId: 'key-1', runnerSubject: 'runner-1', environment: 'test' } } as never);
+  generateAutomationRuntimeBundle.mockReturnValueOnce({ provider: 'PORTABLE', target: 'Custom runner',
+    script: '#!/bin/sh\nexec inheriti secrets exec "$@"', environment: { INHERITI_AUTOMATION_PROVIDER: 'PORTABLE' },
+    requiredEnvironment: ['INHERITI_AUTOMATION_PRIVATE_KEY_FILE'], instructions: ['Install CLI on runner'] });
+  const output = terminal();
+  expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
+  const printed = output.write.mock.calls.flat().join('\n');
+  expect(printed).toContain('Connection: Runner (connection-1)');
+  expect(printed).toContain('Runtime needs: INHERITI_AUTOMATION_PRIVATE_KEY_FILE');
+  expect(printed).toContain('Install CLI on runner');
+  expect(printed).not.toContain('manual_setup_required');
 });
 
 it('saves a new launcher in the build context and prints Dockerfile lines using its chosen path', async () => {
@@ -113,11 +131,15 @@ it('saves a new launcher in the build context and prints Dockerfile lines using 
     expect(await readFile(join(directory, 'launch.sh'), 'utf8')).toBe('#!/bin/sh\nexec inheriti secrets exec "$@"\n');
     expect((await stat(join(directory, 'launch.sh'))).mode & 0o111).toBeTruthy();
     const printed = output.write.mock.calls.flat().join('\n');
+    expect(printed).toContain('Connection: ECS (connection-1)');
+    expect(printed).toContain('The script sets the connection ID and provider.');
+    expect(printed).not.toContain('manual_setup_required');
     expect(printed).toContain('COPY ["./launch.sh","/usr/local/bin/inheriti-automation"]');
     expect(printed).toContain('RUN chmod +x /usr/local/bin/inheriti-automation');
     expect(printed).toContain('ENTRYPOINT ["/usr/local/bin/inheriti-automation"]');
     expect(printed).toContain('Remove any ECS entryPoint or Cloud Run command override');
     expect(await automationSetup(context as never, configuration as never, output, manual)).toBe(1);
+    expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('no file was replaced'));
     expect(await automationSetup(context as never, configuration as never, output,
       [...args.slice(0, 8), '--save', '../escape.sh'])).toBe(1);
     expect(await automationSetup(context as never, configuration as never, output,
@@ -136,6 +158,40 @@ it('offers print or save when manual setup is interactive', async () => {
   expect(promptSelect).toHaveBeenCalledWith('How should the launcher be delivered?', expect.any(Array));
   expect(promptText).not.toHaveBeenCalled();
   expect(output.write.mock.calls.flat().join('\n')).toContain('--- Launcher script');
+});
+
+it('saves in an existing folder with a default .sh name and explains the next steps', async () => {
+  const { promptSelect, promptText } = await import('../src/render/select.js');
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-setup-'));
+  const previous = process.cwd();
+  try {
+    await mkdir(join(directory, 'app'));
+    process.chdir(directory);
+    vi.mocked(promptSelect).mockResolvedValueOnce('save');
+    vi.mocked(promptText).mockResolvedValueOnce('app');
+    const output = { ...terminal(), interactive: true };
+    expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
+    expect(await readFile(join(directory, 'app', 'inheriti-start.sh'), 'utf8')).toContain('#!/bin/sh');
+    expect(output.write.mock.calls.flat().join('\n')).toContain('COPY ["./app/inheriti-start.sh","/usr/local/bin/inheriti-automation"]');
+    expect(output.write.mock.calls.flat().join('\n')).toContain('This shell script (.sh) starts your app through Inheriti');
+    expect(output.write.mock.calls.flat().join('\n')).toContain('Connection:');
+    expect(output.write.mock.calls.flat().join('\n')).toContain('3. Build and deploy');
+    expect(promptText).toHaveBeenCalledWith(expect.stringContaining('folder or .sh file'));
+
+    vi.mocked(promptSelect).mockResolvedValueOnce('save');
+    vi.mocked(promptText).mockResolvedValueOnce('');
+    expect(await automationSetup(context as never, configuration as never, output, args.slice(0, 8))).toBe(0);
+    expect(await readFile(join(directory, 'inheriti-start.sh'), 'utf8')).toContain('#!/bin/sh');
+
+    const invalid = terminal();
+    expect(await automationSetup(context as never, configuration as never, invalid,
+      [...args.slice(0, 8), '--save', 'missing-folder'])).toBe(1);
+    expect(invalid.writeError).toHaveBeenCalledWith(expect.stringContaining('folder does not exist'));
+    await expect(stat(join(directory, 'missing-folder'))).rejects.toThrow();
+  } finally {
+    process.chdir(previous);
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 it('prepares a persistent EC2 launcher with the attached role and application command', async () => {

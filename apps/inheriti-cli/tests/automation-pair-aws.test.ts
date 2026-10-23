@@ -47,6 +47,31 @@ it('pairs an ECS service using the verified task role and pinned revision', asyn
   expect(output.write.mock.calls.flat().join('\n')).toContain('paired');
 });
 
+it('animates pairing stages and closes the live region before reporting success or failure', async () => {
+  const update = vi.fn();
+  const close = vi.fn();
+  const output = { ...terminal(), createLiveRegion: () => ({ update, close }) };
+  const argv = ['--connection', 'connection-1', '--region', 'us-east-1', '--cluster', 'jobs', '--service', 'worker',
+    '--expect-revision', 'rev:1'];
+  mock.getConnection.mockResolvedValueOnce({ id: 'connection-1', provider: 'AWS', status: 'PENDING_VERIFICATION', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } });
+  mock.getConnection.mockResolvedValueOnce({ id: 'connection-1', provider: 'AWS', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } });
+  mock.pairEcsAutomation.mockImplementationOnce((async ({ onProgress }: { onProgress(value: string): void }) => {
+    onProgress('opening'); onProgress('waiting'); onProgress('verifying');
+    return { status: 'paired' };
+  }) as never);
+  expect(await pairAwsAutomationService(context as never, configuration as never, output as never, argv)).toBe(0);
+  expect(update.mock.calls.flat().join('\n')).toContain('Waiting for ECS task to stop');
+  expect(update.mock.calls.flat().join('\n')).toContain('Confirming connection in Business');
+  expect(close).toHaveBeenCalledOnce();
+  expect(update).toHaveBeenLastCalledWith('');
+
+  mock.getConnection.mockResolvedValueOnce({ id: 'connection-1', provider: 'AWS', status: 'PENDING_VERIFICATION', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/task' } });
+  mock.pairEcsAutomation.mockRejectedValueOnce(new Error('automation_ecs_pair_wait_failed'));
+  await expect(pairAwsAutomationService(context as never, configuration as never, output as never, argv))
+    .rejects.toThrow('automation_ecs_pair_wait_failed');
+  expect(close).toHaveBeenCalledTimes(2);
+});
+
 it('rejects a stale ECS task definition before starting pairing', async () => {
   mock.inspectCloudTargetForPairing.mockResolvedValueOnce({ target: { provider: 'AWS', region: 'us-east-1', cluster: 'jobs', service: 'worker' }, image: '123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:v1', container: 'app', identity: 'arn:aws:iam::123456789012:role/task', revision: 'rev:2' });
   const output = terminal();

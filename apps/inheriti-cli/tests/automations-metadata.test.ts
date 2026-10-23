@@ -74,7 +74,7 @@ it('prints spaced EC2 and Dockerfile instructions for a noninteractive terminal'
   expect(printed).toContain('inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID');
   expect(printed).toContain('setup --install checks service-user access');
   expect(printed).not.toContain('Confirm the systemd service user');
-  expect(printed).toContain("1. Add this instruction to your application's final Dockerfile stage");
+  expect(printed).toContain('The final Dockerfile stage needs Node.js 22 or later and npm');
   expect(printed).toContain('2. Build and deploy the image');
   expect(printed).toContain('RUN npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-dev.4');
   expect(printed).toContain(`&& test "$(inheriti --version)" = '1.2.3-dev.4'`);
@@ -118,6 +118,7 @@ it('prints container instructions directly when --container is passed', async ()
   expect(await automationRuntimeInstructions(output, '1.2.3-dev.4', ['--container'])).toBe(0);
   const printed = output.write.mock.calls.flat().join('\n');
   expect(printed).toContain('Dockerfile');
+  expect(printed).toContain('FROM node:22-bookworm-slim');
   expect(printed).not.toContain('Linux EC2 instance');
   expect(select).not.toHaveBeenCalled();
 });
@@ -377,10 +378,11 @@ it('passes window closure and CLI cancellation to proof browser and closes on fa
   expect(complete).not.toHaveBeenCalled();
 });
 
-it('creates a connection from nonsecret provider fields and prints only its ID', async () => {
+it('prints the new connection name and ID without provider trust details', async () => {
   const output = terminal(false);
   expect(await automationManage(context as never, configuration as never, output, new AbortController().signal,
     ['create', '--id', 'connection-2', '--name', 'Deploy', '--provider', 'GITHUB', '--deployment-environment', 'TEST', '--repository', 'acme/deploy', '--environment', 'test', '--workflow', 'deploy.yml'])).toBe(0);
+  expect(output.write).toHaveBeenCalledWith('Connection created: Deploy (connection-2)');
   expect(createConnection).toHaveBeenCalledWith(expect.objectContaining({ id: 'connection-2', trust: { method: 'GITHUB_ACTIONS_OIDC', repositoryName: 'acme/deploy', environment: 'test', workflow: 'deploy.yml' } }));
   expect(output.write.mock.calls.flat().join('\n')).not.toContain('deploy.yml');
   expect(output.write.mock.calls.flat()).toContain('Expected audience: urn:inheriti:automation:connection:connection-2');

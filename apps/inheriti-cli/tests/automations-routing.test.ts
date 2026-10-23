@@ -43,6 +43,34 @@ it('routes management and setup in dev, rejects stg and prod', async () => {
   expect(manage).not.toHaveBeenCalled();
 });
 
+it('shows the complete AWS CLI error including its operation and permission', async () => {
+  manage.mockRejectedValueOnce(Object.assign(new Error('automation_cloud_inspection_failed'), {
+    providerDiagnostic: 'AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation: User is not authorized to perform: ecs:DescribeTaskDefinition on resource',
+  }));
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation'));
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('not authorized to perform: ecs:DescribeTaskDefinition'));
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('on resource'));
+});
+
+it('keeps unexpected automation error details private while naming the command', async () => {
+  manage.mockRejectedValueOnce(new Error('secret-value'));
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('Automations create failed unexpectedly'));
+  expect(output.writeError).not.toHaveBeenCalledWith(expect.stringContaining('secret-value'));
+});
+
+it('shows provider diagnostics when publishing automation secrets', async () => {
+  publish.mockRejectedValueOnce(Object.assign(new Error('automation_aws_provider_failed'), {
+    providerDiagnostic: 'AWS CLI: AccessDeniedException in PutSecretValue (permission secretsmanager:PutSecretValue).',
+  }));
+  const { code, output } = await run('dev', ['secrets', 'publish', 'aws', '--plan', 'plan-1']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('permission secretsmanager:PutSecretValue'));
+});
+
 it('routes safe metadata commands and rejects missing plan IDs', async () => {
   expect((await run('local', ['automations', 'list'], false)).code).toBe(0);
   expect((await run('local', ['automations', 'grants', 'plan-1'], false)).code).toBe(0);

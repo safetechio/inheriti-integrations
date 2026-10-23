@@ -120,6 +120,7 @@ async function describeCloudTarget(
       '--region', region, '--output', 'json',
     ]));
     const definition = record(response.taskDefinition);
+    if (!definition.taskRoleArn) throw new Error('automation_ecs_task_role_missing');
     const container = selectContainer(definition.containerDefinitions, target.container);
     const entryPoint = command(container.entryPoint ?? []);
     if (requireStartup && !entryPoint.length) throw new Error('automation_cloud_startup_unknown');

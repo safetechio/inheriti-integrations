@@ -82,7 +82,7 @@ export async function automationRuntimeInstructions(terminal: Terminal, cliVersi
         'The command installs this CLI version remotely. Later, setup --install checks service-user access.');
   }
   if (target === 'container' || target === 'both') {
-    terminal.write(`\nECS / Cloud Run container\n\n1. Add this instruction to your application's final Dockerfile stage (with npm and Node.js):\n` +
+    terminal.write(`\nECS / Cloud Run container\n\n1. The final Dockerfile stage needs Node.js 22 or later and npm. If it lacks them, use a Node.js base image for that stage, for example FROM node:22-bookworm-slim, while preserving your application's setup. Then add:\n` +
       (local || tarball ? `${tarball ? 'For this test, use the copied inheriti-cli.tgz; do not commit it.' : "Copy the locally built .tgz into your application's Docker build context as inheriti-cli.tgz for this test only; do not commit it."}\n` +
         `COPY inheriti-cli.tgz /tmp/inheriti-cli.tgz\n` +
         `RUN npm install --engine-strict --global --prefix /usr/local /tmp/inheriti-cli.tgz \\\n` +
@@ -346,7 +346,7 @@ export async function automationManage(
     const details = provider.trust(resolvedOptions, id);
     if (!details || !AutomationProviderValue.from(provider.value).accepts(details)) { terminal.writeError(usage); return 1; }
     await operations.createConnection({ id, name: options['--name'], provider: provider.value, environment: environment as 'TEST' | 'LIVE', trust: details });
-    terminal.write(`Connection created: ${id}`);
+    terminal.write(`Connection created: ${options['--name']} (${id})`);
     const expectedAudience = AutomationProviderValue.from(provider.value).expectedAudience(id, details);
     if (expectedAudience) terminal.write(`Expected audience: ${expectedAudience}`);
     return 0;

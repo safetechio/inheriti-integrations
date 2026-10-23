@@ -15,8 +15,8 @@ import type { Terminal } from '../output.js';
 import { renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { promptText } from '../render/select.js';
-import { chmod, realpath, writeFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { chmod, realpath, stat, writeFile } from 'node:fs/promises';
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { cliAutomationProvider } from './automation-provider.js';
 
 const usage = [
@@ -165,21 +165,21 @@ export async function automationSetup(
     planId: options['--plan'], connection,
     mappings,
   });
+  const printManualSummary = (): void => terminal.write(`\nPrepare ${bundle.provider} startup script\nPlan: ${options['--plan']}\n` +
+    `Connection: ${connection.name} (${connection.id})\n` +
+    `Plan fields:\n${mappings.map(item => `  ${item.envName} ← ${item.selector}`).join('\n')}\n` +
+    `Runtime needs: ${bundle.requiredEnvironment.join(', ') || 'no additional variables'}\n` +
+    'The script sets the connection ID and provider. It does not deploy the image or reveal plan values.');
   if (connection.provider === 'PORTABLE') {
     if (['--project', '--region', '--job', '--cluster', '--service',
       '--task-definition', '--container', '--script-path', '--save', '--apply', '--install', '--replace', '--image', '--cli-path', '--expect-revision'].some(key => options[key])) {
       terminal.writeError(usage);
       return 1;
     }
-    renderJson(terminal, {
-      status: 'manual_setup_required', provider: bundle.provider,
-      environment: bundle.environment,
-      mappings,
-      requiredEnvironment: bundle.requiredEnvironment,
-      instructions: bundle.instructions,
-    });
+    printManualSummary();
     terminal.write('--- Launcher script (save as an executable file) ---');
     terminal.write(bundle.script);
+    terminal.write(`Before deploying:\n${bundle.instructions.map(item => `• ${item}`).join('\n')}`);
     return 0;
   }
   if (options['--instance']) {
@@ -245,28 +245,36 @@ export async function automationSetup(
   }
   if (!['--project', '--region', '--job', '--cluster', '--service', '--task-definition', '--container'].some(key => options[key]) &&
       !applying && !options['--image'] && !options['--expect-revision']) {
-    renderJson(terminal, { status: 'manual_setup_required', provider: bundle.provider,
-      environment: bundle.environment, mappings, requiredEnvironment: bundle.requiredEnvironment,
-      instructions: bundle.instructions });
+    printManualSummary();
     const choice = options['--save'] ? 'save' : terminal.interactive
       ? await promptSelect('How should the launcher be delivered?', [
-        { value: 'print', description: 'Print script' },
-        { value: 'save', description: 'Save as a file in this app project' },
+        { value: 'save', description: 'Save startup script in this app project' },
+        { value: 'print', description: 'Print startup script in terminal' },
       ]) : 'print';
     if (!choice) return 1;
     if (choice === 'print') {
       terminal.write('--- Launcher script (save as an executable file) ---');
       terminal.write(bundle.script);
+      terminal.write(`Before deploying:\n${bundle.instructions.map(item => `• ${item}`).join('\n')}`);
       return 0;
     }
-    const source = options['--save'] ?? await promptText('Save launcher as (relative to this Docker build context):');
-    if (!source || isAbsolute(source) || source === '.' || source === '..' || /[\0\[\]*?]/u.test(source)) {
-      terminal.writeError('Choose a relative file path inside the current Docker build context without Docker COPY wildcard characters.');
+    const answer = options['--save'] ?? await promptText('Save in project: folder or .sh file · Enter uses inheriti-start.sh');
+    if (answer === undefined) return 1;
+    const source = answer.trim() || 'inheriti-start.sh';
+    if (isAbsolute(source) || source === '..' || /[\0\[\]*?]/u.test(source)) {
+      terminal.writeError('Choose a relative folder or .sh file inside the current Docker build context.');
       return 1;
     }
     try {
       const base = await realpath(process.cwd());
-      const destination = resolve(base, source);
+      const selected = resolve(base, source);
+      const existing = await stat(selected).catch(() => undefined);
+      const folder = source === '.' || source.endsWith('/') || !extname(source) || existing?.isDirectory();
+      if (folder && !existing?.isDirectory()) {
+        terminal.writeError('That folder does not exist. Create it first, or enter a .sh filename in this project.');
+        return 1;
+      }
+      const destination = folder ? join(selected, 'inheriti-start.sh') : selected;
       const inside = relative(base, destination);
       const parent = relative(base, await realpath(resolve(destination, '..')));
       if (!inside || inside.startsWith(`..${sep}`) || inside === '..' || isAbsolute(inside) ||
@@ -277,14 +285,18 @@ export async function automationSetup(
       await writeFile(destination, bundle.script.endsWith('\n') ? bundle.script : `${bundle.script}\n`, { flag: 'wx', mode: 0o755 });
       await chmod(destination, 0o755);
       const dockerSource = `./${inside.split(sep).join('/')}`;
-      terminal.write(`Saved launcher: ${inside}`);
-      terminal.write('Add to your Dockerfile:');
+      terminal.write(`\nSaved startup script: ${inside}\nThis shell script (.sh) starts your app through Inheriti; keep it in your Docker build context.\n` +
+        '\n1. Add these lines to your Dockerfile:');
       terminal.write(`COPY ${JSON.stringify([dockerSource, '/usr/local/bin/inheriti-automation'])}`);
       terminal.write('RUN chmod +x /usr/local/bin/inheriti-automation');
       terminal.write('ENTRYPOINT ["/usr/local/bin/inheriti-automation"]');
-      terminal.write('Keep the complete application executable and arguments in image CMD, ECS command, or Cloud Run args. Remove any ECS entryPoint or Cloud Run command override that bypasses this launcher (or set it to the launcher). Then deploy with your usual pipeline.');
+      terminal.write('\n2. Keep your app executable and arguments in image CMD, ECS command, or Cloud Run args. Remove any ECS entryPoint or Cloud Run command override that bypasses this script.\n' +
+        '3. Build and deploy the updated image with your usual pipeline.');
+      terminal.write(`\nBefore deploying:\n${bundle.instructions.map(item => `• ${item}`).join('\n')}`);
     } catch (error) {
-      terminal.writeError(`Could not save launcher: ${error instanceof Error ? error.message : String(error)}`);
+      terminal.writeError((error as NodeJS.ErrnoException).code === 'EEXIST'
+        ? 'The startup script already exists. Choose a different filename or folder; no file was replaced.'
+        : `Could not save startup script: ${error instanceof Error ? error.message : String(error)}`);
       return 1;
     }
     return 0;

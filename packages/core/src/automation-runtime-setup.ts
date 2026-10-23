@@ -110,6 +110,7 @@ export function generateAutomationRuntimeBundle(input: AutomationRuntimeInput): 
   const script = [
     '#!/bin/sh',
     'set -eu',
+    ...Object.entries(policy.environment).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
     '[ "$#" -gt 0 ] || { echo \'Application command required\' >&2; exit 2; }',
     `exec ${cli.map(shellQuote).join(' ')} "$@"`,
     '',

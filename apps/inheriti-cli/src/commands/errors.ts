@@ -8,7 +8,7 @@ export function isExplicitAutomationDenial(error: unknown): boolean {
 }
 
 /** Operators see a mapped message; a stable code is kept for support without a stack trace. */
-export function messageFor(error: unknown, business = false): string {
+export function messageFor(error: unknown, business = false, automationCommand?: string): string {
   if (error instanceof OrganizationChoiceRequired) return error.message;
   if (error instanceof CliConfigurationInvalid) return error.message;
   if (error instanceof UsePlanInvalid) return error.message;
@@ -36,10 +36,30 @@ export function messageFor(error: unknown, business = false): string {
   if (code === 'plan_share_reconstruction_failed' && typeof reason === 'string') {
     return RECONSTRUCTION_MESSAGES[reason] ?? MESSAGES.plan_share_reconstruction_failed!;
   }
-  if (typeof code === 'string') return MESSAGES[code] ?? code;
+  if (typeof code === 'string') return MESSAGES[code] ?? (automationCommand
+    ? `Automations ${automationCommand} failed (${/^automation_[a-z0-9_]+$/u.test(code) ? code : 'unrecognized error code'}). Check the command inputs and provider access.` : code);
   const message = (error as { message?: unknown })?.message;
   if (typeof message === 'string' && Object.hasOwn(MESSAGES, message)) return MESSAGES[message]!;
+  if (automationCommand) {
+    if (typeof message === 'string' && /^Docker (?:build|image|run|push) failed\. Check Docker access, the Dockerfile, and registry sign-in\.$/u.test(message)) return message;
+    if (typeof message === 'string' && /^Could not add Inheriti CLI to the image\. Its final stage needs npm, Node\.js and a shell(?:; this CLI version must also be published on npm)?\.$/u.test(message)) return message;
+    const known: Record<string, string> = {
+      'Authentication required': 'Sign in again before managing automation.',
+      'Invalid Business API response': 'Business returned an invalid automation response. Check the service status before retrying.',
+      'Invalid CLI version': 'The CLI version is invalid. Install a published channel version and retry.',
+      'Invalid verified GitHub release': 'Business returned invalid verified release metadata. Check the integration release.',
+      'Invalid GitHub workflow input': 'The GitHub workflow reference or release input is invalid. Check the repository, file and branch.',
+      'Docker CLI is required. Install Docker and start it before building the image.': 'Docker CLI is required. Install Docker and start it before building the image.',
+    };
+    return typeof message === 'string' && known[message] ? known[message]
+      : `Automations ${automationCommand} failed unexpectedly. Check the selected organisation, provider access and workload status before retrying.`;
+  }
   return typeof name === 'string' && name !== 'Error' ? MESSAGES[name] ?? name : 'The command failed.';
+}
+
+export function providerDiagnosticFor(error: unknown): string | undefined {
+  const value = (error as { providerDiagnostic?: unknown } | null)?.providerDiagnostic;
+  return typeof value === 'string' && /^(?:AWS|gcloud) CLI: \S/u.test(value) ? value : undefined;
 }
 
 export function planCreationFailureMessage(stage: 'key' | 'context' | 'save', error: unknown): string {
@@ -102,6 +122,48 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_setup_authentication_required: 'Sign in again to manage automation.',
   automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
   automation_setup_request_failed: 'Business did not accept this automation request. Check your access and entries.',
+  automation_cloud_target_invalid: 'The cloud workload or its configuration could not be read. Check the region, project or cluster, workload name and access.',
+  automation_cloud_container_ambiguous: 'The workload has multiple containers. Select the application container with --container.',
+  automation_cloud_identity_invalid: 'The workload identity is missing or invalid. Check its service account or ECS task role.',
+  automation_cloud_inspection_failed: 'The cloud CLI could not inspect the workload. Check local provider access and the target identifiers.',
+  automation_cloud_preview_invalid: 'The runtime preview is invalid. Check the launcher path and environment variable names.',
+  automation_cloud_apply_target_changed: 'The Cloud Run workload changed since preview. Inspect it and preview again.',
+  automation_cloud_apply_input_invalid: 'The Cloud Run deployment inputs are invalid. Check the image, service and launcher.',
+  automation_cloud_apply_environment_conflict: 'A Cloud Run environment variable conflicts with an existing value. Review the mappings before applying.',
+  automation_cloud_apply_existing_wrapper_conflict: 'Cloud Run already has a different startup wrapper. Review its command before applying.',
+  automation_ecs_input_invalid: 'The ECS deployment inputs are invalid. Check the service, image, launcher and mappings.',
+  automation_ecs_response_invalid: 'AWS returned an unexpected ECS response. Inspect the service before retrying.',
+  automation_ecs_service_invalid: 'The ECS service is unavailable or is not using the expected task definition. Check the cluster, service and region.',
+  automation_ecs_identity_changed: 'The ECS task role changed since verification. Inspect the connection and service before retrying.',
+  automation_ecs_revision_changed: 'The ECS task definition changed since preview. Preview the current revision before applying.',
+  automation_ecs_container_ambiguous: 'The ECS task has multiple containers. Select the application container with --container.',
+  automation_ecs_registration_invalid: 'AWS did not return a usable ECS task definition revision. Inspect the service before retrying.',
+  automation_ecs_environment_conflict: 'An ECS environment variable conflicts with an existing value. Review the mappings before applying.',
+  automation_ecs_existing_setup_conflict: 'The ECS task already has a different automation launcher. Review its entry point before applying.',
+  automation_ecs_deployment_unstable: 'The ECS deployment did not become stable. Inspect the service events and task health before retrying.',
+  automation_ecs_provider_failed: 'AWS CLI could not complete the ECS operation. Check local AWS access, ECS permissions and service events.',
+  automation_ecs_pair_source_invalid: 'The ECS task definition cannot be copied for pairing. Check its task role and container configuration.',
+  automation_ec2_pair_invocation_pending: 'The EC2 pairing command is still running in Systems Manager. Check its command status before retrying.',
+  automation_provider_invalid: 'Choose a supported automation provider.',
+  automation_provider_trust_invalid: 'The provider trust details are invalid. Check the workload identity and connection settings.',
+  automation_runtime_provider_invalid: 'The runtime provider does not match the selected connection.',
+  automation_runtime_provider_unsupported: 'This automation provider does not support runtime setup.',
+  automation_runtime_trust_invalid: 'The runtime identity does not match the verified connection.',
+  automation_runtime_input_invalid: 'The runtime setup inputs are invalid. Check the plan, image and target.',
+  automation_mapping_selection_invalid: 'Choose valid plan fields and unique environment variable names for the mapping.',
+  automation_aws_account_mismatch: 'The AWS account does not match the selected publication target. Check your AWS CLI identity and account ID.',
+  automation_aws_parameter_key_unknown: 'An AWS parameter key is not part of the selected field mapping. Preview the mappings again.',
+  automation_aws_parameter_type_invalid: 'The AWS parameter type is unsupported for this publication. Check the destination.',
+  automation_aws_provider_failed: 'AWS CLI could not publish the values. Check local AWS access and target permissions.',
+  automation_aws_publication_canceled: 'AWS publication was canceled before completion. Inspect the destination before retrying.',
+  automation_aws_publisher_input_invalid: 'The AWS publication inputs are invalid. Check the target, account and field mappings.',
+  automation_aws_secret_format_invalid: 'The existing AWS secret has an incompatible format. Choose a compatible target.',
+  automation_aws_secret_promotion_failed: 'AWS could not promote the new secret version. Inspect versions before retrying.',
+  automation_aws_secret_replica: 'The selected AWS secret is a replica. Publish to its primary secret.',
+  automation_aws_secret_rotation_enabled: 'The selected AWS secret has rotation enabled. Review its rotation policy before publishing.',
+  automation_aws_secret_service_managed: 'The selected AWS secret is managed by another service. Choose a secret you control.',
+  automation_aws_secret_version_changed: 'The AWS secret version changed since preview. Preview again before publishing.',
+  automation_aws_secret_version_unknown: 'The AWS secret version could not be confirmed. Inspect versions before retrying.',
   aws_cli_required: 'AWS CLI is required for this command. Install it and make sure aws is on your PATH.',
   aws_authentication_required: 'AWS CLI has no valid credentials. Authenticate locally, then retry this command.',
   gcloud_cli_required: 'Google Cloud CLI is required for this command. Install it and make sure gcloud is on your PATH.',
@@ -160,6 +222,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_ecs_running_image_unavailable: 'No matching running ECS task has a single confirmed image digest. Wait for the service deployment to finish, or pass --image IMAGE@sha256:DIGEST.',
   automation_ecs_pair_service_invalid: 'The ECS service is unavailable or its task definition changed. Inspect it again.',
   automation_ecs_pair_identity_changed: 'The ECS task role changed. Inspect the service and connection before retrying.',
+  automation_ecs_task_role_missing: 'The ECS task definition has no task role (taskRoleArn). Add a task role and update the service; the execution role alone is not enough.',
   automation_ecs_pair_placement_unknown: 'The ECS service launch type or capacity provider could not be copied safely.',
   automation_ecs_pair_network_unknown: 'The ECS service network settings could not be copied safely.',
   automation_ecs_pair_container_ambiguous: 'Select the ECS application container with --container.',

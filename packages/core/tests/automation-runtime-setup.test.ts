@@ -15,6 +15,7 @@ describe('automation runtime bundle', () => {
     expect(bundle.target).toBe('Cloud Run workload');
     expect(bundle.instructions.join(' ')).toContain('service or job');
     expect(bundle.environment).toEqual({ INHERITI_AUTOMATION_PROVIDER: 'GOOGLE_CLOUD', INHERITI_AUTOMATION_CONNECTION_ID: connectionId, INHERITI_AUTOMATION_AUDIENCE: audience });
+    expect(bundle.script).toContain(`export INHERITI_AUTOMATION_AUDIENCE='${audience}'`);
     expect(bundle.script).toContain(`'secrets' 'exec' '${planId}' '--automation' '--env' 'APP_SECRET=sample.password' '--' "$@"`);
     expect(bundle.script).not.toContain('123456789');
   });
@@ -41,6 +42,8 @@ describe('automation runtime bundle', () => {
     expect(bundle.target).toBe('ECS task');
     expect(bundle.requiredEnvironment).toEqual(['AWS_REGION or AWS_DEFAULT_REGION']);
     expect(bundle.environment).not.toHaveProperty('AWS_REGION');
+    expect(bundle.script).toContain("export INHERITI_AUTOMATION_PROVIDER='AWS'");
+    expect(bundle.script).toContain(`export INHERITI_AUTOMATION_CONNECTION_ID='${connectionId}'`);
     expect(bundle.instructions.join(' ')).toContain('taskRoleArn');
   });
 
