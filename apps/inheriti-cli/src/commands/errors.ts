@@ -177,6 +177,8 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_cloud_apply_rollback_unconfirmed: 'Cloud Run could not confirm rollback. Inspect the service revision before retrying.',
   automation_ecs_startup_unknown: 'The ECS container has no explicit startup command. Set its entry point before preparing automation.',
   automation_ecs_deployment_failed: 'ECS could not deploy the update. Inspect the service before retrying.',
+  automation_ecs_deployment_update_failed: 'ECS rejected the service update. Inspect the service and task definition before retrying.',
+  automation_ecs_deployment_wait_failed: 'ECS did not report a stable service before the wait ended. Inspect service events and task health before retrying.',
   automation_ecs_rollback_failed: 'ECS could not restore the previous task definition. Inspect the service before retrying.',
   automation_ecs_rollback_unconfirmed: 'ECS could not confirm rollback. Inspect the service task definition before retrying.',
   automation_ec2_input_invalid: 'Check the EC2 instance, service name, application command and service user.',

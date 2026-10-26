@@ -113,7 +113,7 @@ describe('cloud target inspection', () => {
   it('inspects ECS service task role and explicit startup', async () => {
     const run: CloudCommandRunner = async (_, args) => args[1] === 'describe-services'
       ? JSON.stringify({
-        services: [{ taskDefinition: 'arn:aws:ecs:us-east-1:123456789012:task-definition/app:3' }],
+        services: [{ taskDefinition: 'arn:aws:ecs:us-east-1:123456789012:task-definition/app:3', healthCheckGracePeriodSeconds: 180 }],
         failures: [],
       })
       : JSON.stringify({ taskDefinition: {
@@ -128,6 +128,8 @@ describe('cloud target inspection', () => {
     const result = await inspectCloudTarget(ecs, run);
     expect(result.command).toEqual(['/bin/sh', '-c', 'exec node server.js']);
     expect(result.identity).toBe('arn:aws:iam::123456789012:role/app');
+    expect(previewCloudTarget(result, '/opt/inheriti/launch.sh', []).healthCheckGracePeriodSeconds).toBe(180);
+    expect(previewCloudTarget(result, '/opt/inheriti/launch.sh', []).healthCheckGraceWarning).toContain('manual SafeKey approval');
     expect(JSON.stringify(result)).not.toContain('do-not-return');
   });
 

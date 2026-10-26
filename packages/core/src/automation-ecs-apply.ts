@@ -141,9 +141,12 @@ export async function applyEcsAutomation(input: EcsApplyInput, run: EcsApplyRunn
     if (!identifier(nextRevision) || nextRevision === previousRevision) throw new Error('automation_ecs_registration_invalid');
     const beforeUpdate = await describeService();
     if (beforeUpdate.taskDefinition !== previousRevision) throw new Error('automation_ecs_revision_changed');
+    let failure = 'automation_ecs_deployment_update_failed';
     try {
       await call(['update-service', '--cluster', target.cluster, '--service', target.service, '--task-definition', nextRevision]);
+      failure = 'automation_ecs_deployment_wait_failed';
       await run(['ecs', 'wait', 'services-stable', '--cluster', target.cluster, '--services', target.service, '--region', target.region]);
+      failure = 'automation_ecs_deployment_unstable';
       const deployed = await describeService();
       const deployments = array(deployed.deployments).map(object);
       if (deployed.status !== 'ACTIVE' || deployed.taskDefinition !== nextRevision || deployments.length !== 1 ||
@@ -156,7 +159,7 @@ export async function applyEcsAutomation(input: EcsApplyInput, run: EcsApplyRunn
     } catch {
       try {
         const current = await describeService();
-        if (current.taskDefinition === previousRevision) throw new Error('automation_ecs_deployment_failed');
+        if (current.taskDefinition === previousRevision) throw new Error(failure);
         if (current.taskDefinition !== nextRevision) throw new Error('automation_ecs_revision_changed');
         await call(['update-service', '--cluster', target.cluster, '--service', target.service, '--task-definition', previousRevision]);
         await run(['ecs', 'wait', 'services-stable', '--cluster', target.cluster, '--services', target.service, '--region', target.region]);
@@ -171,10 +174,10 @@ export async function applyEcsAutomation(input: EcsApplyInput, run: EcsApplyRunn
           throw new Error('automation_ecs_rollback_unconfirmed');
       } catch (error) {
         if (error instanceof Error && (error.message === 'automation_ecs_revision_changed' ||
-            error.message === 'automation_ecs_deployment_failed' || error.message === 'automation_ecs_rollback_unconfirmed')) throw error;
+            error.message === failure || error.message === 'automation_ecs_rollback_unconfirmed')) throw error;
         throw new Error('automation_ecs_rollback_failed');
       }
-      throw new Error('automation_ecs_deployment_failed');
+      throw new Error(failure);
     }
     return { previousRevision, revision: nextRevision, image: input.image, status: 'deployed' };
   } finally {
