@@ -26,7 +26,7 @@
       "electron"
     ],
     "overrides": {
-      "@safetech/inheriti-core-sdk": "4.0.37"
+      "@safetech/inheriti-core-sdk": "4.0.38"
     }
   },
   "devDependencies": {
