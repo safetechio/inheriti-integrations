@@ -382,7 +382,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
 <body>
 <main>
   <header class="page-header">
-    <p class="eyebrow">Inheriti Business</p>
+    <p class="eyebrow">Inheriti® Business</p>
     <h1>Create plan</h1>
     <p class="subtitle">Create assets for a protection plan.</p>
     ${!reviewAsset && !clarification && !options.hasPreviousInput ? '<div class="secure-notice"><strong>Secure session</strong><span>Your message is processed on this device. Only the reviewed plan is sent when you create it.</span></div>' : ''}
@@ -631,13 +631,13 @@ export function renderLocalPlanResultPage(created: unknown, fontUrl?: string): s
   const status = value.status === 'READY' || value.status === 'PENDING' ? value.status : null;
   const planId = typeof value.planId === 'string' && value.planId.length <= 200 ? value.planId : null;
   const heading = status === 'READY' ? 'Plan ready' : status === 'PENDING' ? 'Plan pending' : 'Plan creation completed';
-  const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti Business.' : 'You can close this window and return to your workflow.';
+  const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti® Business.' : 'You can close this window and return to your workflow.';
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${heading} · Inheriti Business</title>
+  <title>${heading} · Inheriti® Business</title>
   <style>${fontUrl ? `@font-face { font-family: AppFont; src: url('${fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${style}</style>
 </head>
 <body>
@@ -651,6 +651,6 @@ export function renderLocalPlanResultPage(created: unknown, fontUrl?: string): s
 }
 
 export function renderLocalPlanCanceledPage(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session canceled · Inheriti Business</title><style>${style}</style></head>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session canceled · Inheriti® Business</title><style>${style}</style></head>
   <body><main><section class="panel" role="status"><h1>Session canceled</h1><p>You can close this window and return to your workflow.</p></section></main></body></html>`;
 }

@@ -10,7 +10,7 @@ import { planCreationFailureMessage } from './errors.js';
 
 export async function createPlan(context: CliContext, configuration: CliConfiguration | undefined, terminal: Terminal, signal: AbortSignal, fontFile?: URL, hints?: LocalPlanHints): Promise<number> {
   if (!configuration?.business || !context.organization) {
-    terminal.writeError('Select a Business Organisation before creating a plan.');
+    terminal.writeError('Select an Inheriti® Business Organisation before creating a plan.');
     return 1;
   }
   if (!terminal.interactive) {

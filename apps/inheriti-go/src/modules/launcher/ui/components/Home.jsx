@@ -2,7 +2,7 @@ import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { useAppVersion } from '../hooks/useAppVersion.js';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
   const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
@@ -20,6 +20,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
     </header>
     <div className="tray-scroll tray-home-content">
       {notice && <p className="tray-home-notice error" role="alert">{notice}</p>}
+      {pendingInboxControls}
       <section className="tray-hero">
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>
       </section>

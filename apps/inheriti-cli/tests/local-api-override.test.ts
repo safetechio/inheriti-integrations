@@ -34,7 +34,7 @@ describe('local Business API endpoint override', () => {
     vi.resetModules();
     const { resolveConfiguration } = await import('../src/configuration.js');
     expect(() => resolveConfiguration({ INHERITI_LOCAL_BUSINESS_API_URL: value }))
-      .toThrow('Local Business API override must be an HTTPS /integrations/ URL');
+      .toThrow('Local Inheriti® Business API override must be an HTTPS /integrations/ URL');
   });
 
   it('does not redirect a dev build', async () => {

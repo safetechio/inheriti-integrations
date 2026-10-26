@@ -683,6 +683,12 @@ describe('choosing a plan', () => {
     ['automation_runtime_trust_invalid', 'verified connection'],
     ['automation_mapping_selection_invalid', 'unique environment variable names'],
     ['automation_ecs_pair_source_invalid', 'task definition'],
+    ['automation_connection_verification_required', 'pair'],
+    ['automation_grant_already_exists', 'already has a grant'],
+    ['automation_grant_already_active', 'already active'],
+    ['automation_grant_revoked', 'cannot be activated'],
+    ['automation_connection_changed', 'connection changed'],
+    ['automation_grant_changed', 'grant changed'],
   ])('explains %s without a generic failure', (code, detail) => {
     expect(messageFor(new Error(code), true, 'setup')).toContain(detail);
   });

@@ -209,10 +209,12 @@ describe('Tray Secure Chat main process', () => {
     onChange({ tenantId: 'org-a', kind: 'CONVERSATIONS' });
     onChange({ tenantId: 'org-a', conversationId: 'conversation', messageId: 'message', status: 'AVAILABLE', recipientStatus: 'UNREAD' });
     onChange({ tenantId: 'org-b', kind: 'CONVERSATIONS' });
-    expect(onSignal).toHaveBeenNthCalledWith(1, { kind: 'CONVERSATIONS' });
-    expect(onSignal).toHaveBeenNthCalledWith(2, { conversationId: 'conversation', messageId: 'message',
+    expect(onSignal).toHaveBeenNthCalledWith(1, { kind: 'CONVERSATIONS', tenantId: 'org-a' });
+    expect(onSignal).toHaveBeenNthCalledWith(2, { tenantId: 'org-a', conversationId: 'conversation', messageId: 'message',
       status: 'AVAILABLE', recipientStatus: 'UNREAD' });
-    expect(onSignal).toHaveBeenCalledTimes(2);
+    onChange({ tenantId: 'org-b', conversationId: 'other', messageId: 'new', status: 'AVAILABLE' });
+    expect(onSignal).toHaveBeenNthCalledWith(3, { kind: 'CONVERSATIONS', tenantId: 'org-b' });
+    expect(onSignal).toHaveBeenNthCalledWith(4, { tenantId: 'org-b', conversationId: 'other', messageId: 'new', status: 'AVAILABLE' });
   });
 
   it('aborts a pending native picker before any file upload after hide and organization switch', async () => {

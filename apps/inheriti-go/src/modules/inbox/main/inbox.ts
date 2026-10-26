@@ -8,10 +8,10 @@ import { TrayInboxIdentity } from './identity.js';
 import type { InboxIdentityState } from './identity.js';
 import { InboxReadAck } from './read-ack.js';
 
-export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'NEW_MESSAGE' }
-  | { kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }
+export type TrayInboxSignal = { kind: 'PARTICIPANTS' | 'NEW_MESSAGE'; tenantId?: string }
+  | { kind: 'CONVERSATIONS'; tenantId?: string; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }
   | { kind: 'PRESENCE'; tenantId: string; memberIds?: string[]; checkedAt?: string; connected: boolean }
-  | { conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string };
+  | { conversationId: string; messageId: string; status: string; tenantId?: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string };
 
 const MAX_FILE_BYTES = 10_000_000;
 const MAX_VIEWER_TEXT_BYTES = 45 * 1024;
@@ -107,22 +107,26 @@ export class TrayInbox {
     this.listen();
     return this.client().client.listConversations(input);
   }
+  listOrganizationConversations(organizationId: string, input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) {
+    return createNodeInbox({ apiUrl: this.apiUrl, environment: this.environment, organizationId,
+      getBearerToken: async () => (await this.token()) ?? null }).listConversations(input);
+  }
   listen(): void {
     if (!this.stopSignals && this.onSignal) {
       const tenantId = this.selectedOrganization();
       this.stopSignals = createNodeInboxEventListener(this.apiUrl, async () => (await this.token()) ?? null,
         (signal) => {
-          if (signal.tenantId !== this.selectedOrganization()) return;
+          if (signal.tenantId !== this.selectedOrganization() && !('messageId' in signal) && signal.kind !== 'CONVERSATIONS') return;
           if ('kind' in signal) {
             if (signal.kind === 'CONVERSATIONS') {
-              this.onSignal?.({ kind: 'CONVERSATIONS', ...(signal.conversationId ? { conversationId: signal.conversationId } : {}),
+              this.onSignal?.({ kind: 'CONVERSATIONS', tenantId: signal.tenantId, ...(signal.conversationId ? { conversationId: signal.conversationId } : {}),
                 ...(signal.action ? { action: signal.action } : {}), ...(signal.memberId ? { memberId: signal.memberId } : {}),
                 ...(signal.memberName ? { memberName: signal.memberName } : {}),
                 ...(signal.participantRevision !== undefined ? { participantRevision: signal.participantRevision } : {}) });
             } else this.onSignal?.({ kind: signal.kind });
             return;
           }
-          const update: TrayInboxSignal = { conversationId: signal.conversationId, messageId: signal.messageId, status: signal.status };
+          const update: TrayInboxSignal = { tenantId: signal.tenantId, conversationId: signal.conversationId, messageId: signal.messageId, status: signal.status };
           if (signal.recipientStatus) update.recipientStatus = signal.recipientStatus;
           if (signal.senderMemberId) update.senderMemberId = signal.senderMemberId;
           if (signal.memberId) update.memberId = signal.memberId;

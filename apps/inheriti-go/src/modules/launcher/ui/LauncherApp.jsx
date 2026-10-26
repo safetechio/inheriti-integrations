@@ -31,8 +31,10 @@ export function LauncherApp({ messages }) {
   const [inboxHasNew, setInboxHasNew] = useState(false);
   const [inboxTarget, setInboxTarget] = useState(null);
   const [pendingInboxAction, setPendingInboxAction] = useState(null);
+  const [inboxSwitchBlocked, setInboxSwitchBlocked] = useState(false);
   const [pendingPlanAction, setPendingPlanAction] = useState(null);
   const switchingOrganization = useRef(false);
+  const blockedInboxSwitch = useRef(false);
   const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
   const inboxIdentity = useInboxState(state?.status === 'signed-in' ? state.selectedId : undefined);
@@ -43,6 +45,8 @@ export function LauncherApp({ messages }) {
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
       setPendingInboxAction(action);
+      blockedInboxSwitch.current = false;
+      setInboxSwitchBlocked(false);
     }
   }), [messages, state?.assetCatalog?.length]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
@@ -69,15 +73,18 @@ export function LauncherApp({ messages }) {
     setPendingPlanAction(null);
   }, [pendingPlanAction, state?.status, state?.selectedId, flow, editFlow.busy, editFlow.editing, closeInbox, messages]);
   useEffect(() => {
-    if (!pendingInboxAction || state?.status !== 'signed-in' || switchingOrganization.current) return;
+    if (!pendingInboxAction || state?.status !== 'signed-in' || switchingOrganization.current || blockedInboxSwitch.current) return;
     const belongsToAccount = state.organizations?.some(({ id }) => id === pendingInboxAction.organizationId);
     if (belongsToAccount && state.selectedId !== pendingInboxAction.organizationId) {
       if (flow.busy || flow.preparing || editFlow.busy) return;
       switchingOrganization.current = true;
       void flow.selectOrganization(pendingInboxAction.organizationId).then((selected) => {
-        setInboxTarget(selected && pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
-        if (selected) { setInboxOpen(true); setInboxHasNew(false); }
-        setPendingInboxAction(null);
+        if (selected) {
+          setInboxTarget(pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
+          setInboxOpen(true);
+          setInboxHasNew(false);
+          setPendingInboxAction(null);
+        } else { blockedInboxSwitch.current = true; setInboxSwitchBlocked(true); }
       }).finally(() => { switchingOrganization.current = false; });
       return;
     }
@@ -86,7 +93,8 @@ export function LauncherApp({ messages }) {
     setInboxOpen(true);
     setInboxHasNew(false);
     setPendingInboxAction(null);
-  }, [pendingInboxAction, state, flow, editFlow.busy]);
+  }, [pendingInboxAction, state, flow, editFlow.busy, inboxSwitchBlocked]);
+  const pendingInboxControls = pendingInboxAction && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>;
   const createPlanFromSecret = (suggestion) => {
     if (!flow.openInboxSuggestion(suggestion)) return;
     setInboxOpen(false);
@@ -135,18 +143,20 @@ export function LauncherApp({ messages }) {
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
+    pendingInboxControls={pendingInboxControls}
     showPlanActions={state.assetCatalog?.length > 0}
     onOrganizationChange={(id) => { closeInbox(); setInboxHasNew(false); editFlow.close(); void flow.selectOrganization(id); }}
     canCreate={canCreate && state.assetCatalog?.length > 0 && !editFlow.busy}
     canEdit={!!state.selectedId && state.assetCatalog?.length > 0 && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
     onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
-    onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); void flow.signOut(); }}
+    onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); setPendingInboxAction(null); void flow.signOut(); }}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName}
   />;
 
   return <main className="tray-screen">
+    {pendingInboxControls}
     <p id="status" className="sr-only" role="status">{status}</p>
     {signedIn && state.selectedId && editFlow.editing && flow.step === 'actions' && <PlanEditPanel messages={messages} state={state} flow={editFlow} onOpenApp={() => void session.openApp(state.edit?.planId)} onSignIn={() => void session.signIn()} />}
     {flow.step === 'capture' && <QuickPlanForm

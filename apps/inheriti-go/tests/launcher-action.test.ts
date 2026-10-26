@@ -80,6 +80,32 @@ it.skipIf(!chrome)('keeps a Secure Chat notification pending through sign-in and
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+it.skipIf(!chrome)('keeps a cancelled organisation switch for retry or dismissal', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-notification-retry-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',selectedId:'org-a',organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
+      let calls=0, sent=false;
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>base,
+        onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:(callback)=>{if(!sent){sent=true;setTimeout(()=>callback({kind:'OPEN_INBOX',organizationId:'org-b',conversationId:'chat-1'}),0)}return()=>{}},
+        select:async(id)=>{calls++;if(calls===1)throw Error('cancelled');return {...base,selectedId:id}},
+        signOut:async()=>({...base,status:'signed-out'}),openApp:async()=>{},version:async()=>''};
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.firstCalls=String(calls);root.dataset.firstInbox=String(!!document.querySelector('.inbox-panel'));root.dataset.retry=String(!!Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Retry'));},300);
+      setTimeout(()=>Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Retry')?.click(),400);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.secondCalls=String(calls);root.dataset.secondInbox=String(!!document.querySelector('.inbox-panel'));},650);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=750', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-first-calls="1"');
+    expect(html).toContain('data-first-inbox="false"');
+    expect(html).toContain('data-retry="true"');
+    expect(html).toContain('data-second-calls="2"');
+    expect(html).toContain('data-second-inbox="true"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('opens private and team capture for their tray actions', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-react-'));
   try {

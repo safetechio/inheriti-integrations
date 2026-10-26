@@ -43,7 +43,9 @@ export class TraySession {
   private pendingSignIn: Promise<void> | undefined;
   private pendingAuthorization: ReturnType<NodeIntegrationCore['auth']['beginAuthorizationCode']> | undefined;
   private pendingSelections = 0;
+  private signingOut = false;
   private organizationRevision = 0;
+  private authenticationRevision = 0;
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
   private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
@@ -95,6 +97,7 @@ export class TraySession {
   setPublisher(publish: () => void): void { this.custodianPrompt.setPublisher(publish); }
   setInboxPublisher(publish: (signal?: TrayInboxSignal) => void): void { this.inboxPublisher = publish; }
   setInboxStatePublisher(publish: () => void): void { this.inboxStatePublisher = publish; }
+  inboxSessionRevision(): number { return this.authenticationRevision; }
   async availableUpdate(version: string): Promise<InternalBuild | undefined> {
     if (this.status !== 'signed-in') throw new Error('sign_in_required');
     const platform = `${process.platform}-${process.arch}${process.platform === 'darwin' ? '-update' : ''}`;
@@ -126,6 +129,7 @@ export class TraySession {
   }
 
   signIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    if (this.signingOut) return Promise.reject(new Error('sign_out_in_progress'));
     if (this.status === 'restoring') return Promise.resolve();
     if (this.pendingSignIn) return this.pendingSignIn;
     const pending = this.runSignIn(onChange, openBrowser);
@@ -136,6 +140,7 @@ export class TraySession {
   }
 
   private async runSignIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    ++this.authenticationRevision;
     const authorization = new AbortController();
     this.authorization = authorization;
     this.configuration.scopes = ['openid', 'profile', 'offline_access'];
@@ -187,6 +192,7 @@ export class TraySession {
   }
 
   async restore(): Promise<void> {
+    ++this.authenticationRevision;
     ++this.organizationRevision;
     this.status = 'restoring';
     let hasSavedSession = false;
@@ -215,6 +221,7 @@ export class TraySession {
   }
 
   async select(id: string): Promise<void> {
+    if (this.signingOut) throw new Error('sign_out_in_progress');
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     if (!this.organizations.some((organization) => organization.id === id)) throw new Error('organization_access_denied');
     ++this.organizationRevision;
@@ -233,11 +240,12 @@ export class TraySession {
       try { this.operatorSessions.saveSelectedOrganization(id); } catch { /* Organisation selection still works without a saved preference. */ }
     } finally {
       this.pendingSelections -= 1;
+      if (this.status === 'signed-in' && this.selectedId && !this.signingOut) this.inbox.listen();
     }
-    this.inbox.listen();
   }
 
   createQuickPlan(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
+    if (this.signingOut) throw new Error('sign_out_in_progress');
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     if (this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
@@ -284,7 +292,10 @@ export class TraySession {
 
   async discardPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.discard(); }
   async cancelPlanEdit(): Promise<void> { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); await this.planEdit.cancelAccess(); }
-  recoverPlanEdit(onChange: () => void): Promise<void> { return this.planEdit.recover(onChange); }
+  recoverPlanEdit(onChange: () => void): Promise<void> {
+    if (this.status !== 'signed-in') throw new Error('organization_required');
+    return this.planEdit.recover(onChange);
+  }
   protectedFilesEnabled(): boolean { return PROTECTED_FILE_FLAGS[this.deployment]; }
   inboxState(): InboxIdentityState & { protectedFileEnabled: boolean } {
     return { ...this.inbox.state(), protectedFileEnabled: this.protectedFilesEnabled() };
@@ -323,6 +334,11 @@ export class TraySession {
   createInboxConversation(title: string, participantMemberIds: string[]) { return this.inbox.createConversation(title, participantMemberIds); }
   changeInboxParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) { return this.inbox.changeParticipants(conversationId, input); }
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
+  listOrganizationInboxConversations(organizationId: string, input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) {
+    if (this.status !== 'signed-in' || this.signingOut || !this.organizations.some(({ id }) => id === organizationId))
+      throw new Error('organization_access_denied');
+    return this.inbox.listOrganizationConversations(organizationId, input);
+  }
   clearInboxHistory(conversationId: string) { return this.inbox.clearHistory(conversationId); }
   listInboxParents(conversationId: string) { return this.inbox.listParents(conversationId); }
   listInboxParentMetadata(conversationId: string) { return this.inbox.listParentMetadata(conversationId); }
@@ -359,27 +375,40 @@ export class TraySession {
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.cancelInboxAccess(); this.validatedInboxOrganization = undefined; void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
-    ++this.organizationRevision;
-    this.cancelInboxAccess();
-    this.validatedInboxOrganization = undefined;
-    this.custodianPrompt.cancel();
-    this.proDevice?.clearPin();
+    if (this.signingOut) throw new Error('sign_out_in_progress');
     if (this.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
     this.planEdit.assertIdle();
-    this.inbox.clear();
-    this.authorization?.abort();
-    await this.pendingSignIn;
-    this.authorization = undefined;
-    await this.planEdit.clear();
-    await this.organizationKeys.forget();
-    await this.core.auth.clear();
-    this.organizations = [];
-    this.quickPlans.clear();
-    this.selectedId = undefined;
-    this.accountName = undefined;
-    this.status = 'signed-out';
-    this.message = undefined;
+    this.signingOut = true;
+    ++this.authenticationRevision;
+    const previousStatus = this.status;
+    this.status = 'restoring';
+    try {
+      ++this.organizationRevision;
+      this.cancelInboxAccess();
+      this.validatedInboxOrganization = undefined;
+      this.custodianPrompt.cancel();
+      this.proDevice?.clearPin();
+      this.inbox.clear();
+      this.authorization?.abort();
+      await this.pendingSignIn;
+      this.authorization = undefined;
+      await this.planEdit.clear();
+      await this.organizationKeys.forget();
+      await this.core.auth.clear();
+      this.organizations = [];
+      this.quickPlans.clear();
+      this.selectedId = undefined;
+      this.accountName = undefined;
+      this.status = 'signed-out';
+      this.message = undefined;
+    } catch (error) {
+      this.status = previousStatus;
+      if (this.status === 'signed-in' && this.selectedId) this.inbox.listen();
+      throw error;
+    } finally {
+      this.signingOut = false;
+    }
   }
 
   private async discover(signal?: AbortSignal): Promise<void> {

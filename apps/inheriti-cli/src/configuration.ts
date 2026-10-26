@@ -13,7 +13,7 @@ export interface CliConfiguration {
   issuer: string;
   clientId: string;
   /**
-   * The interactive code + PKCE client shared with browser hosts in Business mode.
+   * The interactive code + PKCE client shared with browser hosts in Inheriti® Business mode.
    * Falls back to `clientId` for existing standalone configurations.
    */
   interactiveClientId: string;
@@ -95,7 +95,7 @@ function readConfigurationFile(
   const deploymentValue = (parsed as Record<string, unknown>).deployment;
   const deployment = businessDeployment(deploymentValue);
   if (deploymentValue !== undefined && deployment === undefined) {
-    throw new CliConfigurationInvalid('configuration_file_invalid', `${path}: unknown Business deployment.`);
+    throw new CliConfigurationInvalid('configuration_file_invalid', `${path}: unknown Inheriti® Business deployment.`);
   }
   if (deployment !== undefined && business !== true) {
     throw new CliConfigurationInvalid('configuration_conflict', `${path}: deployment requires business: true.`);
@@ -165,7 +165,7 @@ export function resolveConfiguration(
     );
   }
   if (file.business && environmentVariables.INHERITI_ELEMENTS_APPLICATION_ID) {
-    throw new CliConfigurationInvalid('configuration_conflict', 'Business configuration must not include applicationId.');
+    throw new CliConfigurationInvalid('configuration_conflict', 'Inheriti® Business configuration must not include applicationId.');
   }
   return {
     apiUrl: required(environmentVariables, 'INHERITI_ELEMENTS_API_URL', 'apiUrl'),
@@ -190,11 +190,11 @@ export function resolveConfiguration(
 
 function localBusinessApiUrl(value: string): string {
   if (!URL.canParse(value)) {
-    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Business API override must be an HTTPS /integrations/ URL.');
+    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Inheriti® Business API override must be an HTTPS /integrations/ URL.');
   }
   const url = new URL(value);
   if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash || url.pathname !== '/integrations/') {
-    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Business API override must be an HTTPS /integrations/ URL without credentials, query or fragment.');
+    throw new CliConfigurationInvalid('local_api_url_invalid', 'Local Inheriti® Business API override must be an HTTPS /integrations/ URL without credentials, query or fragment.');
   }
   return url.toString();
 }

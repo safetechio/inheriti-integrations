@@ -6,7 +6,7 @@ it('refuses creation without a selected Business Organisation before loading a m
   const terminal = { interactive: true, stdoutIsTTY: true, columns: 80, write: vi.fn(), writeError: vi.fn() };
   const context = { core: { getAccessToken: vi.fn() } };
   expect(await createPlan(context as never, undefined, terminal, new AbortController().signal)).toBe(1);
-  expect(terminal.writeError).toHaveBeenCalledWith('Select a Business Organisation before creating a plan.');
+  expect(terminal.writeError).toHaveBeenCalledWith('Select an Inheriti® Business Organisation before creating a plan.');
   expect(context.core.getAccessToken).not.toHaveBeenCalled();
 });
 

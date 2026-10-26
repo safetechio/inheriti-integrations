@@ -107,7 +107,8 @@ export async function promptText(title: string): Promise<string | undefined> {
     });
     return <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width={72}>
       <Text bold color="cyan">{title}</Text>
-      <Text>{value || 'Existing folder or .sh filename · Enter uses default · Esc cancels'}</Text>
+      <Text dimColor>Type a folder or .sh filename · Enter uses default · Esc cancels</Text>
+      <Text color="cyan">{`› ${value}▌`}</Text>
     </Box>;
   }
   const instance = render(<Input />, { exitOnCtrlC: false });

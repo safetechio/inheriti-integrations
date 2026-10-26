@@ -65,7 +65,7 @@ export async function pairGoogleAutomationWorkload(
   });
   const verified = await operations.getConnection(connection.id);
   if (verified.status !== 'VERIFIED') {
-    terminal.writeError('The Cloud Run job finished, but Business has not confirmed the connection. Check its status before proceeding.');
+    terminal.writeError('The Cloud Run job finished, but Inheriti® Business has not confirmed the connection. Check its status before proceeding.');
     return 1;
   }
   renderJson(terminal, { ...result, connectionId: connection.id, connectionStatus: verified.status });

@@ -122,7 +122,8 @@ it('reconciles unread counts across pages and clears them on organization change
     ? { items: [{ unreadCount: 0 }], total: 2 }
     : { items: [{ unreadCount: 1 }], total: 2 });
   const session = { setPublisher, setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId }), listInboxConversations };
+    state: () => ({ status: selectedId ? 'signed-in' : 'signed-out', selectedId, organizations: selectedId ? [{ id: selectedId }] : [] }),
+    listOrganizationInboxConversations: vi.fn((_id: string, input: { offset: number }) => listInboxConversations(input)) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(mock.setTrayUnread).toHaveBeenLastCalledWith(true));
   expect(listInboxConversations).toHaveBeenCalledWith({ limit: 100, offset: 1 });
@@ -141,7 +142,8 @@ it('ignores an unread response that finishes after sign-out', async () => {
   const setPublisher = vi.fn();
   const listInboxConversations = vi.fn(() => new Promise<{ items: { unreadCount: number }[]; total: number }>((resolve) => { finishList = resolve; }));
   const session = { setPublisher, setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId }), listInboxConversations };
+    state: () => ({ status: selectedId ? 'signed-in' : 'signed-out', selectedId, organizations: selectedId ? [{ id: selectedId }] : [] }),
+    listOrganizationInboxConversations: vi.fn(() => listInboxConversations()) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(listInboxConversations).toHaveBeenCalledOnce());
   selectedId = undefined;
@@ -155,7 +157,8 @@ it('ignores an unread response that finishes after sign-out', async () => {
 it('refreshes the dot after the read IPC callback', async () => {
   let unreadCount = 1;
   const session = { setPublisher: vi.fn(), setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), listInboxConversations: vi.fn(async () => ({ items: [{ unreadCount }], total: 1 })) };
+    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }] }),
+    listOrganizationInboxConversations: vi.fn(async () => ({ items: [{ unreadCount }], total: 1 })) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(mock.setTrayUnread).toHaveBeenLastCalledWith(true));
   unreadCount = 0;
@@ -178,6 +181,92 @@ it('shows an OS notification for an unread message while the tray is visible', a
   expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String), body: 'You have a new Secure Chat message.' }));
   expect(mock.send).toHaveBeenCalledWith('tray:inbox-changed', { kind: 'NEW_MESSAGE' });
   expect(listInboxMessages).toHaveBeenCalledOnce();
+});
+
+it('notifies for an unread message in another authorized organization without changing the selected UI', async () => {
+  const setInboxPublisher = vi.fn();
+  const listOrganizationInboxConversations = vi.fn(async (id: string) => ({
+    items: [{ id: 'conversation-b', unreadCount: id === 'org-b' ? 1 : 0 }], total: 1,
+  }));
+  const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    listOrganizationInboxConversations, listInboxMessages: vi.fn(), registeredInboxMemberId: vi.fn() };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ tenantId: 'org-b', conversationId: 'conversation-b', messageId: 'message-b', status: 'AVAILABLE' });
+  await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
+  expect(mock.showNotification).toHaveBeenCalledWith(expect.objectContaining({ body: 'You have unread Secure Chat messages.' }));
+  expect(mock.setTrayUnread).toHaveBeenLastCalledWith(true);
+  expect(session.listInboxMessages).not.toHaveBeenCalled();
+  expect(session.registeredInboxMemberId).not.toHaveBeenCalled();
+  expect(mock.send).not.toHaveBeenCalledWith('tray:inbox-changed', expect.anything());
+  mock.notifications[0]!.emit('click');
+  expect(mock.showLauncher).toHaveBeenLastCalledWith({ kind: 'OPEN_INBOX', organizationId: 'org-b', conversationId: 'conversation-b' });
+});
+
+it('drops an old account’s delayed unread response after another account signs in', async () => {
+  const setInboxPublisher = vi.fn();
+  const setPublisher = vi.fn();
+  let revision = 1;
+  let finish!: (page: { items: { id: string; unreadCount: number }[]; total: number }) => void;
+  const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    inboxSessionRevision: () => revision,
+    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    listOrganizationInboxConversations: vi.fn((id: string) => id === 'org-b'
+      ? new Promise<{ items: { id: string; unreadCount: number }[]; total: number }>((resolve) => { finish = resolve; })
+      : Promise.resolve({ items: [], total: 0 })) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ tenantId: 'org-b', conversationId: 'conversation-b', messageId: 'message-b', status: 'AVAILABLE' });
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  revision = 2;
+  setPublisher.mock.calls[0]![0]();
+  finish({ items: [{ id: 'conversation-b', unreadCount: 1 }], total: 1 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(mock.showNotification).not.toHaveBeenCalled();
+});
+
+it('keeps a pending other-organization notification through a routine selection and membership refresh', async () => {
+  const setInboxPublisher = vi.fn();
+  const setPublisher = vi.fn();
+  let selectedId = 'org-a';
+  let finish!: (page: { items: { id: string; unreadCount: number }[]; total: number }) => void;
+  const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    inboxSessionRevision: () => 1,
+    state: () => ({ status: 'signed-in', selectedId, organizations: [{ id: 'org-a' }, { id: 'org-b' }, { id: 'org-c' }] }),
+    listOrganizationInboxConversations: vi.fn((id: string) => id === 'org-b'
+      ? new Promise<{ items: { id: string; unreadCount: number }[]; total: number }>((resolve) => { finish = resolve; })
+      : Promise.resolve({ items: [], total: 0 })) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ tenantId: 'org-b', conversationId: 'conversation-b', messageId: 'message-b', status: 'AVAILABLE' });
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  selectedId = 'org-c';
+  setPublisher.mock.calls[0]![0]();
+  finish({ items: [{ id: 'conversation-b', unreadCount: 1 }], total: 1 });
+  await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
+  expect(mock.showLauncher).not.toHaveBeenCalledWith(expect.objectContaining({ organizationId: 'org-b' }));
+});
+
+it('retries an unconfirmed other-organization message and ignores its conversation signal in the UI', async () => {
+  const setInboxPublisher = vi.fn();
+  let unreadCount = 0;
+  const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    listOrganizationInboxConversations: vi.fn(async () => ({ items: [{ id: 'conversation-b', unreadCount }], total: 1 })) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  const publish = setInboxPublisher.mock.calls[0]![0];
+  publish({ kind: 'CONVERSATIONS', tenantId: 'org-b', conversationId: 'conversation-b' });
+  const signal = { tenantId: 'org-b', conversationId: 'conversation-b', messageId: 'message-b', status: 'AVAILABLE' };
+  publish(signal);
+  await vi.waitFor(() => expect(session.listOrganizationInboxConversations).toHaveBeenCalled());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(mock.showNotification).not.toHaveBeenCalled();
+  unreadCount = 1;
+  publish(signal);
+  await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
+  expect(mock.send).not.toHaveBeenCalledWith('tray:inbox-changed', expect.anything());
 });
 
 it('opens the notified conversation and dismisses its notice when read', async () => {

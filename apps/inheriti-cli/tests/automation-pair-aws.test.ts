@@ -61,7 +61,7 @@ it('animates pairing stages and closes the live region before reporting success 
   }) as never);
   expect(await pairAwsAutomationService(context as never, configuration as never, output as never, argv)).toBe(0);
   expect(update.mock.calls.flat().join('\n')).toContain('Waiting for ECS task to stop');
-  expect(update.mock.calls.flat().join('\n')).toContain('Confirming connection in Business');
+  expect(update.mock.calls.flat().join('\n')).toContain('Confirming connection in Inheriti® Business');
   expect(close).toHaveBeenCalledOnce();
   expect(update).toHaveBeenLastCalledWith('');
 

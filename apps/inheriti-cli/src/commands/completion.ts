@@ -11,9 +11,9 @@ const candidates = (...values: readonly (readonly [string, string])[]): Candidat
   values.map(([value, description]) => ({ value, description }));
 
 const ROOT = candidates(
-  ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Business organisations'],
+  ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Inheriti® Business organisations'],
   ['plans', 'List and use plans'], ['secrets', 'Machine-oriented secret delivery'],
-  ['automations', 'Manage local Business automations'],
+  ['automations', 'Manage local Inheriti® Business automations'],
   ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
 const PLANS = candidates(

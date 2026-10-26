@@ -102,7 +102,7 @@ describe('CLI configuration', () => {
     expect(resolveConfiguration({ ...configured, INHERITI_ELEMENTS_CLIENT_ID: 'stale-client', INHERITI_ELEMENTS_APPLICATION_ID: 'stale-application' }))
       .toMatchObject({ business: true, clientId: 'business-cli-device' });
     expect(() => resolveConfiguration(withConfigurationFile(JSON.stringify({ business: true, applicationId: 'fake' }))))
-      .toThrow('Business configuration must not include applicationId');
+      .toThrow('Inheriti® Business configuration must not include applicationId');
     expect(() => resolveConfiguration(withConfigurationFile(JSON.stringify({ business: true }))))
       .toThrow('Set apiUrl in the CLI configuration');
   });

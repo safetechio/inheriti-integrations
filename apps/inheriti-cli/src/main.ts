@@ -116,7 +116,7 @@ export async function run(
     const context = createCliContext(configuration, defaultSessionPath(environmentVariables));
     if (command === 'update') {
       if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--install')) { terminal.writeError(commandUsage(['update'], environmentVariables)); return 1; }
-      if (!configuration.business || !BUILD_DEPLOYMENT) { terminal.writeError('Updates require a channel-locked Business build.'); return 1; }
+      if (!configuration.business || !BUILD_DEPLOYMENT) { terminal.writeError('Updates require a channel-locked Inheriti® Business build.'); return 1; }
       return await updateCli(context, terminal, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, rest[0] === '--install');
     }
     if (command === 'organizations') {

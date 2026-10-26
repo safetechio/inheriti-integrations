@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -23,7 +23,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear, forget: mock.keyClear }),
-  createNodeInboxEventListener: () => vi.fn(),
+  createNodeInboxEventListener: (...args: unknown[]) => { mock.listenInbox(...args); return mock.stopInbox; },
   suggestInboxTextAsset: (text: string) => ({ title: 'Saved message', assetType: 'PLAIN-TEXT', assetName: 'Saved message', fields: { text } }),
   quickPlanAssetCatalog: [{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }],
   createQuickPlanOperations: mock.operations,
@@ -86,6 +86,33 @@ describe('TraySession', () => {
     session.cancelInboxAccess(3);
     expect(signal.aborted).toBe(true);
     await expect(pending).rejects.toThrow('aborted');
+  });
+
+  it('allows read-only conversation scans only for discovered organizations', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('local');
+    await session.restore();
+    await session.select('org-a');
+    expect(() => session.listOrganizationInboxConversations('org-x')).toThrow('organization_access_denied');
+    expect(mock.acquireKey).not.toHaveBeenCalled();
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    await session.refreshOrganizations();
+    expect(() => session.listOrganizationInboxConversations('org-b')).toThrow('organization_access_denied');
+  });
+
+  it('keeps the inbox authentication generation stable across selection and organization refresh', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('local');
+    await session.restore();
+    const revision = session.inboxSessionRevision();
+    await session.select('org-a');
+    await session.refreshOrganizations();
+    await session.select('org-b');
+    expect(session.inboxSessionRevision()).toBe(revision);
+    await session.signOut();
+    expect(session.inboxSessionRevision()).toBeGreaterThan(revision);
   });
 
   it('cancels pending Chat access when switching organizations or signing out', async () => {
@@ -561,6 +588,66 @@ describe('TraySession', () => {
     await session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
     expect(mock.operations).toHaveBeenCalledTimes(1);
     expect(mock.operations).toHaveBeenCalledWith(expect.objectContaining({ organizationId: 'org-a' }));
+  });
+
+  it('restarts the current Inbox listener after a rejected switch', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    mock.listenInbox.mockClear();
+    vi.spyOn(TrayPlanEdit.prototype, 'selectOrganization').mockRejectedValueOnce(new Error('edit_recovery_required'));
+    await expect(session.select('org-b')).rejects.toThrow('edit_recovery_required');
+    expect(session.state().selectedId).toBe('org-a');
+    expect(mock.stopInbox).toHaveBeenCalled();
+    expect(mock.listenInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks selection and creation while sign-out cleanup is pending', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    let release!: () => void;
+    mock.keyClear.mockReturnValueOnce(new Promise<void>((resolve) => { release = resolve; }));
+    const signingOut = session.signOut();
+    const listenerCount = mock.listenInbox.mock.calls.length;
+    await expect(session.select('org-b')).rejects.toThrow('sign_out_in_progress');
+    expect(() => session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {})).toThrow('sign_out_in_progress');
+    expect(() => session.listInboxConversations()).toThrow('organization_required');
+    expect(() => session.loadEditablePlans(() => {})).toThrow('organization_required');
+    expect(() => session.recoverPlanEdit(() => {})).toThrow('organization_required');
+    expect(mock.listenInbox).toHaveBeenCalledTimes(listenerCount);
+    release();
+    await signingOut;
+    expect(session.state().status).toBe('signed-out');
+  });
+
+  it('restores the Inbox listener when sign-out cleanup fails', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    mock.listenInbox.mockClear();
+    mock.keyClear.mockRejectedValueOnce(new Error('vault_failure'));
+    await expect(session.signOut()).rejects.toThrow('vault_failure');
+    expect(session.state()).toMatchObject({ status: 'signed-in', selectedId: 'org-a' });
+    expect(mock.listenInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the selected organization context after A to B to A', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    await session.select('org-b');
+    await session.select('org-a');
+    expect(session.state().selectedId).toBe('org-a');
+    expect(mock.operations.mock.calls.map(([options]) => options.organizationId)).toEqual(['org-a', 'org-b', 'org-a']);
+    expect(mock.listenInbox).toHaveBeenCalledTimes(3);
   });
 
   it('clears organization keys and Inbox identity before a rejected organization switch', async () => {

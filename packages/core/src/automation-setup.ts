@@ -62,7 +62,17 @@ export function createAutomationSetupOperations(options: {
     if (!token) throw new Error('Authentication required');
     const response = await transport(url, { method, headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': 'TEST', ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) {
-      const code = (response.status === 400 || response.status === 404) && url.endsWith('/verified-github-release') ? 'automation_verified_release_unavailable'
+      const grantAction = method === 'POST' && /\/automation-grants(?:\/[^/]+\/activate)?$/u.test(url);
+      const detail: unknown = response.status === 400 && grantAction
+        ? await response.json().catch(() => undefined) : undefined;
+      const grantError = detail && typeof detail === 'object' && 'error' in detail && typeof detail.error === 'string' &&
+        (url.endsWith('/activate')
+          ? ['automation_connection_verification_required', 'automation_grant_already_active', 'automation_grant_revoked',
+            'automation_connection_changed', 'automation_grant_changed']
+          : ['automation_grant_already_exists', 'automation_connection_changed']).includes(detail.error)
+        ? detail.error : undefined;
+      const code = grantError ? grantError
+        : (response.status === 400 || response.status === 404) && url.endsWith('/verified-github-release') ? 'automation_verified_release_unavailable'
         : response.status === 401 ? 'automation_setup_authentication_required'
         : response.status === 403 || response.status === 404 ? 'automation_setup_permission_denied'
         : 'automation_setup_request_failed';

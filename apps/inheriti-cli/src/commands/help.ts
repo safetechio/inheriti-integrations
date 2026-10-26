@@ -5,10 +5,10 @@ import { quickPlanAssetCatalog, localPlanAssetLimit, PROTECTED_FILE_FLAGS } from
 
 export function usage(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const configuration = BUILD_DEPLOYMENT
-    ? `Configuration: this artifact is locked to the ${BUILD_DEPLOYMENT} Business deployment. Sign in, then select an organisation.`
+    ? `Configuration: this artifact is locked to the ${BUILD_DEPLOYMENT} Inheriti® Business deployment. Sign in, then select an organisation.`
     : `Configuration: config.json in the existing CLI configuration directory.
              apiUrl, issuer and clientId are required; applicationId is required for
-             standalone plans. For Business set business: true and deployment to
+             standalone plans. For Inheriti® Business set business: true and deployment to
              local, dev or stg; prod requires a production build.
              Environment defaults to TEST. Existing environment overrides still work.`;
   const automationEnabled = Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation);
@@ -20,8 +20,8 @@ inheriti <command>
 
   login              Sign in using the browser
   logout             Clear the local session
-  organizations list List Business organisations and the selected one
-  organizations use [id] Select a Business organisation
+  organizations list List Inheriti® Business organisations and the selected one
+  organizations use [id] Select an Inheriti® Business organisation
   ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
   ${automationEnabled ? 'automations grants PLAN_ID List safe grant metadata for one plan' : ''}
   ${automationEnabled ? 'automations create|verify|trust|disable|usage|runtime Manage connections and runtime guidance' : ''}
@@ -36,7 +36,7 @@ inheriti <command>
   plans logs [id] [--limit n] [--offset n] [--json|--table]
                      Show the plan activity log
   members logs MEMBER_ID [--source MEMBER|AUTOMATION] [--from DATE] [--to DATE] [--limit n] [--offset n] [--json|--table]
-                     Show unified member activity in Business
+                     Show unified member activity in Inheriti® Business
   plans reveal [id] [--field asset.field ...]
                      Copy one or more selected fields without printing their values.
                      Whether approval is needed is read from the plan.
@@ -77,13 +77,13 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
   const details: Readonly<Record<string, string>> = {
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
-    organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Business organisations or select one for this account.`,
+    organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Inheriti® Business organisations or select one for this account.`,
     automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
-      `create|activate|member|revoke>\n\nManage Business automation connections and grants locally. ` +
+      `create|activate|member|revoke>\n\nManage Inheriti® Business automation connections and grants locally. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
-    'automations list': `Usage: inheriti automations list\n\nPrint safe connection metadata for the selected Business Organisation.`,
-    'automations grants': `Usage: inheriti automations grants PLAN_ID\n\nPrint safe grant metadata for one plan in the selected Business Organisation.`,
+    'automations list': `Usage: inheriti automations list\n\nPrint safe connection metadata for the selected Inheriti® Business Organisation.`,
+    'automations grants': `Usage: inheriti automations grants PLAN_ID\n\nPrint safe grant metadata for one plan in the selected Inheriti® Business Organisation.`,
     'automations create': `Usage: inheriti automations create --name NAME --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
       `--deployment-environment TEST|LIVE [--id ID] PROVIDER_FIELDS\n\nGITHUB: --repository OWNER/REPO ` +
       `from the repository URL; --environment NAME from Settings > Environments and the job; ` +
@@ -103,7 +103,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `from the running workload. You must already have a secure way to transfer that proof: this command ` +
       `opens the window but does not collect proof from Cloud Run or ECS. Never pass proof on the command line or ` +
       `print it in logs.`,
-    'automations pair': `Usage: inheriti automations pair <start|redeem|aws|ec2|google>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Business.`,
+    'automations pair': `Usage: inheriti automations pair <start|redeem|aws|ec2|google>\n\nOpen a short-lived pairing window as an authenticated organisation owner. Verify from inside the configured workload; the proof travels directly to Inheriti® Business.`,
     'automations pair start': `Usage: inheriti automations pair start [--connection ID]\n\nOpen a ten-minute pairing window for the selected connection. No ticket or proof is printed. Run pair redeem inside that workload before expiry.`,
     'automations pair redeem': `Usage: inheriti automations pair redeem\n\nRun inside the configured workload during its pairing window with the usual provider identity settings. Obtains a fresh native proof and verifies the connection directly; no operator login is needed inside the workload.`,
     'automations pair aws': `Usage: inheriti automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE [--image IMAGE_TAG_OR_DIGEST] [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]\n\nRun one temporary ECS task with the service task role to verify the connection. By default, use the selected container image digest from a running service task; --image overrides it. A private ECR tag override is resolved to its immutable digest. The image must include Inheriti CLI. The service is not changed. Review the task revision before noninteractive use.`,
@@ -116,7 +116,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     'automations usage': `Usage: inheriti automations usage [--plan PLAN_ID] [--connection CONNECTION_ID] --field ` +
       `ASSET.FIELD\n\nPrint copyable GitHub Actions YAML for an active plan grant and verified GitHub ` +
       `connection. Find ASSET.FIELD in the plan Data tab. The generated command only checks that the ` +
-      `injected value is present. The Action reference and CLI version come from Business's verified ` +
+      `injected value is present. The Action reference and CLI version come from the verified Inheriti® Business ` +
       `release; if unavailable, no workflow is printed.`,
     'automations runtime': `Usage: inheriti automations runtime <install-instructions|install ec2|image>\n\nPrint installation guidance, install the CLI on EC2, or prepare a container image.`,
     'automations runtime install-instructions': `Usage: inheriti automations runtime install-instructions [--container [--cli-tarball PATH]]\n\nUse --container to print the Dockerfile instruction for ECS or Cloud Run directly. For local or dev CLI tests, add --cli-tarball PATH while in your app's Docker build context; the CLI copies it there as inheriti-cli.tgz without using the npm registry. Without --container, choose interactively; a noninteractive terminal prints both.`,
@@ -127,7 +127,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     'secrets publish aws': `Usage: inheriti secrets publish aws --plan PLAN_ID --region AWS_REGION --account-id 12_DIGITS ` +
       `(--secret NAME | --parameter-prefix /PATH) (--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | ` +
       `--only ASSET.FIELD ...) [--apply]\n\nPreview target metadata by default. --apply reveals selected text fields and ` +
-      `publishes one JSON secret or one SecureString parameter per field. Requires a selected Business Organisation, ` +
+      `publishes one JSON secret or one SecureString parameter per field. Requires a selected Inheriti® Business Organisation, ` +
       `AWS credentials and IAM permissions. Subsequent reads use AWS IAM; plan changes or revocation do not update or delete this copy. No automatic synchronization or rotation. Confirm the account ID and mappings before applying. Values never belong in flags.`,
     'secrets publish google': `Usage: inheriti secrets publish google --plan PLAN_ID --project PROJECT_ID --secret-prefix PREFIX ` +
       `(--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]\n\n` +
@@ -155,7 +155,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `responsible member; activate/revoke require grant; member also requires a new responsible ` +
       `member. Missing IDs can be selected in a terminal.`,
     plans: `Usage: inheriti plans <create|list|show|logs|reveal|download|use|abort>\n\nCreate a plan or ` +
-      `inspect plan metadata and activity. Business commands accept --organization ID to select an ` +
+      `inspect plan metadata and activity. Inheriti® Business commands accept --organization ID to select an ` +
       `eligible organisation for that command. Run inheriti help plans <command> for details.`,
     'plans create': `Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n\nPrefill ` +
       `editable, non-secret plan metadata and likely asset types in the desktop window. Repeat --asset ` +
@@ -175,10 +175,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `total count. An interactive terminal can prompt for PLAN_ID.`,
     members: `Usage: inheriti members logs MEMBER_ID [--source MEMBER|AUTOMATION] [--from DATE] [--to DATE] ` +
       `[--limit N] [--offset N] [--json|--table]\n\nShow authorized member activity in the selected ` +
-      `Business Organisation.`,
+      `Inheriti® Business Organisation.`,
     'members logs': `Usage: inheriti members logs MEMBER_ID [--source MEMBER|AUTOMATION] [--from YYYY-MM-DD] [--to ` +
       `YYYY-MM-DD] [--limit N] [--offset N] [--json|--table]\n\nRead the same member activity shown in ` +
-      `Business, including automation events when authorized. --json returns only safe event fields ` +
+      `Inheriti® Business, including automation events when authorized. --json returns only safe event fields ` +
       `and the total count.`,
     'plans reveal': `Usage: inheriti plans reveal [PLAN_ID] [--field ASSET.FIELD ...] [--clipboard-ttl ` +
       `DURATION]\n\nRun the plan's authorization flow and copy selected fields to the local clipboard. ` +
@@ -189,7 +189,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     'plans open': `Usage: inheriti plans open PATH\n\nOpen a local .inheriti file in the installed Inheriti Workspace. The file path stays on this computer.`,
     'plans download': `Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH ` +
       `[--open-limit N]\n\nAuthorize and save one media asset to a new file with owner-only ` +
-      `permissions. The Business deployment determines whether this is a protected .inheriti copy; ` +
+      `permissions. The Inheriti® Business deployment determines whether this is a protected .inheriti copy; ` +
       `when enabled, --output must end in .inheriti and its opening limit defaults to one. ` +
       `Existing files are never overwritten.`,
     'plans use': `Usage: inheriti plans use [PLAN_ID] [--stdin ASSET.FIELD] [--env NAME=ASSET.FIELD ...] [--fd ` +
@@ -208,7 +208,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `--output inherit explicitly exposes child logs, which may contain credentials. Approve the ` +
       `exact command before an agent runs it.`,
     secrets: `Usage: inheriti secrets <exec|resolve|publish>\n\nDirect Inheriti runtime delivery uses exec and the same ` +
-      `reveal and use flows as plans commands. Publish is an optional one-time cloud-store copy. Business commands accept --organization ID to select an ` +
+      `reveal and use flows as plans commands. Publish is an optional one-time cloud-store copy. Inheriti® Business commands accept --organization ID to select an ` +
       `eligible organisation for that command.`,
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- ` +
       `EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. ` +

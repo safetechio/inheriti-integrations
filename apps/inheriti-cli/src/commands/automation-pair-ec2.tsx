@@ -46,7 +46,7 @@ export async function pairEc2AutomationInstance(
     ...(signal ? { signal } : {}) });
   const verified = await operations.getConnection(connection.id);
   if (verified.status !== 'VERIFIED') {
-    terminal.writeError('The EC2 command finished, but Business has not confirmed the connection. Check its status before proceeding.');
+    terminal.writeError('The EC2 command finished, but Inheriti® Business has not confirmed the connection. Check its status before proceeding.');
     return 1;
   }
   if (terminal.interactive) renderTo(terminal, <Ec2PairSuccess instanceId={instance.instanceId} connectionId={connection.id} commandId={result.commandId} />);

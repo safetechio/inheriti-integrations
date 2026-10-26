@@ -62,6 +62,27 @@ describe('automation setup', () => {
     expect(calls[1]!.url).not.toContain('secret proof');
   });
 
+  it('preserves only actionable grant errors from the matching Business request', async () => {
+    const setup = (body: unknown) => createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/',
+      organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => Response.json(body, { status: 400 }) });
+    await expect(setup({ error: 'automation_connection_verification_required' }).activateGrant(id, id))
+      .rejects.toThrow('automation_connection_verification_required');
+    await expect(setup({ error: 'automation_grant_already_exists' }).createGrant(id, { id, connectionId: id, responsibleMemberId: id }))
+      .rejects.toThrow('automation_grant_already_exists');
+    await expect(setup({ error: 'automation_grant_already_active' }).activateGrant(id, id))
+      .rejects.toThrow('automation_grant_already_active');
+    await expect(setup({ error: 'automation_grant_revoked' }).activateGrant(id, id))
+      .rejects.toThrow('automation_grant_revoked');
+    await expect(setup({ error: 'automation_connection_changed' }).createGrant(id, { id, connectionId: id, responsibleMemberId: id }))
+      .rejects.toThrow('automation_connection_changed');
+    await expect(setup({ error: 'automation_grant_changed' }).activateGrant(id, id))
+      .rejects.toThrow('automation_grant_changed');
+    await expect(setup({ error: 'automation_grant_already_exists' }).activateGrant(id, id))
+      .rejects.toThrow('automation_setup_request_failed');
+    await expect(setup({ error: 'automation_management_denied' }).activateGrant(id, id))
+      .rejects.toThrow('automation_setup_request_failed');
+  });
+
   it('opens an authenticated pairing window and rejects malformed responses', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const pairing = { expiresAt: new Date(Date.now() + 60_000).toISOString() };

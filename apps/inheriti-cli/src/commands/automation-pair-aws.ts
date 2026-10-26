@@ -80,7 +80,7 @@ export async function pairAwsAutomationService(
         verifying: 'Verifying task result', cleaning: 'Removing temporary task definition' } as const)[value]),
       ...(signal ? { signal } : {}),
     });
-    report('Confirming connection in Business');
+    report('Confirming connection in Inheriti® Business');
     verified = await operations.getConnection(connection.id);
   } finally {
     if (timer) clearInterval(timer);
@@ -88,7 +88,7 @@ export async function pairAwsAutomationService(
     region?.close();
   }
   if (verified.status !== 'VERIFIED') {
-    terminal.writeError('The ECS task finished, but Business has not confirmed the connection. Check its status before proceeding.');
+    terminal.writeError('The ECS task finished, but Inheriti® Business has not confirmed the connection. Check its status before proceeding.');
     return 1;
   }
   renderJson(terminal, { ...result, image, connectionId: connection.id, connectionStatus: verified.status });

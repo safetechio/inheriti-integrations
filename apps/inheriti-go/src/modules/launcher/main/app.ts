@@ -23,6 +23,8 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   let stopLinuxLock: (() => void) | undefined;
   let refreshOnShow: (() => void) | undefined;
   const seenInboxMessages = new Set<string>();
+  const sessionRevision = () => session.inboxSessionRevision?.() ?? 0;
+  let seenRevision = sessionRevision();
   const notices = new Set<Notification>();
   const unreadNotices = new Map<string, Notification>();
   const notify = (body: string, target?: { organizationId: string; conversationId: string }, untilRead = false): void => {
@@ -47,36 +49,57 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
       notice.on('close', () => clearTimeout(timer));
     }
   };
-  let badgeOrganization: string | undefined;
   let badgeRequest = 0;
-  const refreshBadge = async () => {
-    const organization = session.state().selectedId;
+  let badgeRefreshing = false;
+  let badgePending = false;
+  const scanBadge = async () => {
+    const state = session.state();
+    const revision = sessionRevision();
     const request = ++badgeRequest;
-    if (organization !== badgeOrganization) {
-      badgeOrganization = organization;
+    if (state.status === 'signed-out') {
       setTrayUnread(false);
+      for (const notice of unreadNotices.values()) notice.close();
+      return;
     }
-    if (!organization) return;
+    if (state.status !== 'signed-in') return;
     try {
-      let offset = 0;
       let unread = false;
-      const unresolved = new Set([...unreadNotices.keys()].filter((key) => key.startsWith(`${organization}:`)));
+      const unresolved = new Set(unreadNotices.keys());
       const dismiss: string[] = [];
-      do {
-        const page = await session.listInboxConversations({ limit: 100, offset });
-        for (const item of page.items as { id?: string; unreadCount: number }[]) {
-          if (item.unreadCount > 0) unread = true;
-          const key = `${organization}:${item.id}`;
-          if (unresolved.delete(key) && item.unreadCount === 0) dismiss.push(key);
-        }
-        offset += page.items.length;
-        if ((unread && !unresolved.size) || !page.items.length || offset >= page.total) break;
-      } while (true);
-      if (request === badgeRequest && session.state().selectedId === organization) {
+      for (const organization of state.organizations ?? []) {
+        let offset = 0;
+        do {
+          const page = await session.listOrganizationInboxConversations(organization.id, { limit: 100, offset });
+          for (const item of page.items as { id?: string; unreadCount: number }[]) {
+            if (item.unreadCount > 0) unread = true;
+            const key = `${organization.id}:${item.id}`;
+            if (unresolved.delete(key) && item.unreadCount === 0) dismiss.push(key);
+          }
+          offset += page.items.length;
+          if (!page.items.length || offset >= page.total) break;
+        } while (true);
+      }
+      if (request === badgeRequest && revision === sessionRevision() && session.state().status === 'signed-in') {
         setTrayUnread(unread);
         for (const key of dismiss.concat([...unresolved])) unreadNotices.get(key)?.close();
       }
     } catch { /* Keep the last confirmed unread state until the next refresh. */ }
+  };
+  const refreshBadge = async () => {
+    if (session.state().status === 'signed-out') {
+      ++badgeRequest;
+      setTrayUnread(false);
+      for (const notice of unreadNotices.values()) notice.close();
+      return;
+    }
+    if (badgeRefreshing) { badgePending = true; ++badgeRequest; return; }
+    badgeRefreshing = true;
+    try {
+      do {
+        badgePending = false;
+        await scanBadge();
+      } while (badgePending);
+    } finally { badgeRefreshing = false; }
   };
   if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -95,14 +118,22 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     try { ensureStartAtLogin(deployment, join(import.meta.dirname, deployment === 'prod' ? 'tray.png' : `tray-${deployment}.png`)); }
     catch { console.warn('Could not enable Inheriti Go launch at login.'); }
     const publishState = () => {
-      if (session.state().status === 'signed-out') for (const notice of notices) notice.close();
+      const revision = sessionRevision();
+      if (revision !== seenRevision) { seenInboxMessages.clear(); seenRevision = revision; }
+      if (session.state().status === 'signed-out') {
+        seenInboxMessages.clear();
+        for (const notice of notices) notice.close();
+      }
       publish(session);
       void refreshBadge();
     };
     refreshOnShow = () => { void session.refreshOrganizations().then((changed) => { if (changed) publishState(); }).catch(() => {}); };
     session.setPublisher(publishState);
     session.setInboxPublisher((signal) => {
-      publishInboxChanged(signal);
+      const revision = sessionRevision();
+      if (revision !== seenRevision) { seenInboxMessages.clear(); seenRevision = revision; }
+      const selectedId = session.state().selectedId;
+      if (!signal || !('tenantId' in signal) || !signal.tenantId || signal.tenantId === selectedId) publishInboxChanged(signal);
       if (signal && 'kind' in signal && signal.kind === 'PRESENCE') return;
       void notifyInboxEvent(session, signal, seenInboxMessages, notify).finally(() => { void refreshBadge(); });
     });
@@ -236,8 +267,37 @@ function publishInboxChanged(signal?: TrayInboxSignal): void {
 async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | undefined, seen: Set<string>,
   notify: (body: string, target?: { organizationId: string; conversationId: string }, untilRead?: boolean) => void): Promise<void> {
   if (!signal) return;
-  const organizationId = session.state().selectedId;
+  const organizationId = ('tenantId' in signal && signal.tenantId) || session.state().selectedId;
   if (!organizationId) return;
+  if (organizationId !== session.state().selectedId) {
+    if ('kind' in signal || signal.status !== 'AVAILABLE' || signal.recipientStatus ||
+      session.state().status !== 'signed-in' || !session.state().organizations.some(({ id }) => id === organizationId)) return;
+    const revision = session.inboxSessionRevision?.() ?? 0;
+    const key = `${revision}:${organizationId}:${signal.messageId}:AVAILABLE`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    let confirmed = false;
+    try {
+      let offset = 0;
+      do {
+        const page = await session.listOrganizationInboxConversations(organizationId, { limit: 100, offset });
+        if (revision !== (session.inboxSessionRevision?.() ?? 0) || session.state().status !== 'signed-in' ||
+          !session.state().organizations.some(({ id }) => id === organizationId)) return;
+        const conversation = page.items.find((item: { id: string }) => item.id === signal.conversationId);
+        if (conversation) {
+          if (conversation.unreadCount > 0) {
+            confirmed = true;
+            notify('You have unread Secure Chat messages.', { organizationId, conversationId: signal.conversationId }, true);
+          }
+          return;
+        }
+        offset += page.items.length;
+        if (!page.items.length || offset >= page.total) return;
+      } while (true);
+    } catch { /* A later signal can retry the read. */ }
+    finally { if (!confirmed) seen.delete(key); }
+    return;
+  }
   if ('kind' in signal) {
     if (signal.kind !== 'CONVERSATIONS' || !signal.conversationId || !signal.action ||
       !signal.memberId || !Number.isSafeInteger(signal.participantRevision)) return;

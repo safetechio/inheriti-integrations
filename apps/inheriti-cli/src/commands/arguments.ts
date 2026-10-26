@@ -169,7 +169,7 @@ export function parseDownloadOptions(argv: readonly string[], protectedCopy = fa
     const option = argv[position.index];
     const value = argv[position.index + 1];
     if (option === '--protected') {
-      return { error: '--protected is controlled by the Business deployment.' };
+      return { error: '--protected is controlled by the Inheriti® Business deployment.' };
     }
     if (option === '--open-limit') {
       if (state.openLimit !== undefined || !value || !/^[1-9][0-9]*$/u.test(value)) return { error: '--open-limit expects a positive integer.' };
