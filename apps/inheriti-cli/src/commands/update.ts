@@ -20,11 +20,11 @@ export async function notifyCliUpdate(context: CliContext, terminal: Terminal, v
 }
 
 function npmCommand(file: string): { command: string; args: string[] } {
-  if (process.platform !== 'win32') return { command: 'npm', args: ['install', '--global', file] };
+  if (process.platform !== 'win32') return { command: 'npm', args: ['install', '--global', '--loglevel=error', '--progress=true', file] };
   const candidates = [process.env.npm_execpath, join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')];
   const script = candidates.find((candidate) => candidate && isAbsolute(candidate) && candidate.endsWith('npm-cli.js') && existsSync(candidate));
   if (!script) throw new Error('npm-cli.js is unavailable. Install npm with Node.js and retry.');
-  return { command: process.execPath, args: [script, 'install', '--global', file] };
+  return { command: process.execPath, args: [script, 'install', '--global', '--loglevel=error', '--progress=true', file] };
 }
 
 export async function updateCli(context: CliContext, terminal: Terminal, version: string, install: boolean): Promise<number> {
@@ -36,6 +36,24 @@ export async function updateCli(context: CliContext, terminal: Terminal, version
   const { promptSelect } = await import('../render/select.jsx');
   if (await promptSelect('Install this update?', [{ value: 'yes', description: 'Install' }, { value: 'no', description: 'Cancel' }]) !== 'yes') return 0;
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-update-'));
+  const region = terminal.createLiveRegion?.();
+  const started = Date.now();
+  let phase = 'Connecting';
+  let size = 0;
+  let shownPercent = -1;
+  let tick = 0;
+  const draw = () => region?.update(`${['⠋', '⠙', '⠹', '⠸'][tick++ % 4]} ${phase} · ${Math.floor((Date.now() - started) / 1000)}s`);
+  const timer = region ? setInterval(draw, 180) : undefined;
+  timer?.unref();
+  let progressClosed = false;
+  const closeProgress = () => {
+    if (progressClosed) return;
+    progressClosed = true;
+    if (timer) clearInterval(timer);
+    region?.update('');
+    region?.close();
+  };
+  draw();
   try {
     const { url } = await context.core.requestInternalBuildDownload(build.id);
     const response = await fetch(url);
@@ -44,7 +62,8 @@ export async function updateCli(context: CliContext, terminal: Terminal, version
     if (!response.body) throw new Error('Update download failed.');
     const target = await open(file, 'wx', 0o600);
     const hash = createHash('sha256');
-    let size = 0;
+    phase = 'Downloading 0%';
+    draw();
     try {
       const reader = response.body.getReader();
       while (true) {
@@ -52,18 +71,25 @@ export async function updateCli(context: CliContext, terminal: Terminal, version
         if (done) break;
         size += chunk.length;
         if (size > build.size) throw new Error('Update integrity check failed.');
+        const percent = Math.min(100, Math.floor(size / build.size * 100));
+        if (percent !== shownPercent) { shownPercent = percent; phase = `Downloading ${percent}%`; draw(); }
         hash.update(chunk);
         for (let offset = 0; offset < chunk.length;) offset += (await target.write(chunk, offset)).bytesWritten;
       }
     } finally { await target.close(); }
+    phase = 'Verifying package';
+    draw();
     if (size !== build.size || hash.digest('hex') !== build.checksum) throw new Error('Update integrity check failed.');
     const npm = npmCommand(file);
+    closeProgress();
+    terminal.write('Installing with npm...');
     const result = spawnSync(npm.command, npm.args, { stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm install exited with status ${result.status}.`);
-    terminal.write(`Installed Inheriti CLI ${build.version}. Start a new terminal session to use it.`);
-    return 0;
   } finally {
+    closeProgress();
     await rm(directory, { recursive: true, force: true });
   }
+  terminal.write(`Installed Inheriti CLI ${build.version}. Start a new terminal session to use it.`);
+  return 0;
 }
