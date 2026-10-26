@@ -248,6 +248,7 @@ export class TrayPlanEdit {
     this.phase = undefined;
     this.phaseHistory = [];
     this.approvals = undefined;
+    let startedWriteThisCall = false;
     onChange();
     try {
       if (this.dismissed) {
@@ -263,6 +264,7 @@ export class TrayPlanEdit {
         return;
       }
       attempt.startedAdd = true;
+      startedWriteThisCall = true;
       this.canRecover = true;
       this.checkpoint.setItem('plan-edit/attempt', attempt);
       this.phase = undefined;
@@ -271,6 +273,7 @@ export class TrayPlanEdit {
       if (this.status === PLAN_EDIT_STATUS.updated) { this.attempt = undefined; }
       if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
     } catch (error) {
+      this.restorePrewriteGovernanceAttempt(error, startedWriteThisCall);
       this.status = this.attempt?.startedAdd ? PLAN_EDIT_STATUS.recoveryRequired : PLAN_EDIT_STATUS.error;
       this.message = this.errorMessage(error);
     } finally {
@@ -391,6 +394,7 @@ export class TrayPlanEdit {
     this.phase = undefined;
     this.phaseHistory = [];
     this.approvals = undefined;
+    const startedWriteThisCall = !attempt.startedAdd;
     onChange();
     try {
       attempt.startedAdd = true;
@@ -402,6 +406,7 @@ export class TrayPlanEdit {
       if (this.status === PLAN_EDIT_STATUS.recoveryRequired) this.message = messages.editNeedsRecovery;
       this.assets = [];
     } catch (error) {
+      this.restorePrewriteGovernanceAttempt(error, startedWriteThisCall);
       this.status = attempt.startedAdd ? PLAN_EDIT_STATUS.recoveryRequired : PLAN_EDIT_STATUS.error;
       this.message = attempt.startedAdd ? `${this.errorMessage(error)} ${messages.editNeedsRecovery}` : this.errorMessage(error);
       this.assets = [];
@@ -413,6 +418,7 @@ export class TrayPlanEdit {
   }
 
   private errorMessage(error: unknown): string {
+    if (this.isGovernanceFailure(error)) return messages.editGovernanceRepair;
     const code = error instanceof Error ? error.message : '';
     const failure = Object.entries(messages.editAccessFailures).find(([failureCode]) => failureCode === code)?.[1];
     if (failure || code === 'edit_session_expired') {
@@ -440,6 +446,20 @@ export class TrayPlanEdit {
       if (error.status === 410) return messages.editExpired;
     }
     return messages.editSaveFailed;
+  }
+
+  private restorePrewriteGovernanceAttempt(error: unknown, startedWriteThisCall: boolean): void {
+    if (!startedWriteThisCall || !this.isGovernanceFailure(error) || this.phaseHistory.includes('preparing') || !this.attempt?.startedAdd) return;
+    this.attempt.startedAdd = false;
+    this.canRecover = false;
+    this.session().save(this.attempt);
+  }
+
+  private isGovernanceFailure(error: unknown): boolean {
+    const typed = error as { code?: unknown; details?: { error?: unknown } } | null;
+    return typed?.code === 'plan_governance_reconfiguration_required' ||
+      typed?.details?.error === 'plan_governance_reconfiguration_required' ||
+      (error instanceof Error && error.message === 'plan_governance_reconfiguration_required');
   }
 
   private reportPhase(phase: EditPhase, onChange: () => void, approvals?: QuickPlanEditApprovalProgress): void {

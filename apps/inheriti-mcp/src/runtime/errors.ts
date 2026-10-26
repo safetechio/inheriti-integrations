@@ -19,6 +19,7 @@ export const lifecycleMessages: Record<string, string> = {
   reveal_denied: 'A participant denied this reveal. Nothing was released.',
   reveal_participant_revoked: 'A participant on this plan was revoked.',
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
+  plan_governance_reconfiguration_required: 'This plan needs more independent moderators or a valid approval threshold. Update Moderators in Inheriti Business plan settings, or ask a plan editor to do it.',
   protected_file_required: 'Download plan files with download_plan_asset in this deployment.',
   protected_file_unavailable: 'Opening limits are available only for protected plan files.',
   plan_key_unwrap_failed: 'The organisation key could not open this plan.',
@@ -107,8 +108,10 @@ const safeCodes = new Set([
   'google_secret_publication_outcome_unknown',
 ]);
 export function safeErrorCode(error: unknown): string {
-  const code = (error as { code?: unknown } | null)?.code;
-  if (typeof code === 'string' && (safeCodes.has(code) || Object.hasOwn(lifecycleMessages, code))) return code;
+  const value = error as { code?: unknown; details?: { error?: unknown } } | null;
+  for (const code of [value?.code, value?.details?.error]) {
+    if (typeof code === 'string' && (safeCodes.has(code) || Object.hasOwn(lifecycleMessages, code))) return code;
+  }
   const name = (error as { name?: unknown } | null)?.name;
   if (typeof name === 'string' && Object.hasOwn(namedCodes, name)) return namedCodes[name]!;
   const message = (error as { message?: unknown } | null)?.message;

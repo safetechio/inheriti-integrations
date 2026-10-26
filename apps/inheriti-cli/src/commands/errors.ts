@@ -27,6 +27,10 @@ export function messageFor(error: unknown, business = false): string {
       : 'The Application key is not available from SafeKey Mobile for this account.';
   }
   const code = (error as { code?: unknown })?.code;
+  if (code === 'plan_governance_reconfiguration_required' ||
+    (error as { details?: { error?: unknown } })?.details?.error === 'plan_governance_reconfiguration_required') {
+    return MESSAGES.plan_governance_reconfiguration_required!;
+  }
   if (business && code === 'plan_not_found') return 'No such plan in this Organisation.';
   if (business && code === 'action_not_allowed') return 'This Organisation is not allowed to open that. Check the integration capabilities and the asset type.';
   const deviceError = (error as { message?: unknown })?.message;
@@ -193,6 +197,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   plan_request_rate_limited: 'Too many requests. Try again shortly.',
   elements_api_unavailable: 'The plan service is unavailable. Try again shortly.',
   plan_request_failed: 'Could not reach the plan service.',
+  plan_governance_reconfiguration_required: 'This plan needs more independent moderators or a valid approval threshold. Update Moderators in Inheriti Business plan settings, or ask a plan editor to do it.',
   session_file_corrupt: 'The stored session was unreadable and has been cleared. Sign in again.',
   session_file_unreadable: 'The stored session could not be read. Check access to the CLI state folder, then retry.',
   session_permissions_widened: 'The stored session was readable by others and has been cleared. Sign in again.',

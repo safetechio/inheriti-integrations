@@ -48,6 +48,8 @@ const STABLE_CODE = /^[a-z][a-z0-9_]{2,63}$/u;
 
 export function codeOf(error: unknown): string {
   if (error instanceof ExtensionConfigurationInvalid) return error.code;
-  const code = (error as { code?: unknown })?.code;
-  return typeof code === 'string' && STABLE_CODE.test(code) ? code : 'plan_request_failed';
+  const value = error as { code?: unknown; details?: { error?: unknown } } | null;
+  if (typeof value?.code === 'string' && STABLE_CODE.test(value.code)) return value.code;
+  const detailCode = value?.details?.error;
+  return typeof detailCode === 'string' && STABLE_CODE.test(detailCode) ? detailCode : 'plan_request_failed';
 }

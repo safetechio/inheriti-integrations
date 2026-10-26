@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('../src/configuration.js', () => ({ ExtensionConfigurationInvalid: class extends Error {
+  constructor(readonly code: string, detail: string) { super(detail); }
+} }));
 import { loadPlans } from '../src/plan-loader.js';
 import { ExtensionConfigurationInvalid } from '../src/configuration.js';
+import { messageFor } from '../src/plan-view-model.js';
 
 const coreWith = (overrides: Record<string, unknown>) => () => ({
   getAccessToken: async () => 'token',
@@ -64,5 +68,13 @@ describe('codeOf', () => {
       listPlans: async () => { throw Object.assign(new Error('x'), { code: 'plan_request_rate_limited' }); },
     }) as never;
     await expect(loadPlans(failing)).resolves.toEqual({ kind: 'ERROR', code: 'plan_request_rate_limited' });
+  });
+
+  it('preserves the Business governance code from existing Core SDK error details', async () => {
+    const failing = coreWith({ listPlans: async () => { throw Object.assign(new Error('PLAN_GOVERNANCE_RECONFIGURATION_REQUIRED'), {
+      details: { error: 'plan_governance_reconfiguration_required', description: 'private diagnostic' },
+    }); } });
+    await expect(loadPlans(failing)).resolves.toEqual({ kind: 'ERROR', code: 'plan_governance_reconfiguration_required' });
+    expect(messageFor('plan_governance_reconfiguration_required')).toContain('Update Moderators in Inheriti Business plan settings');
   });
 });

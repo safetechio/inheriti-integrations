@@ -26,6 +26,17 @@ describe('model-facing metadata', () => {
     expect(result).toMatchObject({ isError: true, content: [{ text: 'reveal_restart_required' }] });
     expect(JSON.stringify(result)).not.toContain('private diagnostic');
   });
+  it('returns the governance code and safe repair instruction without transport details', async () => {
+    const result = await safeResult(async () => { throw Object.assign(new Error('PLAN_GOVERNANCE_RECONFIGURATION_REQUIRED'), {
+      details: { error: 'plan_governance_reconfiguration_required', description: 'private diagnostic' },
+    }); })({});
+    expect(result).toMatchObject({ isError: true,
+      structuredContent: { code: 'plan_governance_reconfiguration_required', message: expect.stringContaining('Update Moderators in Inheriti Business plan settings') },
+      content: [{ text: expect.stringContaining('plan_governance_reconfiguration_required: This plan needs more independent moderators') }],
+    });
+    expect(JSON.stringify(result)).toContain('Update Moderators in Inheriti Business plan settings');
+    expect(JSON.stringify(result)).not.toContain('private diagnostic');
+  });
   it.each(['automation_verified_release_unavailable', 'automation_active_grant_required', 'automation_verified_github_required', 'automation_github_workflow_ref_invalid'])('returns safe GitHub usage error %s', async (code) => {
     const result = await safeResult(async () => { throw Object.assign(new Error('private diagnostic'), { code }); })({});
     expect(result).toMatchObject({ isError: true, content: [{ text: code }] });

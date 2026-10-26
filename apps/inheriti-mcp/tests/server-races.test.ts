@@ -261,6 +261,19 @@ it('reports an interrupted reveal without leaking the underlying error or openin
   expect(withReveal).toHaveBeenCalledTimes(1);
 });
 
+it('keeps the governance repair code and instruction in a failed reveal job', async () => {
+  const tools = new MetadataTools() as any;
+  tools.selected = async () => ({ organizationId: 'org-1', core: {
+    getPlan: async () => ({ governance: { mode: 'MODERATED' }, participants: [] }),
+    withReveal: async () => { throw Object.assign(new Error('private diagnostic'), { code: 'plan_governance_reconfiguration_required' }); },
+  } });
+  const { jobId } = await tools.reveal('plan-1', 'account.password');
+  await vi.waitFor(async () => expect((await tools.revealStatus(jobId)).status).toBe('FAILED'));
+  const status = await tools.revealStatus(jobId);
+  expect(status).toMatchObject({ code: 'plan_governance_reconfiguration_required', message: expect.stringContaining('Update Moderators in Inheriti Business plan settings') });
+  expect(JSON.stringify(status)).not.toContain('private diagnostic');
+});
+
 it('points a full SafeKey PRO to the Desktop Tool', async () => {
   const tools = new MetadataTools() as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {

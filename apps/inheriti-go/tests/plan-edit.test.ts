@@ -37,6 +37,46 @@ beforeEach(() => {
 });
 
 describe('TrayPlanEdit', () => {
+  it('blocks asset editing and explains Business moderation repair on a governance failure', async () => {
+    mock.listAssets.mockRejectedValueOnce(Object.assign(new Error('private diagnostic'), {
+      code: 'plan_governance_reconfiguration_required',
+    }));
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    await edit.listAssets('plan-1', () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', assets: [], message: expect.stringContaining('Update Moderators in Inheriti Business plan settings') });
+    expect(edit.state().message).not.toContain('private diagnostic');
+  });
+  it.each(['add', 'replace'] as const)('keeps a pre-write %s governance failure out of recovery', async (operation) => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    if (operation === 'replace') await edit.listAssets('plan-1', () => {});
+    mock[operation].mockImplementationOnce(async (...args: unknown[]) => {
+      const progress = args[operation === 'add' ? 4 : 5] as (phase: string) => void;
+      progress('opening_plan');
+      throw Object.assign(new Error('private diagnostic'), { code: 'plan_governance_reconfiguration_required' });
+    });
+    if (operation === 'add') await edit.add('plan-1', asset, () => {});
+    else await edit.replace('plan-1', 'asset-1', asset, () => {});
+    expect(edit.state()).toMatchObject({ status: 'error', canRecover: false, message: expect.stringContaining('Update Moderators in Inheriti Business plan settings') });
+    expect(edit.state().message).not.toContain('private diagnostic');
+    expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: false });
+  });
+  it('keeps recovery after a governance failure once saving has begun', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.add.mockImplementationOnce(async (_planId, _editId, _shares, _asset, progress) => {
+      progress('preparing');
+      progress('distributing_validators');
+      throw Object.assign(new Error('private diagnostic'), { code: 'plan_governance_reconfiguration_required' });
+    });
+    await edit.add('plan-1', asset, () => {});
+    expect(edit.state()).toMatchObject({ status: 'recovery-required', canRecover: true });
+    expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: true });
+  });
   it('does not offer Discard edit when listing plans fails without a saved attempt', async () => {
     mock.list.mockRejectedValueOnce(new Error('offline'));
     const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
@@ -494,6 +534,22 @@ describe('TrayPlanEdit', () => {
     expect(mock.recover).toHaveBeenCalledWith('plan-1', 'edit-1');
     expect(mock.add).not.toHaveBeenCalled();
     expect(mock.values.has('plan-edit/attempt')).toBe(false);
+  });
+
+  it('keeps a saved write in recovery when recovery rejects with a governance error', async () => {
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    await edit.selectOrganization('org-1');
+    await edit.load(() => {});
+    mock.add.mockResolvedValueOnce({ status: 'RECOVERY_REQUIRED' });
+    await edit.add('plan-1', asset, () => {});
+    expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: true });
+    mock.add.mockClear();
+    mock.recover.mockRejectedValueOnce(Object.assign(new Error('private diagnostic'), { code: 'plan_governance_reconfiguration_required' }));
+    await edit.add('plan-1', asset, () => {});
+    expect(mock.recover).toHaveBeenCalledWith('plan-1', 'edit-1');
+    expect(mock.add).not.toHaveBeenCalled();
+    expect(edit.state()).toMatchObject({ status: 'recovery-required', canRecover: true });
+    expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: true });
   });
 
   it('discards a failed asset update and retains its checkpoint until the server aborts', async () => {

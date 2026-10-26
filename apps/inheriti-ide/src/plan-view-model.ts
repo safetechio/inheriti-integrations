@@ -21,6 +21,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_request_rate_limited: 'Too many requests — try again shortly',
   elements_api_unavailable: 'The plan service is unavailable — try again shortly',
   plan_request_failed: 'Could not reach the plan service',
+  plan_governance_reconfiguration_required: 'This plan needs more independent moderators or a valid approval threshold. Update Moderators in Inheriti Business plan settings, or ask a plan editor to do it.',
   configuration_missing: 'Configure Inheriti in settings first',
   live_environment_unavailable_in_development_build: 'This build supports TEST only',
   action_not_allowed: 'This VS Code registration is not allowed to insert that field',

@@ -146,6 +146,7 @@ export const trayMessages = Object.freeze({
   editDenied: 'You do not have permission to edit this plan.',
   editSaveFailed: 'Could not add the asset. Check access and try again.',
   editAccessFailed: 'Could not open the protected plan. Retry this step.',
+  editGovernanceRepair: 'This plan needs more independent moderators or a valid approval threshold. Update Moderators in Inheriti Business plan settings, or ask a plan editor to do it.',
   editCustodianConfigurationFailed: 'Could not configure the custodian share. Retry this step.',
   safeKeyProWriteRejected: (code: string) => `SafeKey PRO rejected the custodian share write (device code ${code}). Retry this step.`,
   safeKeyProNoSpace: 'SafeKey PRO has no free space. Use SafeKey Desktop Tool to free space, then retry this step.',

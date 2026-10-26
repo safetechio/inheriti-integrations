@@ -506,7 +506,13 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
     try { return { content: [{ type: 'text' as const, text: JSON.stringify(await work(args)) }] }; }
     catch (error) {
       const safe = safeErrorCode(error);
-      return { isError: true, content: [{ type: 'text' as const, text: safe === 'integration_tester_required' ? lifecycleMessages[safe]! : safe }] };
+      if (safe === 'integration_tester_required') return { isError: true, content: [{ type: 'text' as const, text: lifecycleMessages[safe]! }] };
+      if (safe === 'plan_governance_reconfiguration_required') return {
+        isError: true,
+        structuredContent: { code: safe, message: lifecycleMessages[safe] },
+        content: [{ type: 'text' as const, text: `${safe}: ${lifecycleMessages[safe]}` }],
+      };
+      return { isError: true, content: [{ type: 'text' as const, text: safe }] };
     }
   };
 }
