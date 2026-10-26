@@ -47,7 +47,7 @@
     "@aws-sdk/client-ssm": "3.1152.0",
     "@aws-sdk/client-sts": "3.1152.0",
     "@google-cloud/secret-manager": "6.3.0",
-    "@safetech/inheriti-client-sdk": "1.17.25",
+    "@safetech/inheriti-client-sdk": "1.17.26",
     "@safetech/inheriti-core-sdk": "4.0.37",
     "socket.io-client": "4.8.4"
   },
