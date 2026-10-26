@@ -84,7 +84,7 @@ it('returns verified runtime installation instructions without release channel i
   const operations = vi.spyOn(MetadataTools.prototype as never, 'automationOperations').mockResolvedValue({ organizationId: 'org', operations: { getVerifiedGithubRelease: mock.getVerifiedGithubRelease } } as never);
   try {
     const result = await setup().getAutomationRuntimeInstallInstructions();
-    expect(result).toMatchObject({ organizationId: 'org', packageSpec: '@safetech/inheriti-cli@1.2.3-stg.4', linuxHost: expect.stringContaining('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4'), prerequisite: expect.stringContaining('engines metadata'), dockerfile: expect.stringContaining('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4'), instruction: expect.stringContaining('IMAGE@sha256:DIGEST') });
+    expect(result).toMatchObject({ organizationId: 'org', packageSpec: '@safetech/inheriti-cli@1.2.3-stg.4', linuxHost: expect.stringContaining('npm install --engine-strict --global --prefix /usr/local @safetech/inheriti-cli@1.2.3-stg.4'), prerequisite: expect.stringContaining('engines metadata'), dockerfile: expect.stringContaining('npm install --engine-strict --global @safetech/inheriti-cli@1.2.3-stg.4'), instruction: expect.stringContaining('resolves the tag to an immutable digest') });
     expect(JSON.stringify(result)).not.toContain('private-token');
     mock.getVerifiedGithubRelease.mockRejectedValueOnce(new Error('automation_verified_release_unavailable'));
     await expect(setup().getAutomationRuntimeInstallInstructions()).rejects.toThrow('automation_verified_release_unavailable');

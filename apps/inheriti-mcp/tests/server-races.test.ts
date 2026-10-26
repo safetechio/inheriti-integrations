@@ -7,6 +7,10 @@ import { beginBrowserLogin } from '../src/browser-login.js';
 
 vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
 vi.mock('../src/browser-login.js', () => ({ beginBrowserLogin: vi.fn() }));
+vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
+  ...await importOriginal<typeof import('@safetech/inheriti-elements-core/node-base')>(),
+  HOST_FEATURE_FLAGS: { local: { planCreation: true, automation: false }, dev: { planCreation: false, automation: false }, stg: { planCreation: false, automation: false }, prod: { planCreation: false, automation: false } },
+}));
 
 it.each([{ operator: 'revoked-org' }, {}])('forgets held keys when organization membership is revoked with preferences %j', async preferences => {
   const preferenceCount = Object.keys(preferences).length;
@@ -59,6 +63,7 @@ it('cancels a plan assistant job on organization switch without a reveal job', a
 
 it('returns only safe plan creation status fields', async () => {
   const tools = new MetadataTools() as any;
+  tools.config = { deployment: 'local' };
   tools.planJob = { id: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1', controller: new AbortController(), done: Promise.resolve(), secret: 'hidden' };
   expect(await tools.planCreationStatus('job')).toEqual({ jobId: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1' });
 });

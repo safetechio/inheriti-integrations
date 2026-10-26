@@ -11,7 +11,7 @@ import { expect, it } from 'vitest';
 
 const app = resolve(import.meta.dirname, '..');
 
-async function bundleMcp() {
+async function bundleMcp(deployment?: string) {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-mcp-stdio-'));
   const dist = join(directory, 'dist');
   await build({
@@ -22,7 +22,10 @@ async function bundleMcp() {
     format: 'esm',
     target: 'node22',
     external: ['@google-cloud/secret-manager'],
-    define: { __INHERITI_PRODUCTION_BUILD__: 'false', __INHERITI_DEPLOYMENT__: 'undefined' },
+    define: {
+      __INHERITI_PRODUCTION_BUILD__: 'false',
+      __INHERITI_DEPLOYMENT__: deployment === undefined ? 'undefined' : JSON.stringify(deployment),
+    },
     banner: { js: "import { createRequire as __nodeCreateRequire } from 'node:module';\nconst require = __nodeCreateRequire(import.meta.url);" },
   });
   await cp(join(app, 'src', 'assets'), join(dist, 'assets'), { recursive: true });
@@ -54,31 +57,51 @@ async function connect(directory: string, secureDelivery: boolean) {
   return client;
 }
 
-it('registers secure delivery tools by default over the real stdio transport', async () => {
+it('registers only always-on tools by default over the real stdio transport', async () => {
   const directory = await bundleMcp();
+  let client: Client | undefined;
+  try {
+    client = await connect(directory, false);
+    const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
+    expect(tools).toEqual([
+      'abort_plan_access', 'check_reveal_status', 'check_update', 'download_plan_asset',
+      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
+      'logout', 'reveal_plan_secret', 'select_organization',
+    ]);
+    const result = await client.callTool({ name: 'check_update', arguments: {} });
+    expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
+  } finally {
+    await client?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+it('registers local automation tools with schema and safe errors over real stdio', async () => {
+  const directory = await bundleMcp('local');
   let client: Client | undefined;
   try {
     client = await connect(directory, false);
     const registered = (await client.listTools()).tools;
     const tools = registered.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
-      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'open_inheriti_file', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
+      'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'disable_automation_connection', 'download_plan_asset',
+      'get_automation_runtime_install_instructions', 'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
+      'logout', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
     ]);
     const setup = registered.find(tool => tool.name === 'create_automation_connection');
     expect(setup?.description).toContain('ask the human only for missing nonsecret provider values');
     expect(JSON.stringify(setup?.inputSchema)).toContain('not fetched from Google');
     expect(JSON.stringify(setup?.inputSchema)).toContain('taskRoleArn');
-    const result = await client.callTool({ name: 'check_update', arguments: {} });
-    expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
-    const usage = await client.callTool({ name: 'github_automation_usage', arguments: { planId: 'plan', connectionId: 'connection', field: 'account.password' } });
-    expect(usage).toMatchObject({ isError: true, content: [{ type: 'text', text: 'request_failed' }] });
+    const result = await client.callTool({
+      name: 'check_automation_setup_status',
+      arguments: { jobId: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'automation_setup_not_found' }] });
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 it('keeps the old flag working and returns a safe error over stdio', async () => {
   const directory = await bundleMcp();
@@ -87,9 +110,9 @@ it('keeps the old flag working and returns a safe error over stdio', async () =>
     client = await connect(directory, true);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_plan_creation_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'create_plan_with_assistant', 'disable_automation_connection', 'download_plan_asset',
-      'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'open_inheriti_file', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
+      'abort_plan_access', 'check_reveal_status', 'check_update', 'download_plan_asset',
+      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
+      'logout', 'reveal_plan_secret', 'select_organization',
     ]);
     const invalid = await client.callTool({ name: 'reveal_plan_secret', arguments: {
       planId: 'plan', selector: 'account.password', all: true,
