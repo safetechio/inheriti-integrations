@@ -31,7 +31,7 @@ import { usage, commandUsage, helpTopic } from './commands/help.js';
 import { extractOrganization, parseResolveOptions, parseMemberLogOptions } from './commands/arguments.js';
 import { secrets, requiredAutomationPlanId } from './commands/secrets.js';
 import { plans } from './commands/plan-command.js';
-import { isExplicitAutomationDenial, messageFor, MESSAGES } from './commands/errors.js';
+import { isExplicitAutomationDenial, messageFor, providerDiagnosticFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 
@@ -229,7 +229,13 @@ export async function run(
     return 1;
   } catch (error) {
     if (command === '__complete') return 0;
-    terminal.writeError(messageFor(error, routing.business));
+    const automationCommand = command === 'secrets' && rest[0] === 'publish' ? 'publish'
+      : command === 'automations'
+      ? ['create', 'setup', 'pair', 'grant', 'runtime', 'list', 'grants', 'usage', 'verify', 'trust', 'disable'].includes(rest[0] ?? '')
+        ? rest[0] : 'command' : undefined;
+    const providerDiagnostic = automationCommand && providerDiagnosticFor(error);
+    terminal.writeError(messageFor(error, routing.business, automationCommand) +
+      (providerDiagnostic ? `\n${providerDiagnostic}` : ''));
     return automationSecretDelivery && isExplicitAutomationDenial(error) ? 77 : 1;
   }
 }

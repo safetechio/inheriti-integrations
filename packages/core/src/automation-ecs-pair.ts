@@ -15,6 +15,7 @@ export type EcsPairInput = {
   cliPath: string;
   environment: Readonly<Record<string, string>>;
   startPairing: () => Promise<void>;
+  onProgress?: (phase: 'checking' | 'registering' | 'opening' | 'starting' | 'waiting' | 'verifying' | 'cleaning') => void;
   signal?: AbortSignal;
 };
 export type EcsPairResult = { taskArn: string; taskDefinitionArn: string; status: 'paired' };
@@ -70,6 +71,7 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
   if (!inputValid(input)) throw new Error('automation_ecs_pair_input_invalid');
   const { target } = input;
   input.signal?.throwIfAborted();
+  input.onProgress?.('checking');
   const region = ['--region', target.region, '--output', 'json'];
   const call = async (args: string[], signal?: AbortSignal): Promise<Record<string, unknown>> =>
     parsed(await run(['ecs', ...args, ...region], signal));
@@ -129,15 +131,18 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
   const requestFile = join(directory, 'run-task.json');
   try {
     await writeFile(registrationFile, JSON.stringify(registration), { mode: 0o600, flag: 'wx' });
+    input.onProgress?.('registering');
     const registered = await call(['register-task-definition', '--cli-input-json', `file://${registrationFile}`]);
     const taskDefinitionArn = record(registered.taskDefinition).taskDefinitionArn;
     if (!name(taskDefinitionArn)) throw new Error('automation_ecs_pair_registration_invalid');
     try {
       await writeFile(requestFile, JSON.stringify({ ...request, taskDefinition: taskDefinitionArn }), { mode: 0o600, flag: 'wx' });
       input.signal?.throwIfAborted();
+      input.onProgress?.('opening');
       try { await input.startPairing(); } catch { throw new Error('automation_ecs_pair_window_failed'); }
       input.signal?.throwIfAborted();
       // Let run-task return its ARN even if cancellation arrives during launch, so the task can be stopped.
+      input.onProgress?.('starting');
       const started = await call(['run-task', '--cli-input-json', `file://${requestFile}`], undefined);
       const tasks = items(started.tasks).map(record);
       if (items(started.failures ?? []).length || tasks.length !== 1 || !name(tasks[0]!.taskArn))
@@ -145,12 +150,14 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
       const taskArn = tasks[0]!.taskArn as string;
       try {
         input.signal?.throwIfAborted();
+        input.onProgress?.('waiting');
         await run(['ecs', 'wait', 'tasks-stopped', '--cluster', target.cluster, '--tasks', taskArn, '--region', target.region], input.signal);
       } catch {
         try { await call(['stop-task', '--cluster', target.cluster, '--task', taskArn, '--reason', 'Pairing did not complete'], undefined); }
         catch { throw new Error('automation_ecs_pair_stop_failed'); }
         throw new Error('automation_ecs_pair_wait_failed');
       }
+      input.onProgress?.('verifying');
       const finished = await call(['describe-tasks', '--cluster', target.cluster, '--tasks', taskArn], input.signal);
       const completed = items(finished.tasks).map(record);
       const finalContainers = completed.length === 1 ? items(completed[0]!.containers).map(record) : [];
@@ -159,6 +166,7 @@ export async function pairEcsAutomation(input: EcsPairInput, run: EcsPairRunner 
           finalContainers[0]!.exitCode !== 0) throw new Error('automation_ecs_pair_failed');
       return { taskArn, taskDefinitionArn, status: 'paired' };
     } finally {
+      input.onProgress?.('cleaning');
       await call(['deregister-task-definition', '--task-definition', taskDefinitionArn], undefined);
     }
   } finally {

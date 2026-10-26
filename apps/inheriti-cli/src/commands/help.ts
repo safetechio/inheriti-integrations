@@ -142,7 +142,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `Prepare a Cloud Run, ECS, EC2, or custom runner launch script for a verified connection and active plan grant. ` +
       `Use --map-all or repeatable --only for generated names; --except omits fields from --map-all. ` +
       `Repeat --map to rename a generated variable or map fields explicitly. Review mappings before applying. ` +
-      `Without a managed target, choose Print or Save as. --save writes a new executable launcher in the current Docker build context and prints matching Dockerfile COPY and ENTRYPOINT lines. ` +
+      `Without a managed target, choose Print or Save as. Enter accepts the default inheriti-start.sh filename; an existing folder saves that file inside it. --save writes a new executable launcher in the current Docker build context and prints matching Dockerfile COPY and ENTRYPOINT lines. ` +
       `Managed cloud targets require an exact target. The CLI path inside the image defaults to /usr/local/bin/inheriti; ` +
       `use --cli-path for a different absolute path. ` +
       `By default this prints a safe preview and script. For EC2, --install writes the launcher and systemd unit via SSM after confirmation, without starting the service. Use --install --replace to update a stopped, matching installation; it also upgrades the previous generated unit. To update an existing Cloud Run job, service, or ECS service, ` +

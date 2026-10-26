@@ -34,6 +34,7 @@ describe('ECS one-off pairing', () => {
 
   it('starts pairing after registration, runs a clean task, and leaves the service alone', async () => {
     const calls: string[] = [];
+    const phases: string[] = [];
     const startPairing = vi.fn(async () => { calls.push('start-pairing'); });
     const runner: EcsPairRunner = async args => {
       calls.push(args[1]!);
@@ -58,9 +59,10 @@ describe('ECS one-off pairing', () => {
       if (args[1] === 'deregister-task-definition') return '{}';
       return '';
     };
-    await expect(pairEcsAutomation({ ...input, startPairing }, runner)).resolves.toEqual({ taskArn: task, taskDefinitionArn: paired, status: 'paired' });
+    await expect(pairEcsAutomation({ ...input, startPairing, onProgress: phase => phases.push(phase) }, runner)).resolves.toEqual({ taskArn: task, taskDefinitionArn: paired, status: 'paired' });
     expect(calls).toEqual(['describe-services', 'describe-task-definition', 'register-task-definition', 'start-pairing',
       'run-task', 'wait', 'describe-tasks', 'deregister-task-definition']);
+    expect(phases).toEqual(['checking', 'registering', 'opening', 'starting', 'waiting', 'verifying', 'cleaning']);
     expect(calls).not.toContain('update-service');
   });
 

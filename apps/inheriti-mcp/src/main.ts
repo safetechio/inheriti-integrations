@@ -10,11 +10,11 @@ import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-ba
 import { lockedDeployment, MetadataTools, runServer } from './server.js';
 
 function npmCommand(file: string): { command: string; args: string[] } {
-  if (process.platform !== 'win32') return { command: 'npm', args: ['install', '--global', file] };
+  if (process.platform !== 'win32') return { command: 'npm', args: ['install', '--global', '--loglevel=error', '--progress=true', file] };
   const candidates = [process.env.npm_execpath, join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')];
   const script = candidates.find((candidate) => candidate && isAbsolute(candidate) && candidate.endsWith('npm-cli.js') && existsSync(candidate));
   if (!script) throw new Error('npm-cli.js is unavailable. Install npm with Node.js and retry.');
-  return { command: process.execPath, args: [script, 'install', '--global', file] };
+  return { command: process.execPath, args: [script, 'install', '--global', '--loglevel=error', '--progress=true', file] };
 }
 
 async function update(install: boolean): Promise<void> {
@@ -32,6 +32,22 @@ async function update(install: boolean): Promise<void> {
   finally { prompt.close(); }
   if (!/^(y|yes)$/iu.test(answer.trim())) return;
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-mcp-update-'));
+  const started = Date.now();
+  let phase = 'Connecting';
+  let size = 0;
+  let shownPercent = -1;
+  let tick = 0;
+  const draw = () => process.stderr.write(`\r\u001b[2K${['⠋', '⠙', '⠹', '⠸'][tick++ % 4]} ${phase} · ${Math.floor((Date.now() - started) / 1000)}s`);
+  const timer = setInterval(draw, 180);
+  timer.unref();
+  let progressClosed = false;
+  const closeProgress = () => {
+    if (progressClosed) return;
+    progressClosed = true;
+    clearInterval(timer);
+    process.stderr.write('\r\u001b[2K');
+  };
+  draw();
   try {
     const { url } = await core.requestInternalBuildDownload(build.id);
     const response = await fetch(url);
@@ -39,7 +55,8 @@ async function update(install: boolean): Promise<void> {
     const path = join(directory, 'inheriti-mcp.tgz');
     const target = await open(path, 'wx', 0o600);
     const hash = createHash('sha256');
-    let size = 0;
+    phase = 'Downloading 0%';
+    draw();
     try {
       const reader = response.body.getReader();
       while (true) {
@@ -47,17 +64,26 @@ async function update(install: boolean): Promise<void> {
         if (done) break;
         size += chunk.length;
         if (size > build.size) throw new Error('Update integrity check failed.');
+        const percent = Math.min(100, Math.floor(size / build.size * 100));
+        if (percent !== shownPercent) { shownPercent = percent; phase = `Downloading ${percent}%`; draw(); }
         hash.update(chunk);
         for (let offset = 0; offset < chunk.length;) offset += (await target.write(chunk, offset)).bytesWritten;
       }
     } finally { await target.close(); }
+    phase = 'Verifying package';
+    draw();
     if (size !== build.size || hash.digest('hex') !== build.checksum) throw new Error('Update integrity check failed.');
     const npm = npmCommand(path);
+    closeProgress();
+    process.stderr.write('Installing with npm...\n');
     const result = spawnSync(npm.command, npm.args, { stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm install exited with status ${result.status}.`);
-    process.stderr.write(`Installed Inheriti MCP ${build.version}. Restart the MCP server to use it.\n`);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    closeProgress();
+    await rm(directory, { recursive: true, force: true });
+  }
+  process.stderr.write(`Installed Inheriti MCP ${build.version}. Restart the MCP server to use it.\n`);
 }
 
 const args = process.argv.slice(2);

@@ -54,18 +54,39 @@ export async function pairAwsAutomationService(
     ], signal);
     if (choice !== 'run') return 1;
   }
-  const result = await pairEcsAutomation({
-    target, expectedRevision: inspected.revision, expectedRoleArn: connection.trust.roleArn,
-    image, cliPath: options['--cli-path'] ?? '/usr/local/bin/inheriti',
-    environment: {
-      INHERITI_AUTOMATION_PROVIDER: 'AWS',
-      INHERITI_AUTOMATION_CONNECTION_ID: connection.id,
-      AWS_REGION: target.region,
-    },
-    startPairing: async () => { await operations.startPairing(connection.id); },
-    ...(signal ? { signal } : {}),
-  });
-  const verified = await operations.getConnection(connection.id);
+  const region = terminal.createLiveRegion?.();
+  const started = Date.now();
+  let phase = 'Checking ECS service';
+  let tick = 0;
+  const draw = () => region?.update(`${['⠋', '⠙', '⠹', '⠸'][tick++ % 4]} ${phase} · ${Math.floor((Date.now() - started) / 1000)}s`);
+  const report = (next: string) => { phase = next; draw(); };
+  const timer = region ? setInterval(draw, 180) : undefined;
+  timer?.unref();
+  draw();
+  let result: Awaited<ReturnType<typeof pairEcsAutomation>>;
+  let verified: Awaited<ReturnType<typeof operations.getConnection>>;
+  try {
+    result = await pairEcsAutomation({
+      target, expectedRevision: inspected.revision, expectedRoleArn: connection.trust.roleArn,
+      image, cliPath: options['--cli-path'] ?? '/usr/local/bin/inheriti',
+      environment: {
+        INHERITI_AUTOMATION_PROVIDER: 'AWS',
+        INHERITI_AUTOMATION_CONNECTION_ID: connection.id,
+        AWS_REGION: target.region,
+      },
+      startPairing: async () => { await operations.startPairing(connection.id); },
+      onProgress: value => report(({ checking: 'Checking ECS service', registering: 'Registering temporary task',
+        opening: 'Opening pairing window', starting: 'Starting temporary task', waiting: 'Waiting for ECS task to stop',
+        verifying: 'Verifying task result', cleaning: 'Removing temporary task definition' } as const)[value]),
+      ...(signal ? { signal } : {}),
+    });
+    report('Confirming connection in Business');
+    verified = await operations.getConnection(connection.id);
+  } finally {
+    if (timer) clearInterval(timer);
+    region?.update('');
+    region?.close();
+  }
   if (verified.status !== 'VERIFIED') {
     terminal.writeError('The ECS task finished, but Business has not confirmed the connection. Check its status before proceeding.');
     return 1;

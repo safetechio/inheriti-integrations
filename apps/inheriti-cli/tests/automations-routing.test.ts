@@ -43,6 +43,41 @@ it('routes management and setup in dev, rejects stg and prod', async () => {
   expect(manage).not.toHaveBeenCalled();
 });
 
+it('shows the complete AWS inspection error in the terminal', async () => {
+  const error = new Error('automation_cloud_inspection_failed');
+  Object.defineProperty(error, 'providerDiagnostic', { value: 'AWS CLI: An error occurred (AccessDeniedException) when calling the DescribeTaskDefinition operation: not authorized to perform: ecs:DescribeTaskDefinition' });
+  manage.mockRejectedValueOnce(error);
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('not authorized to perform: ecs:DescribeTaskDefinition'));
+});
+
+it('does not print free-form provider diagnostics that contain secrets', async () => {
+  manage.mockRejectedValueOnce(Object.assign(new Error('automation_cloud_inspection_failed'), {
+    providerDiagnostic: 'AWS CLI: rejected environment value sentinel-secret',
+  }));
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).not.toHaveBeenCalledWith(expect.stringContaining('sentinel-secret'));
+});
+
+it('keeps unexpected automation error details private while naming the command', async () => {
+  manage.mockRejectedValueOnce(new Error('secret-value'));
+  const { code, output } = await run('dev', ['automations', 'create']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('Automations create failed unexpectedly'));
+  expect(output.writeError).not.toHaveBeenCalledWith(expect.stringContaining('secret-value'));
+});
+
+it('shows provider diagnostics when publishing automation secrets', async () => {
+  const error = new Error('automation_aws_provider_failed');
+  Object.defineProperty(error, 'providerDiagnostic', { value: 'AWS CLI: AccessDeniedException in PutSecretValue' });
+  publish.mockRejectedValueOnce(error);
+  const { code, output } = await run('dev', ['secrets', 'publish', 'aws', '--plan', 'plan-1']);
+  expect(code).toBe(1);
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('AWS CLI: AccessDeniedException in PutSecretValue'));
+});
+
 it('routes safe metadata commands and rejects missing plan IDs', async () => {
   expect((await run('local', ['automations', 'list'], false)).code).toBe(0);
   expect((await run('local', ['automations', 'grants', 'plan-1'], false)).code).toBe(0);

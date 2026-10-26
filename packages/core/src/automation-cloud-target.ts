@@ -19,6 +19,7 @@ export type CloudTargetInspection = {
   identity: string;
   identityNumericId?: string;
   revision: string;
+  healthCheckGracePeriodSeconds?: number;
 };
 export type CloudTargetPreview = {
   target: CloudTarget;
@@ -28,6 +29,8 @@ export type CloudTargetPreview = {
   image: string;
   identity: string;
   revision: string;
+  healthCheckGracePeriodSeconds?: number;
+  healthCheckGraceWarning?: string;
 };
 
 export const runCloudCommand: CloudCommandRunner = async (binary, args) => {
@@ -35,7 +38,7 @@ export const runCloudCommand: CloudCommandRunner = async (binary, args) => {
     const { stdout } = await execFileAsync(binary, args, { maxBuffer: 1024 * 1024, windowsHide: true, timeout: 20_000 });
     return stdout;
   } catch (error) {
-    throw providerCliError(binary, error, 'automation_cloud_inspection_failed');
+    throw providerCliError(binary, error, 'automation_cloud_inspection_failed', true);
   }
 };
 
@@ -70,14 +73,18 @@ const selectContainer = (value: unknown, selected?: string): Record<string, unkn
 async function resolveEcsTaskDefinition(
   target: Extract<CloudTarget, { provider: 'AWS' }>,
   run: CloudCommandRunner,
-): Promise<string> {
+): Promise<{ revision: string; healthCheckGracePeriodSeconds?: number }> {
   if (!!target.service === !!target.taskDefinition) throw new Error('automation_cloud_target_invalid');
-  if (target.taskDefinition) return identifier(target.taskDefinition);
+  if (target.taskDefinition) return { revision: identifier(target.taskDefinition) };
   const response = parsed(await run('aws', ['ecs', 'describe-services', '--cluster', identifier(target.cluster),
     '--services', identifier(target.service!), '--region', identifier(target.region), '--output', 'json']));
   const services = list(response.services).map(record);
   if (services.length !== 1 || list(response.failures ?? []).length) throw new Error('automation_cloud_target_invalid');
-  return identifier(string(services[0]!.taskDefinition));
+  const service = services[0]!;
+  const grace = service.healthCheckGracePeriodSeconds;
+  if (grace !== undefined && (!Number.isInteger(grace) || (grace as number) < 0)) throw new Error('automation_cloud_target_invalid');
+  return { revision: identifier(string(service.taskDefinition)),
+    ...(grace !== undefined ? { healthCheckGracePeriodSeconds: grace as number } : {}) };
 }
 
 async function describeCloudTarget(
@@ -114,19 +121,20 @@ async function describeCloudTarget(
   }
   if (target.provider === 'AWS') {
     const region = identifier(target.region);
-    const taskDefinition = await resolveEcsTaskDefinition(target, run);
+    const { revision: taskDefinition, healthCheckGracePeriodSeconds } = await resolveEcsTaskDefinition(target, run);
     const response = parsed(await run('aws', [
       'ecs', 'describe-task-definition', '--task-definition', taskDefinition,
       '--region', region, '--output', 'json',
     ]));
     const definition = record(response.taskDefinition);
+    if (!definition.taskRoleArn) throw new Error('automation_ecs_task_role_missing');
     const container = selectContainer(definition.containerDefinitions, target.container);
     const entryPoint = command(container.entryPoint ?? []);
     if (requireStartup && !entryPoint.length) throw new Error('automation_cloud_startup_unknown');
     const original = [...entryPoint, ...command(container.command ?? [])];
     return { target, image: string(container.image), container: string(container.name), command: original,
       environmentNames: names(container.environment), identity: string(definition.taskRoleArn),
-      revision: string(definition.taskDefinitionArn) };
+      revision: string(definition.taskDefinitionArn), ...(healthCheckGracePeriodSeconds !== undefined ? { healthCheckGracePeriodSeconds } : {}) };
   }
   throw new Error('automation_cloud_target_invalid');
 }
@@ -208,5 +216,9 @@ export function previewCloudTarget(
       addedEnvironmentNames.some(name => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw new Error('automation_cloud_preview_invalid');
   return { target: inspected.target, image: inspected.image, identity: inspected.identity,
     revision: inspected.revision, startupCommandWillChange: true, proposedLauncherPath: scriptPath,
-    addedEnvironmentNames: [...addedEnvironmentNames] };
+    addedEnvironmentNames: [...addedEnvironmentNames],
+    ...(inspected.target.provider === 'AWS' && inspected.target.service ? {
+      ...(inspected.healthCheckGracePeriodSeconds !== undefined ? { healthCheckGracePeriodSeconds: inspected.healthCheckGracePeriodSeconds } : {}),
+      healthCheckGraceWarning: `If this service uses container, load balancer, or VPC Lattice health checks, manual SafeKey approval may outlast the configured health check grace period${inspected.healthCheckGracePeriodSeconds === undefined ? ' (not configured)' : ` (${inspected.healthCheckGracePeriodSeconds} seconds)`}. Size it against the actual authorization window before replacing tasks.`,
+    } : {}) };
 }

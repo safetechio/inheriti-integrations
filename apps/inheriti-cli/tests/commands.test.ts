@@ -668,10 +668,28 @@ describe('choosing a plan', () => {
   });
 
   it('explains cloud setup failures without exposing provider output', () => {
+    expect(messageFor(new Error('automation_ecs_task_role_missing'))).toContain('execution role alone is not enough');
     expect(messageFor(new Error('automation_cloud_startup_unknown'))).toContain('container command or entry point');
     expect(messageFor(new Error('automation_cloud_apply_failed'))).toContain('could not apply');
     expect(messageFor(new Error('automation_cloud_apply_rollback_unconfirmed'))).toContain('Inspect the service revision');
     expect(messageFor(new Error('private-secret'))).toBe('The command failed.');
+  });
+
+  it.each([
+    ['automation_cloud_inspection_failed', 'cloud CLI'],
+    ['automation_cloud_apply_target_changed', 'changed since preview'],
+    ['automation_ecs_identity_changed', 'task role changed'],
+    ['automation_ecs_deployment_unstable', 'service events'],
+    ['automation_runtime_trust_invalid', 'verified connection'],
+    ['automation_mapping_selection_invalid', 'unique environment variable names'],
+    ['automation_ecs_pair_source_invalid', 'task definition'],
+  ])('explains %s without a generic failure', (code, detail) => {
+    expect(messageFor(new Error(code), true, 'setup')).toContain(detail);
+  });
+
+  it('preserves safe Docker diagnostics in automation commands', () => {
+    expect(messageFor(new Error('Docker push failed. Check Docker access, the Dockerfile, and registry sign-in.'), true, 'runtime')).toContain('Docker push failed');
+    expect(messageFor(new Error('Docker CLI is required. Install Docker and start it before building the image.'), true, 'runtime')).toContain('Install Docker');
   });
 
   it('refuses a missing plan id in a pipe, with the message an operator can act on', async () => {

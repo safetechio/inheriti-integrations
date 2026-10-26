@@ -158,9 +158,20 @@ describe('ECS automation apply', () => {
       if (args[1] === 'wait' && calls.filter(call => call[1] === 'wait').length === 1) throw new Error('sensitive provider text');
       return '{}';
     };
-    await expect(applyEcsAutomation(input, runner)).rejects.toThrow('automation_ecs_deployment_failed');
+    await expect(applyEcsAutomation(input, runner)).rejects.toThrow('automation_ecs_deployment_wait_failed');
     expect(calls.filter(args => args[1] === 'update-service').map(args => args[args.indexOf('--task-definition') + 1]))
       .toEqual([newRevision, oldRevision]);
+  });
+
+  it('reports a rejected service update without exposing provider text', async () => {
+    const runner: EcsApplyRunner = async args => {
+      if (args[1] === 'describe-services') return JSON.stringify(service);
+      if (args[1] === 'describe-task-definition') return JSON.stringify(definition);
+      if (args[1] === 'register-task-definition') return JSON.stringify({ taskDefinition: { taskDefinitionArn: newRevision } });
+      if (args[1] === 'update-service') throw new Error('sensitive provider text');
+      return '{}';
+    };
+    await expect(applyEcsAutomation(input, runner)).rejects.toThrow('automation_ecs_deployment_update_failed');
   });
 
   it('rejects a native secret that would conflict with added automation environment', async () => {
@@ -195,7 +206,7 @@ describe('ECS automation apply', () => {
       if (args[1] === 'register-task-definition') return JSON.stringify({ taskDefinition: { taskDefinitionArn: newRevision } });
       return '{}';
     };
-    await expect(applyEcsAutomation(input, runner)).rejects.toThrow('automation_ecs_deployment_failed');
+    await expect(applyEcsAutomation(input, runner)).rejects.toThrow('automation_ecs_deployment_unstable');
     expect(calls.filter(args => args[1] === 'update-service')).toHaveLength(1);
   });
 
