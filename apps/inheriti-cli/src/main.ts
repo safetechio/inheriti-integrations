@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BUILD_DEPLOYMENT, defaultConfigurationPath, resolveConfiguration } from './configuration.js';
 import { defaultSessionPath } from './session-store.js';
 import { createCliContext } from './session.js';
@@ -34,6 +34,7 @@ import { plans } from './commands/plan-command.js';
 import { isExplicitAutomationDenial, messageFor, providerDiagnosticFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
+import { reconcileCliSkill } from './skill-install.js';
 
 export async function run(
   argv: readonly string[],
@@ -258,5 +259,14 @@ const isEntrypoint = process.argv[1] !== undefined
 if (isEntrypoint) {
   const terminal = processTerminal();
   const argv = process.argv.slice(2);
-  process.exitCode = await run(argv, process.env, terminal);
+  const lifecycleInstall = argv[0] === '__skill-install' && process.env.npm_lifecycle_event === 'postinstall';
+  if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
+    try {
+      const result = await reconcileCliSkill(fileURLToPath(new URL('..', import.meta.url)), process.env);
+      if (result.status === 'installed' || result.status === 'updated')
+        terminal.writeError(`Inheriti CLI skill ${result.status}. ${result.backup ? `Previous copy saved at ${result.backup}. ` : ''}Start a new agent session to load it.`);
+      else if (result.status === 'skipped' && result.reason?.startsWith('Unsafe')) terminal.writeError(`Inheriti CLI skill: ${result.reason}.`);
+    } catch { terminal.writeError('Inheriti CLI skill could not be updated; the next CLI command will retry.'); }
+  }
+  process.exitCode = argv[0] === '__skill-install' ? 0 : await run(argv, process.env, terminal);
 }

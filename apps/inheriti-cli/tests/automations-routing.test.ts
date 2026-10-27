@@ -4,7 +4,7 @@ const { manage, metadata, publish, selectedOrganization, context } = vi.hoisted(
   manage: vi.fn(async () => 0), metadata: vi.fn(async () => 0),
   publish: vi.fn(async () => 0),
   selectedOrganization: vi.fn(async () => ({ id: 'org-1', name: 'Acme' })),
-  context: vi.fn(() => ({ core: { getAccessToken: async () => 'human-token' } })),
+  context: vi.fn(() => ({ core: { getAccessToken: async () => 'human-token' }, sessions: { load: async () => false } })),
 }));
 vi.mock('../src/commands/automations.js', () => ({ automationManage: manage, automationMetadata: metadata }));
 vi.mock('../src/commands/automation-setup.js', () => ({ automationSetup: vi.fn(async () => 0) }));

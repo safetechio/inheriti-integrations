@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, open, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
@@ -104,6 +106,14 @@ async function installCliBuild(context: CliContext, terminal: Terminal, version:
     const result = spawnSync(npm.command, npm.args, { stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm install exited with status ${result.status}.`);
+    const entrypoint = fileURLToPath(import.meta.url);
+    if (basename(entrypoint) === 'main.js' && process.argv[1]) {
+      try {
+        if (realpathSync(process.argv[1]) !== entrypoint) throw new Error('CLI entrypoint changed');
+        const refreshed = spawnSync(process.execPath, [entrypoint, '__skill-install'], { stdio: 'inherit' });
+        if (refreshed.error || refreshed.status !== 0) throw refreshed.error ?? new Error('Skill reconciliation failed');
+      } catch { terminal.writeError('CLI installed; its skill will be reconciled on the next CLI command.'); }
+    }
   } finally {
     closeProgress();
     await rm(directory, { recursive: true, force: true });
