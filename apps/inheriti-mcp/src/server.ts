@@ -34,6 +34,7 @@ import { registerCheckRevealStatus } from './tools/check_reveal_status.js';
 export type AutomationTrustInput = Exclude<AutomationTrust, { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC' }> |
   { method: 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC'; audienceBase: string; serviceAccountSubject: string };
 export { lockedDeployment } from './runtime/configuration.js';
+const runningVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 
 export class MetadataTools {
   private core: NodeIntegrationCore | undefined;
@@ -53,9 +54,10 @@ export class MetadataTools {
   private login: { authorizationUrl: string } | undefined;
   private loginFailure: string | undefined;
   private silentAttempted = false;
+  private updateCheck: { at: number; result: Promise<ReturnType<typeof latestIntegrationBuild>> } | undefined;
 
   async updateAccess(onChallenge: (url: string) => void): Promise<NodeIntegrationCore> {
-    const initial = await this.ready();
+    const initial = await this.ready(false);
     if ('core' in initial) return initial.core;
     onChallenge(initial.login.authorizationUrl);
     const core = await this.client();
@@ -70,12 +72,29 @@ export class MetadataTools {
   }
 
   async checkUpdate() {
-    const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
+    const version = runningVersion;
     if (!lockedDeployment) return { version, updateAvailable: false, reason: 'Updates require a channel-locked build.' };
-    const ready = await this.ready(); if ('login' in ready) return ready;
-    const build = latestIntegrationBuild(await ready.core.listInternalBuilds(), 'mcp', version, `${process.platform}-${process.arch}`);
+    const ready = await this.ready(false); if ('login' in ready) return ready;
+    const build = await this.latestUpdate(ready.core);
     return { version, updateAvailable: Boolean(build), latestVersion: build?.version,
-      instruction: build ? 'Ask the operator to run inheriti-mcp update --install in a terminal, then restart this MCP server.' : undefined };
+      instruction: build ? 'Update required: run inheriti-mcp update --install in a terminal, then restart this MCP server.' : undefined };
+  }
+
+  private async latestUpdate(core: NodeIntegrationCore) {
+    const now = Date.now();
+    if (this.updateCheck && now - this.updateCheck.at < 5 * 60_000) return this.updateCheck.result;
+    const version = runningVersion;
+    const result = core.listInternalBuilds()
+      .then(builds => latestIntegrationBuild(builds, 'mcp', version, `${process.platform}-${process.arch}`))
+      .catch(error => {
+        if (this.updateCheck?.result === result) this.updateCheck = undefined;
+        const failure = error as { status?: unknown; code?: unknown } | null;
+        if (failure?.status === 401) throw coded('operator_reauthentication_required');
+        if (failure?.status === 403 || ['operator_reauthentication_required', 'operator_not_signed_in', 'reauthentication_required'].includes(String(failure?.code))) throw error;
+        throw coded('update_check_unavailable');
+      });
+    this.updateCheck = { at: now, result };
+    return result;
   }
 
   private client(): Promise<NodeIntegrationCore> {
@@ -199,9 +218,19 @@ export class MetadataTools {
     return { login: this.login };
   }
 
-  private async ready() {
+  private async ready(requireCurrent = true) {
+    const generation = this.authGeneration;
     const result = await this.authorized();
     if ('login' in result) return { login: result.login };
+    // shortcut: older installed clients cannot be blocked here, add server enforcement after OAuth clients are separated.
+    if (requireCurrent && lockedDeployment) {
+      const build = await this.latestUpdate(result);
+      this.assertGeneration(generation);
+      if (build) throw Object.assign(coded('integration_update_required'), {
+        version: runningVersion,
+        latestVersion: build.version,
+      });
+    }
     return { core: result };
   }
 
@@ -229,7 +258,7 @@ export class MetadataTools {
     if (scoped) await scoped.core.forgetMasterKey();
   }
   async listOrganizations() {
-    const ready = await this.ready(); if ('login' in ready) return ready;
+    const ready = await this.ready(false); if ('login' in ready) return ready;
     const items = await ready.core.listOrganizations();
     const scopedOrganizationId = this.scoped?.organizationId;
     if (scopedOrganizationId && !items.some(item => item.id === scopedOrganizationId)) await this.stopLocalAccess();
@@ -238,9 +267,26 @@ export class MetadataTools {
       await this.stopLocalAccess();
       delete preferences[await this.key()]; await this.save(preferences);
     }
-    return { items: items.map(({ id, name }) => ({ id, name })), selectedId: preferences[await this.key()] ?? (items.length === 1 ? items[0]!.id : null) };
+    let update: { required: true; version: string; latestVersion: string; instruction: string } | { checkFailed: true } | undefined;
+    if (lockedDeployment) {
+      try {
+        const build = await this.latestUpdate(ready.core);
+        if (build) update = { required: true,
+          version: runningVersion,
+          latestVersion: build.version,
+          instruction: 'Run inheriti-mcp update --install in a terminal, then restart this MCP server.' };
+      } catch (error) {
+        const failure = error as { status?: unknown; code?: unknown } | null;
+        if (failure?.status === 401 || failure?.status === 403 ||
+            ['operator_reauthentication_required', 'operator_not_signed_in', 'reauthentication_required'].includes(String(failure?.code))) throw error;
+        update = { checkFailed: true };
+      }
+    }
+    return { items: items.map(({ id, name }) => ({ id, name })), selectedId: preferences[await this.key()] ?? (items.length === 1 ? items[0]!.id : null),
+      ...(update ? { update } : {}) };
   }
   async selectOrganization(id: string) {
+    const access = await this.ready(); if ('login' in access) return access;
     const generation = this.authGeneration;
     const version = ++this.selectionVersion;
     await this.cancelPlanJob();
@@ -263,17 +309,18 @@ export class MetadataTools {
     preferences[key] = selectedId; await this.save(preferences);
     return { selectedId };
   }
-  selected() {
+  selected(skipUpdate = false) {
+    if (skipUpdate) return this.selectCore(true);
     if (!this.selecting) {
-      const pending = this.selectCore().finally(() => { if (this.selecting === pending) this.selecting = undefined; });
+      const pending = this.selectCore(false).finally(() => { if (this.selecting === pending) this.selecting = undefined; });
       this.selecting = pending;
     }
     return this.selecting;
   }
-  private async selectCore() {
+  private async selectCore(skipUpdate: boolean) {
     const version = this.selectionVersion;
     const generation = this.authGeneration;
-    const ready = await this.ready();
+    const ready = await this.ready(!skipUpdate);
     this.assertGeneration(generation); if ('login' in ready) return ready;
     const items = await ready.core.listOrganizations();
     const scopedOrganizationId = this.scoped?.organizationId;
@@ -335,6 +382,7 @@ export class MetadataTools {
     this.browserLogin = undefined;
     this.loginFailure = undefined;
     this.silentAttempted = false;
+    this.updateCheck = undefined;
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
     if (retiredScoped) await retiredScoped.core.forgetMasterKey();
@@ -343,7 +391,8 @@ export class MetadataTools {
       ? { cancellation: { code: job.code, message: job.message } } : {}) };
   }
   async abortPlanAccess(planId: string, expectedRevealId?: string) {
-    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    const selected = await this.selected(true);
+    if (!('organizationId' in selected)) return selected;
     const job = this.job;
     if (job?.status === 'WAITING' && job.organizationId === selected.organizationId && job.planId === planId) {
       job.controller.abort();
@@ -506,6 +555,17 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
     try { return { content: [{ type: 'text' as const, text: JSON.stringify(await work(args)) }] }; }
     catch (error) {
       const safe = safeErrorCode(error);
+      if (safe === 'integration_update_required') {
+        const update = error as { version: string; latestVersion: string };
+        const valid = (value: unknown) => typeof value === 'string' && /^\d+\.\d+\.\d+(?:-(?:local|dev|stg)\.\d+)?$/u.test(value);
+        if (!valid(update.version) || !valid(update.latestVersion)) return { isError: true, content: [{ type: 'text' as const, text: safe }] };
+        const message = `Inheriti MCP ${update.version} must update to ${update.latestVersion}. Run inheriti-mcp update --install in a terminal, then restart this MCP server.`;
+        return { isError: true, structuredContent: { code: safe, version: update.version, latestVersion: update.latestVersion, message },
+          content: [{ type: 'text' as const, text: message }] };
+      }
+      if (safe === 'update_check_unavailable') return { isError: true,
+        structuredContent: { code: safe, message: 'Could not check for a required MCP update. Check your connection and retry.' },
+        content: [{ type: 'text' as const, text: 'Could not check for a required MCP update. Check your connection and retry.' }] };
       if (safe === 'integration_tester_required') return { isError: true, content: [{ type: 'text' as const, text: lifecycleMessages[safe]! }] };
       if (safe === 'plan_governance_reconfiguration_required') return {
         isError: true,
@@ -524,7 +584,7 @@ export function registerRevealTools(server: McpServer, tools: MetadataTools) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: 'inheriti-mcp', version: JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version });
+  const server = new McpServer({ name: 'inheriti-mcp', version: runningVersion });
   const tools = new MetadataTools();
   registerTools(server, tools);
   return server;

@@ -33,6 +33,8 @@ const namedCodes: Record<string, string> = {
   MasterKeyRelayExpired: 'master_key_relay_expired',
 };
 const safeCodes = new Set([
+  'integration_update_required',
+  'update_check_unavailable',
   'organization_required',
   'organization_selection_required',
   'organization_access_denied',

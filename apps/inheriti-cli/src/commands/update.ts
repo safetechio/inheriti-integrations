@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, open, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -7,16 +7,22 @@ import { spawnSync } from 'node:child_process';
 import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
+import type { InternalBuild } from '@safetech/inheriti-elements-core/node-base';
 
-export async function notifyCliUpdate(context: CliContext, terminal: Terminal, version: string, sessionPath: string): Promise<void> {
-  if (!terminal.interactive || !(await context.sessions.load())) return;
-  const marker = `${sessionPath}.update-check`;
-  try { if (Date.now() - (await stat(marker)).mtimeMs < 24 * 60 * 60 * 1000) return; } catch { /* First check. */ }
-  try {
-    await writeFile(marker, '', { mode: 0o600 });
-    const build = latestIntegrationBuild(await context.core.listInternalBuilds(), 'cli', version, `${process.platform}-${process.arch}`);
-    if (build) terminal.writeError(`Inheriti CLI ${build.version} is available. Run inheriti update --install.`);
-  } catch { /* An update notice must never fail the command. */ }
+/** 0: current or signed out, 1: blocked, 2: installed; rerun the original command. */
+export async function requireCliUpdate(context: CliContext, terminal: Terminal, version: string): Promise<0 | 1 | 2> {
+  if (!(await context.sessions.load())) return 0;
+  let build: InternalBuild | undefined;
+  try { build = latestIntegrationBuild(await context.core.listInternalBuilds(), 'cli', version, `${process.platform}-${process.arch}`); }
+  catch (error) {
+    const failure = error as { status?: unknown; code?: unknown } | null;
+    const status = failure?.status;
+    if (status === 401) throw Object.assign(new Error('operator_reauthentication_required'), { code: 'operator_reauthentication_required' });
+    if (status === 403 || ['operator_reauthentication_required', 'operator_not_signed_in', 'reauthentication_required'].includes(String(failure?.code))) throw error;
+    terminal.writeError('Could not check for a required update. Retry when Inheriti Business is available.');
+    return 1;
+  }
+  return build ? installCliBuild(context, terminal, version, build, true, true) : 0;
 }
 
 function npmCommand(file: string): { command: string; args: string[] } {
@@ -30,11 +36,23 @@ function npmCommand(file: string): { command: string; args: string[] } {
 export async function updateCli(context: CliContext, terminal: Terminal, version: string, install: boolean): Promise<number> {
   const build = latestIntegrationBuild(await context.core.listInternalBuilds(), 'cli', version, `${process.platform}-${process.arch}`);
   if (!build) { terminal.write(`Inheriti CLI ${version} is up to date.`); return 0; }
-  terminal.write(`Inheriti CLI ${version} → ${build.version}`);
+  return installCliBuild(context, terminal, version, build, install);
+}
+
+async function installCliBuild(context: CliContext, terminal: Terminal, version: string, build: InternalBuild, install: boolean, required = false): Promise<0 | 1 | 2> {
+  (required ? terminal.writeError : terminal.write)(`Inheriti CLI ${version} → ${build.version}`);
   if (!install) { terminal.write('Run inheriti update --install to install it.'); return 0; }
-  if (!terminal.interactive) { terminal.writeError('Update installation requires an interactive terminal.'); return 1; }
+  if (!terminal.interactive) {
+    terminal.writeError(required
+      ? 'An update is required. Run `inheriti update --install` in an interactive terminal, then retry.'
+      : 'Update installation requires an interactive terminal.');
+    return 1;
+  }
   const { promptSelect } = await import('../render/select.jsx');
-  if (await promptSelect('Install this update?', [{ value: 'yes', description: 'Install' }, { value: 'no', description: 'Cancel' }]) !== 'yes') return 0;
+  if (await promptSelect(required ? 'Update required. Install now?' : 'Install this update?', [{ value: 'yes', description: 'Install' }, { value: 'no', description: 'Cancel' }]) !== 'yes') {
+    if (required) terminal.writeError('Update required. Run `inheriti update --install` to continue.');
+    return required ? 1 : 0;
+  }
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-update-'));
   const region = terminal.createLiveRegion?.();
   const started = Date.now();
@@ -90,6 +108,6 @@ export async function updateCli(context: CliContext, terminal: Terminal, version
     closeProgress();
     await rm(directory, { recursive: true, force: true });
   }
-  terminal.write(`Installed Inheriti CLI ${build.version}. Start a new terminal session to use it.`);
-  return 0;
+  terminal.write(`Installed Inheriti CLI ${build.version}. ${required ? 'Rerun your command to use it.' : 'Start a new terminal session to use it.'}`);
+  return required ? 2 : 0;
 }

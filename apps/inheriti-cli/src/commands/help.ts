@@ -223,7 +223,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `autocomplete, with Yes selected by default. --yes installs without prompting; --no-completion ` +
       `skips. No configuration or sign-in is required.`,
     completion: `Usage: inheriti completion <bash|zsh|fish>\n\nPrint a shell-completion script. This command does not require configuration or sign-in.`,
-    update: `Usage: inheriti update [--install]\n\nCheck for an update in this build's channel. --install confirms and installs it with npm.`,
+    update: `Usage: inheriti update [--install]\n\nCheck for an update in this build's channel. --install confirms and installs it with npm. A newer Business CLI build is required after sign-in and before authenticated commands.`,
     help: `Usage: inheriti help [COMMAND [SUBCOMMAND]]\n\nExamples:\n  inheriti help plans reveal\n  inheriti plans reveal --help`,
   };
   return details[command] ?? usage(environmentVariables);

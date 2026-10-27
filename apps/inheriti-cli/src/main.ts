@@ -14,7 +14,7 @@ import { assertPlaintextDestination } from './commands/reveal.js';
 import { completeWords, completionNeedsPlanContext, printCompletionScript } from './commands/completion.js';
 import { processTerminal } from './output.js';
 import { organizationCommand, selectedOrganization } from './organizations.js';
-import { notifyCliUpdate, updateCli } from './commands/update.js';
+import { requireCliUpdate, updateCli } from './commands/update.js';
 import type { Terminal } from './output.js';
 import { setup } from './commands/setup.js';
 import { registerCliCancel } from './cancellation.js';
@@ -119,6 +119,14 @@ export async function run(
       if (!configuration.business || !BUILD_DEPLOYMENT) { terminal.writeError('Updates require a channel-locked Inheriti® Business build.'); return 1; }
       return await updateCli(context, terminal, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, rest[0] === '--install');
     }
+    // shortcut: older installed clients cannot be blocked here, add server enforcement after OAuth clients are separated.
+    if (configuration.business && BUILD_DEPLOYMENT &&
+        ['organizations', 'plans', 'secrets', 'members', 'automations'].includes(command) &&
+        !(command === 'plans' && rest[0] === 'abort') &&
+        !(command === 'automations' && (rest[0] === 'runtime' || (rest[0] === 'pair' && rest[1] === 'redeem')))) {
+      const status = await requireCliUpdate(context, terminal, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+      if (status !== 0) return 1;
+    }
     if (command === 'organizations') {
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
@@ -201,7 +209,11 @@ export async function run(
       scoped.organization = organization;
       return await completeWords(scoped, terminal, parsed.argv, environmentVariables);
     }
-    if (command === 'login') return await login(context, terminal);
+    if (command === 'login') {
+      const status = await login(context, terminal);
+      if (status !== 0 || !configuration.business || !BUILD_DEPLOYMENT) return status;
+      return await requireCliUpdate(context, terminal, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version) === 1 ? 1 : 0;
+    }
     if (command === 'logout') return await logout(context, terminal);
     if (command === 'members') {
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
@@ -247,13 +259,4 @@ if (isEntrypoint) {
   const terminal = processTerminal();
   const argv = process.argv.slice(2);
   process.exitCode = await run(argv, process.env, terminal);
-  if (process.exitCode === 0 && terminal.interactive && ['login', 'organizations', 'plans'].includes(argv[0] ?? '')) {
-    try {
-      const configuration = resolveConfiguration(process.env, process.env.INHERITI_ELEMENTS_CONFIRM_LIVE);
-      if (configuration.business && BUILD_DEPLOYMENT) {
-        await notifyCliUpdate(createCliContext(configuration, defaultSessionPath(process.env)), terminal,
-          JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, defaultSessionPath(process.env));
-      }
-    } catch { /* Update notices never change command results. */ }
-  }
 }
