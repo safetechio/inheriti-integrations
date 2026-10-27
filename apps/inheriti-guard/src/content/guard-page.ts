@@ -12,7 +12,7 @@
     document.dispatchEvent(new CustomEvent(BLOCKED_EVENT, { detail: { kind } }));
   const denied = (name: string) => {
     blocked('sensitive-api-blocked');
-    return Promise.reject(new DOMException(`${name} is blocked by InheritiGuard.`, 'NotAllowedError'));
+    return Promise.reject(new DOMException(`${name} is blocked by Inheriti® Guard.`, 'NotAllowedError'));
   };
 
   document.addEventListener(SETTINGS_EVENT, (event) => {
@@ -69,13 +69,13 @@
     navigator.geolocation.getCurrentPosition = (success, error, options) => {
       if (!settings.protection || !settings.sensitiveApi) return originalCurrent(success, error, options);
       blocked('sensitive-api-blocked');
-      error?.({ code: 1, message: 'Geolocation is blocked by InheritiGuard.', PERMISSION_DENIED: 1,
+      error?.({ code: 1, message: 'Geolocation is blocked by Inheriti® Guard.', PERMISSION_DENIED: 1,
         POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
     };
     navigator.geolocation.watchPosition = (success, error, options) => {
       if (!settings.protection || !settings.sensitiveApi) return originalWatch(success, error, options);
       blocked('sensitive-api-blocked');
-      error?.({ code: 1, message: 'Geolocation is blocked by InheritiGuard.', PERMISSION_DENIED: 1,
+      error?.({ code: 1, message: 'Geolocation is blocked by Inheriti® Guard.', PERMISSION_DENIED: 1,
         POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
       return 0;
     };

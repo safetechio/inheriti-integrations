@@ -6,9 +6,9 @@ const panelMain = readFileSync(new URL('../src/side-panel/main.ts', import.meta.
 const blockedMain = readFileSync(new URL('../src/blocked/main.ts', import.meta.url), 'utf8');
 const manifest = JSON.parse(readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 
-describe('unified InheritiGuard UI', () => {
+describe('unified Inheriti® Guard UI', () => {
   it('presents one product with three accessible top-level areas', () => {
-    expect(panel).toContain('aria-label="InheritiGuard"');
+    expect(panel).toContain('aria-label="Inheriti® Guard"');
     for (const [tab, view] of [['plan-access-tab', 'plan-access-panel'], ['browser-protection-tab', 'browser-protection-panel'], ['activity-tab', 'activity-panel']]) {
       expect(panel).toContain(`id="${tab}" role="tab"`);
       expect(panel).toContain(`aria-controls="${view}"`);

@@ -15,13 +15,14 @@ interface ChromeManifest {
   readonly action?: { readonly default_icon?: Readonly<Record<string, string>> };
   readonly name?: string;
   readonly short_name?: string;
+  readonly description?: string;
   readonly version?: string;
   readonly key?: string;
   readonly web_accessible_resources?: readonly { readonly resources: readonly string[]; readonly matches: readonly string[] }[];
 }
 
 describe('Chrome MV3 manifest', () => {
-  it('uses the InheritiGuard product identity and the canonical app version', async () => {
+  it('uses the Inheriti® Guard product identity and the canonical app version', async () => {
     const manifest = JSON.parse(
       await readFile(new URL('../src/manifest.json', import.meta.url), 'utf8'),
     ) as ChromeManifest;
@@ -30,8 +31,9 @@ describe('Chrome MV3 manifest', () => {
     ) as { readonly name: string; readonly version: string };
 
     expect(packageManifest.name).toBe('@safetech/inheritiguard-chrome-extension');
-    expect(manifest.name).toBe('InheritiGuard');
-    expect(manifest.short_name).toBe('InheritiGuard');
+    expect(manifest.name).toBe('Inheriti® Guard');
+    expect(manifest.short_name).toBeUndefined();
+    expect(manifest.description).toBe('Browser protection and secure access to Inheriti® Business protection plans, with autofill on authorized sites.');
     expect(manifest.version).toBe(packageManifest.version);
   });
 

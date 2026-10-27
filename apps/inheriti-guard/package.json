@@ -3,7 +3,7 @@
   "version": "1.0.15",
   "private": true,
   "type": "module",
-  "description": "InheritiGuard Chrome MV3 extension with Browser Protection and Plan Access",
+  "description": "Inheriti® Guard Chrome MV3 extension with Browser Protection and Plan Access",
   "files": [
     "dist"
   ],

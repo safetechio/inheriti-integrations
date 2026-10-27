@@ -464,9 +464,9 @@ async function runReveal(batch: Batch, candidates: readonly Candidate[], popover
           if (response?.ok && response.reveal?.kind === 'DONE') {
             closePopover();
           }
-          else { phaseText.textContent = 'Could not cancel this access. Try again or open InheritiGuard.'; finish.disabled = false; }
+          else { phaseText.textContent = 'Could not cancel this access. Try again or open Inheriti® Guard.'; finish.disabled = false; }
         })
-        .catch(() => { phaseText.textContent = 'Could not cancel this access. Try again or open InheritiGuard.'; finish.disabled = false; });
+        .catch(() => { phaseText.textContent = 'Could not cancel this access. Try again or open Inheriti® Guard.'; finish.disabled = false; });
     })
     : interrupted ? action('Cancel pending request', 'primary', () => {
       finish.disabled = true;
@@ -512,12 +512,12 @@ function labelFor(result: FieldResult, batch: Batch): string {
 
 function loadFailure(code?: string): { title: string; message: string; action: string; primary?: boolean; close?: boolean } {
   if (code === 'signed-out') return { title: 'Sign in to use autofill',
-    message: 'Open InheritiGuard and sign in, then try this field again.', action: 'Open InheritiGuard', primary: true };
+    message: 'Open Inheriti® Guard and sign in, then try this field again.', action: 'Open Inheriti® Guard', primary: true };
   if (code === 'stale-page-context') return { title: 'This field changed',
-    message: 'The page changed after InheritiGuard found this input. Close this message and try the field again.', action: 'Close', close: true };
+    message: 'The page changed after Inheriti® Guard found this input. Close this message and try the field again.', action: 'Close', close: true };
   if (code === 'access-request-failed') return { title: 'Plans could not be loaded',
     message: 'Open the side panel to check your account and try again.', action: 'Open side panel' };
-  if (code === undefined) return { title: 'InheritiGuard did not respond',
+  if (code === undefined) return { title: 'Inheriti® Guard did not respond',
     message: 'Reload this page, then try the field again.', action: 'Close', close: true };
   return { title: 'Autofill is unavailable',
     message: 'Open the side panel for details and try again.', action: 'Open side panel' };
@@ -708,7 +708,7 @@ function onOverlayMessage(message: unknown, _sender: chrome.runtime.MessageSende
     const cancel = element('button', 'device-cancel', 'Cancel reveal');
     cancel.type = 'button'; cancel.addEventListener('click', () => answer());
     popover.classList.add('device-choice');
-    popover.replaceChildren(logo, element('p', 'device-eyebrow', 'InheritiGuard · Plan access'),
+    popover.replaceChildren(logo, element('p', 'device-eyebrow', 'Inheriti® Guard · Plan access'),
       element('h2', 'device-title', custodianShareCopy.choice.title),
       element('p', 'device-intro', custodianShareCopy.choice.intro), options, cancel);
     reposition();

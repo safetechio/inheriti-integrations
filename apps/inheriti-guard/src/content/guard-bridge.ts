@@ -34,7 +34,7 @@ document.addEventListener('copy', () => {
   void chrome.runtime.sendMessage({ type: 'guard-content:clipboard-copied' }).catch(() => undefined);
 }, true);
 
-// CSP remains browser/page policy. InheritiGuard only observes that a violation occurred and sends
+// CSP remains browser/page policy. Inheriti® Guard only observes that a violation occurred and sends
 // no directive, blocked URI, document URL, query, fragment, or report details across the boundary.
 document.addEventListener('securitypolicyviolation', (event) => {
   if (shouldReportCspViolation(protectionEnabled, event)) {

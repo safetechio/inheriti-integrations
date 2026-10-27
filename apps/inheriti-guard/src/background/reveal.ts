@@ -783,7 +783,7 @@ function deliveryFailureMessage(code: AccessFieldResultCode): string {
   if (code === 'page-address-changed') return 'The page address changed before autofill. Open the fields again on the current page.';
   if (code === 'form-changed') return 'The login form was replaced before autofill. Open the fields again.';
   if (code === 'tab-inactive') return 'Another tab became active in this window. Return to this page and try again.';
-  if (code === 'authorization-denied') return 'InheritiGuard no longer has permission to autofill on this site.';
+  if (code === 'authorization-denied') return 'Inheriti® Guard no longer has permission to autofill on this site.';
   if (code === 'field-unavailable') return 'A selected input is no longer editable. Open the fields again.';
   return 'Autofill could not write a selected field. No form was submitted.';
 }
