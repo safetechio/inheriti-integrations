@@ -38,7 +38,7 @@ if (typecheck.status !== 0) process.exit(typecheck.status ?? 1);
 // the manifest declares the worker as a module and the CSP allows only self-hosted scripts.
 await build({
   entryPoints: {
-    'background/service-worker': resolve(source, 'background/service-worker.ts'),
+    'background/service-worker': resolve(source, 'background/service-worker/main.ts'),
     'side-panel/main': resolve(source, 'side-panel/main.ts'),
     'safekey-popup/main': resolve(source, 'safekey-popup/main.ts'),
     'blocked/main': resolve(source, 'blocked/main.ts'),

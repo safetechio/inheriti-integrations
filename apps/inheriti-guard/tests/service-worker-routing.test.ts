@@ -2,7 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listeners: Record<string, ((...args: any[]) => any) | undefined> = {};
 const fillBatch = vi.fn(async (_batch: unknown, _initiator?: string) => [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }]);
-const clearSession = vi.fn(async () => undefined);
+const fillField = vi.fn(async () => ({ kind: 'DONE', message: 'Filled.' }));
+const clearSession = vi.fn(async () => { mockProfiles = mockProfiles.filter((profile) => !profile.active); mockGeneration += 1; });
+const clearAllSessions = vi.fn(async () => { mockProfiles = []; mockGeneration += 1; });
 const signInMock = vi.fn(async (_auth?: unknown, _signal?: AbortSignal) => undefined);
 const shutdownReveal = vi.fn(async () => undefined);
 const abortPlanAccess = vi.fn(async (_planId: string, _expectedRevealId?: string) => ({ kind: 'DONE', message: 'Access aborted.' }));
@@ -12,13 +14,24 @@ const reconcileReveal = vi.fn(async (_planId: string) => ({ kind: 'WARNING', mes
 let revealState: Record<string, unknown> = { kind: 'IDLE' };
 let businessMode = false;
 const hasMasterKey = vi.fn(async (_ref: unknown) => false);
+const loadCachedKey = vi.fn(async (_ref: unknown): Promise<Uint8Array | undefined> => undefined);
 const loadPlansMock = vi.fn(async () => ({ kind: 'EMPTY' }));
+const listOrganizationsMock = vi.fn(async (_profileId?: string) => businessOrganizations);
 let businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }];
 const selectedOrganizations: Record<string, string> = {};
 const coreOrganizations: Array<string | undefined> = [];
 const listedOrganizations: Array<string | undefined> = [];
 const planListInputs: unknown[] = [];
 const localValues: Record<string, unknown> = {};
+type MockProfile = { id: string; issuer: string; environment: string; authorizedParty: string;
+  subject: string; expiresAt: number; active: boolean; needsSignIn?: boolean };
+let mockProfiles: MockProfile[] = [{ id: 'account-a', issuer: 'https://safeid.test', environment: 'TEST',
+  authorizedParty: 'chrome-test', subject: 'user-a', expiresAt: Date.now() + 60_000, active: true }];
+let mockGeneration = 0;
+let pauseSnapshot: (() => Promise<void>) | undefined;
+let pauseForProfile: ((id: string) => Promise<void>) | undefined;
+const revokedProfiles = new Set<string>();
+const coreProfiles: Array<string | undefined> = [];
 function storageArea(values: Record<string, unknown>) {
   return {
     get: vi.fn(async (keys: string | string[]) => Object.fromEntries((typeof keys === 'string' ? [keys] : keys)
@@ -55,6 +68,7 @@ vi.mock('../src/background/reveal.js', () => ({
     async recoverAbandoned() {}
     async resume() { return { kind: 'IDLE' }; }
     async fillBatch(batch: unknown, initiator?: string) { return fillBatch(batch, initiator); }
+    fill = fillField;
     async fields() { return { kind: 'READY', planId: 'plan-1', fields: [] }; }
   },
   isRevealDeadline: () => false,
@@ -62,19 +76,53 @@ vi.mock('../src/background/reveal.js', () => ({
 vi.mock('../src/background/session-store.js', () => ({
   SessionStorageOperatorSessionStore: class {
     clear = clearSession;
-    async load() { return { principal: { issuer: 'https://safeid.test', subject: 'user-a', environment: 'TEST' } }; }
-    async snapshot() { return { session: await this.load(), generation: 0 }; }
+    clearAll = clearAllSessions;
+    async load() { return { principal: { issuer: 'https://safeid.test', subject: 'user-a', environment: 'TEST',
+      authorizedParty: 'chrome-test', sessionId: 'session-a' } }; }
+    async snapshot() {
+      const pause = pauseSnapshot;
+      pauseSnapshot = undefined;
+      if (pause !== undefined) await pause();
+      return { session: await this.load(), generation: mockGeneration };
+    }
+    async profiles() { return mockProfiles; }
+    async forProfile(id: string) { await pauseForProfile?.(id); return { profileId: id }; }
+    async beginEnrollment() { return this; }
+    async activate(id: string) { if (mockProfiles.find((profile) => profile.active)?.id !== id) mockGeneration += 1;
+      mockProfiles = mockProfiles.map((profile) => ({
+      id: profile.id, issuer: profile.issuer, environment: profile.environment, authorizedParty: profile.authorizedParty,
+      subject: profile.subject, expiresAt: profile.expiresAt, active: profile.id === id,
+      ...(profile.needsSignIn === undefined ? {} : { needsSignIn: profile.needsSignIn }),
+    })); return true; }
+    async remove(id: string) { mockProfiles = mockProfiles.filter((profile) => profile.id !== id); mockGeneration += 1; }
+    async bumpGeneration() { mockGeneration += 1; }
   },
 }));
+vi.mock('../src/background/session-key-vault.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/background/session-key-vault.js')>();
+  return { operatorSessionIdentity: original.operatorSessionIdentity,
+    SessionStorageKeyVault: class { load = loadCachedKey; } };
+});
 vi.mock('../src/background/plans.js', () => ({
-  createCore: (_configuration: unknown, _sessions: unknown, _transport: unknown, organizationId?: string) => {
+  createCore: (_configuration: unknown, _sessions: { profileId?: string }, _transport: unknown, organizationId?: string) => {
     coreOrganizations.push(organizationId);
+    coreProfiles.push(_sessions.profileId);
     return {
     auth: {},
     forgetMasterKey: vi.fn(async () => undefined),
     hasMasterKey,
     getAccessToken: async () => 'operator-token',
-    listOrganizations: async () => businessOrganizations,
+    listOrganizations: async () => {
+      if (_sessions.profileId && revokedProfiles.has(_sessions.profileId)) {
+        mockProfiles = mockProfiles.map((profile) => profile.id === _sessions.profileId
+          ? { id: profile.id, issuer: profile.issuer, environment: profile.environment,
+            authorizedParty: profile.authorizedParty, subject: profile.subject, expiresAt: profile.expiresAt,
+            active: false, needsSignIn: true } : profile);
+        mockGeneration += 1;
+        throw { status: 401 };
+      }
+      return listOrganizationsMock(_sessions.profileId);
+    },
     listPlans: async (input?: unknown) => {
       listedOrganizations.push(organizationId);
       planListInputs.push(input);
@@ -94,9 +142,10 @@ vi.mock('../src/shared/stored-configuration.js', () => ({
   },
 }));
 vi.mock('../src/shared/configuration.js', () => ({ resolveConfiguration: () => ({
-  issuer: 'https://safeid.test', environment: 'TEST', ...(businessMode ? {} : { applicationId: 'standalone-test' }),
+  issuer: 'https://safeid.test', environment: 'TEST', clientId: 'chrome-test',
+  ...(businessMode ? {} : { applicationId: 'standalone-test' }),
 }) }));
-vi.mock('../src/background/auth.js', () => ({ signIn: signInMock }));
+vi.mock('../src/background/auth.js', () => ({ signIn: signInMock, chooseAnotherSafeIdAccount: vi.fn(async () => undefined) }));
 
 beforeAll(async () => {
   Object.assign(globalThis, { chrome: {
@@ -145,14 +194,22 @@ beforeAll(async () => {
     }) },
     identity: { getRedirectURL: () => 'https://extension.test/oauth' },
   } });
-  await import('../src/background/service-worker.js');
+  await import('../src/background/service-worker/main.js');
   await listeners.action!({ id: 7, windowId: 2, url: 'https://example.test/login' });
 });
 
 beforeEach(() => {
   hasMasterKey.mockReset().mockResolvedValue(false);
+  loadCachedKey.mockReset().mockResolvedValue(undefined);
   loadPlansMock.mockClear();
-  fillBatch.mockClear(); clearSession.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
+  fillBatch.mockClear(); fillField.mockClear(); clearSession.mockClear(); clearAllSessions.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
+  listOrganizationsMock.mockReset().mockImplementation(async () => businessOrganizations);
+  mockProfiles = [{ id: 'account-a', issuer: 'https://safeid.test', environment: 'TEST',
+    authorizedParty: 'chrome-test', subject: 'user-a', expiresAt: Date.now() + 60_000, active: true }];
+  mockGeneration = 0;
+  pauseSnapshot = undefined;
+  pauseForProfile = undefined;
+  revokedProfiles.clear(); coreProfiles.length = 0;
   revealState = { kind: 'IDLE' };
   businessMode = false; workspaceFields = discovered; overlayFields = discovered; planFieldNames = ['username']; planListInputs.length = 0;
 });
@@ -168,23 +225,299 @@ function overlayRequest(message: unknown, sender: Record<string, unknown> = {
 }
 
 describe('service worker access routing', () => {
+  it('shares the active Core when concurrent requests construct it', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let calls = 0;
+    pauseForProfile = async (id) => {
+      if (id === 'account-a' && ++calls === 1) { entered(); await waiting; }
+    };
+    const first = request({ type: 'load-plans' });
+    await started;
+    const second = request({ type: 'load-plans' });
+    release();
+    expect((await Promise.all([first, second])).every((result) => result.ok)).toBe(true);
+    expect(coreProfiles.filter((id) => id === 'account-a')).toHaveLength(1);
+  });
+
+  it('shares active auth while organization discovery overlaps another Core request', async () => {
+    businessMode = true;
+    selectedOrganizations[JSON.stringify(['https://safeid.test', 'TEST', 'user-a'])] = 'org-a';
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    listOrganizationsMock.mockImplementationOnce(async () => { entered(); await waiting; return businessOrganizations; });
+    const discovering = request({ type: 'load-plans' });
+    await started;
+    expect(await request({ type: 'load-plan-assets', planId: 'plan-1' }))
+      .toMatchObject({ ok: true, assets: [] });
+    release();
+    expect((await discovering).ok).toBe(true);
+    expect(coreProfiles.filter((id) => id === 'account-a')).toHaveLength(1);
+    delete selectedOrganizations[JSON.stringify(['https://safeid.test', 'TEST', 'user-a'])];
+  });
+
+  it('serializes concurrent inactive-profile refresh discovery', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: 0, active: false });
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let token = 'old';
+    let oldTokenExchanges = 0;
+    listOrganizationsMock.mockImplementation(async (id) => {
+      if (id !== 'account-b') return businessOrganizations;
+      if (token === 'old') {
+        oldTokenExchanges += 1;
+        if (oldTokenExchanges > 1) {
+          mockProfiles = mockProfiles.map((profile) => profile.id === 'account-b'
+            ? { id: profile.id, issuer: profile.issuer, environment: profile.environment,
+              authorizedParty: profile.authorizedParty, subject: profile.subject, expiresAt: profile.expiresAt,
+              active: profile.active, needsSignIn: true } : profile);
+          throw { status: 401 };
+        }
+        entered();
+        await waiting;
+        token = 'rotated';
+      }
+      return businessOrganizations;
+    });
+    const first = request({ type: 'load-plans' });
+    await started;
+    const second = request({ type: 'load-plans' });
+    await vi.waitFor(() => expect(listOrganizationsMock.mock.calls
+      .filter(([id]) => id === 'account-a')).toHaveLength(4));
+    expect(oldTokenExchanges).toBe(1);
+    release();
+    const results = await Promise.all([first, second]);
+    expect(oldTokenExchanges).toBe(1);
+    expect(results.every((result) => result.ok && result.state.accounts
+      .some((account: { id: string; needsSignIn: boolean }) => account.id === 'account-b' && !account.needsSignIn))).toBe(true);
+    expect(mockProfiles.find((profile) => profile.id === 'account-b')?.needsSignIn).toBeFalsy();
+  });
+
+  it('switches A to B and back while clearing old page work', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    const loaded = await request({ type: 'load-access-workspace', planId: 'plan-1' });
+    expect(loaded.ok).toBe(true);
+    const registrations = vi.mocked(chrome.scripting.registerContentScripts).mock.calls.length;
+    expect(await request({ type: 'switch-account', accountId: 'account-b' }))
+      .toMatchObject({ ok: true, state: { accounts: [
+        { id: 'account-a', active: false }, { id: 'account-b', active: true },
+      ] } });
+    expect(coreProfiles).toContain('account-b');
+    expect(vi.mocked(chrome.scripting.registerContentScripts).mock.calls.length).toBeGreaterThan(registrations);
+    expect(await request({ type: 'set-access-mapping', mapping: {
+      protectedField: loaded.protectedFields[0], pageTarget: loaded.pageTargets[0], source: 'MANUAL',
+    } })).toEqual({ ok: false, error: 'stale-page-context' });
+    expect(await request({ type: 'switch-account', accountId: 'account-a' }))
+      .toMatchObject({ ok: true, state: { accounts: [
+        { id: 'account-a', active: true }, { id: 'account-b', active: false },
+      ] } });
+    expect(shutdownReveal).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks switching while an earlier account request is pending', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    let release!: () => void;
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    loadPlansMock.mockImplementationOnce(async () => { started(); await waiting; return { kind: 'EMPTY' }; });
+    const oldRequest = request({ type: 'load-plans' });
+    await entered;
+    let blocked: unknown;
+    expect(listeners.message!({ type: 'switch-account', accountId: 'account-b' }, {},
+      (response: unknown) => { blocked = response; })).toBe(false);
+    expect(blocked).toEqual({ ok: false, error: 'operation-busy' });
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+    release();
+    await expect(oldRequest).resolves.toMatchObject({ ok: true, state: { kind: 'EMPTY' } });
+    expect((await request({ type: 'switch-account', accountId: 'account-b' })).ok).toBe(true);
+  });
+
+  it('allows switching while a token-free key status read is pending', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    let release!: () => void;
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    loadCachedKey.mockImplementationOnce(async () => { started(); await waiting; return new Uint8Array(32); });
+    const oldStatus = request({ type: 'get-master-key-status' });
+    await entered;
+    expect(coreProfiles).toEqual([]);
+    expect((await request({ type: 'switch-account', accountId: 'account-b' })).ok).toBe(true);
+    expect(coreProfiles).not.toContain('account-a');
+    release();
+    expect(await oldStatus).toEqual({ ok: false, error: 'stale-page-context' });
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-b');
+  });
+
+  it('serializes concurrent switch and removal at message admission', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    listOrganizationsMock.mockImplementationOnce(async () => { entered(); await waiting; return businessOrganizations; });
+    const switching = request({ type: 'switch-account', accountId: 'account-b' });
+    await started;
+    let blocked: unknown;
+    expect(listeners.message!({ type: 'remove-account', accountId: 'account-a' }, {},
+      (response: unknown) => { blocked = response; })).toBe(false);
+    expect(blocked).toEqual({ ok: false, error: 'operation-busy' });
+    release();
+    await switching;
+    expect(mockProfiles).toHaveLength(2);
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-b');
+  });
+
+  it('blocks switching during A fill, then activates B after it finishes', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    const tab = { id: 7, windowId: 2, url: 'https://example.test/login' };
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    vi.mocked(chrome.tabs.query).mockImplementationOnce(async () => { entered(); await waiting; return [tab]; });
+    fillField.mockImplementationOnce(async () => {
+      expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+      return { kind: 'DONE', message: 'Filled.' };
+    });
+    const oldFill = request({ type: 'fill-field', planId: 'plan-1', selector: 'login.username' });
+    await started;
+    let blocked: unknown;
+    expect(listeners.message!({ type: 'switch-account', accountId: 'account-b' }, {},
+      (response: unknown) => { blocked = response; })).toBe(false);
+    expect(blocked).toEqual({ ok: false, error: 'operation-busy' });
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+    release();
+    await expect(oldFill).resolves.toMatchObject({ ok: true, reveal: { kind: 'DONE' } });
+    expect((await request({ type: 'switch-account', accountId: 'account-b' })).ok).toBe(true);
+    expect(fillField).toHaveBeenCalledOnce();
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-b');
+  });
+
+  it('rejects stale second-panel actions until it reloads the active generation', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    const oldGeneration = (await request({ type: 'load-plans' })).state.generation;
+    expect((await request({ type: 'switch-account', accountId: 'account-b', expectedGeneration: oldGeneration })).ok).toBe(true);
+    expect(await request({ type: 'fill-field', planId: 'plan-1', selector: 'login.username',
+      expectedGeneration: oldGeneration })).toEqual({ ok: false, error: 'stale-page-context' });
+    expect(await request({ type: 'remove-account', accountId: 'account-b', expectedGeneration: oldGeneration }))
+      .toEqual({ ok: false, error: 'stale-page-context' });
+    expect(fillField).not.toHaveBeenCalled();
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-b');
+    const currentGeneration = (await request({ type: 'load-plans' })).state.generation;
+    expect(currentGeneration).toBeGreaterThan(oldGeneration);
+    expect((await request({ type: 'get-master-key-status', expectedGeneration: currentGeneration })).ok).toBe(true);
+  });
+
+  it('invalidates another panel after a same-account organization change', async () => {
+    businessMode = true;
+    const oldGeneration = (await request({ type: 'load-plans' })).state.generation;
+    const selected = await request({ type: 'select-organization', organizationId: 'org-b',
+      expectedGeneration: oldGeneration });
+    expect(selected.state.generation).toBeGreaterThan(oldGeneration);
+    expect(await request({ type: 'fill-field', planId: 'plan-1', selector: 'login.username',
+      expectedGeneration: oldGeneration })).toEqual({ ok: false, error: 'stale-page-context' });
+    expect(await request({ type: 'select-organization', organizationId: 'org-a',
+      expectedGeneration: oldGeneration })).toEqual({ ok: false, error: 'stale-page-context' });
+    expect(fillField).not.toHaveBeenCalled();
+    expect((await request({ type: 'load-plans' })).state).toMatchObject({
+      organizationId: 'org-b', generation: selected.state.generation,
+    });
+  });
+
+  it('rejects foreign and forged account destinations before activation', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    mockProfiles.push({ id: 'foreign', issuer: 'https://safeid.test', environment: 'LIVE',
+      authorizedParty: 'chrome-test', subject: 'user-c', expiresAt: Date.now() + 60_000, active: false });
+    expect(await request({ type: 'switch-account', accountId: 'foreign' }))
+      .toEqual({ ok: false, error: 'plan-request-failed' });
+    expect(await request({ type: 'select-account-organization', accountId: 'account-b', organizationId: 'forged' }))
+      .toEqual({ ok: false, error: 'plan-request-failed' });
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+    expect((await request({ type: 'load-plans' })).state.accounts).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ id: 'foreign' }),
+    ]));
+  });
+
+  it('rejects a cross-account destination message aimed at the already-active account', async () => {
+    businessMode = true;
+    const generation = (await request({ type: 'load-plans' })).state.generation;
+    expect(await request({ type: 'select-account-organization', accountId: 'account-a',
+      organizationId: 'org-b', expectedGeneration: generation }))
+      .toEqual({ ok: false, error: 'plan-request-failed' });
+    expect(mockGeneration).toBe(generation);
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+  });
+
+  it('keeps A usable and marks revoked B for sign-in', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    revokedProfiles.add('account-b');
+    const result = await request({ type: 'switch-account', accountId: 'account-b' });
+    expect(result.state.accounts).toContainEqual(expect.objectContaining({ id: 'account-b', needsSignIn: true }));
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+  });
+
+  it('retains a credential-cleared B row without querying it or losing A', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() - 1, active: false,
+      needsSignIn: true });
+    const state = (await request({ type: 'load-plans' })).state;
+    expect(state.accounts).toContainEqual(expect.objectContaining({ id: 'account-b', needsSignIn: true }));
+    expect(coreProfiles).not.toContain('account-b');
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+  });
+
+  it('removes one account without clearing the other, then Secure Logoff clears all', async () => {
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    const registrations = vi.mocked(chrome.scripting.registerContentScripts).mock.calls.length;
+    expect(await request({ type: 'remove-account', accountId: 'account-b' }))
+      .toMatchObject({ ok: true, state: { accounts: [{ id: 'account-a', active: true }] } });
+    expect(vi.mocked(chrome.scripting.registerContentScripts).mock.calls.length).toBeGreaterThan(registrations);
+    expect(clearAllSessions).not.toHaveBeenCalled();
+    await request({ type: 'guard:secure-logoff' });
+    expect(mockProfiles).toEqual([]);
+  });
+
   it('reads cached key status without reloading plans and reflects acquisition and clearing', async () => {
     expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Application', loaded: false } });
-    expect(hasMasterKey).toHaveBeenLastCalledWith({ system: 'INHERITI_ELEMENTS', contextId: 'standalone-test' });
-    hasMasterKey.mockResolvedValue(true);
+    expect(loadCachedKey).toHaveBeenLastCalledWith({ system: 'INHERITI_ELEMENTS', contextId: 'standalone-test' });
+    loadCachedKey.mockResolvedValue(new Uint8Array(32));
     expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Application', loaded: true } });
-    hasMasterKey.mockResolvedValue(false);
+    loadCachedKey.mockResolvedValue(undefined);
     expect((await request({ type: 'get-master-key-status' })).keyStatus.loaded).toBe(false);
     expect(loadPlansMock).not.toHaveBeenCalled();
+    expect(coreProfiles).toEqual([]);
   });
 
   it('checks the selected organization key without fetching the plan list', async () => {
     businessMode = true;
     await request({ type: 'select-organization', organizationId: 'org-b' });
     loadPlansMock.mockClear();
-    hasMasterKey.mockResolvedValue(true);
+    loadCachedKey.mockResolvedValue(new Uint8Array(32));
     expect(await request({ type: 'get-master-key-status' })).toEqual({ ok: true, keyStatus: { owner: 'Organization', loaded: true } });
-    expect(hasMasterKey).toHaveBeenLastCalledWith({ system: 'INHERITI_BUSINESS', contextId: 'org-b' });
+    expect(loadCachedKey).toHaveBeenLastCalledWith({ system: 'INHERITI_BUSINESS', contextId: 'org-b' });
     expect(loadPlansMock).not.toHaveBeenCalled();
     for (const key of Object.keys(selectedOrganizations)) delete selectedOrganizations[key];
   });
@@ -236,8 +569,23 @@ describe('service worker access routing', () => {
     await expect(request({ type: 'guard:secure-logoff' })).resolves.toMatchObject({ ok: true });
     finishSignIn();
 
-    await expect(signingIn).resolves.toEqual({ ok: true, state: { kind: 'ERROR', code: 'login_cancelled' } });
-    expect(clearSession.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await expect(signingIn).resolves.toEqual({ ok: false, error: 'stale-page-context' });
+    expect(clearAllSessions).toHaveBeenCalledOnce();
+  });
+
+  it('does not start OAuth when Secure Logoff wins a paused sign-in preflight', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    pauseSnapshot = async () => { entered(); await waiting; };
+    const signingIn = request({ type: 'sign-in', expectedGeneration: 0 });
+    await started;
+    await request({ type: 'guard:secure-logoff' });
+    release();
+    await expect(signingIn).resolves.toEqual({ ok: false, error: 'stale-page-context' });
+    expect(signInMock).not.toHaveBeenCalled();
+    expect(mockProfiles).toEqual([]);
   });
 
   it('lets Guard denial win for an already-open untrusted tab', async () => {

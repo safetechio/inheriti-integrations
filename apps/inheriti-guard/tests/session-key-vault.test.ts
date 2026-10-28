@@ -14,6 +14,9 @@ function login(): OperatorSession {
     principal: { issuer: configuration.issuer, audience: 'inheriti-integrations-api', authorizedParty: configuration.clientId,
       environment: 'TEST', subject: 'operator-a', sessionId: 'login-a', tokenId: 'token-a', scopes: ['openid'] } };
 }
+async function enroll(sessions: SessionStorageOperatorSessionStore, session: OperatorSession) {
+  await (await sessions.beginEnrollment()).save(session);
+}
 function storage() {
   const values: Record<string, unknown> = {};
   const area = {
@@ -23,15 +26,20 @@ function storage() {
     remove: async (keys: string | string[]) => { for (const name of typeof keys === 'string' ? [keys] : keys) delete values[name]; },
   } as unknown as chrome.storage.StorageArea;
   const sessions = new SessionStorageOperatorSessionStore(area);
-  return { area, values, sessions, vault: () => new SessionStorageKeyVault(area, sessions, configuration,
-    { session: typeof values['inheriti.operatorSession'] === 'string' ? JSON.parse(values['inheriti.operatorSession']) as OperatorSession : undefined,
-      generation: values['inheriti.operatorSessionGeneration'] as number ?? 0 }) };
+  return { area, values, sessions, vault: () => {
+    const profiles = typeof values['inheriti.operatorProfiles'] === 'string'
+      ? JSON.parse(values['inheriti.operatorProfiles']) as Array<{ id: string; session: OperatorSession }> : [];
+    return new SessionStorageKeyVault(area, sessions, configuration, {
+      session: profiles.find(({ id }) => id === values['inheriti.activeOperatorProfile'])?.session,
+      generation: values['inheriti.operatorSessionGeneration'] as number ?? 0,
+    });
+  } };
 }
 
 describe('SessionStorageKeyVault', () => {
   it('retains keys across worker/client recreation and isolates key references', async () => {
     const state = storage();
-    await state.sessions.save(login());
+    await enroll(state.sessions, login());
     await state.vault().store(ref, key);
     await expect(state.vault().load(ref)).resolves.toEqual(key);
     await expect(state.vault().load({ system: 'INHERITI_BUSINESS', contextId: 'org-b' })).resolves.toBeUndefined();
@@ -48,7 +56,7 @@ describe('SessionStorageKeyVault', () => {
   it('keeps a refreshed login bound to the same key', async () => {
     const state = storage();
     const session = login();
-    await state.sessions.save(session);
+    await enroll(state.sessions, session);
     const vault = state.vault();
     await vault.store(ref, key);
     session.accessToken = 'new-access';
@@ -61,12 +69,12 @@ describe('SessionStorageKeyVault', () => {
     'rejects an old vault when the login %s changes', async (property) => {
       const state = storage();
       const session = login();
-      await state.sessions.save(session);
+      await enroll(state.sessions, session);
       const vault = state.vault();
       await vault.store(ref, key);
       if (property === 'environment') session.principal.environment = 'LIVE';
       else session.principal[property] = 'different';
-      await state.sessions.save(session);
+      await enroll(state.sessions, session);
       await expect(vault.load(ref)).rejects.toThrow('master_key_session_changed');
       await expect(vault.store(ref, key)).rejects.toThrow('master_key_session_changed');
       await expect(vault.remove(ref)).rejects.toThrow('master_key_session_changed');
@@ -77,11 +85,11 @@ describe('SessionStorageKeyVault', () => {
   it('rejects an old vault after logout and an identical SSO login', async () => {
     const state = storage();
     const session = login();
-    await state.sessions.save(session);
+    await enroll(state.sessions, session);
     const vault = state.vault();
     await vault.store(ref, key);
     await state.sessions.clear();
-    await state.sessions.save(session);
+    await enroll(state.sessions, session);
     await expect(vault.load(ref)).rejects.toThrow('master_key_session_changed');
     await expect(vault.store(ref, key)).rejects.toThrow('master_key_session_changed');
     await expect(state.vault().load(ref)).resolves.toBeUndefined();
@@ -90,11 +98,11 @@ describe('SessionStorageKeyVault', () => {
   it('cannot bind an old core to a login that changed before vault creation', async () => {
     const state = storage();
     const original = login();
-    await state.sessions.save(original);
+    await enroll(state.sessions, original);
     const snapshot = await state.sessions.snapshot();
     const replacement = login();
     replacement.principal.sessionId = 'login-b';
-    await state.sessions.save(replacement);
+    await enroll(state.sessions, replacement);
     const oldVault = new SessionStorageKeyVault(state.area, state.sessions, configuration, snapshot);
     await expect(oldVault.store(ref, key)).rejects.toThrow('master_key_session_changed');
   });
@@ -102,7 +110,7 @@ describe('SessionStorageKeyVault', () => {
   it('rejects missing login and invalid key material', async () => {
     const state = storage();
     const unsigned = state.vault();
-    await state.sessions.save(login());
+    await enroll(state.sessions, login());
     await expect(unsigned.store(ref, key)).rejects.toThrow('master_key_session_changed');
     await expect(state.vault().store(ref, new Uint8Array(31))).rejects.toThrow('invalid_master_key_material');
     await expect(state.vault().store(ref, new Uint8Array(33))).rejects.toThrow('invalid_master_key_material');
@@ -111,7 +119,7 @@ describe('SessionStorageKeyVault', () => {
   it.each(['bad-hex', 'a'.repeat(63), Array(32).fill(1)])(
     'discards malformed stored material %#', async (invalid) => {
       const state = storage();
-      await state.sessions.save(login());
+      await enroll(state.sessions, login());
       const vault = state.vault();
       await vault.store(ref, key);
       const name = Object.keys(state.values).find((name) => name.startsWith(MASTER_KEY_CACHE_PREFIX))!;
@@ -122,7 +130,7 @@ describe('SessionStorageKeyVault', () => {
 
   it('explicit removal requires reacquisition', async () => {
     const state = storage();
-    await state.sessions.save(login());
+    await enroll(state.sessions, login());
     const vault = state.vault();
     await vault.store(ref, key);
     await expect(vault.load(ref)).resolves.toEqual(key);
@@ -132,7 +140,7 @@ describe('SessionStorageKeyVault', () => {
 
   it.each([false, true])('cleans a late write after logout (identical SSO login: %s)', async (newLogin) => {
     const state = storage();
-    await state.sessions.save(login());
+    await enroll(state.sessions, login());
     const vault = state.vault();
     await vault.load(ref);
     const originalSet = state.area.set.bind(state.area);
@@ -150,7 +158,7 @@ describe('SessionStorageKeyVault', () => {
     await state.sessions.clear();
     if (newLogin) {
       const session = login();
-      await state.sessions.save(session);
+      await enroll(state.sessions, session);
     }
     resume();
     await outcome;

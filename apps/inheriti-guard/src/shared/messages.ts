@@ -50,6 +50,9 @@ type ExistingSidePanelRequest =
   | { readonly type: 'inspect-active-page' }
   | { readonly type: 'sign-in' }
   | { readonly type: 'sign-out' }
+  | { readonly type: 'switch-account'; readonly accountId: string }
+  | { readonly type: 'remove-account'; readonly accountId: string }
+  | { readonly type: 'select-account-organization'; readonly accountId: string; readonly organizationId: string }
   | { readonly type: 'load-plans' }
   | { readonly type: 'get-master-key-status' }
   | { readonly type: 'select-organization'; readonly organizationId: string }
@@ -94,7 +97,8 @@ export type OverlayRequest =
   | { readonly type: 'overlay-resume-reveal' }
   | { readonly type: 'overlay-open-side-panel' };
 
-export type SidePanelRequest = ExistingSidePanelRequest | AccessWorkspaceRequest | OverlayPermissionRequest;
+export type SidePanelRequest = (ExistingSidePanelRequest | AccessWorkspaceRequest | OverlayPermissionRequest)
+  & { readonly expectedGeneration?: number };
 
 export type GuardRequest =
   | { readonly type: 'guard:get-state' }
@@ -151,7 +155,7 @@ export type SidePanelResponse =
   | { readonly ok: true; readonly reveal: RevealViewState }
   | { readonly ok: true; readonly overlay: { readonly currentOrigin?: string; readonly currentEnabled: boolean; readonly enabledOrigins: readonly string[] } }
   | AccessWorkspaceResponse
-  | { readonly ok: false; readonly error: 'no-active-tab' | 'stale-tab-context' | 'unsupported-page' | 'plan-request-failed' | 'guard-denied' | 'reveal-access-changed' };
+  | { readonly ok: false; readonly error: 'no-active-tab' | 'stale-tab-context' | 'unsupported-page' | 'plan-request-failed' | 'guard-denied' | 'reveal-access-changed' | 'operation-busy' };
 
 export type GuardResponse =
   | { readonly ok: true; readonly guard: GuardSettings }
@@ -190,6 +194,19 @@ export function isGuardContentRequest(value: unknown): value is GuardContentRequ
 
 export function isSidePanelRequest(value: unknown): value is SidePanelRequest {
   if (typeof value !== 'object' || value === null || !('type' in value)) return false;
+  const request = value as Record<string, unknown>;
+  const hasGeneration = request.expectedGeneration !== undefined;
+  if (hasGeneration && (typeof request.expectedGeneration !== 'number'
+    || !Number.isSafeInteger(request.expectedGeneration) || request.expectedGeneration < 0)) return false;
+  if (request.type === 'switch-account' || request.type === 'remove-account') {
+    return Object.keys(request).length === 2 + Number(hasGeneration) && typeof request.accountId === 'string'
+      && request.accountId.length > 0 && request.accountId.length <= 512;
+  }
+  if (request.type === 'select-account-organization') {
+    return Object.keys(request).length === 3 + Number(hasGeneration) && typeof request.accountId === 'string'
+      && request.accountId.length > 0 && request.accountId.length <= 512
+      && typeof request.organizationId === 'string' && request.organizationId.length > 0 && request.organizationId.length <= 255;
+  }
   return ['get-active-context', 'inspect-active-page', 'sign-in', 'sign-out', 'load-plans', 'get-master-key-status', 'select-organization', 'load-plan-assets', 'load-reveal-fields', 'fill-field', 'get-reveal-state', 'cancel-reveal', 'resume-reveal', 'abort-plan-access', 'forget-master-key', 'load-access-workspace', 'load-page-first-candidates', 'start-page-first-picker', 'select-page-first-candidate', 'discard-access-workspace', 'start-page-field-picker', 'cancel-page-field-picker', 'set-access-mapping', 'remove-access-mapping', 'reveal-and-autofill', 'get-overlay-permissions', 'enable-overlay-current-origin', 'disable-overlay-origin', 'disable-all-overlays']
     .includes((value as { type: unknown }).type as string);
 }

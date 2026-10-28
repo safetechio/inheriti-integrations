@@ -65,7 +65,7 @@ for (const file of await sourceFiles(sourceRoot)) {
   // Configuration — an API origin, an issuer, a public client id — survives a browser restart in the
   // local area, or an installed extension would have to be reconfigured on every start. Session
   // material must not: it stays in the session area, which is what `session-store.ts` is checked for.
-  const configurationOnly = name.includes('options/') || name.endsWith('background/service-worker.ts');
+  const configurationOnly = name.includes('options/') || name.endsWith('background/service-worker/main.ts');
   if (!configurationOnly && /chrome\.storage\.local/.test(source)) {
     errors.push(`${name}: chrome.storage.local must not hold session material`);
   }
@@ -82,7 +82,7 @@ for (const file of await sourceFiles(sourceRoot)) {
 const authSource = await readFile(resolve(sourceRoot, 'background/auth.ts'), 'utf8');
 if (!authSource.includes('launchWebAuthFlow')) errors.push('background/auth.ts: sign-in must use launchWebAuthFlow');
 
-const worker = await readFile(resolve(sourceRoot, 'background/service-worker.ts'), 'utf8');
+const worker = await readFile(resolve(sourceRoot, 'background/service-worker/main.ts'), 'utf8');
 if (!worker.includes('chrome.action.onClicked')) errors.push('side panel must open from explicit action click');
 if (!worker.includes('chrome.sidePanel.open')) errors.push('side panel open call is missing');
 if (!worker.includes('chrome.tabs.onUpdated') || !worker.includes('chrome.tabs.onActivated')) {

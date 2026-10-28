@@ -161,9 +161,27 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .skeleton-heading .skeleton-line:first-child { width: 45%; height: 24px; }
 .skeleton-card { min-height: 160px; align-content: start; }
 .plan-access[data-authenticated="false"] > :not(.signed-out-view):not(dialog) { display: none; }
+.plan-access[data-authenticated="false"][data-has-accounts="true"] > .account-area { display: flex; }
 .plan-access[data-authenticated="true"] > .signed-out-view { display: none; }
+.plan-access[aria-busy="true"] > :not(.session-skeleton):not(dialog) { display: none; }
 .plan-access[data-organization="required"] > :not(.account-area):not(dialog) { display: none; }
 .account-area { min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.account-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.account-add-note { width: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.account-list { display: grid; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.account-list li { min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.account-list li[data-active="true"] { border-color: var(--primary); }
+.account-label { display: block; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
+.account-meta { color: var(--muted); font-size: 12px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.account-actions button { padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; }
+.account-actions button:hover { background: var(--primary-soft); }
+.account-actions button:focus-visible, .account-heading button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.account-status { width: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.account-status:empty { display: none; }
+.access-account { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
+.account-destinations { display: grid; gap: 2px; margin: 6px 0 0; padding: 0; list-style: none; }
+.account-destinations button { width: 100%; text-align: left; overflow-wrap: anywhere; }
 .account-area #forget-master-key { order: 3; width: 100%; text-align: left; }
 .account-area #forget-master-key:disabled { color: var(--muted); background: transparent; cursor: default; }
 .organization-choice { min-width: 0; flex: 1; }

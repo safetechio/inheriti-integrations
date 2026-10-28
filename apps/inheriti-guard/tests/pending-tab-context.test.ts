@@ -26,4 +26,15 @@ describe('PendingTabContextStore', () => {
     store.invalidateTab(9);
     expect(store.get(9)).toBeUndefined();
   });
+
+  it('clears both page context and draft on account transition', () => {
+    const store = new PendingTabContextStore();
+    store.set(7, 'https://accounts.example.test/login');
+    store.setDraft({ identity: { planId: 'plan-a', tabId: 7, frameId: 0,
+      origin: 'https://accounts.example.test', navigationId: 'nav-a' },
+    protectedFields: [], pageTargets: [], mappings: [] });
+    store.clear();
+    expect(store.get(7)).toBeUndefined();
+    expect(store.getDraft(7)).toBeUndefined();
+  });
 });

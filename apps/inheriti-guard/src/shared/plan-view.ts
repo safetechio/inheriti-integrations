@@ -1,3 +1,15 @@
+export interface AccountSummary {
+  readonly id: string;
+  readonly label: string;
+  readonly subject: string;
+  readonly issuer: string;
+  readonly environment: string;
+  readonly expiresAt: number;
+  readonly active: boolean;
+  readonly needsSignIn?: boolean;
+  readonly organizations?: readonly { readonly id: string; readonly name: string }[];
+}
+
 export type PanelState = (
   | { kind: 'SIGNED_OUT' }
   | { kind: 'SIGNING_IN' }
@@ -6,7 +18,7 @@ export type PanelState = (
   | { kind: 'ERROR'; code: string }
   | { kind: 'PLANS'; plans: readonly { id: string; name: string; status: string }[] }
   | { kind: 'SELECT_ORGANIZATION'; organizations: readonly { id: string; name: string }[]; reason?: string }
-) & { readonly organizations?: readonly { id: string; name: string }[]; readonly organizationId?: string; readonly keyInMemory?: boolean };
+) & { readonly organizations?: readonly { id: string; name: string }[]; readonly organizationId?: string; readonly keyInMemory?: boolean; readonly accounts?: readonly AccountSummary[]; readonly generation?: number };
 
 const MESSAGES: Readonly<Record<string, string>> = {
   operator_reauthentication_required: 'Session expired — sign in again',
