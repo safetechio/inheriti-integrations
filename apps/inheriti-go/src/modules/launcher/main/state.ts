@@ -1,7 +1,6 @@
-import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS, BUSINESS_INTERACTIVE_CLIENT_ID, createNodeIntegrationCore, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
-import type { BusinessOrganization, InternalBuild, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import type { InternalBuild, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { accountNameFromIdToken } from '../../auth/main/account-name.js';
-import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
 import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
 import { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
@@ -14,7 +13,9 @@ import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import { trayMessages as messages } from '../../../messages.js';
 import { OrganizationKeyVault } from './organization-key-vault.js';
-import { ProtectedOperatorSessionStore } from './operator-session-store.js';
+import { TrayAuthRuntime } from './tray-auth-runtime.js';
+import { TrayOrganizationContext } from './tray-organization-context.js';
+import { TrayInboxAccess } from './tray-inbox-access.js';
 
 export type Deployment = keyof typeof BUSINESS_DEPLOYMENTS;
 export type TrayState = {
@@ -31,20 +32,15 @@ export type TrayState = {
 };
 
 export class TraySession {
-  private readonly core: NodeIntegrationCore;
-  private readonly configuration: NodeIntegrationCoreOptions['configuration'];
-  private readonly operatorSessions: ProtectedOperatorSessionStore;
-  private organizations: BusinessOrganization[] = [];
-  private selectedId: string | undefined;
+  private readonly auth: TrayAuthRuntime;
+  private readonly organization: TrayOrganizationContext;
+  private readonly inboxAccess: TrayInboxAccess;
   private accountName: string | undefined;
   private status: TrayState['status'] = 'restoring';
   private message: string | undefined;
   private authorization: AbortController | undefined;
   private pendingSignIn: Promise<void> | undefined;
-  private pendingAuthorization: ReturnType<NodeIntegrationCore['auth']['beginAuthorizationCode']> | undefined;
-  private pendingSelections = 0;
   private signingOut = false;
-  private organizationRevision = 0;
   private authenticationRevision = 0;
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
@@ -54,44 +50,31 @@ export class TraySession {
   private readonly inbox: TrayInbox;
   private inboxPublisher: ((signal?: TrayInboxSignal) => void) | undefined;
   private inboxStatePublisher: (() => void) | undefined;
-  private inboxAccess: { organizationId: string; requestId: number; controller: AbortController; promise: Promise<void> } | undefined;
-  private validatedInboxOrganization: string | undefined;
 
   constructor(private readonly deployment: Deployment, localOverrides?: { apiUrl: string | undefined; issuer: string | undefined }) {
     const config = BUSINESS_DEPLOYMENTS[deployment];
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
-    this.configuration = {
-      issuer,
-      clientId: BUSINESS_INTERACTIVE_CLIENT_ID,
-      audience: 'inheriti-integrations-api',
-      environment: config.environment,
-      redirectUri: 'http://127.0.0.1/oauth/callback',
-      scopes: ['openid', 'profile', 'offline_access'],
-    };
-    this.operatorSessions = new ProtectedOperatorSessionStore(deployment, issuer);
-    this.core = createNodeIntegrationCore({
-      apiUrl,
-      business: true,
-      environment: config.environment,
-      liveConfirmation: config.environment,
-      masterKey: {},
-      configuration: this.configuration,
-      sessions: this.operatorSessions,
-    });
-    this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.core.auth.getAccessToken(),
-      keyVault: new OrganizationKeyVault(deployment, () => this.core.auth.getAccessToken()) });
-    this.inbox = new TrayInbox(apiUrl, config.environment, () => this.core.auth.getAccessToken(),
+    this.auth = new TrayAuthRuntime(deployment, apiUrl, issuer, config.environment);
+    this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.auth.getAccessToken(),
+      keyVault: new OrganizationKeyVault(deployment, () => this.auth.getAccessToken()) });
+    this.inbox = new TrayInbox(apiUrl, config.environment, () => this.auth.getAccessToken(),
       (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), () => {
-        if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
-        return this.selectedId;
+        if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
+        return this.organization.selectedId;
       }, (signal) => this.inboxPublisher?.(signal), () => this.inboxStatePublisher?.());
     this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
-    this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
-    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.core.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
+    this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
+    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
       selectCustodianDevice: () => this.custodianPrompt.choose(!!this.proDevice),
       proDevice: this.proDevice,
     });
+    this.inboxAccess = new TrayInboxAccess(() => ({ selectedId: this.organization.selectedId,
+      selecting: !!this.organization.pendingSelections, signedIn: this.status === 'signed-in' }),
+    (id, signal) => this.organizationKeys.resolve(id, signal));
+    this.organization = new TrayOrganizationContext(this.auth, this.quickPlans, this.planEdit, this.inbox,
+      () => this.organizationKeys.clear(), () => this.inboxAccess.reset(),
+      () => this.status === 'signed-in', () => this.signingOut);
   }
 
   setPublisher(publish: () => void): void { this.custodianPrompt.setPublisher(publish); }
@@ -101,11 +84,11 @@ export class TraySession {
   async availableUpdate(version: string): Promise<InternalBuild | undefined> {
     if (this.status !== 'signed-in') throw new Error('sign_in_required');
     const platform = `${process.platform}-${process.arch}${process.platform === 'darwin' ? '-update' : ''}`;
-    return latestIntegrationBuild(await this.core.listInternalBuilds(), 'tray', version, platform);
+    return latestIntegrationBuild(await this.auth.core.listInternalBuilds(), 'tray', version, platform);
   }
   requestUpdateDownload(id: string): ReturnType<NodeIntegrationCore['requestInternalBuildDownload']> {
     if (this.status !== 'signed-in') throw new Error('sign_in_required');
-    return this.core.requestInternalBuildDownload(id);
+    return this.auth.core.requestInternalBuildDownload(id);
   }
   selectCustodianDevice(value: unknown): void { this.custodianPrompt.select(value); }
   submitSafeKeyProPin(value: unknown): void { this.custodianPrompt.submitPin(value); }
@@ -117,10 +100,10 @@ export class TraySession {
     return {
       status: this.status,
       ...(message ? { message } : {}),
-      organizations: this.organizations.map(({ id, name }) => ({ id, name })),
-      teams: this.pendingSelections ? [] : quickPlans.teams,
+      organizations: this.organization.organizations.map(({ id, name }) => ({ id, name })),
+      teams: this.organization.pendingSelections ? [] : quickPlans.teams,
       assetCatalog: HOST_FEATURE_FLAGS[this.deployment].planCreation ? quickPlanAssetCatalog : [],
-      ...(this.selectedId && !this.pendingSelections ? { selectedId: this.selectedId } : {}),
+      ...(this.organization.selectedId && !this.organization.pendingSelections ? { selectedId: this.organization.selectedId } : {}),
       ...(this.status === 'signed-in' && this.accountName ? { accountName: this.accountName } : {}),
       ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
       edit: this.planEdit.state(),
@@ -143,31 +126,12 @@ export class TraySession {
     ++this.authenticationRevision;
     const authorization = new AbortController();
     this.authorization = authorization;
-    this.configuration.scopes = ['openid', 'profile', 'offline_access'];
+    this.auth.renewIfRetired();
     this.status = 'authorizing';
     this.message = undefined;
     onChange();
     try {
-      const authorize = async () => {
-        const callbackUrl = await waitForCallback(async (redirectUri) => {
-          if (this.pendingAuthorization) await untilCanceled(this.pendingAuthorization.catch(() => undefined), authorization.signal);
-          authorization.signal.throwIfAborted();
-          this.configuration.redirectUri = redirectUri;
-          const pending = this.core.auth.beginAuthorizationCode();
-          this.pendingAuthorization = pending;
-          const started = await untilCanceled(pending, authorization.signal);
-          authorization.signal.throwIfAborted();
-          return started.authorizationUrl;
-        }, openBrowser, authorization.signal);
-        return this.core.auth.completeAuthorizationCode(callbackUrl) as Promise<OperatorSession>;
-      };
-      let session: OperatorSession;
-      try { session = await authorize(); }
-      catch (error) {
-        if (!(error instanceof Error) || (error.message !== 'invalid_scope' && !('code' in error && error.code === 'invalid_scope'))) throw error;
-        this.configuration.scopes = ['openid', 'profile'];
-        session = await authorize();
-      }
+      const session = await this.auth.authorize(openBrowser, authorization.signal);
       if (authorization.signal.aborted) return;
       this.accountName = accountNameFromIdToken(session?.idToken);
       await this.discover(authorization.signal);
@@ -175,8 +139,8 @@ export class TraySession {
       if (authorization.signal.aborted) return;
       if ((error as { status?: unknown; code?: unknown })?.status === 403
         && (error as { code?: unknown }).code === 'integration_tester_required') {
-        try { await this.core.auth.clear(); } catch { /* Clear the saved session even if SDK cleanup fails. */ }
-        await this.operatorSessions.clear();
+        try { await this.auth.core.auth.clear(); } catch { /* Clear the saved session even if SDK cleanup fails. */ }
+        await this.auth.sessions.clear();
         this.accountName = undefined;
         this.status = 'error';
         this.message = 'You are not an integration tester. Contact developer support.';
@@ -193,62 +157,38 @@ export class TraySession {
 
   async restore(): Promise<void> {
     ++this.authenticationRevision;
-    ++this.organizationRevision;
+    this.organization.invalidate();
     this.status = 'restoring';
     let hasSavedSession = false;
-    this.cancelInboxAccess();
-    this.validatedInboxOrganization = undefined;
+    this.inboxAccess.reset();
     this.custodianPrompt.cancel();
     this.proDevice?.clearPin();
     try {
-      if (await this.core.auth.getAccessToken()) {
-        this.accountName = accountNameFromIdToken((await this.operatorSessions.load())?.idToken);
+      if (await this.auth.core.auth.getAccessToken()) {
+        this.accountName = accountNameFromIdToken((await this.auth.sessions.load())?.idToken);
         await this.discover();
         return;
       }
     } catch {
-      try { hasSavedSession = !!await this.operatorSessions.load(); } catch { /* A damaged checkpoint cannot be retried. */ }
+      try { hasSavedSession = !!await this.auth.sessions.load(); } catch { /* A damaged checkpoint cannot be retried. */ }
     }
-    this.organizations = [];
     this.inbox.clear();
     await this.organizationKeys.clear();
     this.quickPlans.clear();
     this.planEdit.reset();
-    this.selectedId = undefined;
+    this.organization.reset();
     this.accountName = undefined;
     this.status = hasSavedSession ? 'session-unavailable' : 'signed-out';
     this.message = undefined;
   }
 
-  async select(id: string): Promise<void> {
-    if (this.signingOut) throw new Error('sign_out_in_progress');
-    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
-    if (!this.organizations.some((organization) => organization.id === id)) throw new Error('organization_access_denied');
-    ++this.organizationRevision;
-    this.pendingSelections += 1;
-    try {
-      this.quickPlans.assertCanSelectOrganization(id);
-      if (this.selectedId !== id) {
-        this.cancelInboxAccess();
-        this.validatedInboxOrganization = undefined;
-        this.inbox.clear();
-        await this.organizationKeys.clear();
-      }
-      await this.planEdit.selectOrganization(id);
-      await this.quickPlans.selectOrganization(id);
-      this.selectedId = id;
-      try { this.operatorSessions.saveSelectedOrganization(id); } catch { /* Organisation selection still works without a saved preference. */ }
-    } finally {
-      this.pendingSelections -= 1;
-      if (this.status === 'signed-in' && this.selectedId && !this.signingOut) this.inbox.listen();
-    }
-  }
+  select(id: string): Promise<void> { return this.organization.select(id); }
 
   createQuickPlan(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
     if (this.signingOut) throw new Error('sign_out_in_progress');
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
-    if (this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
+    if (this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.quickPlans.create(input, onChange);
   }
 
@@ -262,31 +202,31 @@ export class TraySession {
 
   loadEditablePlans(onChange: () => void): Promise<void> {
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.load(onChange);
   }
 
   addPlanAsset(planId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.add(planId, asset, onChange);
   }
 
   listPlanAssets(planId: string, onChange: () => void): Promise<void> {
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.listAssets(planId, onChange);
   }
 
   getPlanAsset(planId: string, assetId: string) {
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.getAsset(planId, assetId);
   }
 
   replacePlanAsset(planId: string, assetId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
     if (!HOST_FEATURE_FLAGS[this.deployment].planCreation) throw new Error('plan_creation_unavailable');
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
+    if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.replace(planId, assetId, asset, onChange);
   }
 
@@ -305,25 +245,8 @@ export class TraySession {
     await this.inbox.prepare();
     return this.inboxState();
   }
-  prepareInboxAccess(requestId: number): Promise<void> {
-    if (this.pendingSelections || this.status !== 'signed-in' || !this.selectedId) throw new Error('organization_required');
-    const organizationId = this.selectedId;
-    if (this.validatedInboxOrganization === organizationId) return Promise.resolve();
-    if (this.inboxAccess?.organizationId === organizationId && this.inboxAccess.requestId === requestId) return this.inboxAccess.promise;
-    this.cancelInboxAccess();
-    const controller = new AbortController();
-    const promise = this.organizationKeys.resolve(organizationId, controller.signal).then(() => {
-      if (controller.signal.aborted || this.selectedId !== organizationId || this.status !== 'signed-in') throw new Error('inbox_access_canceled');
-      this.validatedInboxOrganization = organizationId;
-    }).finally(() => { if (this.inboxAccess?.controller === controller) this.inboxAccess = undefined; });
-    this.inboxAccess = { organizationId, requestId, controller, promise };
-    return promise;
-  }
-  cancelInboxAccess(requestId?: number): void {
-    if (requestId !== undefined && this.inboxAccess?.requestId !== requestId) return;
-    this.inboxAccess?.controller.abort();
-    this.inboxAccess = undefined;
-  }
+  prepareInboxAccess(requestId: number): Promise<void> { return this.inboxAccess.prepare(requestId); }
+  cancelInboxAccess(requestId?: number): void { this.inboxAccess.cancel(requestId); }
   async replaceInboxDevice(): Promise<InboxIdentityState & { protectedFileEnabled: boolean }> {
     await this.inbox.replace();
     return this.inboxState();
@@ -335,7 +258,7 @@ export class TraySession {
   changeInboxParticipants(conversationId: string, input: { action: 'ADD' | 'REMOVE'; memberId: string; expectedRevision: number }) { return this.inbox.changeParticipants(conversationId, input); }
   listInboxConversations(input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) { return this.inbox.listConversations(input); }
   listOrganizationInboxConversations(organizationId: string, input?: { status?: 'ACTIVE' | 'CLOSED'; limit?: number; offset?: number }) {
-    if (this.status !== 'signed-in' || this.signingOut || !this.organizations.some(({ id }) => id === organizationId))
+    if (this.status !== 'signed-in' || this.signingOut || !this.organization.organizations.some(({ id }) => id === organizationId))
       throw new Error('organization_access_denied');
     return this.inbox.listOrganizationConversations(organizationId, input);
   }
@@ -372,11 +295,11 @@ export class TraySession {
   retryInboxAck(conversationId: string, messageId: string) { return this.inbox.retryAck(conversationId, messageId); }
   hideInboxText(): void { this.inbox.hide(); }
   clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); this.inbox.hide(); }
-  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.cancelInboxAccess(); this.validatedInboxOrganization = undefined; void this.organizationKeys.clear(); }
+  clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.inboxAccess.reset(); void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
     if (this.signingOut) throw new Error('sign_out_in_progress');
-    if (this.pendingSelections) throw new Error('organization_selection_in_progress');
+    if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
     this.planEdit.assertIdle();
     this.signingOut = true;
@@ -384,9 +307,8 @@ export class TraySession {
     const previousStatus = this.status;
     this.status = 'restoring';
     try {
-      ++this.organizationRevision;
-      this.cancelInboxAccess();
-      this.validatedInboxOrganization = undefined;
+      this.organization.invalidate();
+      this.inboxAccess.reset();
       this.custodianPrompt.cancel();
       this.proDevice?.clearPin();
       this.inbox.clear();
@@ -395,75 +317,30 @@ export class TraySession {
       this.authorization = undefined;
       await this.planEdit.clear();
       await this.organizationKeys.forget();
-      await this.core.auth.clear();
-      this.organizations = [];
+      await this.auth.core.auth.clear();
+      await this.auth.sessions.clear();
+      this.auth.renew();
       this.quickPlans.clear();
-      this.selectedId = undefined;
+      this.organization.reset();
       this.accountName = undefined;
       this.status = 'signed-out';
       this.message = undefined;
     } catch (error) {
       this.status = previousStatus;
-      if (this.status === 'signed-in' && this.selectedId) this.inbox.listen();
+      if (this.status === 'signed-in' && this.organization.selectedId) this.inbox.listen();
       throw error;
     } finally {
       this.signingOut = false;
     }
   }
 
-  private async discover(signal?: AbortSignal): Promise<void> {
-    ++this.organizationRevision;
-    const organizations = await this.core.listOrganizations();
-    if (signal?.aborted) return;
-    this.organizations = organizations;
-    if (!this.selectedId) {
-      try { this.selectedId = this.operatorSessions.selectedOrganization(); } catch { /* Use the organisation picker if secure storage is unavailable. */ }
-    }
-    if (!this.organizations.some(({ id }) => id === this.selectedId)) {
-      this.quickPlans.clear();
-      this.cancelInboxAccess();
-      this.validatedInboxOrganization = undefined;
-      this.inbox.clear();
-      this.planEdit.reset();
-      this.selectedId = this.organizations.length === 1 ? this.organizations[0]?.id : undefined;
-    }
-    if (this.selectedId) {
-      try { this.operatorSessions.saveSelectedOrganization(this.selectedId); } catch { /* The active organisation remains usable. */ }
-    }
-    this.status = 'signed-in';
-    this.message = this.organizations.length === 0 ? messages.noOrganizations : undefined;
-    if (this.selectedId) {
-      await this.quickPlans.selectOrganization(this.selectedId);
-      await this.planEdit.selectOrganization(this.selectedId);
-      this.inbox.listen();
-    }
+  private discover(signal?: AbortSignal): Promise<void> {
+    return this.organization.discover(signal, (message) => { this.status = 'signed-in'; this.message = message; });
   }
 
   async refreshOrganizations(): Promise<boolean> {
-    if (this.status !== 'signed-in' || this.pendingSelections) return false;
-    const revision = ++this.organizationRevision;
-    const selectedId = this.selectedId;
-    const organizations = await this.core.listOrganizations();
-    if (revision !== this.organizationRevision || this.status !== 'signed-in' || this.pendingSelections || this.selectedId !== selectedId) return false;
-    if (selectedId && !organizations.some(({ id }) => id === selectedId)) {
-      try {
-        this.quickPlans.assertIdle();
-        this.planEdit.assertIdle();
-      } catch { // shortcut: defer revocation during active plan work, retry when the tray opens again.
-        return false;
-      }
-    }
-    this.organizations = organizations;
-    this.message = organizations.length === 0 ? messages.noOrganizations : undefined;
-    if (selectedId && !organizations.some(({ id }) => id === selectedId)) {
-      this.quickPlans.clear();
-      this.cancelInboxAccess();
-      this.validatedInboxOrganization = undefined;
-      this.inbox.clear();
-      this.planEdit.reset();
-      this.selectedId = undefined;
-      await this.organizationKeys.clear();
-    }
-    return true;
+    const result = await this.organization.refresh();
+    if (result.changed) this.message = result.message;
+    return result.changed;
   }
 }

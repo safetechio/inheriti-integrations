@@ -288,6 +288,42 @@ describe('TraySession', () => {
     expect(session.state().status).toBe('signed-out');
   });
 
+  it('uses a fresh session adapter when signing in after sign-out', async () => {
+    const subjects = ['member-a', 'member-b'];
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          const subject = subjects.shift()!;
+          const result = { accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
+            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: mock.token,
+      },
+      listOrganizations: mock.organizations,
+    }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const openBrowser = async (authorizationUrl: string) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    };
+    await session.signIn(() => {}, openBrowser);
+    expect(session.state().status).toBe('signed-in');
+    const firstStore = mock.core.mock.calls[0]![0].sessions;
+    await session.signOut();
+    await session.signIn(() => {}, openBrowser);
+    expect(session.state().status).toBe('signed-in');
+    expect(mock.core).toHaveBeenCalledTimes(2);
+    const secondStore = mock.core.mock.calls[1]![0].sessions;
+    expect(secondStore).not.toBe(firstStore);
+    expect((await secondStore.load())?.principal.subject).toBe('member-b');
+    await expect(firstStore.save({ accessToken: 'stale' })).rejects.toThrow('operator_session_retired');
+  });
+
   it('drains canceled authorization before changing the callback URI on retry', async () => {
     let release!: (value: { authorizationUrl: string }) => void;
     mock.begin.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }))
@@ -402,6 +438,37 @@ describe('TraySession', () => {
     await session.restore();
     expect(session.state().status).toBe('signed-out');
     expect(session.state().organizations).toEqual([]);
+  });
+
+  it('starts a fresh auth core after a revoked session is cleared during restore', async () => {
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          const result = { accessToken: 'new-access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+            principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => {
+          await options.sessions.clear();
+          throw new Error('revoked');
+        },
+      },
+      listOrganizations: mock.organizations,
+    }));
+    const session = new TraySession('dev');
+    await session.restore();
+    expect(session.state().status).toBe('signed-out');
+    const originalStore = mock.core.mock.calls[0]![0].sessions;
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(session.state().status).toBe('signed-in');
+    expect(mock.core).toHaveBeenCalledTimes(2);
+    expect(mock.core.mock.calls[1]![0].sessions).not.toBe(originalStore);
   });
 
   it('keeps a saved session available for retry after a temporary restore failure', async () => {
