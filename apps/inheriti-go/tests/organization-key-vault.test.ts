@@ -125,4 +125,33 @@ describe('OrganizationKeyVault', () => {
     expect(first).toEqual(key(1));
     expect(second).toEqual(key(2));
   });
+
+  it('purges every account key for one deployment and issuer only', async () => {
+    const active = new OrganizationKeyVault('dev', async () => token('account-a'), 'test-issuer');
+    const sibling = new OrganizationKeyVault('dev', async () => token('account-b'), 'test-issuer');
+    const otherIssuer = new OrganizationKeyVault('dev', async () => token('account-a', 'other-issuer'), 'other-issuer');
+    const otherDeployment = new OrganizationKeyVault('stg', async () => token('account-a'), 'test-issuer');
+    await active.store(ref('org-a'), key(1));
+    await sibling.store(ref('org-b'), key(2));
+    await otherIssuer.store(ref('org-c'), key(3));
+    await otherDeployment.store(ref('org-d'), key(4));
+    await active.forgetAll();
+    expect(await new OrganizationKeyVault('dev', async () => token('account-a')).load(ref('org-a'))).toBeUndefined();
+    expect(await new OrganizationKeyVault('dev', async () => token('account-b')).load(ref('org-b'))).toBeUndefined();
+    expect(await otherIssuer.load(ref('org-c'))).toEqual(key(3));
+    expect(await otherDeployment.load(ref('org-d'))).toEqual(key(4));
+  });
+
+  it('rejects a token from another issuer when configured for all-account cleanup', async () => {
+    const vault = new OrganizationKeyVault('dev', async () => token('account-a', 'other-issuer'), 'test-issuer');
+    await expect(vault.store(ref('org-a'), key(1))).rejects.toThrow('reauthentication_required');
+  });
+
+  it('preserves active keys if all-account cleanup cannot access protected storage', async () => {
+    const vault = new OrganizationKeyVault('dev', async () => token('account-a'), 'test-issuer');
+    await vault.store(ref('org-a'), key(1));
+    storage.available = false;
+    await expect(vault.forgetAll()).rejects.toThrow('protected_storage_unavailable');
+    expect(await vault.load(ref('org-a'))).toEqual(key(1));
+  });
 });

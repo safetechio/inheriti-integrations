@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { OperatorSession } from '@safetech/inheriti-elements-core/node';
 
-const secure = vi.hoisted(() => ({ directory: '', available: true }));
+const secure = vi.hoisted(() => ({ directory: '', available: true, failEncrypt: false }));
 vi.mock('electron', () => ({
   app: { getPath: () => secure.directory },
   safeStorage: {
     isEncryptionAvailable: () => secure.available,
     getSelectedStorageBackend: () => 'gnome_libsecret',
-    encryptString: (value: string) => Buffer.from(`encrypted:${value}`),
+    encryptString: (value: string) => { if (secure.failEncrypt) throw new Error('disk_error'); return Buffer.from(`encrypted:${value}`); },
     decryptString: (value: Buffer) => value.toString().slice('encrypted:'.length),
   },
 }));
@@ -25,7 +25,7 @@ const session = (issuer: string): OperatorSession => ({
     sessionId: 'session', tokenId: 'token', scopes: [] },
 });
 
-afterEach(() => { rmSync(secure.directory, { recursive: true, force: true }); secure.available = true; });
+afterEach(() => { rmSync(secure.directory, { recursive: true, force: true }); secure.available = true; secure.failEncrypt = false; });
 
 it('restores only the matching deployment and issuer, then clears on sign-out', async () => {
   secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
@@ -340,4 +340,82 @@ it('exposes only non-secret saved-account summaries', async () => {
     { subject: 'other', name: 'other', status: 'sign-in-again' },
   ] });
   expect(JSON.stringify(await store.accountSummaries())).not.toContain('private-refresh-token');
+});
+
+it('clears every profile in one issuer and retires all old adapters', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const issuer = 'https://issuer.test';
+  const first = session(issuer);
+  const other = { ...first, principal: { ...first.principal, subject: 'other' } };
+  const store = new ProtectedOperatorSessionStore('dev', issuer);
+  await store.save(first);
+  store.saveSelectedOrganization('org-a');
+  await store.enroll(other);
+  const stale = store.fork();
+  expect(await stale.load()).toEqual(first);
+  const unbound = store.fork();
+  const separate = new ProtectedOperatorSessionStore('dev', issuer);
+  const checkpoint = new (await import('../src/modules/launcher/main/protected-checkpoint.js')).ProtectedCheckpoint();
+  checkpoint.setItem('organization-key/dev/same-issuer/account-a/org-a', 'private-key');
+  checkpoint.setItem('organization-key/dev/another-issuer/account-a/org-a', 'other-key');
+  const otherIssuer = session('https://another.test');
+  await new ProtectedOperatorSessionStore('stg', issuer).save(first);
+  await new ProtectedOperatorSessionStore('dev', 'https://another.test').save(otherIssuer);
+
+  await store.clearAll(['organization-key/dev/same-issuer/']);
+  expect(await stale.load()).toBeUndefined();
+  expect(stale.selectedOrganization()).toBeUndefined();
+  await expect(stale.save(first)).rejects.toThrow('operator_session_retired');
+  await expect(unbound.enroll(other)).rejects.toThrow('operator_session_retired');
+  await expect(separate.save(first)).rejects.toThrow('operator_session_retired');
+  await unbound.clear();
+  expect(await store.fork().accountSummaries()).toEqual({ accounts: [], activeSubject: undefined });
+  expect(await new ProtectedOperatorSessionStore('dev', issuer).listProfiles()).toEqual([]);
+  expect(await new ProtectedOperatorSessionStore('stg', issuer).load()).toEqual(first);
+  expect(await new ProtectedOperatorSessionStore('dev', 'https://another.test').load()).toEqual(otherIssuer);
+  expect(checkpoint.getItem('organization-key/dev/same-issuer/account-a/org-a')).toBeNull();
+  expect(checkpoint.getItem('organization-key/dev/another-issuer/account-a/org-a')).toBe('other-key');
+
+  const renewed = store.fork();
+  await renewed.save(first);
+  expect(await renewed.load()).toEqual(first);
+});
+
+it('clears memory-only profiles without later restoring them', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  secure.available = false;
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  const first = session('https://issuer.test');
+  await store.save(first);
+  await store.enroll({ ...first, principal: { ...first.principal, subject: 'other' } });
+  await store.clearAll();
+  secure.available = true;
+  expect(await store.fork().listProfiles()).toEqual([]);
+  expect(await store.fork().load()).toBeUndefined();
+});
+
+it('leaves persisted profiles intact when all-profile cleanup lacks protected storage', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  const first = session('https://issuer.test');
+  await store.save(first);
+  secure.available = false;
+  await expect(store.clearAll()).rejects.toThrow('protected_storage_unavailable');
+  secure.available = true;
+  expect(await store.load()).toEqual(first);
+  expect(await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load()).toEqual(first);
+});
+
+it('keeps profiles and other scoped data when atomic cleanup cannot write', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  const first = session('https://issuer.test');
+  await store.save(first);
+  const checkpoint = new (await import('../src/modules/launcher/main/protected-checkpoint.js')).ProtectedCheckpoint();
+  checkpoint.setItem('organization-key/dev/same-issuer/account-a/org-a', 'private-key');
+  secure.failEncrypt = true;
+  await expect(store.clearAll(['organization-key/dev/same-issuer/'])).rejects.toThrow('disk_error');
+  secure.failEncrypt = false;
+  expect(await store.load()).toEqual(first);
+  expect(checkpoint.getItem('organization-key/dev/same-issuer/account-a/org-a')).toBe('private-key');
 });

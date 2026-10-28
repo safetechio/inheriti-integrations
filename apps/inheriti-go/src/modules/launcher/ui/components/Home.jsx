@@ -2,7 +2,7 @@ import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { useAppVersion } from '../hooks/useAppVersion.js';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
   const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
@@ -42,6 +42,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
           {!accounts.length && <p>No saved accounts found.</p>}
         </div>
         <button id="add-account" type="button" className="button-secondary" disabled={signOutDisabled} onClick={onAddAccount}>Add account</button>
+        <button id="sign-out-all" type="button" className="button-secondary" disabled={signOutDisabled} onClick={onSignOutAll}>Sign out all accounts</button>
       </section>
       <section className="tray-hero">
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>

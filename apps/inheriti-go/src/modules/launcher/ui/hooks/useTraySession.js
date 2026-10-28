@@ -75,6 +75,17 @@ export function useTraySession(messages) {
     }
   }
 
+  async function signOutAll() {
+    try {
+      setError('');
+      setState(await window.inheritiTray.signOutAll());
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : messages.retryError);
+      return false;
+    }
+  }
+
   async function openApp(planId) {
     try {
       await window.inheritiTray.openApp(planId);
@@ -83,5 +94,5 @@ export function useTraySession(messages) {
     }
   }
 
-  return { state, setState, error, setError, signIn, addAccount, cancelAccountAuthorization, activateAccount, restore, openApp };
+  return { state, setState, error, setError, signIn, addAccount, cancelAccountAuthorization, activateAccount, restore, signOutAll, openApp };
 }

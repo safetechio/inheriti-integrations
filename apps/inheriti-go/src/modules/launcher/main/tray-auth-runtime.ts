@@ -71,6 +71,12 @@ export class TrayAuthRuntime {
 
   async enroll(session: OperatorSession): Promise<void> { this.renewIfRetired(); await this.store.enroll(session); }
 
+  async clearAll(additionalScopes: string[]): Promise<void> {
+    this.renewIfRetired();
+    await this.store.clearAll(additionalScopes);
+    this.renew();
+  }
+
   async activate(subject: string): Promise<void> {
     this.renewIfRetired();
     await this.store.activate(subject);

@@ -39,6 +39,8 @@ export function LauncherApp({ messages }) {
   const [pendingPlanAction, setPendingPlanAction] = useState(null);
   const [pendingAccountSwitch, setPendingAccountSwitch] = useState(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [confirmSignOutAll, setConfirmSignOutAll] = useState(false);
+  const [signingOutAll, setSigningOutAll] = useState(false);
   const switchingOrganization = useRef(false);
   const blockedInboxSwitch = useRef(false);
   const previousAccount = useRef(null);
@@ -189,6 +191,26 @@ export function LauncherApp({ messages }) {
     if (next.activeSubject !== target.accountSubject) { setTargetInboxStatus('A different account was added. Add the requested account to open this notification.'); return; }
     setTargetInboxStatus('');
   };
+  const signOutAll = async () => {
+    setSigningOutAll(true);
+    try {
+      if (!(await session.signOutAll())) return;
+      closeInbox();
+      flow.clearDraft();
+      editFlow.close();
+      setInboxHasNew(false);
+      setInboxRequested(null);
+      setPendingInboxAction(null);
+      targetInboxRef.current = null;
+      setTargetInboxAction(null);
+      setTargetInboxStatus('');
+      setPendingPlanAction(null);
+      setPendingAccountSwitch(null);
+      clearInboxPresence();
+      clearInboxConversationCache();
+      setConfirmSignOutAll(false);
+    } finally { setSigningOutAll(false); }
+  };
   const pendingInboxControls = <>
     {currentAction(pendingInboxAction) && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>}
     {targetInboxAction && targetInboxStatus && <p role="status">{targetInboxStatus} <button type="button" onClick={() => void recoverTargetInbox()}>Add account</button> <button type="button" onClick={() => { targetInboxRef.current = null; setTargetInboxAction(null); setTargetInboxStatus(''); }}>Dismiss</button></p>}
@@ -220,6 +242,14 @@ export function LauncherApp({ messages }) {
   if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
+  if (confirmSignOutAll) return <main className="tray-screen tray-account-confirmation">
+    <div className="tray-scroll tray-account-confirmation-content">
+      <h1>Sign out all accounts?</h1>
+      <p>This removes every saved account and its organisation keys from this device. You will need to sign in again to use them.</p>
+      {session.error && <p role="alert" className="error">{session.error}</p>}
+    </div>
+    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus disabled={signingOutAll} onClick={() => setConfirmSignOutAll(false)}>Cancel</button><button type="button" disabled={signingOutAll} onClick={() => void signOutAll()}>Sign out all accounts</button></div>
+  </main>;
   if (switchingAccount || state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
   if (pendingAccountSwitch) return <main className="tray-screen tray-account-confirmation">
     <div className="tray-scroll tray-account-confirmation-content">
@@ -243,7 +273,8 @@ export function LauncherApp({ messages }) {
 
   if (!signedIn) return <>{pendingInboxControls}<SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
     accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount}
-    onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()} onOpenApp={() => void session.openApp()} /></>;
+    onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()}
+    onSignOutAll={() => setConfirmSignOutAll(true)} onOpenApp={() => void session.openApp()} /></>;
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
@@ -262,6 +293,7 @@ export function LauncherApp({ messages }) {
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
     onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
     onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); setPendingInboxAction(null); void flow.signOut(); }}
+    onSignOutAll={() => setConfirmSignOutAll(true)}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName}
   />;

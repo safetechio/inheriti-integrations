@@ -13,7 +13,13 @@ export class OrganizationKeyVault {
   private scope: string | undefined;
   private generation = 0;
 
-  constructor(private readonly deployment: string, private readonly getToken: () => Promise<string | undefined>) {}
+  constructor(private readonly deployment: string, private readonly getToken: () => Promise<string | undefined>,
+    private readonly issuer?: string) {}
+
+  get allAccountScope(): string {
+    if (!this.issuer) throw new Error('organization_key_issuer_required');
+    return `organization-key/${this.deployment}/${createHash('sha256').update(this.issuer).digest('hex')}/`;
+  }
 
   private async path(ref: Ref): Promise<string> {
     if (ref.system !== 'INHERITI_BUSINESS' || !ref.contextId) throw new Error('invalid_organization_key_reference');
@@ -31,6 +37,7 @@ export class OrganizationKeyVault {
     catch { throw new Error('reauthentication_required'); }
     if (!decoded || typeof decoded !== 'object' || !('iss' in decoded) || typeof decoded.iss !== 'string' || !decoded.iss ||
       !('sub' in decoded) || typeof decoded.sub !== 'string' || !decoded.sub) throw new Error('reauthentication_required');
+    if (this.issuer && decoded.iss !== this.issuer) throw new Error('reauthentication_required');
     const scope = `organization-key/${this.deployment}/${createHash('sha256').update(decoded.iss).digest('hex')}/${encodeURIComponent(decoded.sub)}`;
     if (this.scope !== undefined && this.scope !== scope) this.clearMemory();
     this.scope = scope;
@@ -99,6 +106,13 @@ export class OrganizationKeyVault {
       throw new Error('protected_storage_unavailable');
     }
     this.checkpoint.clean(scope);
+  }
+
+  async forgetAll(): Promise<void> {
+    const scope = this.allAccountScope;
+    if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');
+    if (this.checkpoint.isAvailable()) this.checkpoint.clean(scope);
+    this.clearMemory();
   }
 
   async withScope<T>(run: () => Promise<T>): Promise<T> {

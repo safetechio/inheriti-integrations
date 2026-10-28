@@ -9,6 +9,40 @@ const chrome = ['google-chrome', 'chromium'].find((binary) => {
   try { execFileSync('which', [binary]); return true; } catch { return false; }
 });
 
+it.skipIf(!chrome)('requires confirmation before removing every saved account', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-sign-out-all-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const base={status:'signed-in',activeSubject:'a',accountName:'Alice',selectedId:'org-a',
+        accounts:[{subject:'a',name:'Alice',status:'ready',organizations:[{id:'org-a',name:'Company A'}]},
+          {subject:'b',name:'Bob',status:'ready',organizations:[{id:'org-b',name:'Company B'}]}],
+        organizations:[{id:'org-a',name:'Company A'}],teams:[],assetCatalog:[{id:'DOCUMENT',fields:[]}],edit:{status:'idle'}};
+      let current=base,calls=0;
+      window.inheritiTray={state:async()=>current,onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},
+        onHidden:()=>()=>{},onAction:()=>()=>{},onInboxChanged:()=>()=>{},onInboxStateChanged:()=>()=>{},
+        inboxState:async()=>({status:'error'}),version:async()=>'',updateProgress:async()=>null,onUpdateProgress:()=>()=>{},
+        signOutAll:async()=>{calls++;current={...base,status:'signed-out',activeSubject:undefined,accounts:[],organizations:[],selectedId:undefined};window.stateChanged(current);return current},
+        signOut:async()=>current,openApp:async()=>{}};
+      setTimeout(()=>document.getElementById('sign-out-all')?.click(),150);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.confirm=String(document.body.textContent.includes('every saved account and its organisation keys'));
+        root.dataset.before=String(calls);document.querySelector('.tray-account-confirmation button')?.click()},300);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.cancel=String(calls===0&&!!document.getElementById('sign-out-all'));
+        document.getElementById('sign-out-all')?.click()},450);
+      setTimeout(()=>Array.from(document.querySelectorAll('.tray-account-confirmation button')).find((button)=>button.textContent==='Sign out all accounts')?.click(),600);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.after=String(calls);root.dataset.saved=String(!!document.querySelector('.tray-recovery-accounts'))},850);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=1000', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-confirm="true"');
+    expect(html).toContain('data-before="0"');
+    expect(html).toContain('data-cancel="true"');
+    expect(html).toContain('data-after="1"');
+    expect(html).toContain('data-saved="false"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('confirms account and organisation before switching and keeps the original on cancel', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-account-switch-'));
   try {

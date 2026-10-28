@@ -68,6 +68,13 @@ export class ProtectedCheckpoint {
     for (const key of Object.keys(values)) if (!root || key.includes(root)) delete values[key];
     this.write(values);
   }
+  cleanMany(roots: string[]): void {
+    const values = this.read();
+    for (const key of Object.keys(values)) {
+      if (roots.some((root) => key === root || key.startsWith(root.endsWith('/') ? root : `${root}/`))) delete values[key];
+    }
+    this.write(values);
+  }
   multiRemove(root: string, keys: string[]): void {
     const values = this.read();
     for (const key of keys) delete values[key.startsWith(root) ? key : `${root}/${key}`];

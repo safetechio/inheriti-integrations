@@ -8,9 +8,12 @@ type ProfileRegistry = { profiles: Map<string, ProfileRecord>; memoryActiveSubje
 export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again' };
 
 export class ProtectedOperatorSessionStore implements OperatorSessionStore {
+  private static readonly epochs = new Map<string, number>();
+  private static readonly registries = new Map<string, Set<ProfileRegistry>>();
   private readonly checkpoint = new ProtectedCheckpoint();
   private readonly path: string;
   private readonly registry: ProfileRegistry;
+  private readonly epoch: number;
   private boundSubject: string | undefined;
   private boundGeneration: number | undefined;
   private retired = false;
@@ -18,14 +21,18 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   constructor(private readonly deployment: string, private readonly issuer: string, registry?: ProfileRegistry) {
     this.path = `operator-session/${deployment}/${createHash('sha256').update(issuer).digest('hex')}`;
     this.registry = registry ?? { profiles: new Map(), memoryActiveSubject: undefined };
+    this.epoch = ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0;
+    const registries = ProtectedOperatorSessionStore.registries.get(this.path) ?? new Set<ProfileRegistry>();
+    registries.add(this.registry);
+    ProtectedOperatorSessionStore.registries.set(this.path, registries);
   }
 
-  get isRetired(): boolean { return this.retired; }
+  get isRetired(): boolean { return this.retired || this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0); }
   fork(): ProtectedOperatorSessionStore { return new ProtectedOperatorSessionStore(this.deployment, this.issuer, this.registry); }
   retire(): void { this.retired = true; }
 
   async load(): Promise<OperatorSession | undefined> {
-    if (this.retired) return undefined;
+    if (this.isRetired) return undefined;
     if (!this.checkpoint.isAvailable()) {
       const subject = this.boundSubject ?? this.registry.memoryActiveSubject;
       if (!subject) return undefined;
@@ -58,7 +65,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async save(session: OperatorSession): Promise<void> {
-    if (this.retired) throw new Error('operator_session_retired');
+    if (this.isRetired) throw new Error('operator_session_retired');
     if (!this.valid(session)) throw new Error('Invalid operator session');
     if (this.checkpoint.isAvailable()) this.migrate();
     const active = this.checkpoint.isAvailable()
@@ -80,7 +87,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async enroll(session: OperatorSession): Promise<void> {
-    if (this.retired) throw new Error('operator_session_retired');
+    if (this.isRetired) throw new Error('operator_session_retired');
     if (!this.valid(session)) throw new Error('Invalid operator session');
     if (this.checkpoint.isAvailable()) this.migrate();
     const subject = session.principal.subject;
@@ -89,7 +96,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async activate(subject: string): Promise<void> {
-    if (this.retired) throw new Error('operator_session_retired');
+    if (this.isRetired) throw new Error('operator_session_retired');
     if (!subject) throw new Error('operator_account_not_found');
     if (this.checkpoint.isAvailable()) this.migrate();
     const record = this.currentProfile(subject);
@@ -98,6 +105,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async listProfiles(): Promise<string[]> {
+    if (this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0)) return [];
     if (!this.checkpoint.isAvailable()) {
       return [...this.registry.profiles.entries()].filter(([, record]) => !!record.session).map(([subject]) => subject);
     }
@@ -107,6 +115,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> {
+    if (this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0)) return { accounts: [], activeSubject: undefined };
     if (this.checkpoint.isAvailable()) this.migrate();
     const records = this.checkpoint.isAvailable()
       ? this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
@@ -124,7 +133,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   async clear(): Promise<void> {
-    if (this.retired) return;
+    if (this.isRetired) return;
     if (!this.boundSubject) {
       this.retired = true;
       return;
@@ -146,6 +155,18 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     this.retired = true;
   }
 
+  async clearAll(additionalScopes: string[] = []): Promise<void> {
+    if (this.isRetired) throw new Error('operator_session_retired');
+    if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');
+    if (this.checkpoint.isAvailable()) this.checkpoint.cleanMany([this.path].concat(additionalScopes));
+    for (const registry of ProtectedOperatorSessionStore.registries.get(this.path) ?? []) {
+      registry.profiles.clear();
+      registry.memoryActiveSubject = undefined;
+    }
+    ProtectedOperatorSessionStore.epochs.set(this.path, this.epoch + 1);
+    this.retired = true;
+  }
+
   selectedOrganization(): string | undefined {
     const subject = this.boundSubject;
     if (!subject || !this.currentBinding(subject) || !this.checkpoint.isAvailable()) return undefined;
@@ -159,7 +180,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   private currentBinding(subject: string): boolean {
-    return !this.retired && this.boundGeneration !== undefined &&
+    return !this.isRetired && this.boundGeneration !== undefined &&
       this.currentProfile(subject)?.generation === this.boundGeneration;
   }
 

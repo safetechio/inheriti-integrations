@@ -7,6 +7,9 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
   getItem(path: string) { return mock.checkpoint.get(path) ?? null; }
   setItem(path: string, value: unknown) { mock.checkpoint.set(path, value); }
   removeItem(path: string) { mock.checkpoint.delete(path); }
+  clean(root: string) { for (const path of mock.checkpoint.keys()) if (path.startsWith(root)) mock.checkpoint.delete(path); }
+  cleanMany(roots: string[]) { for (const path of mock.checkpoint.keys()) if (roots.some((root) => path.startsWith(root))) mock.checkpoint.delete(path); }
+  hasFile() { return true; }
   multiRemove(_root: string, paths: string[]) { for (const path of paths) mock.checkpoint.delete(path); }
   searchItems(root: string, predicate: (value: unknown) => boolean) {
     return [...mock.checkpoint.entries()].filter(([path, value]) => path.includes(root) && predicate(value)).map(([, value]) => value);
@@ -45,6 +48,7 @@ vi.mock('@safetech/inheriti-elements-core/inbox', () => ({
 }));
 
 import { TraySession } from '../src/modules/launcher/main/state.js';
+import { ProtectedCheckpoint } from '../src/modules/launcher/main/protected-checkpoint.js';
 import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
 import { TrayQuickPlans } from '../src/modules/quick-plan/main/quick-plans.js';
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
@@ -1108,6 +1112,76 @@ describe('TraySession', () => {
     await expect(session.signOut()).rejects.toThrow('vault_failure');
     expect(session.state()).toMatchObject({ status: 'signed-in', selectedId: 'org-a' });
     expect(mock.listenInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs out every saved account and clears the active context', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await store.enroll({ accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
+    await session.restore();
+    await session.select('org-a');
+    expect(session.state().accounts).toHaveLength(2);
+
+    await session.signOutAll();
+
+    expect(session.state()).toMatchObject({ status: 'signed-out', organizations: [], accounts: [] });
+    expect(session.state().activeSubject).toBeUndefined();
+    await expect(store.load()).resolves.toBeUndefined();
+    expect(mock.clear).not.toHaveBeenCalled();
+  });
+
+  it('signs out all saved accounts after the active session adapter retires', async () => {
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await store.enroll({ accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
+    await session.restore();
+    store.retire();
+
+    await session.signOutAll();
+
+    expect(session.state()).toMatchObject({ status: 'signed-out', accounts: [] });
+    expect(await store.listProfiles()).toEqual([]);
+  });
+
+  it('blocks sign-out-all during an Inbox mutation', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    await session.select('org-a');
+    let finishMutation!: () => void;
+    mock.changeParticipants.mockReturnValueOnce(new Promise<void>((resolve) => { finishMutation = resolve; }));
+    const mutation = session.changeInboxParticipants('conversation-1', { action: 'ADD', memberId: 'member-1', expectedRevision: 1 });
+    await expect(session.signOutAll()).rejects.toThrow('inbox_operation_busy');
+    finishMutation();
+    await mutation;
+  });
+
+  it('preserves the signed-in account when all-account checkpoint cleanup fails', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    await store.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+    await session.restore();
+    await session.select('org-a');
+    vi.spyOn(ProtectedCheckpoint.prototype, 'cleanMany').mockImplementationOnce(() => { throw new Error('checkpoint_failure'); });
+
+    await expect(session.signOutAll()).rejects.toThrow('checkpoint_failure');
+
+    expect(session.state()).toMatchObject({ status: 'signed-in', selectedId: 'org-a', activeSubject: 'member-a' });
+    await expect(store.load()).resolves.toMatchObject({ accessToken: 'access-a' });
   });
 
   it('restores the selected organization context after A to B to A', async () => {

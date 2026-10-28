@@ -89,6 +89,23 @@ it('cancels Add Account without signing out the current account', async () => {
   expect(signOut).not.toHaveBeenCalled();
 });
 
+it('signs out all accounts only from the trusted Tray renderer', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const signOutAll = vi.fn(async () => {});
+  const publish = vi.fn();
+  const publishInbox = vi.fn();
+  registerTrayIpc({ state: () => ({ status: 'signed-out', accounts: [] }), signOutAll } as never,
+    () => ({ webContents }) as never, publish, undefined, undefined, publishInbox);
+  const all = mock.handlers.get('tray:sign-out-all')!;
+  await expect(all({ sender: webContents, senderFrame: {} })).rejects.toThrow('Untrusted renderer');
+  expect(signOutAll).not.toHaveBeenCalled();
+  await expect(all({ sender: webContents, senderFrame: frame })).resolves.toEqual({ status: 'signed-out', accounts: [] });
+  expect(signOutAll).toHaveBeenCalledOnce();
+  expect(publish).toHaveBeenCalledOnce();
+  expect(publishInbox).toHaveBeenCalledOnce();
+});
+
 it('notifies only after confirmed protection or update using generic text', async () => {
   const frame = {};
   const webContents = { mainFrame: frame };

@@ -53,6 +53,7 @@ export class TraySession {
   private readonly quickPlans: TrayQuickPlans;
   private readonly planEdit: TrayPlanEdit;
   private readonly organizationKeys: ReturnType<typeof createOrganizationKeys>;
+  private readonly organizationKeyVault: OrganizationKeyVault;
   private readonly custodianPrompt = new CustodianPrompt();
   private readonly proDevice: ReturnType<typeof createTraySafeKeyPro>;
   private readonly inbox: TrayInbox;
@@ -64,8 +65,9 @@ export class TraySession {
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
     this.auth = new TrayAuthRuntime(deployment, apiUrl, issuer, config.environment);
+    this.organizationKeyVault = new OrganizationKeyVault(deployment, () => this.auth.getAccessToken(), issuer);
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.auth.getAccessToken(),
-      keyVault: new OrganizationKeyVault(deployment, () => this.auth.getAccessToken()) });
+      keyVault: this.organizationKeyVault });
     this.inbox = new TrayInbox(apiUrl, config.environment, () => this.auth.getAccessToken(),
       (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), () => {
         if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
@@ -415,7 +417,10 @@ export class TraySession {
   clearRevealed(): void { this.custodianPrompt.cancel(); this.proDevice?.clearPin(); this.planEdit.clearRevealed(); this.inbox.hide(); }
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.inboxAccess.reset(); void this.organizationKeys.clear(); }
 
-  async signOut(): Promise<void> {
+  signOut(): Promise<void> { return this.clearSession(false); }
+  signOutAll(): Promise<void> { return this.clearSession(true); }
+
+  private async clearSession(allAccounts: boolean): Promise<void> {
     if (this.signingOut || this.accountSwitcher.isSwitching) throw new Error('account_transition_in_progress');
     if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
@@ -435,10 +440,15 @@ export class TraySession {
       await this.pendingSignIn;
       this.authorization = undefined;
       await this.planEdit.clear();
-      await this.organizationKeys.forget();
-      await this.auth.core.auth.clear();
-      await this.auth.sessions.clear();
-      this.auth.renew();
+      if (allAccounts) {
+        await this.auth.clearAll([this.organizationKeyVault.allAccountScope]);
+        await this.organizationKeys.clear();
+      } else {
+        await this.organizationKeys.forget();
+        await this.auth.core.auth.clear();
+        await this.auth.sessions.clear();
+        this.auth.renew();
+      }
       this.quickPlans.clear();
       this.organization.reset();
       this.accountName = undefined;

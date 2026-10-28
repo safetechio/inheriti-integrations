@@ -64,6 +64,7 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); publishInbox?.(); return session.state(); });
+  ipcMain.handle('tray:sign-out-all', async (event) => { trusted(event); await session.signOutAll(); publish(); publishInbox?.(); return session.state(); });
   registerInboxIpc(session, trusted, publishInbox, publish, refreshBadge);
   registerQuickPlanIpc(session, trusted, publish, notify);
   ipcMain.handle('tray:open-app', (event, planId?: unknown) => {
