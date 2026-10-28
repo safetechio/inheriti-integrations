@@ -31,6 +31,10 @@ export function LauncherApp({ messages }) {
   const [inboxHasNew, setInboxHasNew] = useState(false);
   const [inboxTarget, setInboxTarget] = useState(null);
   const [pendingInboxAction, setPendingInboxAction] = useState(null);
+  const [targetInboxAction, setTargetInboxAction] = useState(null);
+  const [targetInboxStatus, setTargetInboxStatus] = useState('');
+  const [targetSelectionVersion, setTargetSelectionVersion] = useState(0);
+  const targetInboxRef = useRef(null);
   const [inboxSwitchBlocked, setInboxSwitchBlocked] = useState(false);
   const [pendingPlanAction, setPendingPlanAction] = useState(null);
   const [pendingAccountSwitch, setPendingAccountSwitch] = useState(null);
@@ -53,7 +57,14 @@ export function LauncherApp({ messages }) {
     if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(queueAction(action));
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
-      setPendingInboxAction(queueAction(action));
+      if (action.accountSubject === undefined) setPendingInboxAction(queueAction(action));
+      else if (typeof action.accountSubject === 'string' && action.accountSubject.length > 0 && action.accountSubject.length <= 500) {
+        const target = { accountSubject: action.accountSubject, organizationId: action.organizationId, conversationId: action.conversationId };
+        targetInboxRef.current = target;
+        setTargetInboxAction(target);
+        setTargetInboxStatus('');
+        setPendingAccountSwitch(null);
+      }
       blockedInboxSwitch.current = false;
       setInboxSwitchBlocked(false);
     }
@@ -90,7 +101,7 @@ export function LauncherApp({ messages }) {
   const chooseAccount = (account, organization) => setPendingAccountSwitch({ account, organization });
   const confirmAccountSwitch = async () => {
     if (!pendingAccountSwitch) return;
-    const { account, organization } = pendingAccountSwitch;
+    const { account, organization, targetAction } = pendingAccountSwitch;
     setPendingAccountSwitch(null);
     setSwitchingAccount(true);
     closeInbox();
@@ -98,13 +109,16 @@ export function LauncherApp({ messages }) {
     editFlow.close();
     try {
       const activated = await session.activateAccount(account.subject, organization?.id);
-      if (!activated) return;
+      if (!activated) { if (targetAction && targetInboxRef.current === targetAction) setTargetInboxStatus('This organisation is no longer available for this account.'); return; }
       setInboxHasNew(false);
       setInboxRequested(null);
       setPendingInboxAction(null);
       setPendingPlanAction(null);
       clearInboxPresence();
       clearInboxConversationCache();
+      if ((targetAction && targetInboxRef.current === targetAction) || (!targetAction && targetInboxRef.current?.accountSubject === account.subject)) {
+        setTargetInboxStatus('');
+      }
     } finally { setSwitchingAccount(false); }
   };
   useEffect(() => {
@@ -134,7 +148,7 @@ export function LauncherApp({ messages }) {
           setInboxHasNew(false);
           setPendingInboxAction(null);
         } else { blockedInboxSwitch.current = true; setInboxSwitchBlocked(true); }
-      }).finally(() => { switchingOrganization.current = false; });
+      }).finally(() => { switchingOrganization.current = false; setTargetSelectionVersion((version) => version + 1); });
       return;
     }
     if (!state.selectedId) { setPendingInboxAction(null); return; }
@@ -143,7 +157,42 @@ export function LauncherApp({ messages }) {
     setInboxHasNew(false);
     setPendingInboxAction(null);
   }, [pendingInboxAction, state, flow, editFlow.busy, inboxSwitchBlocked]);
-  const pendingInboxControls = currentAction(pendingInboxAction) && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>;
+  useEffect(() => {
+    if (!targetInboxAction || targetInboxStatus || pendingAccountSwitch || switchingAccount || !state) return;
+    const account = state.accounts?.find(({ subject }) => subject === targetInboxAction.accountSubject);
+    if (state.activeSubject !== targetInboxAction.accountSubject || state.status !== 'signed-in') {
+      if (account?.status !== 'ready') { setTargetInboxStatus(account ? 'Sign in again to open this Secure Chat notification.' : 'This account is no longer saved. Add the account to open this Secure Chat notification.'); return; }
+      const organization = account.organizations?.find(({ id }) => id === targetInboxAction.organizationId);
+      setPendingAccountSwitch({ account, organization: organization || { id: targetInboxAction.organizationId, name: 'Unavailable' }, targetAction: targetInboxAction });
+      return;
+    }
+    if (!state.organizations?.some(({ id }) => id === targetInboxAction.organizationId)) { setTargetInboxStatus('This organisation is no longer available for this account.'); return; }
+    if (state.selectedId !== targetInboxAction.organizationId) {
+      if (flow.busy || flow.preparing || editFlow.busy || switchingOrganization.current) return;
+      switchingOrganization.current = true;
+      void flow.selectOrganization(targetInboxAction.organizationId).then((selected) => {
+        if (!selected && targetInboxRef.current === targetInboxAction) setTargetInboxStatus('This organisation is no longer available for this account.');
+      }).finally(() => { switchingOrganization.current = false; setTargetSelectionVersion((version) => version + 1); });
+      return;
+    }
+    if (targetInboxRef.current !== targetInboxAction) return;
+    targetInboxRef.current = null;
+    setInboxTarget(targetInboxAction.conversationId ? { conversationId: targetInboxAction.conversationId } : null);
+    setInboxOpen(true);
+    setInboxHasNew(false);
+    setTargetInboxAction(null);
+  }, [targetInboxAction, targetInboxStatus, pendingAccountSwitch, switchingAccount, state, flow, editFlow.busy, targetSelectionVersion]);
+  const recoverTargetInbox = async () => {
+    const target = targetInboxRef.current;
+    const next = await session.addAccount();
+    if (!target || targetInboxRef.current !== target || !next) return;
+    if (next.activeSubject !== target.accountSubject) { setTargetInboxStatus('A different account was added. Add the requested account to open this notification.'); return; }
+    setTargetInboxStatus('');
+  };
+  const pendingInboxControls = <>
+    {currentAction(pendingInboxAction) && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>}
+    {targetInboxAction && targetInboxStatus && <p role="status">{targetInboxStatus} <button type="button" onClick={() => void recoverTargetInbox()}>Add account</button> <button type="button" onClick={() => { targetInboxRef.current = null; setTargetInboxAction(null); setTargetInboxStatus(''); }}>Dismiss</button></p>}
+  </>;
   const createPlanFromSecret = (suggestion) => {
     if (!flow.openInboxSuggestion(suggestion)) return;
     setInboxOpen(false);
@@ -180,7 +229,7 @@ export function LauncherApp({ messages }) {
       <p>Your current account will stay saved. Active work must finish before switching.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
     </div>
-    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus onClick={() => setPendingAccountSwitch(null)}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></div>
+    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus onClick={() => { if (pendingAccountSwitch.targetAction) setTargetInboxStatus('Secure Chat notification pending for this account.'); setPendingAccountSwitch(null); }}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></div>
   </main>;
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
@@ -192,9 +241,9 @@ export function LauncherApp({ messages }) {
     error: messages.signInError,
   })[state.status];
 
-  if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
+  if (!signedIn) return <>{pendingInboxControls}<SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
     accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount}
-    onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()} onOpenApp={() => void session.openApp()} />;
+    onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()} onOpenApp={() => void session.openApp()} /></>;
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 

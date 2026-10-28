@@ -27,7 +27,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   let seenRevision = sessionRevision();
   const notices = new Set<Notification>();
   const unreadNotices = new Map<string, Notification>();
-  const notify = (body: string, target?: { organizationId: string; conversationId: string }, untilRead = false): void => {
+  const notify = (body: string, target?: { organizationId: string; conversationId: string; accountSubject: string }, untilRead = false): void => {
     if (!Notification.isSupported()) return;
     const revision = sessionRevision();
     const key = untilRead && target ? `${target.organizationId}:${target.conversationId}` : undefined;
@@ -42,7 +42,8 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     notice.on('click', () => {
       notice.close();
       if (revision !== sessionRevision()) return;
-      showLauncher(target ? { kind: 'OPEN_INBOX', ...target } : undefined);
+      showLauncher(target ? { kind: 'OPEN_INBOX', organizationId: target.organizationId, conversationId: target.conversationId,
+        accountSubject: target.accountSubject } : undefined);
     });
     notice.show();
     if (!untilRead) {
@@ -145,7 +146,13 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
       if (!signal || !('tenantId' in signal) || !signal.tenantId || signal.tenantId === selectedId) publishInboxChanged(signal);
       if (signal && 'kind' in signal && signal.kind === 'PRESENCE') return;
       void notifyInboxEvent(session, signal, seenInboxMessages, (body, target, untilRead) => {
-        if (revision === sessionRevision()) notify(body, target, untilRead);
+        if (revision !== sessionRevision()) return;
+        if (!target) { notify(body, undefined, untilRead); return; }
+        const state = session.state();
+        if (state.status !== 'signed-in' || typeof state.activeSubject !== 'string' ||
+          !state.activeSubject || state.activeSubject.length > 500) return;
+        notify(body, { organizationId: target.organizationId, conversationId: target.conversationId,
+          accountSubject: state.activeSubject }, untilRead);
       }).finally(() => { void refreshBadge(); });
     });
     session.setInboxStatePublisher(() => publishInbox(session));

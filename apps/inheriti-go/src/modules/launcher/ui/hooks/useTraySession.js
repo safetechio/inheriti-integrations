@@ -23,9 +23,12 @@ export function useTraySession(messages) {
   async function addAccount() {
     try {
       setError('');
-      setState(await window.inheritiTray.addAccount());
+      const next = await window.inheritiTray.addAccount();
+      setState(next);
+      return next;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : messages.signInFailed);
+      return null;
     }
   }
 
@@ -42,15 +45,19 @@ export function useTraySession(messages) {
       setError('');
       let next = await window.inheritiTray.activateAccount(subject);
       setState(next);
+      if (next.activeSubject !== subject || next.status !== 'signed-in') return false;
       if (organizationId && next.organizations?.some(({ id }) => id === organizationId)) {
         try {
           next = await window.inheritiTray.select(organizationId);
           setState(next);
+          return next.activeSubject === subject && next.selectedId === organizationId;
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : messages.retryError);
+          return false;
         }
       } else if (organizationId) {
         setError('This organisation is no longer available for this account.');
+        return false;
       }
       return true;
     } catch (cause) {

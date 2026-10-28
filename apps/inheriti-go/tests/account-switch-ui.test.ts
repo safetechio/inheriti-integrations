@@ -118,3 +118,95 @@ it.skipIf(!chrome)('drops account A tray actions queued during Add Account befor
     expect(html).toContain('data-b-action="true"');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+for (const scenario of ['legacy', 'active', 'cross', 'cancel', 'expired', 'unknown', 'removed', 'stale-membership', 'different-account', 'signed-out-ready', 'signed-out-expired', 'unavailable-unknown']) {
+  it.skipIf(!chrome)(`routes targeted inbox notification: ${scenario}`, () => {
+    const directory = mkdtempSync(join(tmpdir(), 'tray-target-inbox-'));
+    try {
+      buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+        define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+      writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+      writeFileSync(join(directory, 'preload.js'), `
+        const scenario=${JSON.stringify(scenario)};
+        const accounts=[{subject:'a',name:'Alice',status:'ready',organizations:[{id:'org-a',name:'Alice Company'}]},
+          {subject:'b',name:'Bob',status:scenario==='expired'||scenario==='different-account'||scenario==='signed-out-expired'?'sign-in-again':'ready',organizations:[{id:'org-b',name:'Bob Company'}]}];
+        if(scenario==='unknown'||scenario==='unavailable-unknown') accounts.pop();
+        let current={status:scenario.startsWith('signed-out')?'signed-out':scenario==='unavailable-unknown'?'session-unavailable':'signed-in',activeSubject:'a',accountName:'Alice',selectedId:'org-a',accounts,
+          organizations:accounts[0].organizations,teams:[],assetCatalog:[],edit:{status:'idle'}};
+        const callbacks=new Set();let activations=0,adds=0;
+        window.inheritiTray={state:async()=>current,onStateChanged:(fn)=>{window.stateChanged=fn;return()=>{}},
+          onHidden:()=>()=>{},onAction:(fn)=>{callbacks.add(fn);return()=>callbacks.delete(fn)},onInboxChanged:()=>()=>{},onInboxStateChanged:()=>()=>{},
+          inboxState:async()=>({status:'error'}),version:async()=>'',updateProgress:async()=>null,onUpdateProgress:()=>()=>{},
+          activateAccount:async(subject)=>{activations++;if(!current.accounts.some((account)=>account.subject===subject)) throw Error('Account no longer saved');
+            current={...current,status:'signed-in',activeSubject:subject,accountName:'Bob',selectedId:undefined,
+            organizations:scenario==='stale-membership'?[]:[{id:'org-b',name:'Bob Company'}]};window.stateChanged(current);return current},
+          select:async(id)=>{current={...current,selectedId:id};window.stateChanged(current);return current},
+          addAccount:async()=>{adds++;current={...current,activeSubject:scenario==='different-account'?'c':'b',
+            organizations:[{id:'org-b',name:'Bob Company'}],selectedId:'org-b'};window.stateChanged(current);return current},
+          signOut:async()=>current,openApp:async()=>{}};
+        setTimeout(()=>{for(const callback of callbacks) callback({kind:'OPEN_INBOX',accountSubject:scenario==='active'?'a':scenario==='legacy'?undefined:'b',
+          organizationId:scenario==='active'||scenario==='legacy'?'org-a':'org-b',conversationId:'conversation-1'})},150);
+        setTimeout(()=>{const root=document.getElementById('root');root.dataset.confirm=String(!!document.querySelector('.tray-account-confirmation'));
+          root.dataset.account=String(document.body.textContent.includes('Account: Bob'));
+          root.dataset.organization=String(document.body.textContent.includes('Organisation: Bob Company'));
+          if(scenario==='removed') {current={...current,accounts:[accounts[0]]};window.stateChanged(current)}
+          if(scenario==='cross'||scenario==='stale-membership'||scenario==='removed'||scenario==='signed-out-ready')
+            Array.from(document.querySelectorAll('.tray-account-confirmation button')).find((button)=>button.textContent==='Switch account')?.click();
+          if(scenario==='cancel') document.querySelector('.tray-account-confirmation button')?.click();
+          if(scenario==='expired'||scenario==='unknown'||scenario==='different-account')
+            Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Add account')?.click();},300);
+        setTimeout(()=>{const root=document.getElementById('root');root.dataset.active=String(current.activeSubject);
+          root.dataset.selected=String(current.selectedId);root.dataset.activations=String(activations);root.dataset.adds=String(adds);
+          root.dataset.inbox=String(!!document.querySelector('.inbox-panel'));
+          root.dataset.pending=String(document.body.textContent.includes('notification pending')||document.body.textContent.includes('no longer available')||document.body.textContent.includes('different account')||document.body.textContent.includes('no longer saved')||document.body.textContent.includes('Sign in again to open'));
+          root.dataset.recovery=String(!!Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Add account')&&!!Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Dismiss'))},700);
+      `);
+      const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=850', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      if (scenario === 'legacy' || scenario === 'active' || scenario === 'cross' || scenario === 'expired' || scenario === 'unknown' || scenario === 'signed-out-ready') expect(html).toContain('data-inbox="true"');
+      if (scenario === 'cross') { expect(html).toContain('data-account="true"'); expect(html).toContain('data-organization="true"'); expect(html).toContain('data-activations="1"'); }
+      if (scenario === 'cancel' || scenario === 'stale-membership' || scenario === 'different-account' || scenario === 'removed') expect(html).toContain('data-inbox="false"');
+      if (scenario === 'cancel') { expect(html).toContain('data-active="a"'); expect(html).toContain('data-pending="true"'); }
+      if (scenario === 'stale-membership') expect(html).toContain('data-pending="true"');
+      if (scenario === 'different-account') expect(html).toContain('data-pending="true"');
+      if (scenario === 'removed') { expect(html).toContain('data-active="a"'); expect(html).toContain('data-pending="true"'); }
+      if (scenario === 'signed-out-expired' || scenario === 'unavailable-unknown') { expect(html).toContain('data-pending="true"'); expect(html).toContain('data-recovery="true"'); expect(html).toContain('data-inbox="false"'); }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}
+
+for (const scenario of ['select', 'add', 'add-dismiss']) {
+  it.skipIf(!chrome)(`ignores a stale ${scenario} completion after a newer inbox target`, () => {
+    const directory = mkdtempSync(join(tmpdir(), 'tray-target-race-'));
+    try {
+      buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+        define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+      writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+      writeFileSync(join(directory, 'preload.js'), `
+        const scenario=${JSON.stringify(scenario)};
+        const accounts=[{subject:'a',name:'Alice',status:'ready',organizations:[{id:'org-a',name:'Company A'},{id:'org-a2',name:'Company A2'},{id:'org-a3',name:'Company A3'}]}];
+        let current={status:'signed-in',activeSubject:'a',accountName:'Alice',selectedId:'org-a',accounts,
+          organizations:accounts[0].organizations,teams:[],assetCatalog:[],edit:{status:'idle'}};
+        let finish,selectedOnce=false;const callbacks=new Set();
+        window.inheritiTray={state:async()=>current,onStateChanged:(fn)=>{window.stateChanged=fn;return()=>{}},
+          onHidden:()=>()=>{},onAction:(fn)=>{callbacks.add(fn);return()=>callbacks.delete(fn)},onInboxChanged:()=>()=>{},onInboxStateChanged:()=>()=>{},
+          inboxState:async()=>({status:'error'}),version:async()=>'',updateProgress:async()=>null,onUpdateProgress:()=>()=>{},
+          select:async(id)=>{if(scenario==='select'&&!selectedOnce) {selectedOnce=true;return new Promise((resolve)=>{finish=resolve})}
+            current={...current,selectedId:id};window.stateChanged(current);return current},
+          addAccount:async()=>new Promise((resolve)=>{finish=resolve}),signOut:async()=>current,openApp:async()=>{}};
+        const emit=(accountSubject,organizationId)=>{for(const callback of callbacks) callback({kind:'OPEN_INBOX',accountSubject,organizationId,conversationId:'new-conversation'})};
+        setTimeout(()=>emit(scenario==='select'?'a':'b',scenario==='select'?'org-a2':'org-b'),150);
+        setTimeout(()=>{if(scenario!=='select') Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Add account')?.click()},240);
+        setTimeout(()=>{if(scenario==='add-dismiss') Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Dismiss')?.click();
+          else emit('a',scenario==='select'?'org-a3':'org-a')},330);
+        setTimeout(()=>finish?.(scenario==='select'?current:{...current,activeSubject:'c'}),430);
+        setTimeout(()=>{const root=document.getElementById('root');root.dataset.inbox=String(!!document.querySelector('.inbox-panel'));
+          root.dataset.stale=String(document.body.textContent.includes('different account')||document.body.textContent.includes('no longer available'));
+          root.dataset.pending=String(!!Array.from(document.querySelectorAll('button')).find((button)=>button.textContent==='Dismiss'))},700);
+      `);
+      const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=850', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      if (scenario === 'select') expect(html).toContain('data-inbox="true"');
+      expect(html).toContain('data-stale="false"');
+      if (scenario === 'add-dismiss') expect(html).toContain('data-pending="false"');
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}
