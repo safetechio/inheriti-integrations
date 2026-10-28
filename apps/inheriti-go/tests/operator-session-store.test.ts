@@ -83,21 +83,31 @@ it('preserves the checkpoint when decryption fails', async () => {
   expect(readFileSync(file, 'utf8')).toBe(before);
 });
 
-it('migrates the legacy session and keeps its organization preference', async () => {
+it('discards a legacy session while preserving account data for a fresh sign-in', async () => {
   secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
-  const legacyPath = `operator-session/dev/${createHash('sha256').update('https://issuer.test').digest('hex')}`;
+  const issuerHash = createHash('sha256').update('https://issuer.test').digest('hex');
+  const legacyPath = `operator-session/dev/${issuerHash}`;
+  const preferencePath = `${legacyPath}/organisation/member`;
+  const keyPath = `organization-key/dev/${issuerHash}/member/org-a`;
+  const identityPath = `inbox/identity/TEST/${issuerHash}/member/org-a/device`;
   const file = join(secure.directory, 'protected-checkpoint');
   const original = session('https://issuer.test');
-  const values = { [legacyPath]: original, [`${legacyPath}/organisation/member`]: 'org-a' };
+  const values = { [legacyPath]: original, [preferencePath]: 'org-a', [keyPath]: 'organization-key', [identityPath]: 'identity-key' };
   const { writeFileSync } = await import('node:fs');
   writeFileSync(file, Buffer.from(`encrypted:${JSON.stringify(values)}`).toString('base64'));
   const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
-  expect(await store.load()).toEqual(original);
+  expect(await store.load()).toBeUndefined();
+  expect(await store.listProfiles()).toEqual([]);
+  expect(store.selectedOrganization()).toBeUndefined();
+  const discarded = JSON.parse(Buffer.from(readFileSync(file, 'utf8'), 'base64').toString().slice('encrypted:'.length)) as Record<string, unknown>;
+  expect(discarded[legacyPath]).toBeUndefined();
+  expect(discarded[`${legacyPath}/active`]).toBeUndefined();
+  expect(discarded[preferencePath]).toBe('org-a');
+  expect(discarded[keyPath]).toBe('organization-key');
+  expect(discarded[identityPath]).toBe('identity-key');
+  await store.save(original);
   expect(store.selectedOrganization()).toBe('org-a');
-  expect(await store.listProfiles()).toEqual(['member']);
-  const migrated = JSON.parse(Buffer.from(readFileSync(file, 'utf8'), 'base64').toString().slice('encrypted:'.length)) as Record<string, unknown>;
-  expect(migrated[legacyPath]).toBeUndefined();
-  expect(migrated[`${legacyPath}/active`]).toBe('member');
+  expect(await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load()).toEqual(original);
 });
 
 it('keeps profiles and preferences separate across activation and duplicate enrollment', async () => {

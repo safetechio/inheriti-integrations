@@ -218,6 +218,42 @@ describe('Tray Secure Chat main process', () => {
     inbox.endAccountTransition();
   });
 
+  it('cancels pending identity preparation when an account transition starts', async () => {
+    let finishPreparation!: (state: { status: 'ready'; memberId: string }) => void;
+    const prepare = vi.spyOn(TrayInboxIdentity.prototype, 'prepare').mockReturnValue(new Promise((resolve) => { finishPreparation = resolve; }));
+    const cancel = vi.spyOn(TrayInboxIdentity.prototype, 'cancelPreparation').mockImplementation(() => {});
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    const pending = inbox.prepare();
+    expect(prepare).toHaveBeenCalledExactlyOnceWith('org-a');
+    expect(() => inbox.assertIdle()).not.toThrow();
+    expect(() => inbox.beginAccountTransition()).not.toThrow();
+    expect(cancel).toHaveBeenCalledOnce();
+    await expect(inbox.prepare()).rejects.toThrow('inbox_transition_in_progress');
+    finishPreparation({ status: 'ready', memberId: 'old-member' });
+    await pending;
+    expect(prepare).toHaveBeenCalledTimes(1);
+    inbox.endAccountTransition();
+  });
+
+  it('continues to block account transitions during device replacement and file transfer', async () => {
+    let finishReplacement!: (state: { status: 'ready'; memberId: string }) => void;
+    vi.spyOn(TrayInboxIdentity.prototype, 'replace').mockReturnValue(new Promise((resolve) => { finishReplacement = resolve; }));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    const replacing = inbox.replace();
+    expect(() => inbox.beginAccountTransition()).toThrow('inbox_operation_busy');
+    finishReplacement({ status: 'ready', memberId: 'member-a' });
+    await replacing;
+
+    let finishPicker!: (value: { canceled: boolean; filePaths: string[] }) => void;
+    mock.showOpenDialog.mockReturnValueOnce(new Promise((resolve) => { finishPicker = resolve; }));
+    const transfer = inbox.sendFile('conversation', new Date(Date.now() + 60_000).toISOString());
+    expect(() => inbox.beginAccountTransition()).toThrow('inbox_transfer_busy');
+    finishPicker({ canceled: true, filePaths: [] });
+    await transfer;
+  });
+
   it('blocks account transition while conversation creation awaits the member identity', async () => {
     let finishMember!: (value: string) => void;
     vi.spyOn(TrayInboxIdentity.prototype, 'registeredMemberId').mockReturnValue(new Promise((resolve) => { finishMember = resolve; }));

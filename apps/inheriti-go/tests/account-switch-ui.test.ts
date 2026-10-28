@@ -83,6 +83,46 @@ it.skipIf(!chrome)('confirms account and organisation before switching and keeps
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+it.skipIf(!chrome)('disambiguates duplicate organisation names without changing their selected IDs', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'tray-duplicate-organizations-'));
+  try {
+    buildSync({ entryPoints: [resolve('src/launcher.jsx')], bundle: true, format: 'iife', jsx: 'automatic', minify: true,
+      define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
+    writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
+    writeFileSync(join(directory, 'preload.js'), `
+      const managerOrganizations=[{id:'org-a-11111111',name:'Shared Company'},{id:'org-b-22222222',name:'Shared Company'}];
+      const accounts=[{subject:'a',name:'Alice',status:'ready',organizations:[{id:'org-owner',name:'Shared Company'}]},
+        {subject:'b',name:'Bob',status:'ready',organizations:managerOrganizations}];
+      let current={status:'signed-in',activeSubject:'a',accountName:'Alice',selectedId:'org-owner',
+        organizations:accounts[0].organizations,accounts,teams:[],assetCatalog:[],edit:{status:'idle'}};
+      window.inheritiTray={state:async()=>current,onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},
+        onHidden:()=>()=>{},onAction:()=>()=>{},onInboxChanged:()=>()=>{},onInboxStateChanged:()=>()=>{},
+        inboxState:async()=>({status:'error'}),version:async()=>'',updateProgress:async()=>null,onUpdateProgress:()=>()=>{},
+        activateAccount:async(subject)=>{current={...current,activeSubject:subject,accountName:'Bob',selectedId:undefined,
+          organizations:managerOrganizations};window.stateChanged(current);return current},
+        select:async(id)=>{current={...current,selectedId:id};window.stateChanged(current);return current},
+        signOut:async()=>current,openApp:async()=>{}};
+      const manager=()=>Array.from(document.querySelectorAll('.tray-account-group')).find((card)=>card.textContent.includes('Bob'));
+      setTimeout(()=>{const root=document.getElementById('root');const buttons=manager()?.querySelectorAll('button');
+        root.dataset.rows=String(buttons?.[0]?.textContent.includes('11111111')&&buttons?.[1]?.textContent.includes('22222222'));
+        buttons?.[1]?.click()},150);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.confirm=String(Array.from(document.querySelectorAll('.tray-account-confirmation strong')).some((item)=>item.textContent.includes('22222222')));
+        Array.from(document.querySelectorAll('.tray-account-confirmation button')).find((button)=>button.textContent==='Switch account')?.click()},300);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.first=String(current.selectedId);
+        manager()?.querySelector('button')?.click()},600);
+      setTimeout(()=>{const root=document.getElementById('root');root.dataset.second=String(current.selectedId);
+        root.dataset.options=String(Array.from(document.querySelectorAll('#organization option')).some((option)=>option.textContent.includes('11111111'))&&
+          Array.from(document.querySelectorAll('#organization option')).some((option)=>option.textContent.includes('22222222')))},850);
+    `);
+    const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=1000', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    expect(html).toContain('data-rows="true"');
+    expect(html).toContain('data-confirm="true"');
+    expect(html).toContain('data-first="org-b-22222222"');
+    expect(html).toContain('data-options="true"');
+    expect(html).toContain('data-second="org-a-11111111"');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 it.skipIf(!chrome)('offers a saved account after sign out and switches without OAuth', () => {
   const directory = mkdtempSync(join(tmpdir(), 'tray-signed-out-switch-'));
   try {

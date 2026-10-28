@@ -2,6 +2,13 @@ import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { useAppVersion } from '../hooks/useAppVersion.js';
 
+export function organizationDisplayName(organization, organizations = []) {
+  if (organizations.filter(({ name }) => name === organization.name).length < 2) return organization.name;
+  const suffix = organization.id.slice(-8);
+  const ambiguous = organizations.some(({ id, name }) => name === organization.name && id !== organization.id && id.endsWith(suffix));
+  return `${organization.name} · ${ambiguous ? organization.id : suffix}`;
+}
+
 export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
   const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
@@ -14,7 +21,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         <span className="sr-only">{messages.organization}</span>
         <select id="organization" value={selectedId || ''} onChange={(event) => onOrganizationChange(event.target.value)} disabled={!organizations.length}>
           <option value="">{messages.chooseOrganization}</option>
-          {organizations.map(({ id, name }) => <option value={id} key={id}>{name}</option>)}
+          {organizations.map((organization) => <option value={organization.id} key={organization.id}>{organizationDisplayName(organization, organizations)}</option>)}
         </select>
       </label>
     </header>
@@ -33,7 +40,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
             {account.status === 'ready' && account.organizations?.map((organization) => <button type="button" key={organization.id}
               aria-current={account.subject === activeSubject && organization.id === selectedId ? 'true' : undefined}
               disabled={signOutDisabled} onClick={() => account.subject === activeSubject ? onOrganizationChange(organization.id) : onChooseAccount(account, organization)}>
-              <span>{organization.name}</span><small>{account.subject === activeSubject ? 'This account' : `Switch to ${account.name}`}</small>
+              <span>{organizationDisplayName(organization, account.organizations)}</span><small>{account.subject === activeSubject ? 'This account' : `Switch to ${account.name}`}</small>
             </button>)}
             {account.status === 'ready' && !account.organizations?.length && (account.subject === activeSubject
               ? <p>No organisations available.</p>

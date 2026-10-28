@@ -249,6 +249,7 @@ export class TrayInboxIdentity {
       signal.throwIfAborted();
       return this.set({ status: 'ready', memberId: registered.memberId }, generation);
     } catch (error) {
+      if (signal.aborted || generation !== this.generation) return this.status;
       const reason = error instanceof Error ? error.message : '';
       const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;

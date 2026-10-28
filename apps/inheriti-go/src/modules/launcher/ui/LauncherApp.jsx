@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignedOut } from './components/SignedOut.jsx';
-import { Home } from './components/Home.jsx';
+import { Home, organizationDisplayName } from './components/Home.jsx';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
 import { PlanEditPanel } from '../../quick-plan/ui/PlanEditPanel.jsx';
 import { CustodianPrompt } from '../../quick-plan/ui/CustodianPrompt.jsx';
@@ -255,7 +255,9 @@ export function LauncherApp({ messages }) {
     <div className="tray-scroll tray-account-confirmation-content">
       <h1>Switch account?</h1>
       <p>Account: <strong>{pendingAccountSwitch.account.name}</strong></p>
-      <p>Organisation: <strong>{pendingAccountSwitch.organization?.name || 'Choose after switching'}</strong></p>
+      <p>Organisation: <strong>{pendingAccountSwitch.organization
+        ? organizationDisplayName(pendingAccountSwitch.organization, pendingAccountSwitch.account.organizations)
+        : 'Choose after switching'}</strong></p>
       <p>Your current account will stay saved. Active work must finish before switching.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
     </div>

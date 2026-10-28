@@ -39,7 +39,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       const record = this.registry.profiles.get(subject);
       return this.bind(subject, record);
     }
-    this.migrate();
+    this.discardLegacySession();
     const active = this.checkpoint.getItem<unknown>(`${this.path}/active`);
     const subject = this.boundSubject ?? active ?? this.registry.memoryActiveSubject;
     if (typeof subject !== 'string' || !subject) return undefined;
@@ -67,7 +67,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   async save(session: OperatorSession): Promise<void> {
     if (this.isRetired) throw new Error('operator_session_retired');
     if (!this.valid(session)) throw new Error('Invalid operator session');
-    if (this.checkpoint.isAvailable()) this.migrate();
+    if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const active = this.checkpoint.isAvailable()
       ? this.checkpoint.getItem<unknown>(`${this.path}/active`)
       : this.registry.memoryActiveSubject;
@@ -89,7 +89,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   async enroll(session: OperatorSession): Promise<void> {
     if (this.isRetired) throw new Error('operator_session_retired');
     if (!this.valid(session)) throw new Error('Invalid operator session');
-    if (this.checkpoint.isAvailable()) this.migrate();
+    if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const subject = session.principal.subject;
     const generation = (this.currentProfile(subject)?.generation ?? 0) + 1;
     this.writeProfile(subject, { generation, session });
@@ -98,7 +98,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   async activate(subject: string): Promise<void> {
     if (this.isRetired) throw new Error('operator_session_retired');
     if (!subject) throw new Error('operator_account_not_found');
-    if (this.checkpoint.isAvailable()) this.migrate();
+    if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const record = this.currentProfile(subject);
     if (!record?.session) throw new Error('operator_account_not_found');
     this.setActive(subject);
@@ -109,14 +109,14 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     if (!this.checkpoint.isAvailable()) {
       return [...this.registry.profiles.entries()].filter(([, record]) => !!record.session).map(([subject]) => subject);
     }
-    this.migrate();
+    this.discardLegacySession();
     return this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
       .map((record) => record.session!.principal.subject);
   }
 
   async accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> {
     if (this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0)) return { accounts: [], activeSubject: undefined };
-    if (this.checkpoint.isAvailable()) this.migrate();
+    if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const records = this.checkpoint.isAvailable()
       ? this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
       : [...this.registry.profiles.values()].filter((record) => !!record.session);
@@ -139,7 +139,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       return;
     }
     if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');
-    if (this.checkpoint.isAvailable()) this.migrate();
+    if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const active = this.checkpoint.isAvailable()
       ? this.checkpoint.getItem<unknown>(`${this.path}/active`)
       : this.registry.memoryActiveSubject;
@@ -231,19 +231,8 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     return `${this.path}/organisation/${encodeURIComponent(subject)}`;
   }
 
-  private migrate(): void {
-    const legacy = this.checkpoint.getItem<unknown>(this.path);
-    if (legacy === null) return;
-    if (!this.valid(legacy)) {
-      this.checkpoint.removeItem(this.path);
-      return;
-    }
-    const subject = legacy.principal.subject;
-    if (this.checkpoint.getItem(this.profilePath(subject)) === null) {
-      this.checkpoint.setItem(this.profilePath(subject), { generation: 1, session: legacy });
-    }
-    if (this.checkpoint.getItem(`${this.path}/active`) === null) this.setActive(subject);
-    this.checkpoint.removeItem(this.path);
+  private discardLegacySession(): void {
+    if (this.checkpoint.getItem(this.path) !== null) this.checkpoint.removeItem(this.path);
   }
 
   private validRecord(value: unknown): value is ProfileRecord {

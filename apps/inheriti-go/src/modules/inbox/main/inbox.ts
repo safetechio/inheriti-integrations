@@ -52,7 +52,10 @@ export class TrayInbox {
     if (this.transitioning) throw new Error('inbox_transition_in_progress');
     return this.identity.registeredMemberId(this.selectedOrganization());
   }
-  prepare(): Promise<InboxIdentityState> { return this.trackOperation(() => this.identity.prepare(this.selectedOrganization())); }
+  async prepare(): Promise<InboxIdentityState> {
+    if (this.transitioning) throw new Error('inbox_transition_in_progress');
+    return this.identity.prepare(this.selectedOrganization());
+  }
   replace(): Promise<InboxIdentityState> { return this.trackOperation(() => this.identity.replace(this.selectedOrganization())); }
   cancelPreparation(): void { this.identity.cancelPreparation(); }
   assertIdle(): void {
@@ -63,6 +66,7 @@ export class TrayInbox {
     if (this.transitioning) throw new Error('inbox_transition_in_progress');
     this.assertIdle();
     this.transitioning = true;
+    this.identity.cancelPreparation();
   }
   endAccountTransition(): void { this.transitioning = false; }
   clear(): void { this.cancelTransfer(); this.stopSignals?.(); this.stopSignals = undefined; this.read.clear(); this.identity.clear(); this.cachedClient = undefined; }

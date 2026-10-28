@@ -25,6 +25,17 @@ describe('Tray Inbox identity', () => {
     await expect(identity.prepare('org-1')).rejects.toThrow('inbox_identity_http_401');
   });
 
+  it.each(['cancelPreparation', 'clear'] as const)('does not forward a stale authentication failure after %s', async (cancel) => {
+    let rejectToken!: (error: Error) => void;
+    const pendingToken = new Promise<string>((_resolve, reject) => { rejectToken = reject; });
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', () => pendingToken);
+    const preparing = identity.prepare('org-1');
+    identity[cancel]();
+    rejectToken(Object.assign(new Error('operator_token_expired'), { code: 'operator_token_expired' }));
+    await expect(preparing).resolves.toEqual({ status: 'missing' });
+    expect(identity.state()).toEqual({ status: 'missing' });
+  });
+
   it('restores the same device keys across logins and never sends private material', async () => {
     let registered: { signingPublicKey: string; encryptionPublicKey: string } | undefined;
     const fetcher = vi.fn().mockImplementation(async (_url, init: RequestInit) => {
