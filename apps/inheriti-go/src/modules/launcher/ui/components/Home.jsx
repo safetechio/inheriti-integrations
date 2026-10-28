@@ -2,7 +2,7 @@ import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
 import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 import { useAppVersion } from '../hooks/useAppVersion.js';
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
   const version = useAppVersion();
   const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
   const firstName = accountName?.trim().split(/\s+/u)[0];
@@ -21,6 +21,28 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
     <div className="tray-scroll tray-home-content">
       {notice && <p className="tray-home-notice error" role="alert">{notice}</p>}
       {pendingInboxControls}
+      <section className="tray-home-section tray-saved-accounts" aria-labelledby="saved-accounts-heading">
+        <h2 id="saved-accounts-heading">Saved accounts</h2>
+        <div className="tray-account-groups">
+          {accounts.map((account) => <div className="tray-account-group" key={account.subject}>
+            <div className="tray-account-group-heading"><strong title={account.name}>{account.name}</strong>
+              {account.subject === activeSubject && <small>Current account</small>}
+              {account.subject !== activeSubject && <small>{account.status === 'sign-in-again' ? 'Sign in again' : 'Saved account'}</small>}
+            </div>
+            {account.status === 'sign-in-again' && <p>Use Add account to sign in again.</p>}
+            {account.status === 'ready' && account.organizations?.map((organization) => <button type="button" key={organization.id}
+              aria-current={account.subject === activeSubject && organization.id === selectedId ? 'true' : undefined}
+              disabled={signOutDisabled} onClick={() => account.subject === activeSubject ? onOrganizationChange(organization.id) : onChooseAccount(account, organization)}>
+              <span>{organization.name}</span><small>{account.subject === activeSubject ? 'This account' : `Switch to ${account.name}`}</small>
+            </button>)}
+            {account.status === 'ready' && !account.organizations?.length && (account.subject === activeSubject
+              ? <p>No organisations available.</p>
+              : <button type="button" disabled={signOutDisabled} onClick={() => onChooseAccount(account)}>Switch to this account to load organisations</button>)}
+          </div>)}
+          {!accounts.length && <p>No saved accounts found.</p>}
+        </div>
+        <button id="add-account" type="button" className="button-secondary" disabled={signOutDisabled} onClick={onAddAccount}>Add account</button>
+      </section>
       <section className="tray-hero">
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>
       </section>
@@ -47,6 +69,6 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         </div>
       </div>
     </div>
-    <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}{version && <span className="tray-version">· v{version}</span>}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>{messages.signOut}</button></ScreenFooter>
+    <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}{version && <span className="tray-version">· v{version}</span>}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>Sign out this account</button></ScreenFooter>
   </main>;
 }

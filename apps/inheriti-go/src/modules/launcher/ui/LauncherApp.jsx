@@ -27,37 +27,48 @@ export function LauncherApp({ messages }) {
     return stop;
   }, []);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [inboxRequested, setInboxRequested] = useState(false);
+  const [inboxRequested, setInboxRequested] = useState(null);
   const [inboxHasNew, setInboxHasNew] = useState(false);
   const [inboxTarget, setInboxTarget] = useState(null);
   const [pendingInboxAction, setPendingInboxAction] = useState(null);
   const [inboxSwitchBlocked, setInboxSwitchBlocked] = useState(false);
   const [pendingPlanAction, setPendingPlanAction] = useState(null);
+  const [pendingAccountSwitch, setPendingAccountSwitch] = useState(null);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const switchingOrganization = useRef(false);
   const blockedInboxSwitch = useRef(false);
+  const previousAccount = useRef(null);
   const closeInbox = useCallback(() => { setInboxOpen(false); setInboxTarget(null); }, []);
   const { state } = session;
+  const accountGeneration = useRef({ subject: state?.activeSubject, value: 0 });
+  if (accountGeneration.current.subject !== state?.activeSubject) {
+    accountGeneration.current = { subject: state?.activeSubject, value: accountGeneration.current.value + 1 };
+  }
+  const currentAction = (pending) => !!pending && pending.subject === state?.activeSubject && pending.generation === accountGeneration.current.value;
+  const queueAction = (action) => ({ action, subject: state?.activeSubject, generation: accountGeneration.current.value });
   const inboxIdentity = useInboxState(state?.status === 'signed-in' ? state.selectedId : undefined);
-  useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.selectedId]);
+  useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.activeSubject, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
-    if (action === messages.openSecureInbox) setInboxRequested(true);
-    if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(action);
+    if (action === messages.openSecureInbox) setInboxRequested(queueAction(action));
+    if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(queueAction(action));
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
-      setPendingInboxAction(action);
+      setPendingInboxAction(queueAction(action));
       blockedInboxSwitch.current = false;
       setInboxSwitchBlocked(false);
     }
-  }), [messages, state?.assetCatalog?.length]);
+  }), [messages, state?.assetCatalog?.length, state?.activeSubject]);
   useEffect(() => window.inheritiTray.onInboxChanged?.((signal) => {
     rememberInboxPresence(signal);
     if (signal?.kind === 'NEW_MESSAGE' && !inboxOpen) setInboxHasNew(true);
   }), [inboxOpen]);
   useEffect(() => {
-    if (!inboxRequested || state?.status !== 'signed-in' || !state.selectedId) return;
+    if (!inboxRequested) return;
+    if (!currentAction(inboxRequested)) { setInboxRequested(null); return; }
+    if (state?.status !== 'signed-in' || !state.selectedId) return;
     setInboxOpen(true);
-    setInboxRequested(false);
-  }, [inboxRequested, state?.status, state?.selectedId]);
+    setInboxRequested(null);
+  }, [inboxRequested, state?.status, state?.selectedId, state?.activeSubject]);
   const editFlow = usePlanEditFlow({ state, setState: session.setState, messages });
   const flow = useQuickPlanFlow({ state, setState: session.setState, messages,
     canHandleAction: !editFlow.editing && !!state?.assetCatalog?.length,
@@ -65,22 +76,60 @@ export function LauncherApp({ messages }) {
     onReturnToInbox: () => setInboxOpen(true),
   });
   useEffect(() => {
-    if (!pendingPlanAction || state?.status !== 'signed-in' || !state.selectedId || flow.busy || flow.preparing || editFlow.busy) return;
+    if (previousAccount.current && previousAccount.current !== state?.activeSubject) {
+      closeInbox();
+      flow.clearDraft();
+      editFlow.close();
+      setInboxHasNew(false);
+      setInboxRequested(null);
+      setPendingInboxAction(null);
+      setPendingPlanAction(null);
+    }
+    previousAccount.current = state?.activeSubject;
+  }, [state?.activeSubject]);
+  const chooseAccount = (account, organization) => setPendingAccountSwitch({ account, organization });
+  const confirmAccountSwitch = async () => {
+    if (!pendingAccountSwitch) return;
+    const { account, organization } = pendingAccountSwitch;
+    setPendingAccountSwitch(null);
+    setSwitchingAccount(true);
+    closeInbox();
+    flow.clearDraft();
+    editFlow.close();
+    try {
+      const activated = await session.activateAccount(account.subject, organization?.id);
+      if (!activated) return;
+      setInboxHasNew(false);
+      setInboxRequested(null);
+      setPendingInboxAction(null);
+      setPendingPlanAction(null);
+      clearInboxPresence();
+      clearInboxConversationCache();
+    } finally { setSwitchingAccount(false); }
+  };
+  useEffect(() => {
+    if (!pendingPlanAction) return;
+    if (!currentAction(pendingPlanAction)) { setPendingPlanAction(null); return; }
+    if (state?.status !== 'signed-in' || !state.selectedId || flow.busy || flow.preparing || editFlow.busy) return;
     if ((flow.step === 'actions' || flow.step === 'capture') && !editFlow.editing) {
       closeInbox();
-      flow.openCapture(pendingPlanAction === messages.savePrivately ? 'private' : 'team');
+      flow.openCapture(pendingPlanAction.action === messages.savePrivately ? 'private' : 'team');
     }
     setPendingPlanAction(null);
-  }, [pendingPlanAction, state?.status, state?.selectedId, flow, editFlow.busy, editFlow.editing, closeInbox, messages]);
+  }, [pendingPlanAction, state?.status, state?.selectedId, state?.activeSubject, flow, editFlow.busy, editFlow.editing, closeInbox, messages]);
   useEffect(() => {
-    if (!pendingInboxAction || state?.status !== 'signed-in' || switchingOrganization.current || blockedInboxSwitch.current) return;
-    const belongsToAccount = state.organizations?.some(({ id }) => id === pendingInboxAction.organizationId);
-    if (belongsToAccount && state.selectedId !== pendingInboxAction.organizationId) {
+    if (!pendingInboxAction) return;
+    if (!currentAction(pendingInboxAction)) { setPendingInboxAction(null); return; }
+    if (state?.status !== 'signed-in' || switchingOrganization.current || blockedInboxSwitch.current) return;
+    const action = pendingInboxAction.action;
+    const belongsToAccount = state.organizations?.some(({ id }) => id === action.organizationId);
+    if (belongsToAccount && state.selectedId !== action.organizationId) {
       if (flow.busy || flow.preparing || editFlow.busy) return;
       switchingOrganization.current = true;
-      void flow.selectOrganization(pendingInboxAction.organizationId).then((selected) => {
+      void flow.selectOrganization(action.organizationId).then((selected) => {
+        if (!currentAction(pendingInboxAction)) return;
         if (selected) {
-          setInboxTarget(pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
+          setInboxTarget(action.conversationId ? { conversationId: action.conversationId } : null);
           setInboxOpen(true);
           setInboxHasNew(false);
           setPendingInboxAction(null);
@@ -89,12 +138,12 @@ export function LauncherApp({ messages }) {
       return;
     }
     if (!state.selectedId) { setPendingInboxAction(null); return; }
-    setInboxTarget(belongsToAccount && pendingInboxAction.conversationId ? { conversationId: pendingInboxAction.conversationId } : null);
+    setInboxTarget(belongsToAccount && action.conversationId ? { conversationId: action.conversationId } : null);
     setInboxOpen(true);
     setInboxHasNew(false);
     setPendingInboxAction(null);
   }, [pendingInboxAction, state, flow, editFlow.busy, inboxSwitchBlocked]);
-  const pendingInboxControls = pendingInboxAction && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>;
+  const pendingInboxControls = currentAction(pendingInboxAction) && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>;
   const createPlanFromSecret = (suggestion) => {
     if (!flow.openInboxSuggestion(suggestion)) return;
     setInboxOpen(false);
@@ -122,7 +171,17 @@ export function LauncherApp({ messages }) {
   if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
-  if (state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
+  if (switchingAccount || state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
+  if (pendingAccountSwitch) return <main className="tray-screen tray-account-confirmation">
+    <div className="tray-scroll tray-account-confirmation-content">
+      <h1>Switch account?</h1>
+      <p>Account: <strong>{pendingAccountSwitch.account.name}</strong></p>
+      <p>Organisation: <strong>{pendingAccountSwitch.organization?.name || 'Choose after switching'}</strong></p>
+      <p>Your current account will stay saved. Active work must finish before switching.</p>
+      {session.error && <p role="alert" className="error">{session.error}</p>}
+    </div>
+    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus onClick={() => setPendingAccountSwitch(null)}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></div>
+  </main>;
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
   const status = flow.error || session.error || state.message || ({
@@ -133,16 +192,19 @@ export function LauncherApp({ messages }) {
     error: messages.signInError,
   })[state.status];
 
-  if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'} onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void flow.signOut()} onOpenApp={() => void session.openApp()} />;
+  if (!signedIn) return <SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
+    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount}
+    onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()} onOpenApp={() => void session.openApp()} />;
 
   if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
 
-  if (inboxOpen) return <InboxPanel key={state.selectedId || 'no-organization'} onClose={closeInbox}
+  if (inboxOpen) return <InboxPanel key={`${state.activeSubject || 'no-account'}:${state.selectedId || 'no-organization'}`} onClose={closeInbox}
     identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
     onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />;
 
   if (flow.step === 'actions' && !editFlow.editing) return <Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
+    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount} onAddAccount={() => void session.addAccount()}
     pendingInboxControls={pendingInboxControls}
     showPlanActions={state.assetCatalog?.length > 0}
     onOrganizationChange={(id) => { closeInbox(); setInboxHasNew(false); editFlow.close(); void flow.selectOrganization(id); }}

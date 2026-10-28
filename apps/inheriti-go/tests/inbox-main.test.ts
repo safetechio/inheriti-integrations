@@ -199,6 +199,40 @@ describe('Tray Secure Chat main process', () => {
     expect(createConversation).toHaveBeenCalledExactlyOnceWith('Project handover', ['member-a', 'member-b']);
   });
 
+  it('blocks account transition until a normal send settles', async () => {
+    let finishSend!: (value: { parentId: string }) => void;
+    const sendNormal = vi.fn().mockReturnValue(new Promise((resolve) => { finishSend = resolve; }));
+    mock.createNodeInbox.mockReturnValue({ sendNormal });
+    vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
+      run(identity, new AbortController().signal));
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    const sending = inbox.sendNormal('conversation', 'parent', 'message');
+    await vi.waitFor(() => expect(sendNormal).toHaveBeenCalledOnce());
+    expect(() => inbox.beginAccountTransition()).toThrow('inbox_operation_busy');
+    finishSend({ parentId: 'parent' });
+    await sending;
+    expect(() => inbox.beginAccountTransition()).not.toThrow();
+    inbox.clear();
+    await expect(inbox.sendNormal('conversation', 'parent', 'late')).rejects.toThrow('inbox_transition_in_progress');
+    inbox.endAccountTransition();
+  });
+
+  it('blocks account transition while conversation creation awaits the member identity', async () => {
+    let finishMember!: (value: string) => void;
+    vi.spyOn(TrayInboxIdentity.prototype, 'registeredMemberId').mockReturnValue(new Promise((resolve) => { finishMember = resolve; }));
+    const createConversation = vi.fn().mockResolvedValue({ id: 'conversation-a' });
+    mock.createNodeInbox.mockReturnValue({ createConversation });
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => 'org-a');
+    const creating = inbox.createConversation('Project handover', ['member-b']);
+    expect(() => inbox.assertIdle()).toThrow('inbox_operation_busy');
+    finishMember('member-a');
+    await creating;
+    expect(() => inbox.assertIdle()).not.toThrow();
+    expect(createConversation).toHaveBeenCalledExactlyOnceWith('Project handover', ['member-a', 'member-b']);
+  });
+
   it('forwards conversation and recipient changes only for the selected organization', async () => {
     mock.createNodeInbox.mockReturnValue({ listConversations: vi.fn().mockResolvedValue({ items: [] }) });
     const onSignal = vi.fn();

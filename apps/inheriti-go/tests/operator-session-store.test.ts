@@ -326,3 +326,18 @@ it('restores a memory-rotated profile after switching away and back through fres
   expect((await registry.fork().load())?.refreshToken).toBe('rotated-a');
   expect((await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load())?.refreshToken).toBe('rotated-a');
 });
+
+it('exposes only non-secret saved-account summaries', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  const first = session('https://issuer.test');
+  const expired = { accessToken: 'other-access', idToken: 'private-id-token', tokenType: first.tokenType, expiresAt: Date.now() - 1,
+    principal: { ...first.principal, subject: 'other' } };
+  await store.save(first);
+  await store.enroll(expired);
+  expect(await store.accountSummaries()).toEqual({ activeSubject: 'member', accounts: [
+    { subject: 'member', name: 'member', status: 'ready' },
+    { subject: 'other', name: 'other', status: 'sign-in-again' },
+  ] });
+  expect(JSON.stringify(await store.accountSummaries())).not.toContain('private-refresh-token');
+});

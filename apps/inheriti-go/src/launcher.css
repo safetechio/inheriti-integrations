@@ -142,6 +142,26 @@ body { padding: 0; background: #fff; }
 @media (max-width: 360px) { .tray-home-header > span { font-size: 12px; } .tray-organization-picker { flex-basis: 150px; } }
 .tray-home-content { display: flex; flex-direction: column; gap: 14px; padding: 14px 18px; background: #f6f7fb; }
 .tray-home-notice { padding: 8px 12px; border-radius: 8px; background: #fef3f2; font-size: 13px; }
+.tray-saved-accounts { min-width: 0; }
+.tray-account-groups { display: grid; gap: 8px; }
+.tray-account-group { min-width: 0; border: 1px solid #eaecf0; border-radius: 8px; background: #fff; overflow: hidden; }
+.tray-account-group-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+.tray-account-group-heading strong, .tray-recovery-accounts span { min-width: 0; overflow-wrap: anywhere; }
+.tray-account-group-heading small { flex: none; color: #667085; font-size: 11px; }
+.tray-account-group button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: 0; border-top: 1px solid #eaecf0; border-radius: 0; color: #101828; background: #fff; text-align: left; }
+.tray-account-group button:hover:not(:disabled), .tray-account-group button[aria-current="true"] { color: #1642ba; background: #edf2ff; }
+.tray-account-group button span { min-width: 0; overflow-wrap: anywhere; }
+.tray-account-group button small { flex: none; color: #667085; font-size: 11px; }
+.tray-account-group p, .tray-account-groups > p { padding: 0 10px 8px; color: #667085; font-size: 12px; }
+.tray-saved-accounts > button { justify-self: start; min-height: 34px; }
+.tray-recovery-accounts { width: 100%; display: grid; gap: 6px; text-align: left; }
+.tray-recovery-accounts > div { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #eaecf0; }
+.tray-recovery-accounts > div span { flex: 1; }
+.tray-recovery-accounts > div button { width: auto; min-height: 32px; }
+.tray-recovery-accounts small { color: #667085; }
+.tray-account-confirmation-content { display: grid; align-content: start; gap: 12px; padding: 24px 18px; }
+.tray-account-confirmation-content h1 { font-size: 20px; }
+.tray-account-confirmation-content p { overflow-wrap: anywhere; }
 .tray-home-content section { padding: 20px; }
 .tray-hero { position: relative; flex: none; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 0; border: 0; border-radius: 12px; color: #fff; background: #2962ff; }
 .tray-hero::before { content: ''; position: absolute; right: -8px; bottom: -8px; width: 150px; height: 70px; background: radial-gradient(#ffffff38 1.2px, transparent 1.2px) 0 0 / 8px 8px; }

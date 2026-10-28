@@ -20,6 +20,45 @@ export function useTraySession(messages) {
     }
   }
 
+  async function addAccount() {
+    try {
+      setError('');
+      setState(await window.inheritiTray.addAccount());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : messages.signInFailed);
+    }
+  }
+
+  async function cancelAccountAuthorization() {
+    try {
+      setState(await window.inheritiTray.cancelAccountAuthorization());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : messages.retryError);
+    }
+  }
+
+  async function activateAccount(subject, organizationId) {
+    try {
+      setError('');
+      let next = await window.inheritiTray.activateAccount(subject);
+      setState(next);
+      if (organizationId && next.organizations?.some(({ id }) => id === organizationId)) {
+        try {
+          next = await window.inheritiTray.select(organizationId);
+          setState(next);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : messages.retryError);
+        }
+      } else if (organizationId) {
+        setError('This organisation is no longer available for this account.');
+      }
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : messages.retryError);
+      return false;
+    }
+  }
+
   async function restore() {
     try {
       setError('');
@@ -37,5 +76,5 @@ export function useTraySession(messages) {
     }
   }
 
-  return { state, setState, error, setError, signIn, restore, openApp };
+  return { state, setState, error, setError, signIn, addAccount, cancelAccountAuthorization, activateAccount, restore, openApp };
 }

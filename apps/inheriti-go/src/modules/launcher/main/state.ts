@@ -11,9 +11,12 @@ import type { TrayInboxSignal } from '../../inbox/main/inbox.js';
 import type { InboxIdentityState } from '../../inbox/main/identity.js';
 import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
+import type { OperatorSession } from '@safetech/inheriti-elements-core/node';
 import { trayMessages as messages } from '../../../messages.js';
 import { OrganizationKeyVault } from './organization-key-vault.js';
+import { TrayAccountSwitcher } from './tray-account-switcher.js';
 import { TrayAuthRuntime } from './tray-auth-runtime.js';
+import type { SavedAccountSummary } from './operator-session-store.js';
 import { TrayOrganizationContext } from './tray-organization-context.js';
 import { TrayInboxAccess } from './tray-inbox-access.js';
 
@@ -26,6 +29,8 @@ export type TrayState = {
   assetCatalog: typeof quickPlanAssetCatalog;
   selectedId?: string;
   accountName?: string;
+  accounts: Array<SavedAccountSummary & { organizations: { id: string; name: string }[] }>;
+  activeSubject?: string;
   creation?: CreationState;
   edit: PlanEditState;
   custodianPrompt?: CustodianPromptState;
@@ -35,11 +40,14 @@ export class TraySession {
   private readonly auth: TrayAuthRuntime;
   private readonly organization: TrayOrganizationContext;
   private readonly inboxAccess: TrayInboxAccess;
+  private readonly accountSwitcher: TrayAccountSwitcher;
   private accountName: string | undefined;
   private status: TrayState['status'] = 'restoring';
   private message: string | undefined;
   private authorization: AbortController | undefined;
+  private authorizationCommitting = false;
   private pendingSignIn: Promise<void> | undefined;
+  private restoreInFlight = false;
   private signingOut = false;
   private authenticationRevision = 0;
   private readonly quickPlans: TrayQuickPlans;
@@ -75,6 +83,8 @@ export class TraySession {
     this.organization = new TrayOrganizationContext(this.auth, this.quickPlans, this.planEdit, this.inbox,
       () => this.organizationKeys.clear(), () => this.inboxAccess.reset(),
       () => this.status === 'signed-in', () => this.signingOut);
+    this.accountSwitcher = new TrayAccountSwitcher(this.auth, this.organization, this.inboxAccess, this.inbox,
+      this.quickPlans, this.planEdit, this.organizationKeys, this.custodianPrompt, this.proDevice, () => this.signingOut);
   }
 
   setPublisher(publish: () => void): void { this.custodianPrompt.setPublisher(publish); }
@@ -97,6 +107,7 @@ export class TraySession {
     const quickPlans = this.quickPlans.state();
     const message = quickPlans.message ?? this.message;
     const custodianPrompt = this.custodianPrompt.state();
+    const accounts = this.accountSwitcher.snapshot;
     return {
       status: this.status,
       ...(message ? { message } : {}),
@@ -105,6 +116,8 @@ export class TraySession {
       assetCatalog: HOST_FEATURE_FLAGS[this.deployment].planCreation ? quickPlanAssetCatalog : [],
       ...(this.organization.selectedId && !this.organization.pendingSelections ? { selectedId: this.organization.selectedId } : {}),
       ...(this.status === 'signed-in' && this.accountName ? { accountName: this.accountName } : {}),
+      accounts: accounts.accounts,
+      ...(accounts.activeSubject ? { activeSubject: accounts.activeSubject } : {}),
       ...(quickPlans.creation ? { creation: quickPlans.creation } : {}),
       edit: this.planEdit.state(),
       ...(custodianPrompt ? { custodianPrompt } : {}),
@@ -112,17 +125,84 @@ export class TraySession {
   }
 
   signIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
-    if (this.signingOut) return Promise.reject(new Error('sign_out_in_progress'));
+    if (this.signingOut || this.accountSwitcher.isSwitching) return Promise.reject(new Error('account_transition_in_progress'));
     if (this.status === 'restoring') return Promise.resolve();
     if (this.pendingSignIn) return this.pendingSignIn;
-    const pending = this.runSignIn(onChange, openBrowser);
+    const pending = this.status === 'session-unavailable' && !this.auth.sessions.isRetired
+      ? this.runAddAccount(onChange, openBrowser)
+      : this.runSignIn(onChange, openBrowser);
     this.pendingSignIn = pending.finally(() => {
       this.pendingSignIn = undefined;
     });
     return this.pendingSignIn;
   }
 
+  addAccount(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    if (this.restoreInFlight) return Promise.reject(new Error('restore_in_progress'));
+    if (this.signingOut || this.accountSwitcher.isSwitching) return Promise.reject(new Error('account_transition_in_progress'));
+    if (this.pendingSignIn) return this.pendingSignIn;
+    const pending = this.runAddAccount(onChange, openBrowser);
+    this.pendingSignIn = pending.finally(() => { this.pendingSignIn = undefined; });
+    return this.pendingSignIn;
+  }
+
+  async cancelAccountAuthorization(): Promise<void> {
+    if (this.accountSwitcher.isSwitching) throw new Error('account_transition_in_progress');
+    if (this.authorizationCommitting) throw new Error('authorization_committing');
+    this.authorization?.abort();
+    await this.pendingSignIn;
+  }
+
+  private async runAddAccount(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    this.accountSwitcher.assertCanSwitch();
+    const previousStatus = this.status;
+    const authorization = new AbortController();
+    this.authorization = authorization;
+    this.status = 'authorizing';
+    this.message = undefined;
+    onChange();
+    let transitioning = false;
+    try {
+      const { session, organizations } = await this.auth.authorizeAdditional(openBrowser, authorization.signal);
+      authorization.signal.throwIfAborted();
+      this.accountSwitcher.rememberOrganizations(session.principal.subject, organizations);
+      await this.transitionAccount(session.principal.subject, session, () => { transitioning = true; });
+    } catch (error) {
+      if (!transitioning) {
+        this.status = previousStatus;
+        if (!authorization.signal.aborted) this.message = error instanceof Error ? error.message : messages.signInFailed;
+      }
+    } finally {
+      if (this.authorization === authorization) this.authorization = undefined;
+      onChange();
+    }
+  }
+
+  async activateAccount(subject: string): Promise<void> {
+    if (this.restoreInFlight) throw new Error('restore_in_progress');
+    if (this.pendingSignIn) throw new Error('authorization_in_progress');
+    await this.transitionAccount(subject);
+  }
+
+  private async transitionAccount(subject: string, session?: OperatorSession, onStart?: () => void): Promise<void> {
+    let started = false;
+    try {
+      await this.accountSwitcher.transition(subject, session,
+        () => { started = true; onStart?.(); ++this.authenticationRevision; this.status = 'restoring'; this.message = undefined; this.accountName = undefined; },
+        (name, message) => { this.accountName = name; this.status = 'signed-in'; this.message = message; });
+    } catch (error) {
+      if (!started) throw error;
+      this.organization.reset();
+      this.accountName = undefined;
+      this.status = 'session-unavailable';
+      this.message = error instanceof Error ? error.message : messages.signInFailed;
+      await this.refreshAccountSummaries();
+      throw error;
+    }
+  }
+
   private async runSignIn(onChange: () => void, openBrowser: (url: string) => Promise<void>): Promise<void> {
+    const previousStatus = this.status;
     ++this.authenticationRevision;
     const authorization = new AbortController();
     this.authorization = authorization;
@@ -130,33 +210,56 @@ export class TraySession {
     this.status = 'authorizing';
     this.message = undefined;
     onChange();
+    let committed = false;
     try {
-      const session = await this.auth.authorize(openBrowser, authorization.signal);
-      if (authorization.signal.aborted) return;
+      const session = await this.auth.authorizeFresh(openBrowser, authorization.signal);
+      authorization.signal.throwIfAborted();
+      this.authorizationCommitting = true;
+      this.status = 'restoring';
+      onChange();
+      await this.auth.sessions.save(session);
+      committed = true;
       this.accountName = accountNameFromIdToken(session?.idToken);
       await this.discover(authorization.signal);
+      await this.refreshAccountSummaries();
     } catch (error) {
       if (authorization.signal.aborted) return;
       if ((error as { status?: unknown; code?: unknown })?.status === 403
         && (error as { code?: unknown }).code === 'integration_tester_required') {
-        try { await this.auth.core.auth.clear(); } catch { /* Clear the saved session even if SDK cleanup fails. */ }
-        await this.auth.sessions.clear();
-        this.accountName = undefined;
-        this.status = 'error';
+        if (committed) {
+          try { await this.auth.core.auth.clear(); } catch { /* Clear the saved session even if SDK cleanup fails. */ }
+          await this.auth.sessions.clear();
+          this.inbox.clear();
+          this.organization.reset();
+          this.accountName = undefined;
+          this.status = 'error';
+        } else {
+          if (previousStatus !== 'signed-in') this.accountName = undefined;
+          this.status = previousStatus === 'signed-in' ? previousStatus : 'error';
+        }
         this.message = 'You are not an integration tester. Contact developer support.';
-        if (this.authorization === authorization) this.authorization = undefined;
-        onChange();
         return;
       }
       this.status = 'error';
       this.message = error instanceof Error ? error.message : messages.signInFailed;
+    } finally {
+      if (authorization.signal.aborted && !this.signingOut) {
+        this.status = previousStatus;
+        this.message = undefined;
+      }
+      if (this.authorization === authorization) this.authorization = undefined;
+      this.authorizationCommitting = false;
+      await this.refreshAccountSummaries();
+      onChange();
     }
-    if (this.authorization === authorization) this.authorization = undefined;
-    onChange();
   }
 
   async restore(): Promise<void> {
-    ++this.authenticationRevision;
+    if (this.restoreInFlight) return;
+    this.restoreInFlight = true;
+    try {
+    const revision = ++this.authenticationRevision;
+    const core = this.auth.core;
     this.organization.invalidate();
     this.status = 'restoring';
     let hasSavedSession = false;
@@ -164,14 +267,21 @@ export class TraySession {
     this.custodianPrompt.cancel();
     this.proDevice?.clearPin();
     try {
-      if (await this.auth.core.auth.getAccessToken()) {
-        this.accountName = accountNameFromIdToken((await this.auth.sessions.load())?.idToken);
+      if (await core.auth.getAccessToken()) {
+        if (revision !== this.authenticationRevision || core !== this.auth.core) return;
+        const saved = await this.auth.sessions.load();
+        if (revision !== this.authenticationRevision || core !== this.auth.core) return;
+        this.accountName = accountNameFromIdToken(saved?.idToken);
         await this.discover();
+        if (revision !== this.authenticationRevision || core !== this.auth.core) return;
+        await this.refreshAccountSummaries();
         return;
       }
     } catch {
+      if (revision !== this.authenticationRevision || core !== this.auth.core) return;
       try { hasSavedSession = !!await this.auth.sessions.load(); } catch { /* A damaged checkpoint cannot be retried. */ }
     }
+    if (revision !== this.authenticationRevision || core !== this.auth.core) return;
     this.inbox.clear();
     await this.organizationKeys.clear();
     this.quickPlans.clear();
@@ -180,9 +290,17 @@ export class TraySession {
     this.accountName = undefined;
     this.status = hasSavedSession ? 'session-unavailable' : 'signed-out';
     this.message = undefined;
+    await this.refreshAccountSummaries();
+    } finally {
+      this.restoreInFlight = false;
+    }
   }
 
-  select(id: string): Promise<void> { return this.organization.select(id); }
+  select(id: string): Promise<void> {
+    if (this.signingOut) return Promise.reject(new Error('sign_out_in_progress'));
+    if (this.accountSwitcher.isSwitching || this.status !== 'signed-in') return Promise.reject(new Error('account_transition_in_progress'));
+    return this.organization.select(id);
+  }
 
   createQuickPlan(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
     if (this.signingOut) throw new Error('sign_out_in_progress');
@@ -298,10 +416,11 @@ export class TraySession {
   clearOnLock(): void { this.clearRevealed(); this.quickPlans.clearResolved(); this.inbox.clear(); this.inboxAccess.reset(); void this.organizationKeys.clear(); }
 
   async signOut(): Promise<void> {
-    if (this.signingOut) throw new Error('sign_out_in_progress');
+    if (this.signingOut || this.accountSwitcher.isSwitching) throw new Error('account_transition_in_progress');
     if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
     this.quickPlans.assertIdle();
     this.planEdit.assertIdle();
+    this.inbox.beginAccountTransition();
     this.signingOut = true;
     ++this.authenticationRevision;
     const previousStatus = this.status;
@@ -325,11 +444,13 @@ export class TraySession {
       this.accountName = undefined;
       this.status = 'signed-out';
       this.message = undefined;
+      await this.refreshAccountSummaries();
     } catch (error) {
       this.status = previousStatus;
       if (this.status === 'signed-in' && this.organization.selectedId) this.inbox.listen();
       throw error;
     } finally {
+      this.inbox.endAccountTransition();
       this.signingOut = false;
     }
   }
@@ -338,9 +459,16 @@ export class TraySession {
     return this.organization.discover(signal, (message) => { this.status = 'signed-in'; this.message = message; });
   }
 
+  private async refreshAccountSummaries(): Promise<void> {
+    await this.accountSwitcher.refresh(this.status === 'signed-in');
+  }
+
   async refreshOrganizations(): Promise<boolean> {
     const result = await this.organization.refresh();
-    if (result.changed) this.message = result.message;
+    if (result.changed) {
+      this.message = result.message;
+      await this.refreshAccountSummaries();
+    }
     return result.changed;
   }
 }

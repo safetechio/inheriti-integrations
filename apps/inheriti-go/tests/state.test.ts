@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), changeParticipants: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -8,6 +8,9 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
   setItem(path: string, value: unknown) { mock.checkpoint.set(path, value); }
   removeItem(path: string) { mock.checkpoint.delete(path); }
   multiRemove(_root: string, paths: string[]) { for (const path of paths) mock.checkpoint.delete(path); }
+  searchItems(root: string, predicate: (value: unknown) => boolean) {
+    return [...mock.checkpoint.entries()].filter(([path, value]) => path.includes(root) && predicate(value)).map(([, value]) => value);
+  }
 } }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
@@ -20,6 +23,12 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   PROTECTED_FILE_FLAGS: { local: false, dev: false, stg: false, prod: false },
   HOST_FEATURE_FLAGS: { local: { planCreation: true, automation: false }, dev: { planCreation: true, automation: false }, stg: { planCreation: true, automation: false }, prod: { planCreation: true, automation: false } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
+  MemoryOperatorSessionStore: class {
+    private session: unknown;
+    async load() { return this.session; }
+    async save(session: unknown) { this.session = session; }
+    async clear() { this.session = undefined; }
+  },
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear, forget: mock.keyClear }),
@@ -32,12 +41,14 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
 }));
 
 vi.mock('@safetech/inheriti-elements-core/inbox', () => ({
-  createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: mock.openInbox, ackText: mock.ackInbox }),
+  createNodeInbox: () => ({ listParticipants: vi.fn(), createConversation: vi.fn(), changeParticipants: mock.changeParticipants, listConversations: vi.fn(), listMessages: vi.fn(), sendText: vi.fn(), openText: mock.openInbox, ackText: mock.ackInbox }),
 }));
 
 import { TraySession } from '../src/modules/launcher/main/state.js';
 import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
+import { TrayQuickPlans } from '../src/modules/quick-plan/main/quick-plans.js';
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
+import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
 
 const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'Note' }, secret: { text } });
 
@@ -189,7 +200,8 @@ describe('TraySession', () => {
     await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({});
+    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: configuration.issuer, subject: 'member-a' } });
     let opened = 0;
     await session.signIn(() => {}, async (authorizationUrl) => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
@@ -215,12 +227,13 @@ describe('TraySession', () => {
     expect(session.state().status).toBe('error');
   });
 
-  it('clears a rejected tester session and shows the support message', async () => {
+  it('shows the support message when tester preflight rejects sign-in', async () => {
     const session = new TraySession('dev');
     await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({});
+    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: configuration.issuer, subject: 'member-a' } });
     mock.organizations.mockRejectedValue(Object.assign(new Error('elements_api_request_failed_403'), {
       status: 403, code: 'integration_tester_required',
     }));
@@ -228,8 +241,62 @@ describe('TraySession', () => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
       await fetch(`${redirectUri}?code=code&state=state`);
     });
-    expect(mock.clear).toHaveBeenCalledOnce();
+    expect(mock.clear).not.toHaveBeenCalled();
     expect(session.state()).toMatchObject({ status: 'error', message: 'You are not an integration tester. Contact developer support.' });
+  });
+
+  it('preserves active A when B fails tester preflight', async () => {
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          const result = { accessToken: 'access-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+            principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => (await options.sessions.load())?.accessToken,
+      },
+      listOrganizations: async () => {
+        if ((await options.sessions.load())?.principal.subject === 'member-b')
+          throw Object.assign(new Error('elements_api_request_failed_403'), { status: 403, code: 'integration_tester_required' });
+        return [{ id: 'org-a', name: 'A' }];
+      },
+    }));
+    const session = new TraySession('dev');
+    const durable = mock.core.mock.calls[0]![0].sessions;
+    await durable.save({ accessToken: 'access-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+    await session.restore();
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(await durable.load()).toMatchObject({ principal: { subject: 'member-a' }, accessToken: 'access-a' });
+    expect(session.state()).toMatchObject({ status: 'signed-in', activeSubject: 'member-a',
+      message: 'You are not an integration tester. Contact developer support.' });
+  });
+
+  it('drops committed credentials when active discovery rejects tester access', async () => {
+    const session = new TraySession('dev');
+    await session.restore();
+    const durable = mock.core.mock.calls[0]![0].sessions;
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
+    mock.complete.mockResolvedValue({ accessToken: 'access-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }])
+      .mockRejectedValueOnce(Object.assign(new Error('elements_api_request_failed_403'), {
+        status: 403, code: 'integration_tester_required',
+      }));
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(await durable.load()).toBeUndefined();
+    expect(session.state()).toMatchObject({ status: 'error', organizations: [], accounts: [],
+      message: 'You are not an integration tester. Contact developer support.' });
   });
 
   it.each(['dev', 'prod'] as const)('uses the bound callback URI throughout %s sign-in', async (deployment) => {
@@ -241,13 +308,14 @@ describe('TraySession', () => {
       redirectUri = configuration.redirectUri;
       return { authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}` };
     });
-    mock.complete.mockResolvedValue({});
+    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: configuration.issuer, subject: 'member-a' } });
     await session.signIn(() => {}, async (authorizationUrl) => {
       expect(new URL(authorizationUrl).searchParams.get('redirect_uri')).toBe(redirectUri);
       expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:[1-9]\d*\/oauth\/callback$/);
       await fetch(`${redirectUri}?code=code&state=state`);
     });
-    expect(mock.core).toHaveBeenCalledTimes(1);
+    expect(mock.core).toHaveBeenCalledTimes(2);
     expect(configuration.redirectUri).toBe(redirectUri);
     expect(mock.complete).toHaveBeenCalledWith(`${redirectUri}?code=code&state=state`);
     expect(session.state().status).toBe('signed-in');
@@ -317,11 +385,322 @@ describe('TraySession', () => {
     await session.signOut();
     await session.signIn(() => {}, openBrowser);
     expect(session.state().status).toBe('signed-in');
-    expect(mock.core).toHaveBeenCalledTimes(2);
-    const secondStore = mock.core.mock.calls[1]![0].sessions;
+    expect(mock.core).toHaveBeenCalledTimes(4);
+    const secondStore = mock.core.mock.calls[2]![0].sessions;
     expect(secondStore).not.toBe(firstStore);
     expect((await secondStore.load())?.principal.subject).toBe('member-b');
     await expect(firstStore.save({ accessToken: 'stale' })).rejects.toThrow('operator_session_retired');
+  });
+
+  it('adds B after A and activates either saved account without another login', async () => {
+    const subjects = ['member-a', 'member-b'];
+    const authorizationUrls: URL[] = [];
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state-1&nonce=nonce-1&code_challenge=challenge-1` }),
+        completeAuthorizationCode: async () => {
+          const subject = subjects.shift()!;
+          const result = { accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
+            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => (await options.sessions.load())?.accessToken,
+      },
+      listOrganizations: async () => {
+        const current = await options.sessions.load();
+        if (current?.principal.subject === 'member-b' && !('accountSummaries' in options.sessions)) {
+          await options.sessions.save({ ...current, refreshToken: 'rotated-b' });
+        }
+        return current ? [{ id: `org-${current.principal.subject}`, name: current.principal.subject }] : [];
+      },
+    }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const openBrowser = async (authorizationUrl: string) => {
+      const authorization = new URL(authorizationUrl);
+      authorizationUrls.push(authorization);
+      const redirectUri = authorization.searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    };
+    await session.signIn(() => {}, openBrowser);
+    expect(session.state().organizations).toEqual([{ id: 'org-member-a', name: 'member-a' }]);
+    await session.addAccount(() => {}, openBrowser);
+    expect(authorizationUrls.map((url) => url.searchParams.get('prompt'))).toEqual([null, 'login']);
+    for (const url of authorizationUrls) {
+      expect(url.searchParams.get('state')).toBe('state-1');
+      expect(url.searchParams.get('nonce')).toBe('nonce-1');
+      expect(url.searchParams.get('code_challenge')).toBe('challenge-1');
+    }
+    expect(session.state().organizations).toEqual([{ id: 'org-member-b', name: 'member-b' }]);
+    expect((await mock.core.mock.calls[0]![0].sessions.fork().load())?.refreshToken).toBe('rotated-b');
+    expect(session.state()).toMatchObject({ activeSubject: 'member-b', accounts: [
+      { subject: 'member-a', name: 'member-a', status: 'ready', organizations: [{ id: 'org-member-a', name: 'member-a' }] },
+      { subject: 'member-b', name: 'member-b', status: 'ready', organizations: [{ id: 'org-member-b', name: 'member-b' }] },
+    ] });
+    expect(JSON.stringify(session.state())).not.toContain('refresh-member');
+    expect(JSON.stringify(session.state())).not.toContain('access-member');
+    await session.activateAccount('member-a');
+    expect(session.state().organizations).toEqual([{ id: 'org-member-a', name: 'member-a' }]);
+    await session.activateAccount('member-b');
+    expect(session.state().organizations).toEqual([{ id: 'org-member-b', name: 'member-b' }]);
+    expect(subjects).toEqual([]);
+  });
+
+  it('recovers an unavailable saved A by signing in as B without removing A', async () => {
+    let offline = true;
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          const result = { accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer',
+            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-b' } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => {
+          if (offline) throw new Error('offline');
+          return (await options.sessions.load())?.accessToken;
+        },
+      },
+      listOrganizations: async () => [{ id: 'org-b', name: 'B' }],
+    }));
+    const session = new TraySession('dev');
+    const saved = mock.core.mock.calls[0]![0].sessions;
+    await saved.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+    await session.restore();
+    expect(session.state().status).toBe('session-unavailable');
+    offline = false;
+    await session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [{ id: 'org-b', name: 'B' }] });
+    expect(await saved.listProfiles()).toEqual(['member-a', 'member-b']);
+  });
+
+  it('keeps A active when Add Account authorization is canceled', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    const options = mock.core.mock.calls[0]![0];
+    await options.sessions.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+    await session.restore();
+    mock.begin.mockResolvedValue({ authorizationUrl: 'https://issuer.test/authorize' });
+    const pending = session.addAccount(() => {}, async () => {});
+    await vi.waitFor(() => expect(mock.begin).toHaveBeenCalled());
+    await session.cancelAccountAuthorization();
+    await pending;
+    expect(session.state().status).toBe('signed-in');
+    expect(session.state().organizations).toEqual([{ id: 'org-a', name: 'A' }]);
+  });
+
+  it('returns to signed out when initial authorization is canceled', async () => {
+    const session = new TraySession('dev');
+    await session.restore();
+    mock.begin.mockResolvedValue({ authorizationUrl: 'https://issuer.test/authorize' });
+    const pending = session.signIn(() => {}, async () => {});
+    await vi.waitFor(() => expect(session.state().status).toBe('authorizing'));
+    await session.cancelAccountAuthorization();
+    await pending;
+    expect(session.state().status).toBe('signed-out');
+    expect(mock.complete).not.toHaveBeenCalled();
+  });
+
+  it('does not restore a canceled sign-in after the token exchange saves late', async () => {
+    let finishExchange!: () => void;
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          await new Promise<void>((resolve) => { finishExchange = resolve; });
+          const result = { accessToken: 'late-access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+            principal: { issuer: options.configuration.issuer, subject: 'member-late' } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => (await options.sessions.load())?.accessToken,
+      },
+      listOrganizations: mock.organizations,
+    }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const durable = mock.core.mock.calls[0]![0].sessions;
+    const signingIn = session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    await vi.waitFor(() => expect(finishExchange).toBeTypeOf('function'));
+    const cancelling = session.cancelAccountAuthorization();
+    finishExchange();
+    await cancelling;
+    await signingIn;
+    expect(await durable.load()).toBeUndefined();
+    expect(session.state().status).toBe('signed-out');
+    const restarted = new TraySession('dev');
+    await restarted.restore();
+    expect(restarted.state()).toMatchObject({ status: 'signed-out', accounts: [] });
+  });
+
+  it('does not persist a sign-in canceled during membership discovery', async () => {
+    let finishDiscovery!: (organizations: { id: string; name: string }[]) => void;
+    mock.core.mockImplementation((options) => ({
+      auth: {
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        completeAuthorizationCode: async () => {
+          const result = { accessToken: 'access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+            principal: { issuer: options.configuration.issuer, subject: 'member-a' } };
+          await options.sessions.save(result);
+          return result;
+        },
+        clear: () => options.sessions.clear(),
+        getAccessToken: async () => (await options.sessions.load())?.accessToken,
+      },
+      listOrganizations: () => new Promise((resolve) => { finishDiscovery = resolve; }),
+    }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const durable = mock.core.mock.calls[0]![0].sessions;
+    const signingIn = session.signIn(() => {}, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    await vi.waitFor(() => expect(finishDiscovery).toBeTypeOf('function'));
+    const cancelling = session.cancelAccountAuthorization();
+    finishDiscovery([{ id: 'org-a', name: 'A' }]);
+    await cancelling;
+    await signingIn;
+    expect(await durable.load()).toBeUndefined();
+    const restarted = new TraySession('dev');
+    await restarted.restore();
+    expect(restarted.state()).toMatchObject({ status: 'signed-out', accounts: [] });
+  });
+
+  it('hides cancellation once a fresh sign-in starts durable commit', async () => {
+    let finishDiscovery!: (organizations: { id: string; name: string }[]) => void;
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }])
+      .mockImplementationOnce(() => new Promise((resolve) => { finishDiscovery = resolve; }));
+    const session = new TraySession('dev');
+    await session.restore();
+    const configuration = mock.core.mock.calls[0]![0].configuration;
+    mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
+    mock.complete.mockResolvedValue({ accessToken: 'access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+    const statuses: string[] = [];
+    const signingIn = session.signIn(() => { statuses.push(session.state().status); }, async (authorizationUrl) => {
+      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      await fetch(`${redirectUri}?code=code&state=state`);
+    });
+    await vi.waitFor(() => expect(finishDiscovery).toBeTypeOf('function'));
+    expect(session.state().status).toBe('restoring');
+    expect(statuses).toContain('restoring');
+    await expect(session.cancelAccountAuthorization()).rejects.toThrow('authorization_committing');
+    finishDiscovery([{ id: 'org-a', name: 'A' }]);
+    await signingIn;
+    expect(session.state().status).toBe('signed-in');
+  });
+
+  it('blocks account activation before clearing active plan, edit, or inbox work', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    const creation = vi.spyOn(TrayQuickPlans.prototype, 'assertIdle').mockImplementationOnce(() => { throw new Error('creation_in_progress'); });
+    await expect(session.activateAccount('member-b')).rejects.toThrow('creation_in_progress');
+    creation.mockRestore();
+    const edit = vi.spyOn(TrayPlanEdit.prototype, 'assertIdle').mockImplementationOnce(() => { throw new Error('edit_in_progress'); });
+    await expect(session.activateAccount('member-b')).rejects.toThrow('edit_in_progress');
+    edit.mockRestore();
+    const transfer = vi.spyOn(TrayInbox.prototype, 'assertIdle').mockImplementationOnce(() => { throw new Error('inbox_transfer_busy'); });
+    await expect(session.activateAccount('member-b')).rejects.toThrow('inbox_transfer_busy');
+    transfer.mockRestore();
+    expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [{ id: 'org-a', name: 'A' }] });
+  });
+
+  it('switches accounts after a completed plan creation remains in Home state', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    mock.create.mockResolvedValue({ status: 'READY', planId: 'plan-1' });
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
+    await session.restore();
+    await session.createQuickPlan({ title: 'First', asset: asset('secret') }, () => {});
+    expect(session.state().creation).toMatchObject({ status: 'ready', planId: 'plan-1' });
+    await session.activateAccount('member-b');
+    expect(session.state()).toMatchObject({ activeSubject: 'member-b', status: 'signed-in' });
+    expect(session.state().creation).toBeUndefined();
+  });
+
+  it('rejects new inbox work while account activation is cleaning up', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
+    await session.restore();
+    let release!: () => void;
+    const clear = vi.spyOn(TrayPlanEdit.prototype, 'clear').mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const activation = session.activateAccount('member-b');
+    await expect(session.createInboxConversation('Conversation', [])).rejects.toThrow('inbox_transition_in_progress');
+    await expect(session.select('org-a')).rejects.toThrow('account_transition_in_progress');
+    release();
+    await activation;
+    expect(() => session.listInboxConversations()).not.toThrow();
+    clear.mockRestore();
+  });
+
+  it('drops a late A organization refresh after B activates', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await session.restore();
+    await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
+    let release!: (organizations: { id: string; name: string }[]) => void;
+    mock.organizations.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+      .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
+    const oldRefresh = session.refreshOrganizations();
+    await session.activateAccount('member-b');
+    release([{ id: 'org-a-stale', name: 'Stale A' }]);
+    expect(await oldRefresh).toBe(false);
+    expect(session.state()).toMatchObject({ activeSubject: 'member-b', organizations: [{ id: 'org-b', name: 'B' }] });
+  });
+
+  it('waits for A restoration before activating B', async () => {
+    mock.token.mockResolvedValue('access-token');
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+    await store.save(first);
+    await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
+    let release!: (organizations: { id: string; name: string }[]) => void;
+    mock.organizations.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+      .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
+    const restoring = session.restore();
+    await vi.waitFor(() => expect(mock.organizations).toHaveBeenCalledTimes(1));
+    await expect(session.activateAccount('member-b')).rejects.toThrow('restore_in_progress');
+    release([{ id: 'org-a', name: 'A' }]);
+    await restoring;
+    expect(session.state()).toMatchObject({ activeSubject: 'member-a', organizations: [{ id: 'org-a', name: 'A' }] });
+    await session.activateAccount('member-b');
+    expect(session.state()).toMatchObject({ activeSubject: 'member-b', organizations: [{ id: 'org-b', name: 'B' }] });
   });
 
   it('drains canceled authorization before changing the callback URI on retry', async () => {
@@ -351,7 +730,7 @@ describe('TraySession', () => {
 
   it('rejects an organization absent from discovery', async () => {
     const session = new TraySession('dev');
-    await expect(session.select('unlisted')).rejects.toThrow('organization_access_denied');
+    await expect(session.select('unlisted')).rejects.toThrow('account_transition_in_progress');
     expect(session.state().selectedId).toBeUndefined();
   });
 
@@ -390,10 +769,13 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }])
       .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
     const session = new TraySession('dev');
+    await mock.core.mock.calls[0]![0].sessions.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     await session.select('org-a');
     expect(await session.refreshOrganizations()).toBe(true);
     expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [{ id: 'org-b', name: 'B' }] });
+    expect(session.state().accounts[0]?.organizations).toEqual([{ id: 'org-b', name: 'B' }]);
     expect(session.state().selectedId).toBeUndefined();
     await session.select('org-b');
     expect(session.state().selectedId).toBe('org-b');
@@ -467,7 +849,7 @@ describe('TraySession', () => {
       await fetch(`${redirectUri}?code=code&state=state`);
     });
     expect(session.state().status).toBe('signed-in');
-    expect(mock.core).toHaveBeenCalledTimes(2);
+    expect(mock.core).toHaveBeenCalledTimes(3);
     expect(mock.core.mock.calls[1]![0].sessions).not.toBe(originalStore);
   });
 
@@ -683,11 +1065,35 @@ describe('TraySession', () => {
     const listenerCount = mock.listenInbox.mock.calls.length;
     await expect(session.select('org-b')).rejects.toThrow('sign_out_in_progress');
     expect(() => session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {})).toThrow('sign_out_in_progress');
-    expect(() => session.listInboxConversations()).toThrow('organization_required');
+    expect(() => session.listInboxConversations()).toThrow('inbox_transition_in_progress');
     expect(() => session.loadEditablePlans(() => {})).toThrow('organization_required');
     expect(() => session.recoverPlanEdit(() => {})).toThrow('organization_required');
     expect(mock.listenInbox).toHaveBeenCalledTimes(listenerCount);
     release();
+    await signingOut;
+    expect(session.state().status).toBe('signed-out');
+  });
+
+  it('blocks sign-out during a pending Inbox mutation and locks new mutations during cleanup', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
+    const session = new TraySession('dev');
+    await session.restore();
+    let finishMutation!: () => void;
+    mock.changeParticipants.mockReturnValueOnce(new Promise<void>((resolve) => { finishMutation = resolve; }));
+    const mutation = session.changeInboxParticipants('conversation-1', { action: 'ADD', memberId: 'member-1', expectedRevision: 1 });
+    await expect(session.signOut()).rejects.toThrow('inbox_operation_busy');
+    expect(mock.clear).not.toHaveBeenCalled();
+    finishMutation();
+    await mutation;
+
+    let finishCleanup!: () => void;
+    mock.keyClear.mockReturnValueOnce(new Promise<void>((resolve) => { finishCleanup = resolve; }));
+    const signingOut = session.signOut();
+    await expect(session.changeInboxParticipants('conversation-1', { action: 'ADD', memberId: 'member-2', expectedRevision: 1 }))
+      .rejects.toThrow('inbox_transition_in_progress');
+    expect(mock.changeParticipants).toHaveBeenCalledTimes(1);
+    finishCleanup();
     await signingOut;
     expect(session.state().status).toBe('signed-out');
   });

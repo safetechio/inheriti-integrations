@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
+import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { ProtectedCheckpoint } from './protected-checkpoint.js';
 
 type ProfileRecord = { generation: number; session?: OperatorSession; memoryOnly?: boolean };
 type ProfileRegistry = { profiles: Map<string, ProfileRecord>; memoryActiveSubject: string | undefined };
+export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again' };
 
 export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   private readonly checkpoint = new ProtectedCheckpoint();
@@ -20,6 +22,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
 
   get isRetired(): boolean { return this.retired; }
   fork(): ProtectedOperatorSessionStore { return new ProtectedOperatorSessionStore(this.deployment, this.issuer, this.registry); }
+  retire(): void { this.retired = true; }
 
   async load(): Promise<OperatorSession | undefined> {
     if (this.retired) return undefined;
@@ -101,6 +104,23 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     this.migrate();
     return this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
       .map((record) => record.session!.principal.subject);
+  }
+
+  async accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> {
+    if (this.checkpoint.isAvailable()) this.migrate();
+    const records = this.checkpoint.isAvailable()
+      ? this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
+      : [...this.registry.profiles.values()].filter((record) => !!record.session);
+    const accounts = records.flatMap((record) => {
+      const session = record.session;
+      if (!session) return [];
+      const usable = session.expiresAt > Date.now() || !!session.refreshToken &&
+        (session.refreshExpiresAt === undefined || session.refreshExpiresAt > Date.now());
+      return [{ subject: session.principal.subject, name: accountNameFromIdToken(session.idToken) ?? session.principal.subject,
+        status: usable ? 'ready' as const : 'sign-in-again' as const }];
+    });
+    const active = this.checkpoint.isAvailable() ? this.checkpoint.getItem<unknown>(`${this.path}/active`) : this.registry.memoryActiveSubject;
+    return { accounts, activeSubject: typeof active === 'string' ? active : undefined };
   }
 
   async clear(): Promise<void> {

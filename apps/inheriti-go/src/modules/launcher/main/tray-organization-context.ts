@@ -52,9 +52,10 @@ export class TrayOrganizationContext {
   }
 
   async discover(signal: AbortSignal | undefined, onReady: (message: string | undefined) => void): Promise<void> {
-    ++this.revision;
-    const organizations = await this.auth.core.listOrganizations();
-    if (signal?.aborted) return;
+    const revision = ++this.revision;
+    const core = this.auth.core;
+    const organizations = await core.listOrganizations();
+    if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
     this.known = organizations;
     if (!this.selected) {
       try { this.selected = this.auth.sessions.selectedOrganization(); } catch { /* Use the organisation picker if secure storage is unavailable. */ }
@@ -69,12 +70,16 @@ export class TrayOrganizationContext {
     if (this.selected) {
       try { this.auth.sessions.saveSelectedOrganization(this.selected); } catch { /* The active organisation remains usable. */ }
     }
-    onReady(this.known.length === 0 ? messages.noOrganizations : undefined);
     if (this.selected) {
       await this.quickPlans.selectOrganization(this.selected);
+      if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
       await this.planEdit.selectOrganization(this.selected);
+      if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
+      onReady(this.known.length === 0 ? messages.noOrganizations : undefined);
       this.inbox.listen();
+      return;
     }
+    onReady(this.known.length === 0 ? messages.noOrganizations : undefined);
   }
 
   async refresh(): Promise<{ changed: boolean; message: string | undefined }> {

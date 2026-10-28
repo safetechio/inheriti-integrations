@@ -25,6 +25,29 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-in', (event) => { trusted(event); void session.signIn(publish, (url) => shell.openExternal(url)); return session.state(); });
+  ipcMain.handle('tray:add-account', async (event) => {
+    trusted(event);
+    const addition = session.addAccount(publish, (url) => shell.openExternal(url));
+    publish();
+    try { await addition; }
+    finally { publish(); publishInbox?.(); }
+    return session.state();
+  });
+  ipcMain.handle('tray:cancel-account-authorization', async (event) => {
+    trusted(event);
+    await session.cancelAccountAuthorization();
+    publish();
+    return session.state();
+  });
+  ipcMain.handle('tray:activate-account', async (event, subject: unknown) => {
+    trusted(event);
+    if (typeof subject !== 'string' || !subject || subject.length > 500) throw new Error('invalid_account');
+    const activation = session.activateAccount(subject);
+    publish();
+    try { await activation; }
+    finally { publish(); publishInbox?.(); }
+    return session.state();
+  });
   ipcMain.handle('tray:restore', (event) => {
     trusted(event);
     if (session.state().status !== 'session-unavailable') return session.state();
