@@ -20,7 +20,7 @@ import {
 } from './contracts';
 
 const RuntimeContext = createContext<RuntimeValue | null>(null);
-const AuthContext = createContext({ authInitialized: false, isLoggedIn: false });
+const AuthContext = createContext({ authInitialized: false, isLoggedIn: false, notice: null as string | null, accountsRevision: 0 });
 type SessionValue = {
   status: AuthSessionStatus;
   session: AuthSessionDescriptor | null;
@@ -81,12 +81,14 @@ export function ImporterApiProvider({
   onSessionChange?: (status: AuthSessionStatus, session: AuthSessionDescriptor | null) => void;
 }) {
   const [auth, dispatch] = useReducer(
-    (state: { authInitialized: boolean; isLoggedIn: boolean }, action: AuthAction) => {
-      if (action.type === 'SIGN_IN') return { authInitialized: true, isLoggedIn: true };
-      if (action.type === 'SIGN_OUT') return { authInitialized: true, isLoggedIn: false };
-      return { authInitialized: true, isLoggedIn: state.isLoggedIn };
+    (state: { authInitialized: boolean; isLoggedIn: boolean; notice: string | null; accountsRevision: number }, action: AuthAction) => {
+      if (action.type === 'SIGN_IN') return { authInitialized: true, isLoggedIn: true, notice: null, accountsRevision: state.accountsRevision };
+      if (action.type === 'SIGN_OUT') return { authInitialized: true, isLoggedIn: false, notice: null, accountsRevision: state.accountsRevision };
+      if (action.type === 'NOTICE') return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: String(action.userData ?? ''), accountsRevision: state.accountsRevision };
+      if (action.type === 'ACCOUNTS_CHANGED') return { authInitialized: state.authInitialized, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision + 1 };
+      return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision };
     },
-    { authInitialized: false, isLoggedIn: false },
+    { authInitialized: false, isLoggedIn: false, notice: null, accountsRevision: 0 },
   );
   const [sessionState, setSessionState] = useState<{
     status: AuthSessionStatus;

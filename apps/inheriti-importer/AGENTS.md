@@ -101,3 +101,24 @@ wraps them behind the `ImportParser` port.
 | Desktop security boundary | [docs/security.md](docs/security.md)         |
 | IPC contract              | [docs/electron-ipc.md](docs/electron-ipc.md) |
 | Adding an import format   | [docs/import-model.md](docs/import-model.md) |
+
+## Multi-account verification
+
+From this app directory, with Docker and the sibling `bussiness/feature-e2e` harness available, run the versioned served lanes:
+
+```bash
+node tests/served/multi-account.mjs
+node tests/served/staging.mjs
+```
+
+Run them sequentially: both own and tear down the same disposable `business-e2e` stack. The account lane checks real Electron sign-in, account and organization switching, restart, revocation, and sign-out. Its fixture activates disposable organizations directly to isolate session behavior. The staging lane uses a real organization-key claim and a development SafeKey release simulator, then verifies encrypted staging creates a `NOT_CREATED` draft and no normal Plan. Each writes a redacted manifest under `bussiness/feature-e2e/evidence/` with source revisions and an Importer tree fingerprint.
+
+On Linux, smoke-test a fresh unpacked release with:
+
+```bash
+yarn build:dev
+INHERITI_RELEASE_ENV=dev ./node_modules/.bin/electron-builder --config electron-builder.config.cjs --linux dir --publish never
+node tests/served/packaged-smoke.mjs release/dev/linux-unpacked/inheriti-import
+```
+
+The smoke check verifies that the executable is packaged, opens its sign-in window, and contains the intended runtime environment. Run the served account lane against the packaged executable before release.

@@ -26,6 +26,9 @@ import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
 import { createEmptyWorkspace } from '@modules/plans/domain/workspace-model';
 import { usePlanBatchController } from '@modules/batch/application/use-plan-batch-controller';
+import { secureCleanup } from '@modules/_shared/application/secure-cleanup-controller';
+import { useAuthProvider } from '@shared/infrastructure/importer-api';
+import type { ElectronAuthProvider } from '@modules/auth/infrastructure/electron-auth-provider';
 
 const stagingChecklist: ChecklistItem[] = [
   {
@@ -64,6 +67,7 @@ export function App() {
 }
 
 function AuthenticatedImporter() {
+  const authProvider = useAuthProvider() as ElectronAuthProvider;
   const imports = useImportLifecycle();
   const [workspaceHistory, setWorkspaceHistory] = useState(() =>
     createHistory(createEmptyWorkspace()),
@@ -114,6 +118,10 @@ function AuthenticatedImporter() {
     setWarningFile(null);
   }
 
+  useEffect(() => secureCleanup.register(discardAll));
+  useEffect(() => authProvider.blockTransitionsWhile(() =>
+    imports.busy || files.length > 0 || batchController.running || Boolean(batchController.organizationKey.activePlanId)));
+
   const releaseCancelled =
     batchController.organizationKey.error === 'Organization Key release was cancelled.';
   const stagingFailed =
@@ -155,7 +163,7 @@ function AuthenticatedImporter() {
 
   const content =
     files.length === 0 ? (
-      <AppShell dirtyCount={0}>
+      <AppShell dirtyCount={0} accountActionsDisabled={imports.busy}>
         <ImportPanel
           busy={imports.busy}
           error={null}

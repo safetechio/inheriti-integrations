@@ -33,10 +33,16 @@ contextBridge.exposeInMainWorld('inheriti', {
   },
 
   auth: {
-    // Runs the Keycloak PKCE flow in a controlled window owned by main,
+    // Runs the SafeID PKCE flow in a controlled window owned by main,
     // exchanges the SafeID token, and resolves once the Business API session
     // cookie is held by main. Returns the non-secret session descriptor.
     login: () => ipcRenderer.invoke('auth:login'),
+    add: () => ipcRenderer.invoke('auth:add'),
+    accounts: () => ipcRenderer.invoke('auth:accounts'),
+    destinations: () => ipcRenderer.invoke('auth:destinations'),
+    activate: (key) => ipcRenderer.invoke('auth:activate', key),
+    remove: (key) => ipcRenderer.invoke('auth:remove', key),
+    logoutAll: () => ipcRenderer.invoke('auth:logoutAll'),
     cancel: () => ipcRenderer.invoke('auth:cancel'),
     logout: () => ipcRenderer.invoke('auth:logout'),
     // The current session descriptor, or null.

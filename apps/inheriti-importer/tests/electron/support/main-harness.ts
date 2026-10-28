@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +38,7 @@ export interface FakeNetResponse {
   status: number;
   headers?: Record<string, string | string[]>;
   body?: string;
+  hold?: boolean;
 }
 
 class FakeClientRequest extends EventEmitter {
@@ -53,8 +57,12 @@ class FakeClientRequest extends EventEmitter {
 }
 
 export function createMainHarness() {
+  const userData = mkdtempSync(resolvePath(tmpdir(), 'importer-accounts-'));
   const netRequests: { url: string; method: string; request: FakeClientRequest }[] = [];
   const netQueue: FakeNetResponse[] = [];
+  const heldResponses: Array<() => void> = [];
+  let accountCookieFailureAt = 0;
+  let accountCookieSets = 0;
 
   function queueNetResponse(response: FakeNetResponse) {
     netQueue.push(response);
@@ -62,13 +70,22 @@ export function createMainHarness() {
 
   const partitions = new Map<string, ReturnType<typeof createPartitionSession>>();
 
-  function createPartitionSession() {
+  function createPartitionSession(name = '') {
     const cookies = new Map<string, any>();
     return {
       cookies: {
         get: vi.fn(async () => Array.from(cookies.values())),
         set: vi.fn(async (cookie: any) => {
+          if (
+            name.startsWith('persist:inheriti-api-') &&
+            accountCookieFailureAt &&
+            ++accountCookieSets === accountCookieFailureAt
+          )
+            throw new Error('cookie_write_failed');
           cookies.set(cookie.name, cookie);
+        }),
+        remove: vi.fn(async (_url: string, name: string) => {
+          cookies.delete(name);
         }),
         flushStore: vi.fn(async () => {}),
       },
@@ -121,6 +138,7 @@ export function createMainHarness() {
   const app = {
     isPackaged: false,
     getVersion: () => '0.1.1',
+    getPath: () => userData,
     whenReady: () => Promise.resolve(),
     on: vi.fn((event: string, handler: (...a: any[]) => void) => {
       const arr = appHandlers.get(event) || [];
@@ -153,14 +171,18 @@ export function createMainHarness() {
         req.emit('error', new Error(`No queued net response for ${method} ${url}`));
         return;
       }
-      const response = new EventEmitter() as any;
-      response.statusCode = next.status;
-      response.headers = next.headers || {};
-      req.emit('response', response);
-      queueMicrotask(() => {
-        if (next.body) response.emit('data', Buffer.from(next.body));
-        response.emit('end');
-      });
+      const deliver = () => {
+        const response = new EventEmitter() as any;
+        response.statusCode = next.status;
+        response.headers = next.headers || {};
+        req.emit('response', response);
+        queueMicrotask(() => {
+          if (next.body) response.emit('data', Buffer.from(next.body));
+          response.emit('end');
+        });
+      };
+      if (next.hold) heldResponses.push(deliver);
+      else deliver();
     });
     return req;
   });
@@ -172,7 +194,7 @@ export function createMainHarness() {
     dialog,
     session: {
       fromPartition: vi.fn((name: string) => {
-        if (!partitions.has(name)) partitions.set(name, createPartitionSession());
+        if (!partitions.has(name)) partitions.set(name, createPartitionSession(name));
         return partitions.get(name);
       }),
       defaultSession,
@@ -208,6 +230,12 @@ export function createMainHarness() {
     netRequestMock,
     netRequests,
     queueNetResponse,
+    heldResponses,
+    releaseHeldResponse: () => heldResponses.shift()?.(),
+    failAccountCookieSetAt: (index: number) => {
+      accountCookieFailureAt = index;
+      accountCookieSets = 0;
+    },
     windows,
     partitions,
     defaultSession,
@@ -216,6 +244,9 @@ export function createMainHarness() {
     dialog,
     shell,
     socketInstances,
+    userData,
+    activePartition: '',
+    savedProfiles: [] as Array<{ subject: string; partition: string; key: string }>,
   };
 }
 
@@ -232,8 +263,39 @@ function stubCjsModule(specifier: string, exports: unknown) {
   return resolved;
 }
 
-export async function loadMain() {
+export async function loadMain(
+  options: { signedIn?: boolean; legacyCookie?: boolean; savedSubjects?: string[] } = {},
+) {
   const harness = createMainHarness();
+  if (options.signedIn !== false) {
+    const environment = process.env.INHERITI_ENV || 'local';
+    const apiOrigin = process.env.INHERITI_API_ORIGIN || '';
+    const issuer = `${process.env.SAFEID_URL || ''}/realms/${process.env.SAFEID_REALM || ''}`;
+    const subjects = options.savedSubjects || ['test-user'];
+    const profiles = subjects.map((subject) => {
+      const key = createHash('sha256')
+        .update(JSON.stringify([environment, apiOrigin, issuer, subject]))
+        .digest('hex');
+      return { subject, partition: `persist:inheriti-api-${key}-${'0'.repeat(32)}`, key };
+    });
+    const activeKey = profiles[0].key;
+    writeFileSync(
+      resolvePath(harness.userData, 'importer-accounts.json'),
+      JSON.stringify({
+        environment,
+        apiOrigin,
+        issuer,
+        activeKey,
+        profiles: profiles.map(({ subject, partition }) => ({ subject, partition })),
+      }),
+    );
+    harness.activePartition = profiles[0].partition;
+    harness.savedProfiles = profiles;
+  }
+  if (options.legacyCookie)
+    await harness.electronMock.session
+      .fromPartition('persist:inheriti-api')
+      .cookies.set({ name: 'token', value: 'legacy-session' });
   stubCjsModule('electron', harness.electronMock);
   stubCjsModule('socket.io-client', { io: harness.ioMock });
   clearOwnModuleCache();
@@ -241,8 +303,9 @@ export async function loadMain() {
   cjsRequire(mainCjsPath);
 
   // Let `app.whenReady().then(createWindow)` (a microtask chain) settle.
-  await Promise.resolve();
-  await Promise.resolve();
+  await vi.waitFor(() => {
+    if (!harness.windows.length) throw new Error('Window not ready');
+  });
 
   return harness;
 }

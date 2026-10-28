@@ -1,18 +1,23 @@
 const { io } = require('socket.io-client');
-const { apiSession } = require('./api-session.cjs');
+const { captureActiveContext, isCurrent } = require('./api-session.cjs');
 
 const API_ORIGIN = process.env.INHERITI_API_ORIGIN || '';
 const SOCKET_EVENTS = new Set(['tenant_changed', 'master_key_delivered']);
 
 let businessSocket = null;
+let socketCapture = null;
 const socketSubscriptions = new Map();
 
 async function ensureBusinessSocket() {
   if (businessSocket) return businessSocket;
   if (!API_ORIGIN) throw new Error('INHERITI_API_ORIGIN is not configured');
-  const cookies = await apiSession().cookies.get({ url: API_ORIGIN });
+  const capture = captureActiveContext();
+  if (!capture.context) throw new Error('AUTH_SIGNED_OUT');
+  const cookies = await capture.context.session.cookies.get({ url: API_ORIGIN });
+  if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
   const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
-  businessSocket = io(API_ORIGIN, {
+  socketCapture = capture;
+  const socket = io(API_ORIGIN, {
     autoConnect: true,
     reconnection: true,
     withCredentials: true,
@@ -20,7 +25,8 @@ async function ensureBusinessSocket() {
     transports: ['polling', 'websocket'],
     extraHeaders: cookieHeader ? { Cookie: cookieHeader } : undefined,
   });
-  businessSocket.on('connect', () => {
+  businessSocket = socket;
+  socket.on('connect', () => {
     console.info('[socket] connected:', API_ORIGIN);
     // Room membership lives on the connection the server just replaced, so every
     // (re)connect must replay the join commands or a subscriber goes deaf without
@@ -28,16 +34,20 @@ async function ensureBusinessSocket() {
     // longer reach it (e.g. an Organization Key relay from SafeKey Mobile).
     // `off` first so a same-instance transport-level reconnect (handlers survive)
     // doesn't end up with the handler bound twice.
+    if (!isCurrent(capture)) {
+      socket.disconnect();
+      return;
+    }
     for (const { eventName, handler, subscribe, payload } of socketSubscriptions.values()) {
-      businessSocket.off(eventName, handler);
-      businessSocket.on(eventName, handler);
-      businessSocket.emit(subscribe, payload);
+      socket.off(eventName, handler);
+      socket.on(eventName, handler);
+      socket.emit(subscribe, payload);
     }
   });
-  businessSocket.on('connect_error', (error) =>
+  socket.on('connect_error', (error) =>
     console.warn('[socket] connect_error:', error?.message || 'unknown error'),
   );
-  return businessSocket;
+  return socket;
 }
 
 // `extraHeaders` (the auth cookie) is captured once, when the socket is first
@@ -50,6 +60,7 @@ async function ensureBusinessSocket() {
 async function reconnectBusinessSocket() {
   if (businessSocket) businessSocket.disconnect();
   businessSocket = null;
+  socketCapture = null;
   await ensureBusinessSocket();
 }
 
@@ -64,9 +75,13 @@ async function subscribeBusinessSocket(sender, request) {
     throw new Error('Unsupported socket subscription');
   }
   const socket = await ensureBusinessSocket();
+  if (!isCurrent(socketCapture)) throw new Error('AUTH_CONTEXT_CHANGED');
   const key = socketSubscriptionKey(eventName, payload);
   if (socketSubscriptions.has(key)) return;
-  const handler = (data) => sender.send('socket:event', { event: eventName, data });
+  const capture = socketCapture;
+  const handler = (data) => {
+    if (isCurrent(capture)) sender.send('socket:event', { event: eventName, data });
+  };
   const subscribe =
     eventName === 'tenant_changed' ? 'subscribe_to_tenant' : 'subscribe_to_master_key_session';
   socketSubscriptions.set(key, { eventName, payload, handler, subscribe });
@@ -93,6 +108,7 @@ function disconnectBusinessSocket() {
   if (!businessSocket) return;
   businessSocket.disconnect();
   businessSocket = null;
+  socketCapture = null;
   socketSubscriptions.clear();
 }
 

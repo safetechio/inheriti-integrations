@@ -6,7 +6,7 @@ const useAuthState = vi.fn();
 const useAuthenticatedCookieSession = vi.fn();
 const useGetJoinedOrganizations = vi.fn();
 const useGetMyOrganization = vi.fn();
-const useOrgSubscriptionStatus = vi.fn();
+const useGetSelectedOrganization = vi.fn();
 const useSelectedOrganizationMemberCapabilities = vi.fn();
 const useGetSelectedOrganizationId = vi.fn();
 const useSwitchToOrganization = vi.fn();
@@ -22,7 +22,7 @@ vi.mock('@shared/infrastructure/importer-api', () => ({
 vi.mock('@modules/organization/infrastructure/importer-api', () => ({
   useGetJoinedOrganizations: (...args: unknown[]) => useGetJoinedOrganizations(...args),
   useGetMyOrganization: (...args: unknown[]) => useGetMyOrganization(...args),
-  useOrgSubscriptionStatus: (...args: unknown[]) => useOrgSubscriptionStatus(...args),
+  useGetSelectedOrganization: (...args: unknown[]) => useGetSelectedOrganization(...args),
   useSelectedOrganizationMemberCapabilities: (...args: unknown[]) =>
     useSelectedOrganizationMemberCapabilities(...args),
   useGetSelectedOrganizationId: (...args: unknown[]) => useGetSelectedOrganizationId(...args),
@@ -38,6 +38,8 @@ type AuthProviderMock = {
   login: () => Promise<unknown>;
   cancelLogin: () => Promise<void>;
   logout: () => Promise<void>;
+  accounts?: () => Promise<Array<{ key: string; subject: string; active: boolean }>>;
+  activateAccount?: (key: string) => Promise<void>;
 };
 
 function makeAuthProvider(overrides: Partial<AuthProviderMock> = {}): AuthProviderMock {
@@ -50,15 +52,19 @@ function makeAuthProvider(overrides: Partial<AuthProviderMock> = {}): AuthProvid
   };
 }
 
-function stubAuthState(state: { authInitialized: boolean; isLoggedIn: boolean }) {
+function stubAuthState(state: {
+  authInitialized: boolean;
+  isLoggedIn: boolean;
+  accountsRevision?: number;
+  notice?: string | null;
+}) {
   useAuthState.mockImplementation((selector: (s: unknown) => unknown) => selector(state));
 }
 
 function stubReadyOrganization(
   overrides: {
-    canStartPlanCreation?: boolean;
-    isCreationBlocked?: boolean;
-    accessRestrictionMessage?: string;
+    canAccessStagedItems?: boolean;
+    isActivationPending?: boolean;
   } = {},
 ) {
   useGetMyOrganization.mockReturnValue({
@@ -68,14 +74,12 @@ function stubReadyOrganization(
   });
   useGetJoinedOrganizations.mockReturnValue({ data: [], loading: false, isRefetching: false });
   useGetSelectedOrganizationId.mockReturnValue('org-a');
-  useOrgSubscriptionStatus.mockReturnValue({
-    isCreationBlocked: overrides.isCreationBlocked ?? false,
-    accessRestrictionMessage: overrides.accessRestrictionMessage,
-    organizationId: 'org-a',
+  useGetSelectedOrganization.mockReturnValue({
+    data: { id: 'org-a', name: 'Acme', isActivationPending: overrides.isActivationPending ?? false },
     loading: false,
   });
   useSelectedOrganizationMemberCapabilities.mockReturnValue({
-    canStartPlanCreation: overrides.canStartPlanCreation ?? true,
+    canAccessStagedItems: overrides.canAccessStagedItems ?? true,
     loading: false,
   });
   useSwitchToOrganization.mockReturnValue({
@@ -117,6 +121,79 @@ describe('AuthGate — restore / sign-in / cancel', () => {
     expect(screen.getByText('Sign in with SafeID')).toBeTruthy();
   });
 
+  it('offers saved accounts after sign-out and activates the selected profile', async () => {
+    const activateAccount = vi.fn().mockResolvedValue(undefined);
+    useAuthProvider.mockReturnValue(
+      makeAuthProvider({
+        accounts: vi.fn().mockResolvedValue([{ key: 'account-b', subject: 'B', active: false }]),
+        activateAccount,
+      }),
+    );
+    stubAuthState({ authInitialized: true, isLoggedIn: false });
+    stubReadyOrganization();
+
+    render(<AuthGate>content</AuthGate>);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue as B' }));
+    await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('account-b'));
+  });
+
+  it('reloads saved accounts when the active account signs out without restarting', async () => {
+    const accounts = vi.fn().mockResolvedValue([{ key: 'account-b', subject: 'B', active: false }]);
+    useAuthProvider.mockReturnValue(makeAuthProvider({ accounts }));
+    stubAuthState({ authInitialized: true, isLoggedIn: true });
+    stubReadyOrganization();
+    const view = render(<AuthGate>content</AuthGate>);
+
+    stubAuthState({ authInitialized: true, isLoggedIn: false });
+    view.rerender(<AuthGate>content</AuthGate>);
+
+    expect(await screen.findByRole('button', { name: 'Continue as B' })).toBeTruthy();
+    expect(accounts).toHaveBeenCalled();
+  });
+
+  it('clears an early saved-account chooser snapshot after sign-out-all completes', async () => {
+    const accounts = vi
+      .fn()
+      .mockResolvedValueOnce([{ key: 'account-b', subject: 'B', active: false }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]);
+    useAuthProvider.mockReturnValue(makeAuthProvider({ accounts }));
+    stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 0 });
+    const view = render(<AuthGate>content</AuthGate>);
+    expect(await screen.findByRole('button', { name: 'Continue as B' })).toBeTruthy();
+
+    stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 1 });
+    view.rerender(<AuthGate>content</AuthGate>);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Continue as B' })).toBeNull());
+  });
+
+  it('ignores a late saved-account list from before sign-out-all completed', async () => {
+    let resolveOld: (
+      accounts: Array<{ key: string; subject: string; active: boolean }>,
+    ) => void = () => {};
+    const accounts = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValue([]);
+    useAuthProvider.mockReturnValue(makeAuthProvider({ accounts }));
+    stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 0 });
+    const view = render(<AuthGate>content</AuthGate>);
+
+    stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 1 });
+    view.rerender(<AuthGate>content</AuthGate>);
+    await waitFor(() => expect(accounts).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolveOld([{ key: 'account-b', subject: 'B', active: false }]);
+    });
+    expect(screen.queryByRole('button', { name: 'Continue as B' })).toBeNull();
+  });
+
   it('clicking sign-in calls the provider login and lets a cancel abort it', async () => {
     let resolveLogin: (value: unknown) => void = () => {};
     const login = vi.fn(
@@ -156,6 +233,26 @@ describe('AuthGate — restore / sign-in / cancel', () => {
 });
 
 describe('AuthGate — organization selection and sign-out', () => {
+  it('keeps a failed cross-account destination notice visible on the organization gate', async () => {
+    useAuthProvider.mockReturnValue(makeAuthProvider());
+    stubAuthState({
+      authInitialized: true,
+      isLoggedIn: true,
+      notice: 'That organisation is no longer available for this account.',
+    });
+    stubReadyOrganization({ canAccessStagedItems: false });
+
+    render(
+      <AuthGate>
+        <div data-testid="protected">secret content</div>
+      </AuthGate>,
+    );
+
+    expect(
+      await screen.findByText('That organisation is no longer available for this account.'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('protected')).toBeNull();
+  });
   it('renders imported children once signed in, an organization is selectable, and the cookie session is confirmed', async () => {
     useAuthProvider.mockReturnValue(makeAuthProvider());
     stubAuthState({ authInitialized: true, isLoggedIn: true });
@@ -173,7 +270,7 @@ describe('AuthGate — organization selection and sign-out', () => {
   it('shows the blocked reason and withholds children when the organization capability check fails', async () => {
     useAuthProvider.mockReturnValue(makeAuthProvider());
     stubAuthState({ authInitialized: true, isLoggedIn: true });
-    stubReadyOrganization({ canStartPlanCreation: false });
+    stubReadyOrganization({ canAccessStagedItems: false });
 
     render(
       <AuthGate>
@@ -183,7 +280,7 @@ describe('AuthGate — organization selection and sign-out', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('You do not have permission to create plans in this organisation.'),
+        screen.getByText('You do not have permission to stage imports in this organisation.'),
       ).toBeTruthy(),
     );
     expect(screen.queryByTestId('protected')).toBeNull();
@@ -197,7 +294,7 @@ describe('AuthGate — organization selection and sign-out', () => {
     const logout = vi.fn().mockResolvedValue(undefined);
     useAuthProvider.mockReturnValue(makeAuthProvider({ logout }));
     stubAuthState({ authInitialized: true, isLoggedIn: true });
-    stubReadyOrganization({ canStartPlanCreation: false });
+    stubReadyOrganization({ canAccessStagedItems: false });
 
     render(
       <AuthGate>
@@ -206,7 +303,7 @@ describe('AuthGate — organization selection and sign-out', () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText('You do not have permission to create plans in this organisation.'),
+        screen.getByText('You do not have permission to stage imports in this organisation.'),
       ).toBeTruthy(),
     );
 

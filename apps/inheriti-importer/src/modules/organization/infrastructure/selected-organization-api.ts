@@ -1,16 +1,61 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { unwrapList, useApiQuery } from '@shared/infrastructure/importer-api/http';
 
-const selectedOrganizationKey = 'selectedOrganizationId';
+let activeAccountKey: string | null = null;
+const preferenceListeners = new Set<() => void>();
+
+function subscribeToSelectedOrganization(listener: () => void) {
+  preferenceListeners.add(listener);
+  return () => { preferenceListeners.delete(listener); };
+}
+
+function notifySelectedOrganization() {
+  for (const listener of preferenceListeners) listener();
+}
+
+const selectedOrganizationKey = () =>
+  activeAccountKey ? `selectedOrganizationId:${activeAccountKey}` : null;
+
+function getSelectedOrganizationSnapshot() {
+  const key = selectedOrganizationKey();
+  return key ? localStorage.getItem(key) : null;
+}
+
+export function setActiveOrganizationAccount(key: string | null, migrateLegacy = false) {
+  activeAccountKey = key;
+  if (!key || !migrateLegacy) {
+    notifySelectedOrganization();
+    return;
+  }
+  const legacy = localStorage.getItem('selectedOrganizationId');
+  if (legacy === null) {
+    notifySelectedOrganization();
+    return;
+  }
+  const scopedKey = `selectedOrganizationId:${key}`;
+  if (localStorage.getItem(scopedKey) === null) localStorage.setItem(scopedKey, legacy);
+  localStorage.removeItem('selectedOrganizationId');
+  notifySelectedOrganization();
+}
+
+export function getActiveOrganizationAccount() {
+  return activeAccountKey;
+}
+
+export function setSelectedOrganizationForActive(accountKey: string, organizationId: string) {
+  if (!accountKey || activeAccountKey !== accountKey) throw new Error('AUTH_CONTEXT_CHANGED');
+  localStorage.setItem(`selectedOrganizationId:${accountKey}`, organizationId);
+  notifySelectedOrganization();
+}
 
 export function useGetRawSelectedOrganizationId() {
-  const data = localStorage.getItem(selectedOrganizationKey);
+  const data = useSyncExternalStore(subscribeToSelectedOrganization, getSelectedOrganizationSnapshot);
   return { data, loading: false };
 }
 
 export function useGetSelectedOrganizationId() {
-  return localStorage.getItem(selectedOrganizationKey);
+  return useSyncExternalStore(subscribeToSelectedOrganization, getSelectedOrganizationSnapshot);
 }
 
 export function useSwitchToOrganization() {
@@ -19,9 +64,12 @@ export function useSwitchToOrganization() {
   return {
     loading,
     switchToOrganization: async (organizationId: string) => {
+      const accountKey = activeAccountKey;
+      if (!accountKey) throw new Error('AUTH_ACCOUNT_NOT_ACTIVE');
       setLoading(true);
       try {
-        localStorage.setItem(selectedOrganizationKey, organizationId);
+        if (activeAccountKey !== accountKey) return;
+        setSelectedOrganizationForActive(accountKey, organizationId);
         await queryClient.invalidateQueries();
       } finally {
         setLoading(false);
@@ -37,6 +85,7 @@ type Organization = {
   settings?: OrganizationSettings;
   standbyPeriod?: unknown;
   standbyPeriodInfo?: unknown;
+  isActivationPending?: boolean;
 };
 
 type OrganizationSettings = {

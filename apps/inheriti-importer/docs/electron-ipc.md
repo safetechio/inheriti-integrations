@@ -20,8 +20,8 @@ editing both `preload.cjs` (exposure) and `main.cjs` (`ipcMain.handle`).
 ## Authentication configuration
 
 The committed `.env.dev`, `.env.stg`, and `.env.prod` files configure
-`INHERITI_API_ORIGIN`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, and
-`KEYCLOAK_CLIENT_ID` with the shared Business integrations interactive client
+`INHERITI_API_ORIGIN`, `SAFEID_URL`, `SAFEID_REALM`, and
+`SAFEID_CLIENT_ID` with the shared Business integrations interactive client
 used by Inheriti Go. `WEB_APP_URL` configures the matching Business web CTA.
 Environment builds validate those values and bundle the selected configuration
 for the main process. Local development reads `.env.local` unless `INHERITI_ENV`

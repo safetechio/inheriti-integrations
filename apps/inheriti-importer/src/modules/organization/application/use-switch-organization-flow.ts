@@ -5,6 +5,7 @@ import {
 } from '@modules/organization/infrastructure/importer-api';
 import useSelectableOrganization from './use-selectable-organization';
 import useOrganizationKeyPurge from './use-organization-key-purge';
+import { getActiveOrganizationAccount } from '@modules/organization/infrastructure/selected-organization-api';
 
 export type SwitchOrganizationPhase = 'idle' | 'switching' | 'checking' | 'ready' | 'blocked';
 
@@ -44,12 +45,14 @@ export default function useSwitchOrganizationFlow(): SwitchOrganizationFlow {
 
   const selectOrganization = useCallback(
     async (nextOrganizationId: string) => {
+      const accountKey = getActiveOrganizationAccount();
       setPendingOrganizationId(nextOrganizationId);
       setIsSwitching(true);
       try {
         if (selectedOrganizationId && selectedOrganizationId !== nextOrganizationId) {
           await purgeOrganization(selectedOrganizationId);
         }
+        if (getActiveOrganizationAccount() !== accountKey) return;
         await switchToOrganization(nextOrganizationId);
       } finally {
         setIsSwitching(false);

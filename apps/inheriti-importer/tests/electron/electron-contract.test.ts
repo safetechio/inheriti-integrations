@@ -12,6 +12,12 @@ const mainSource = [
   ...readdirSync(resolve(electronRoot, 'lib'))
     .filter((name) => name.endsWith('.cjs'))
     .map((name) => readFileSync(resolve(electronRoot, 'lib', name), 'utf8')),
+  ...readdirSync(resolve(electronRoot, 'lib/auth'))
+    .filter((name) => name.endsWith('.cjs'))
+    .map((name) => readFileSync(resolve(electronRoot, 'lib/auth', name), 'utf8')),
+  ...readdirSync(resolve(electronRoot, 'ipc'))
+    .filter((name) => name.endsWith('.cjs'))
+    .map((name) => readFileSync(resolve(electronRoot, 'ipc', name), 'utf8')),
 ].join('\n');
 
 // Strip comments before scanning for forbidden tokens, so prose like "the

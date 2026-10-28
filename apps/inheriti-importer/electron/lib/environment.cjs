@@ -15,7 +15,7 @@ function assignEnvironment(values, overrideExisting = false) {
 // Populates `process.env` before any other main-process module reads it, so
 // this must run — and this call must resolve — before `main.cjs` requires
 // anything that captures an env-derived constant at module-load time (e.g.
-// `API_ORIGIN` in api-transport.cjs, business-socket.cjs, keycloak-auth.cjs).
+// `API_ORIGIN` in api-transport.cjs, business-socket.cjs, safeid-auth.cjs).
 function loadEnvironment({ isPackaged, electronDir }) {
   if (isPackaged) {
     const runtimePath = path.join(electronDir, '../dist/runtime-environment.json');

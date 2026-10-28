@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setActiveOrganizationAccount } from '@modules/organization/infrastructure/selected-organization-api';
 import {
   createCoreSessionBridge,
   ImporterApiProvider,
@@ -18,7 +19,6 @@ import {
   useGetJoinedOrganizations,
   useGetMyOrganization,
   useMasterKeySession,
-  useOrgSubscriptionStatus,
 } from '@modules/organization/infrastructure/importer-api';
 import type { ElectronHttpTransport } from '@shared/infrastructure/transport/electron-http-transport';
 
@@ -81,8 +81,11 @@ function setup(
 describe('Importer API provider', () => {
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem('selectedOrganizationId', 'org-1');
+    setActiveOrganizationAccount('account-a');
+    localStorage.setItem('selectedOrganizationId:account-a', 'org-1');
   });
+
+  afterEach(() => setActiveOrganizationAccount(null));
 
   it('joins the API tenant room for Organization Key delivery', () => {
     const { socket, wrapper } = setup(() => session);
@@ -320,41 +323,5 @@ describe('Importer API provider', () => {
         }),
       ),
     );
-  });
-
-  it.each([
-    [null, true],
-    [{ status: 'ACTIVE' }, false],
-    [{ status: 'TRIALING' }, false],
-    [{ status: 'PAUSED' }, true],
-    [{ status: 'ACTIVE', paymentMethod: { state: 'failed' } }, true],
-    [{ status: 'ACTIVE', standbyPeriod: { status: 'ACTIVE' } }, true],
-    [{ status: 'ACTIVE', standbyPeriod: { status: 'EXPIRED' } }, true],
-    [{ status: 'ACTIVE', lifecycle: { accessMode: 'READ_ONLY' } }, true],
-    [{ status: 'PAUSED', lifecycle: { accessMode: 'FULL' } }, false],
-  ])('derives subscription eligibility from %j', async (subscription, blocked) => {
-    const { wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
-      if (request.path === '/organizations/org-1') return { id: 'org-1', name: 'Org' };
-      if (request.path.endsWith('/subscriptions/details')) return subscription;
-      return null;
-    });
-    const { result } = renderHook(() => useOrgSubscriptionStatus(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.isCreationBlocked).toBe(blocked);
-  });
-
-  it('blocks legacy organizations in standby even with an active subscription', async () => {
-    const { wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
-      if (request.path === '/organizations/org-1') {
-        return { id: 'org-1', name: 'Org', standbyPeriodInfo: { id: 'standby-1' } };
-      }
-      if (request.path.endsWith('/subscriptions/details')) return { status: 'ACTIVE' };
-      return null;
-    });
-    const { result } = renderHook(() => useOrgSubscriptionStatus(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.isCreationBlocked).toBe(true);
   });
 });

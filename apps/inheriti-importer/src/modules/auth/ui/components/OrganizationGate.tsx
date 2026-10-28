@@ -4,6 +4,8 @@ import { useTheme } from '@modules/_shared/ui/theme/AppTheme';
 import useOrganizationMemberships from '@modules/organization/application/use-organization-memberships';
 import useSwitchOrganizationFlow from '@modules/organization/application/use-switch-organization-flow';
 import OrganizationOptionRow from '@modules/organization/ui/components/OrganizationOptionRow';
+import { organizationDisplayName } from '@modules/organization/application/organization-display-name';
+import { useAuthState } from '@shared/infrastructure/importer-api';
 import { useEffect, type ReactNode } from 'react';
 
 export default function OrganizationGate({
@@ -14,6 +16,7 @@ export default function OrganizationGate({
   onSignOut: () => void;
 }) {
   const uiTheme = useTheme();
+  const authNotice = useAuthState((state) => (state as { notice?: string | null }).notice ?? null);
   const { memberships, loading } = useOrganizationMemberships();
   const {
     phase,
@@ -120,6 +123,11 @@ export default function OrganizationGate({
           </Box>
         </Box>
         <Box padding="l" gap="m">
+          {authNotice ? (
+            <Text variant="bodySmall" color="danger">
+              {authNotice}
+            </Text>
+          ) : null}
           {loading ? (
             <Text variant="bodySmall" color="gray">
               Loading organisations…
@@ -156,7 +164,7 @@ export default function OrganizationGate({
             return (
               <OrganizationOptionRow
                 key={organization.id}
-                name={organization.name}
+                name={organizationDisplayName(organization, memberships)}
                 isOwned={organization.isOwned}
                 loading={
                   pendingOrganizationId === organization.id &&

@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
 import {
-  useOrgSubscriptionStatus,
+  useGetSelectedOrganization,
   useSelectedOrganizationMemberCapabilities,
 } from '@modules/organization/infrastructure/importer-api';
 
@@ -11,66 +10,43 @@ export interface SelectableOrganizationState {
   loading: boolean;
 }
 
-const NO_PLAN_CREATION_MESSAGE = 'You do not have permission to create plans in this organisation.';
+const NO_STAGED_ACCESS_MESSAGE = 'You do not have permission to stage imports in this organisation.';
+const ACTIVATION_PENDING_MESSAGE = 'This organisation must finish activation before imports can be staged.';
 
-/**
- * Importer-scoped composition. Joins the local `useOrgSubscriptionStatus`
- * (lifecycle / standby / trial / payment authority) with `canStartPlanCreation`
- * for the *currently selected* organisation and reduces both to a single
- * "can this org be used as the Importer working context" verdict.
- *
- * The blocking logic stays in the shared Importer API hooks; this only merges
- * their outputs.
- */
 export default function useSelectableOrganization(): SelectableOrganizationState {
-  const {
-    isCreationBlocked,
-    accessRestrictionMessage,
-    organizationId,
-    loading: statusLoading,
-  } = useOrgSubscriptionStatus();
-
-  const { canStartPlanCreation, loading: capabilitiesLoading } =
+  const organization = useGetSelectedOrganization();
+  const { canAccessStagedItems, loading: capabilitiesLoading } =
     useSelectedOrganizationMemberCapabilities();
-
-  const loading = statusLoading || capabilitiesLoading;
-
-  useEffect(() => {
-    console.debug('[selectable-organization]', {
-      organizationId,
-      statusLoading,
-      capabilitiesLoading,
-      loading,
-      isCreationBlocked,
-      canStartPlanCreation,
-    });
-  }, [
-    canStartPlanCreation,
-    capabilitiesLoading,
-    isCreationBlocked,
-    loading,
-    organizationId,
-    statusLoading,
-  ]);
+  const organizationId = organization.data?.id;
+  const loading = organization.loading || capabilitiesLoading;
 
   if (loading) {
     return { organizationId, canUse: false, blockedReason: null, loading: true };
   }
 
-  if (isCreationBlocked) {
+  if (!organizationId) {
     return {
       organizationId,
       canUse: false,
-      blockedReason: accessRestrictionMessage ?? 'This organisation’s subscription is inactive.',
+      blockedReason: 'We could not verify this organisation’s access.',
       loading: false,
     };
   }
 
-  if (!canStartPlanCreation) {
+  if (organization.data?.isActivationPending) {
     return {
       organizationId,
       canUse: false,
-      blockedReason: NO_PLAN_CREATION_MESSAGE,
+      blockedReason: ACTIVATION_PENDING_MESSAGE,
+      loading: false,
+    };
+  }
+
+  if (!canAccessStagedItems) {
+    return {
+      organizationId,
+      canUse: false,
+      blockedReason: NO_STAGED_ACCESS_MESSAGE,
       loading: false,
     };
   }

@@ -56,7 +56,12 @@ export function ImporterRuntime({ children }: { children: ReactNode }) {
     [transport],
   );
   const organizationKeyVault = useMemo(() => new InMemoryOrganizationKeyVault(), []);
-  const authProvider = useMemo(() => createElectronAuthProvider(() => secureCleanup.runAll()), []);
+  const authProvider = useMemo(() => createElectronAuthProvider(async (strict = false) => {
+    const cleanup = strict ? secureCleanup.runAllStrict() : secureCleanup.runAll();
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await cleanup;
+  }), []);
   useEffect(
     () => secureCleanup.register(() => organizationKeyVault.clearAllSessions()),
     [organizationKeyVault],

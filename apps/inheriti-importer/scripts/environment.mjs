@@ -4,9 +4,9 @@ import { loadEnv } from 'vite';
 export const environments = ['dev', 'stg', 'prod'];
 export const runtimeEnvironmentKeys = [
   'INHERITI_API_ORIGIN',
-  'KEYCLOAK_URL',
-  'KEYCLOAK_CLIENT_ID',
-  'KEYCLOAK_REALM',
+  'SAFEID_URL',
+  'SAFEID_CLIENT_ID',
+  'SAFEID_REALM',
   'WEB_APP_URL',
 ];
 
@@ -26,9 +26,9 @@ export function readEnvironment(environment, root) {
   return {
     environment,
     INHERITI_API_ORIGIN: values.INHERITI_API_ORIGIN,
-    KEYCLOAK_URL: values.KEYCLOAK_URL,
-    KEYCLOAK_CLIENT_ID: values.KEYCLOAK_CLIENT_ID,
-    KEYCLOAK_REALM: values.KEYCLOAK_REALM,
+    SAFEID_URL: values.SAFEID_URL,
+    SAFEID_CLIENT_ID: values.SAFEID_CLIENT_ID,
+    SAFEID_REALM: values.SAFEID_REALM,
     WEB_APP_URL: values.WEB_APP_URL,
   };
 }

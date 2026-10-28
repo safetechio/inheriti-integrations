@@ -5,13 +5,15 @@ import { SignInGate } from './components/SignInGate';
 import useAuthGate from './hooks/use-auth-gate';
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { status, message, loginInProgress, login, cancelLogin, logout } = useAuthGate();
+  const { status, message, loginInProgress, accounts, activateAccount, login, cancelLogin, logout } = useAuthGate();
   if (status !== 'signed-in') {
     return (
       <SignInGate
         status={status}
         message={message}
         loginInProgress={loginInProgress}
+        accounts={accounts}
+        onActivateAccount={activateAccount}
         onLogin={login}
         onCancel={cancelLogin}
       />

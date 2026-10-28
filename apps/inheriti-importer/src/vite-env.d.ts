@@ -41,8 +41,21 @@ interface InheritiDesktop {
   };
   auth: {
     login: () => Promise<unknown>;
+    add: () => Promise<unknown>;
+    accounts: () => Promise<Array<{ key: string; subject: string; active: boolean }>>;
+    destinations: () => Promise<
+      Array<{
+        accountKey: string;
+        subject: string;
+        status: 'ready' | 'sign_in_required';
+        organizations: Array<{ id: string; name: string }>;
+      }>
+    >;
+    activate: (key: string) => Promise<unknown>;
+    remove: (key: string) => Promise<{ remoteRevocationFailed: boolean }>;
+    logoutAll: () => Promise<{ remoteRevocationFailed: boolean }>;
     cancel: () => Promise<unknown>;
-    logout: () => Promise<unknown>;
+    logout: () => Promise<{ remoteRevocationFailed: boolean }>;
     session: () => Promise<unknown>;
   };
 }
