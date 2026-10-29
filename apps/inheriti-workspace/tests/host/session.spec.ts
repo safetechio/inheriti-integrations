@@ -149,6 +149,27 @@ describe('Workspace session', () => {
     await expect(host.selectOrganization(organizationId)).rejects.toThrow('sign_in_required');
   });
 
+  it('clears local state and blocks silent sign-in when Business revocation fails', async () => {
+    keychain.clear();
+    let token: string | undefined = 'private-token';
+    const core = {
+      auth: {
+        getAccessToken: vi.fn(async () => token),
+        clear: vi.fn(async () => { token = undefined; throw new Error('network_failed'); }),
+      },
+      listOrganizations: vi.fn(async () => [{ id: organizationId, name: 'Team' }]),
+    } as unknown as WorkspaceCore;
+    const host = new WorkspaceSession('dev', {
+      core, apiForOrganization: () => ({}) as WorkspaceApi,
+      configuration: { issuer: 'https://issuer.test', clientId: 'client', audience: 'audience', environment: 'TEST', redirectUri: 'http://127.0.0.1/oauth/callback', scopes: [] },
+    });
+    await host.listOrganizations();
+    await host.selectOrganization(organizationId);
+    await expect(host.signOut()).rejects.toThrow('network_failed');
+    expect(await host.status()).toEqual({ signedIn: false });
+    expect(await host.tryBrowserSignIn()).toBe(false);
+  });
+
   it('does not silently sign in after an explicit sign-out, even after restart', async () => {
     keychain.clear();
     let token: string | undefined = 'private-token';

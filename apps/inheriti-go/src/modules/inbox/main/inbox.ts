@@ -40,11 +40,12 @@ export class TrayInbox {
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE',
     private readonly token: () => Promise<string | undefined>,
+    getPrincipal: () => Promise<{ issuer: string; subject: string } | undefined>,
     private readonly resolveKey: (organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => Promise<string>,
     private readonly selectedOrganization: () => string,
     private readonly onSignal?: (signal?: TrayInboxSignal) => void,
     onIdentityState?: () => void) {
-    this.identity = new TrayInboxIdentity(apiUrl, environment, token, onIdentityState);
+    this.identity = new TrayInboxIdentity(apiUrl, environment, token, getPrincipal, onIdentityState);
     this.read = new InboxReadAck(this.identity, () => this.client(), resolveKey);
   }
 

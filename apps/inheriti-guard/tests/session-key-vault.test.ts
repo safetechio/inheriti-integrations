@@ -10,7 +10,8 @@ const configuration = resolveConfiguration({ apiUrl: 'https://business.test/inte
 const ref: MasterKeyRef = { system: 'INHERITI_BUSINESS', contextId: 'org-a' };
 const key = Uint8Array.from({ length: 32 }, (_, index) => index);
 function login(): OperatorSession {
-  return { accessToken: 'access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+  return { kind: 'business', familyId: 'family-a', accessToken: 'access', refreshToken: 'refresh',
+    tokenType: 'Bearer', expiresAt: Date.now() + 60_000, sessionExpiresAt: Date.now() + 300_000,
     principal: { issuer: configuration.issuer, audience: 'inheriti-integrations-api', authorizedParty: configuration.clientId,
       environment: 'TEST', subject: 'operator-a', sessionId: 'login-a', tokenId: 'token-a', scopes: ['openid'] } };
 }

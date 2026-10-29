@@ -8,7 +8,6 @@ import { expect, it, vi } from 'vitest';
 import { createNodeIntegrationCore } from '../src/node.js';
 
 const ISSUER = 'https://issuer.test';
-const TOKEN_ENDPOINT = `${ISSUER}/oauth/token`;
 const CLIENT_ID = 'host-client';
 const AUDIENCE = 'inheriti-elements-api';
 
@@ -28,7 +27,7 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
-it('single-flights SDK refresh across scoped Node cores and persists rotation', async () => {
+it('single-flights Business refresh across scoped Node cores and persists rotation', async () => {
   const principal: ValidatedOperatorToken = {
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -40,11 +39,13 @@ it('single-flights SDK refresh across scoped Node cores and persists rotation', 
     scopes: ['openid', 'plan:list'],
   };
   let persistedSession: OperatorSession | undefined = {
+    kind: 'business',
+    familyId: 'family-1',
     accessToken: 'expired-access',
     refreshToken: 'refresh-1',
     tokenType: 'Bearer',
     expiresAt: 0,
-    refreshExpiresAt: Date.now() + 300_000,
+    sessionExpiresAt: Date.now() + 300_000,
     principal,
   };
   const sessions: OperatorSessionStore = {
@@ -58,31 +59,26 @@ it('single-flights SDK refresh across scoped Node cores and persists rotation', 
       return principal;
     }),
   };
-  let discoveryRequests = 0;
   let refreshRequests = 0;
   const authorizationHeaders: string[] = [];
   const organizationHeaders: string[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (url.pathname === '/.well-known/openid-configuration') {
-      discoveryRequests += 1;
-      return jsonResponse({
-        issuer: ISSUER,
-        authorization_endpoint: `${ISSUER}/oauth/authorize`,
-        token_endpoint: TOKEN_ENDPOINT,
-      });
-    }
-    if (url.href === TOKEN_ENDPOINT) {
+    if (url.pathname === '/integrations/operator-sessions/refresh') {
       refreshRequests += 1;
       expect(init?.method).toBe('POST');
-      expect(String(init?.body)).toContain('refresh_token=refresh-1');
-      return jsonResponse({
-        access_token: 'rotated-access',
-        refresh_token: 'refresh-2',
-        token_type: 'Bearer',
-        expires_in: 3_600,
-        refresh_expires_in: 3_600,
-      });
+      expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: 'refresh-1' });
+      return jsonResponse({ ok: true, result: {
+        accessToken: 'rotated-access',
+        refreshToken: 'refresh-2',
+        accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+        familyId: 'family-1',
+        environment: 'TEST',
+        clientId: CLIENT_ID,
+        providerIssuer: ISSUER,
+        providerSubject: 'operator-1',
+      } });
     }
     authorizationHeaders.push(new Headers(init?.headers).get('authorization') ?? '');
     organizationHeaders.push(new Headers(init?.headers).get('x-organization-id') ?? '');
@@ -125,7 +121,6 @@ it('single-flights SDK refresh across scoped Node cores and persists rotation', 
   expect(second.auth).toBe(discovery.auth);
   await Promise.all([first.listPlans(), second.listPlans()]);
 
-  expect(discoveryRequests).toBe(1);
   expect(refreshRequests).toBe(1);
   expect(persistedSession?.accessToken).toBe('rotated-access');
   expect(persistedSession?.refreshToken).toBe('refresh-2');

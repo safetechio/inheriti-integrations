@@ -322,6 +322,7 @@ export class MetadataTools {
     await this.cancelAutomationJob();
     this.browserLogin?.cancel();
     const retired = this.sessions;
+    const retiredCore = this.core;
     const retiredScoped = this.scoped;
     this.scoped = undefined;
     this.sessions = new MemoryOperatorSessionStore();
@@ -337,8 +338,13 @@ export class MetadataTools {
     this.silentAttempted = false;
     const job = this.job;
     if (job?.status === 'WAITING') { job.controller.abort(); await job.done; }
-    if (retiredScoped) await retiredScoped.core.forgetMasterKey();
-    await retired.clear();
+    try {
+      if (retiredScoped) await retiredScoped.core.forgetMasterKey();
+    } finally {
+      try { await retiredCore?.auth.clear(); }
+      catch { /* Revocation is best effort. */ }
+      finally { await retired.clear(); }
+    }
     return { signedOut: true, ...(job?.code === 'reveal_cancellation_failed' || job?.code === 'master_key_relay_cancellation_failed'
       ? { cancellation: { code: job.code, message: job.message } } : {}) };
   }

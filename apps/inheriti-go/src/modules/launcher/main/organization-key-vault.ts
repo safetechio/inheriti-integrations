@@ -5,6 +5,7 @@ import { ProtectedCheckpoint } from './protected-checkpoint.js';
 const keyLength = 32;
 
 type Ref = { system: string; contextId: string };
+type Principal = { issuer: string; subject: string };
 
 export class OrganizationKeyVault {
   private readonly checkpoint = new ProtectedCheckpoint();
@@ -13,7 +14,7 @@ export class OrganizationKeyVault {
   private scope: string | undefined;
   private generation = 0;
 
-  constructor(private readonly deployment: string, private readonly getToken: () => Promise<string | undefined>,
+  constructor(private readonly deployment: string, private readonly getPrincipal: () => Promise<Principal | undefined>,
     private readonly issuer?: string) {}
 
   get allAccountScope(): string {
@@ -25,20 +26,15 @@ export class OrganizationKeyVault {
     if (ref.system !== 'INHERITI_BUSINESS' || !ref.contextId) throw new Error('invalid_organization_key_reference');
     const active = this.operation.getStore();
     if (active) return `${active.scope}/${encodeURIComponent(ref.contextId)}`;
-    const token = await this.getToken();
-    return `${this.scopeForToken(token)}/${encodeURIComponent(ref.contextId)}`;
+    const principal = await this.getPrincipal();
+    return `${this.scopeForPrincipal(principal)}/${encodeURIComponent(ref.contextId)}`;
   }
 
-  private scopeForToken(token: string | undefined): string {
-    const claims = token?.split('.')[1];
-    if (!claims) throw new Error('reauthentication_required');
-    let decoded: unknown;
-    try { decoded = JSON.parse(Buffer.from(claims, 'base64url').toString('utf8')); }
-    catch { throw new Error('reauthentication_required'); }
-    if (!decoded || typeof decoded !== 'object' || !('iss' in decoded) || typeof decoded.iss !== 'string' || !decoded.iss ||
-      !('sub' in decoded) || typeof decoded.sub !== 'string' || !decoded.sub) throw new Error('reauthentication_required');
-    if (this.issuer && decoded.iss !== this.issuer) throw new Error('reauthentication_required');
-    const scope = `organization-key/${this.deployment}/${createHash('sha256').update(decoded.iss).digest('hex')}/${encodeURIComponent(decoded.sub)}`;
+  private scopeForPrincipal(principal: Principal | undefined): string {
+    if (!principal || typeof principal.issuer !== 'string' || !principal.issuer ||
+      typeof principal.subject !== 'string' || !principal.subject) throw new Error('reauthentication_required');
+    if (this.issuer && principal.issuer !== this.issuer) throw new Error('reauthentication_required');
+    const scope = `organization-key/${this.deployment}/${createHash('sha256').update(principal.issuer).digest('hex')}/${encodeURIComponent(principal.subject)}`;
     if (this.scope !== undefined && this.scope !== scope) this.clearMemory();
     this.scope = scope;
     return scope;
@@ -117,9 +113,9 @@ export class OrganizationKeyVault {
 
   async withScope<T>(run: () => Promise<T>): Promise<T> {
     const started = this.generation;
-    const token = await this.getToken();
+    const principal = await this.getPrincipal();
     if (started !== this.generation) throw new Error('organization_key_request_canceled');
-    const scope = this.scopeForToken(token);
+    const scope = this.scopeForPrincipal(principal);
     return this.operation.run({ scope, generation: this.generation }, run);
   }
 }

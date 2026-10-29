@@ -157,7 +157,7 @@ describe('TraySession', () => {
     new TraySession('local', { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://local-issuer.test/' });
     const options = mock.core.mock.calls[0]?.[0];
     expect(options.sessions).toEqual(expect.objectContaining({ load: expect.any(Function), save: expect.any(Function), clear: expect.any(Function) }));
-    await options.sessions.save({ accessToken: 'token', tokenType: 'Bearer', expiresAt: Date.now() + 1000,
+    await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 1000,
       principal: { issuer: 'https://local-issuer.test/', subject: 'member' } });
     await expect(options.sessions.load()).resolves.toMatchObject({ accessToken: 'token' });
   });
@@ -191,31 +191,31 @@ describe('TraySession', () => {
     await expect(session.retryInboxAck('conversation-1', 'message-1')).resolves.toEqual({ acknowledgement: 'ACKNOWLEDGED' });
   });
 
-  it.each(['local', 'dev', 'stg', 'prod'] as const)('requests offline access for %s Business sign-in', (deployment) => {
+  it.each(['local', 'dev', 'stg', 'prod'] as const)('requests only sign-in scopes for %s Business sign-in', (deployment) => {
     new TraySession(deployment);
     expect(mock.core).toHaveBeenCalledWith(expect.objectContaining({
       business: true,
-      configuration: expect.objectContaining({ scopes: ['openid', 'profile', 'offline_access'] }),
+      configuration: expect.objectContaining({ scopes: ['openid', 'profile'] }),
     }));
   });
 
-  it('retries with a normal session when Keycloak rejects offline_access', async () => {
+  it('does not retry an invalid-scope sign-in', async () => {
     const session = new TraySession('dev');
     await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: configuration.issuer, subject: 'member-a' } });
     let opened = 0;
     await session.signIn(() => {}, async (authorizationUrl) => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
       await fetch(`${redirectUri}?${++opened === 1 ? 'error=invalid_scope' : 'code=code&state=state'}`);
     });
-    expect(opened).toBe(2);
-    expect(mock.begin).toHaveBeenCalledTimes(2);
-    expect(mock.complete).toHaveBeenCalledTimes(1);
+    expect(opened).toBe(1);
+    expect(mock.begin).toHaveBeenCalledTimes(1);
+    expect(mock.complete).not.toHaveBeenCalled();
     expect(configuration.scopes).toEqual(['openid', 'profile']);
-    expect(session.state().status).toBe('signed-in');
+    expect(session.state().status).toBe('error');
   });
 
   it('does not retry when the operator declines authorisation', async () => {
@@ -236,7 +236,7 @@ describe('TraySession', () => {
     await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: configuration.issuer, subject: 'member-a' } });
     mock.organizations.mockRejectedValue(Object.assign(new Error('elements_api_request_failed_403'), {
       status: 403, code: 'integration_tester_required',
@@ -254,7 +254,7 @@ describe('TraySession', () => {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
-          const result = { accessToken: 'access-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
             principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
           await options.sessions.save(result);
           return result;
@@ -270,7 +270,7 @@ describe('TraySession', () => {
     }));
     const session = new TraySession('dev');
     const durable = mock.core.mock.calls[0]![0].sessions;
-    await durable.save({ accessToken: 'access-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await durable.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     await session.signIn(() => {}, async (authorizationUrl) => {
@@ -288,7 +288,7 @@ describe('TraySession', () => {
     const durable = mock.core.mock.calls[0]![0].sessions;
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({ accessToken: 'access-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: configuration.issuer, subject: 'member-a' } });
     mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }])
       .mockRejectedValueOnce(Object.assign(new Error('elements_api_request_failed_403'), {
@@ -312,7 +312,7 @@ describe('TraySession', () => {
       redirectUri = configuration.redirectUri;
       return { authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}` };
     });
-    mock.complete.mockResolvedValue({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: configuration.issuer, subject: 'member-a' } });
     await session.signIn(() => {}, async (authorizationUrl) => {
       expect(new URL(authorizationUrl).searchParams.get('redirect_uri')).toBe(redirectUri);
@@ -367,7 +367,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           const subject = subjects.shift()!;
-          const result = { accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
             expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
           await options.sessions.save(result);
           return result;
@@ -404,7 +404,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state-1&nonce=nonce-1&code_challenge=challenge-1` }),
         completeAuthorizationCode: async () => {
           const subject = subjects.shift()!;
-          const result = { accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
             expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
           await options.sessions.save(result);
           return result;
@@ -417,6 +417,10 @@ describe('TraySession', () => {
         if (current?.principal.subject === 'member-b' && !('accountSummaries' in options.sessions)) {
           await options.sessions.save({ ...current, refreshToken: 'rotated-b' });
         }
+        if (current?.principal.subject === 'member-b') return [
+          { id: 'org-member-b', name: 'member-b' },
+          { id: 'org-member-b-2', name: 'member-b-2' },
+        ];
         return current ? [{ id: `org-${current.principal.subject}`, name: current.principal.subject }] : [];
       },
     }));
@@ -430,6 +434,10 @@ describe('TraySession', () => {
     };
     await session.signIn(() => {}, openBrowser);
     expect(session.state().organizations).toEqual([{ id: 'org-member-a', name: 'member-a' }]);
+    mock.stopInbox.mockImplementation(() => {
+      const presence = mock.listenInbox.mock.lastCall?.[5] as ((snapshot: null) => void) | undefined;
+      presence?.(null);
+    });
     await session.addAccount(() => {}, openBrowser);
     expect(authorizationUrls.map((url) => url.searchParams.get('prompt'))).toEqual([null, 'login']);
     for (const url of authorizationUrls) {
@@ -437,18 +445,31 @@ describe('TraySession', () => {
       expect(url.searchParams.get('nonce')).toBe('nonce-1');
       expect(url.searchParams.get('code_challenge')).toBe('challenge-1');
     }
-    expect(session.state().organizations).toEqual([{ id: 'org-member-b', name: 'member-b' }]);
+    expect(session.state().message).toBeUndefined();
+    expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [
+      { id: 'org-member-b', name: 'member-b' },
+      { id: 'org-member-b-2', name: 'member-b-2' },
+    ] });
+    expect(session.state().selectedId).toBeUndefined();
     expect((await mock.core.mock.calls[0]![0].sessions.fork().load())?.refreshToken).toBe('rotated-b');
     expect(session.state()).toMatchObject({ activeSubject: 'member-b', accounts: [
       { subject: 'member-a', name: 'member-a', status: 'ready', organizations: [{ id: 'org-member-a', name: 'member-a' }] },
-      { subject: 'member-b', name: 'member-b', status: 'ready', organizations: [{ id: 'org-member-b', name: 'member-b' }] },
+      { subject: 'member-b', name: 'member-b', status: 'ready', organizations: [
+        { id: 'org-member-b', name: 'member-b' }, { id: 'org-member-b-2', name: 'member-b-2' },
+      ] },
     ] });
     expect(JSON.stringify(session.state())).not.toContain('refresh-member');
     expect(JSON.stringify(session.state())).not.toContain('access-member');
     await session.activateAccount('member-a');
     expect(session.state().organizations).toEqual([{ id: 'org-member-a', name: 'member-a' }]);
     await session.activateAccount('member-b');
-    expect(session.state().organizations).toEqual([{ id: 'org-member-b', name: 'member-b' }]);
+    expect(session.state().organizations).toEqual([
+      { id: 'org-member-b', name: 'member-b' }, { id: 'org-member-b-2', name: 'member-b-2' },
+    ]);
+    expect(session.state().selectedId).toBeUndefined();
+    await session.select('org-member-b');
+    await session.select('org-member-b-2');
+    expect(session.state().selectedId).toBe('org-member-b-2');
     expect(subjects).toEqual([]);
   });
 
@@ -458,7 +479,7 @@ describe('TraySession', () => {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
-          const result = { accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer',
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer',
             expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-b' } };
           await options.sessions.save(result);
           return result;
@@ -473,7 +494,7 @@ describe('TraySession', () => {
     }));
     const session = new TraySession('dev');
     const saved = mock.core.mock.calls[0]![0].sessions;
-    await saved.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+    await saved.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
       expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     expect(session.state().status).toBe('session-unavailable');
@@ -491,7 +512,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const options = mock.core.mock.calls[0]![0];
-    await options.sessions.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+    await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
       expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     mock.begin.mockResolvedValue({ authorizationUrl: 'https://issuer.test/authorize' });
@@ -522,7 +543,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           await new Promise<void>((resolve) => { finishExchange = resolve; });
-          const result = { accessToken: 'late-access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'late-access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
             principal: { issuer: options.configuration.issuer, subject: 'member-late' } };
           await options.sessions.save(result);
           return result;
@@ -557,7 +578,7 @@ describe('TraySession', () => {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
-          const result = { accessToken: 'access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
             principal: { issuer: options.configuration.issuer, subject: 'member-a' } };
           await options.sessions.save(result);
           return result;
@@ -593,7 +614,7 @@ describe('TraySession', () => {
     await session.restore();
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
-    mock.complete.mockResolvedValue({ accessToken: 'access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: configuration.issuer, subject: 'member-a' } });
     const statuses: string[] = [];
     const signingIn = session.signIn(() => { statuses.push(session.state().status); }, async (authorizationUrl) => {
@@ -633,7 +654,7 @@ describe('TraySession', () => {
     mock.create.mockResolvedValue({ status: 'READY', planId: 'plan-1' });
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
@@ -650,7 +671,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
@@ -671,7 +692,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
     await session.restore();
@@ -690,7 +711,7 @@ describe('TraySession', () => {
     mock.token.mockResolvedValue('access-token');
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
@@ -773,7 +794,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }])
       .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
     const session = new TraySession('dev');
-    await mock.core.mock.calls[0]![0].sessions.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
+    await mock.core.mock.calls[0]![0].sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
       expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     await session.select('org-a');
@@ -802,7 +823,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }]);
     const first = new TraySession('dev');
     const issuer = mock.core.mock.calls[0]![0].configuration.issuer;
-    await mock.core.mock.calls[0]![0].sessions.save({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await mock.core.mock.calls[0]![0].sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer, subject: 'member' } });
     await first.restore();
     await first.select('org-b');
@@ -831,7 +852,7 @@ describe('TraySession', () => {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
-          const result = { accessToken: 'new-access', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+          const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'new-access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
             principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
           await options.sessions.save(result);
           return result;
@@ -860,7 +881,7 @@ describe('TraySession', () => {
   it('keeps a saved session available for retry after a temporary restore failure', async () => {
     const session = new TraySession('dev');
     const options = mock.core.mock.calls[0]![0];
-    await options.sessions.save({ accessToken: 'access-token', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: options.configuration.issuer, subject: 'member' } });
     mock.token.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
@@ -1114,15 +1135,29 @@ describe('TraySession', () => {
     expect(mock.listenInbox).toHaveBeenCalledTimes(1);
   });
 
+  it('clears the active account when Business revocation fails', async () => {
+    const session = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    await store.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000,
+      accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+    mock.clear.mockRejectedValueOnce(new Error('network_failed'));
+
+    await session.signOut();
+
+    expect(session.state().status).toBe('signed-out');
+    expect(await store.load()).toBeUndefined();
+  });
+
   it('signs out every saved account and clears the active context', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
-    await store.enroll({ accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await store.enroll({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
     await session.restore();
     await session.select('org-a');
@@ -1133,16 +1168,16 @@ describe('TraySession', () => {
     expect(session.state()).toMatchObject({ status: 'signed-out', organizations: [], accounts: [] });
     expect(session.state().activeSubject).toBeUndefined();
     await expect(store.load()).resolves.toBeUndefined();
-    expect(mock.clear).not.toHaveBeenCalled();
+    expect(mock.clear).toHaveBeenCalledTimes(2);
   });
 
   it('signs out all saved accounts after the active session adapter retires', async () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    const first = { accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
     await store.save(first);
-    await store.enroll({ accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await store.enroll({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
     await session.restore();
     store.retire();
@@ -1172,7 +1207,7 @@ describe('TraySession', () => {
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
-    await store.save({ accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+    await store.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
       principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
     await session.restore();
     await session.select('org-a');

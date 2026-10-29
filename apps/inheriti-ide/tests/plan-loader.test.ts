@@ -17,6 +17,14 @@ describe('loadPlans', () => {
     await expect(loadPlans(coreWith({ getAccessToken: async () => undefined }))).resolves.toEqual({ kind: 'SIGNED_OUT' });
   });
 
+  it('asks for sign-in again when a saved provider session is invalidated', async () => {
+    const invalidated = coreWith({ getAccessToken: async () => {
+      throw Object.assign(new Error('sign in again'), { code: 'reauthentication_required' });
+    } });
+    await expect(loadPlans(invalidated)).resolves.toEqual({ kind: 'ERROR', code: 'reauthentication_required' });
+    expect(messageFor('reauthentication_required')).toContain('sign in again');
+  });
+
   it('is empty, not an error, when the Application has no plans', async () => {
     await expect(loadPlans(coreWith({}))).resolves.toEqual({ kind: 'EMPTY' });
   });

@@ -54,7 +54,7 @@ await (async () => {
 
 ## Server identity oracle
 
-For each identity check, open the extension service worker's DevTools from `chrome://extensions` and run this snippet in its Console. It reads the active session inside the trusted worker and asks the Business API which user owns its bearer. It prints only the local subject, server email, and HTTP status. Never print the storage object or response body.
+For each identity check, open the extension service worker's DevTools from `chrome://extensions` and run this snippet in its Console. It reads the active session inside the trusted worker and asks Business API for the organizations authorized by that bearer. It prints only the saved SafeID subject, organization IDs, and HTTP status. Never print the storage object or response body.
 
 ```js
 await (async () => {
@@ -64,26 +64,30 @@ await (async () => {
   const profiles = JSON.parse(stored['inheriti.operatorProfiles'] ?? '[]');
   const active = profiles.find((profile) => profile.id === stored['inheriti.activeOperatorProfile']);
   if (!active?.session?.accessToken) throw new Error('No active Guard credential');
-  const response = await fetch('http://localhost:3000/safe-id/profile', {
-    headers: { Authorization: `Bearer ${active.session.accessToken}` },
+  const response = await fetch('http://localhost:3000/integrations/v1/organizations', {
+    headers: {
+      Authorization: `Bearer ${active.session.accessToken}`,
+      'x-elements-environment': 'TEST',
+    },
   });
   const body = response.ok ? await response.json() : undefined;
+  const organizationIds = body?.result?.items?.map(({ id }) => id);
   console.log(JSON.stringify({
     activeSubject: active.session.principal.subject,
-    serverEmail: body?.result?.email,
+    organizationIds,
     status: response.status,
   }));
 })();
 ```
 
-The expected server email is the fixture's SafeID identity. Capture the printed result for A, B, then A again after switching. A panel label alone is insufficient evidence. If DevTools rejects the request, use the Network panel to inspect the extension's `listOrganizations` request and verify its bearer with the same `/safe-id/profile` endpoint without writing the bearer to disk.
+Compare the server organization IDs with the recorded fixture IDs: A's unique organization must appear only under A, and B's unique organization only under B. Capture the printed result for A, B, then A again after switching. A panel label alone is insufficient evidence. If DevTools rejects the request, use the Network panel to inspect the extension's `listOrganizations` request and compare its returned organization IDs without writing the bearer to disk.
 
 ## Cases
 
 | Case | Action and passing observation |
 | --- | --- |
 | Two identities | Sign in as A. Choose Add account and sign in as B. Switch A → B → A without another SafeID login. Capture each panel state and the server identity oracle after every transition. Both saved rows remain until browser exit. |
-| Organization choice | Under A, switch between two authorized organizations directly. From B, choose A's company, cancel once, then confirm. The confirmation names both SafeID and company. After confirmation, the server identity oracle is A and the chosen organization ID is the one shown. A removed membership is denied after fresh revalidation. Same-name organizations remain distinct by account and ID. |
+| Organization choice | Under A, switch between two authorized organizations directly. From B, choose A's company, cancel once, then confirm. The confirmation names both SafeID and company. After confirmation, the server organization oracle contains A's unique organization and the chosen organization ID is the one shown. A removed membership is denied after fresh revalidation. Same-name organizations remain distinct by account and ID. |
 | Isolation | Start a reveal/autofill or page-field selection under A. Switch to B or confirm that the active operation blocks switching. After switching, the old draft, field mapping, key status, reveal result, and protected value are absent from B's panel and target page. A late response must be discarded. Repeat with a navigation to a different page before the late result. |
 | Login and failure | Cancel Add account and confirm A remains server-confirmed. Re-enroll the same SafeID subject and confirm one row. Expire or revoke B's login, confirm B says Sign in again and A remains usable. An unavailable API must leave protected content hidden until a profile is confirmed again. |
 | Removal | Remove B while A is active; A remains usable. Re-add B, sign out the active account, and confirm the other saved row remains. Secure Logoff clears every saved row and active key or reveal state. Verify server identity after each remaining-account activation. |

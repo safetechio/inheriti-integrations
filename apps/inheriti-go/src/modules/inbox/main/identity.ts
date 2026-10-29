@@ -12,17 +12,14 @@ type StoredIdentity = {
   signingKeyFingerprint: string;
 };
 type StagedReplacement = { identity: StoredIdentity; expectedSigningFingerprint: string };
+type Principal = { issuer: string; subject: string };
 
 export type InboxIdentityState = { status: 'unavailable' | 'ready' | 'missing' | 'preparing' | 'replacement_required' | 'error'; message?: string; memberId?: string };
 
-function tokenScope(token: string): { subject: string; family: string } {
-  const segment = token.split('.')[1];
-  if (!segment) throw new Error('reauthentication_required');
-  const claims: unknown = JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
-  if (!claims || typeof claims !== 'object' || !('sub' in claims) || typeof claims.sub !== 'string' || !claims.sub) throw new Error('reauthentication_required');
-  if (!('iss' in claims) || typeof claims.iss !== 'string' || !claims.iss) throw new Error('inbox_issuer_unavailable');
-  // The issuer + subject is the stable account family; OIDC sid changes on a new login.
-  return { subject: claims.sub, family: createHash('sha256').update(claims.iss).digest('hex') };
+function principalScope(principal: Principal | undefined): { subject: string; family: string } {
+  if (!principal || typeof principal.subject !== 'string' || !principal.subject) throw new Error('reauthentication_required');
+  if (typeof principal.issuer !== 'string' || !principal.issuer) throw new Error('inbox_issuer_unavailable');
+  return { subject: principal.subject, family: createHash('sha256').update(principal.issuer).digest('hex') };
 }
 
 function generateIdentity(): StoredIdentity {
@@ -58,7 +55,8 @@ export class TrayInboxIdentity {
   private operationTail: Promise<void> = Promise.resolve();
   private operationOrganization: string | undefined;
 
-  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>, private readonly onStateChange?: () => void) {}
+  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly token: () => Promise<string | undefined>,
+    private readonly getPrincipal: () => Promise<Principal | undefined>, private readonly onStateChange?: () => void) {}
 
   state(): InboxIdentityState { return this.status; }
   async registeredMemberId(organizationId: string): Promise<string | undefined> {
@@ -66,7 +64,7 @@ export class TrayInboxIdentity {
     if (!this.checkpoint.isAvailable()) return undefined;
     const bearer = await this.token();
     if (!bearer) return undefined;
-    const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(bearer, organizationId));
+    const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(await this.getPrincipal(), organizationId));
     if (!identity) return undefined;
     const current = await this.request('GET', 'devices/me', bearer, organizationId, new AbortController().signal);
     if (current === null) return undefined;
@@ -104,7 +102,9 @@ export class TrayInboxIdentity {
     const generation = this.generation;
     const queued = this.operationOrganization !== undefined;
     const bearerAtEnqueue = this.token();
+    const principalAtEnqueue = this.getPrincipal();
     void bearerAtEnqueue.catch(() => {});
+    void principalAtEnqueue.catch(() => {});
     const previous = this.operationTail;
     let release!: () => void;
     const slot = new Promise<void>((resolve) => { release = resolve; });
@@ -121,13 +121,15 @@ export class TrayInboxIdentity {
       const bearer = queued ? await this.token() : originalBearer;
       abort.signal.throwIfAborted();
       if (!bearer) throw new Error('reauthentication_required');
+      const originalPrincipal = await principalAtEnqueue;
+      const currentPrincipal = queued ? await this.getPrincipal() : originalPrincipal;
+      const originalScope = principalScope(originalPrincipal);
+      const currentScope = principalScope(currentPrincipal);
       if (queued) {
-        const originalScope = tokenScope(originalBearer);
-        const currentScope = tokenScope(bearer);
         if (originalScope.subject !== currentScope.subject || originalScope.family !== currentScope.family)
           throw new Error('inbox_identity_not_ready');
       }
-      const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(bearer, organizationId));
+      const identity = this.checkpoint.getItem<StoredIdentity>(this.identityPath(currentPrincipal, organizationId));
       const current = await this.request('GET', 'devices/me', bearer, organizationId, abort.signal);
       abort.signal.throwIfAborted();
       this.assertCurrentIdentity(current, identity);
@@ -183,7 +185,7 @@ export class TrayInboxIdentity {
       const bearer = await this.token();
       signal.throwIfAborted();
       if (!bearer) throw new Error('reauthentication_required');
-      const path = this.identityPath(bearer, organizationId);
+      const path = this.identityPath(await this.getPrincipal(), organizationId);
       let identity = this.checkpoint.getItem<StoredIdentity>(path);
       const current = await this.request('GET', 'devices/me', bearer, organizationId, signal);
       signal.throwIfAborted();
@@ -260,8 +262,8 @@ export class TrayInboxIdentity {
     }
   }
 
-  private identityPath(bearer: string, organizationId: string): string {
-    const { subject, family } = tokenScope(bearer);
+  private identityPath(principal: Principal | undefined, organizationId: string): string {
+    const { subject, family } = principalScope(principal);
     const device = createHash('sha256').update(hostname()).update(app.getPath('userData')).digest('hex');
     return `inbox/identity/${this.environment}/${family}/${subject}/${organizationId}/${device}`;
   }

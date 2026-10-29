@@ -81,11 +81,16 @@ export class WorkspaceSession {
     await this.signInPending?.catch(() => undefined);
     try {
       await this.core.auth.clear();
-      await this.sessions.markSignedOut();
     }
     finally {
-      this.organizations = [];
-      this.selectedId = undefined;
+      try { await this.sessions.clear(); }
+      finally {
+        try { await this.sessions.markSignedOut(); }
+        finally {
+          this.organizations = [];
+          this.selectedId = undefined;
+        }
+      }
     }
   }
 

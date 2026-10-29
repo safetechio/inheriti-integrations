@@ -35,7 +35,7 @@ export function createCliContext(
   organizationId?: string,
 ): CliContext {
   const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
-  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault);
+  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault, configuration.business);
   const source = createCliMasterKeySource(configuration);
   const authConfiguration: NodeIntegrationCoreOptions['configuration'] = {
     issuer: configuration.issuer,
@@ -45,7 +45,7 @@ export function createCliContext(
     redirectUri: configuration.redirectUri,
     scopes: configuration.scopes,
   };
-  const core = createNodeIntegrationCore({
+  const options: NodeIntegrationCoreOptions = {
     apiUrl: configuration.apiUrl,
     ...(configuration.business ? { business: true as const, ...(organizationId ? { organizationId } : {}) }
       : { applicationId: configuration.applicationId! }),
@@ -57,7 +57,20 @@ export function createCliContext(
     liveConfirmation: configuration.environment,
     configuration: authConfiguration,
     sessions,
-  });
+  };
+  const initialCore = createNodeIntegrationCore(options);
+  const core = configuration.business ? createNodeIntegrationCore({
+    ...options,
+    auth: {
+      beginAuthorizationCode: (input) => initialCore.auth.beginAuthorizationCode(input),
+      completeAuthorizationCode: (callback) => sessions.withExclusiveAccess(() => initialCore.auth.completeAuthorizationCode(callback)),
+      beginDeviceAuthorization: () => initialCore.auth.beginDeviceAuthorization(),
+      pollDeviceAuthorization: (signal) => sessions.withExclusiveAccess(() => initialCore.auth.pollDeviceAuthorization(signal)),
+      getAccessToken: () => sessions.withExclusiveAccess(() => initialCore.auth.getAccessToken()),
+      refresh: () => sessions.withExclusiveAccess(() => initialCore.auth.refresh()),
+      clear: () => sessions.withExclusiveAccess(() => initialCore.auth.clear()),
+    },
+  }) : initialCore;
   const safeKeyPro = createCliSafeKeyPro(configuration);
   return { core, authConfiguration, sessions, keyVault, keyOwner: configuration.business ? 'Organisation' : 'Application',
     ...(safeKeyPro ? { safeKeyPro } : {}) };

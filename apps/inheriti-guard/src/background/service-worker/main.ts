@@ -54,7 +54,8 @@ const guard = new GuardController({
   async secureLogoff() {
     await reveal.shutdown();
     await account.forgetHeldCore();
-    await sessions.clearAll();
+    try { await account.revokeAllSessions(); }
+    finally { await sessions.clearAll(); }
     pendingContext.clear();
     organizationRevision += 1;
     await overlayPermissions.hideAll().catch(() => undefined);

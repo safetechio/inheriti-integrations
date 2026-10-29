@@ -96,25 +96,15 @@ export type { LocalAssistantInstallStatus, LocalAssistantInstallProgress } from 
 export type { LocalPlanModel, LocalPlanModelRequest, LocalPlanDraft, LocalPlanClarification, LocalPlanHints, LocalSource, SourceReference } from './local-plan-assistant.js';
 export { createPlanEditOperations } from './plan-edit.js';
 export function createNodePlanEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>) {
-  const socket = io(new URL(apiUrl).origin, {
-    autoConnect: false,
-    auth: (callback) => {
-      Promise.resolve().then(getBearerToken).then((token) => callback({ token: token ?? '' })).catch(() => callback({ token: '' }));
-    },
-  });
+  const { socket, close } = createAuthorizedSocket(apiUrl, getBearerToken);
   const listener = new SocketIoSharedPlanEventListener(socket);
-  return { listener, close: () => { listener.destroy(); socket.disconnect(); } };
+  return { listener, close: () => { close(); listener.destroy(); } };
 }
 export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () => Promise<string | null>,
   onChange: (signal: { tenantId: string; conversationId: string; messageId: string; status: string; recipientStatus?: string; senderMemberId?: string; memberId?: string; memberName?: string } | { tenantId: string; kind: 'PARTICIPANTS' } | { tenantId: string; kind: 'CONVERSATIONS'; conversationId?: string; action?: 'CREATED' | 'ADD' | 'REMOVE'; memberId?: string; memberName?: string; participantRevision?: number }) => void,
   onConnect: () => void, tenantId: string,
   onPresence: (snapshot: { tenantId: string; memberIds: string[]; checkedAt: string } | null) => void) {
-  const socket = io(new URL(apiUrl).origin, {
-    autoConnect: false,
-    auth: (callback) => {
-      Promise.resolve().then(getBearerToken).then((token) => callback({ token: token ?? '' })).catch(() => callback({ token: '' }));
-    },
-  });
+  const { socket, close } = createAuthorizedSocket(apiUrl, getBearerToken);
   socket.on('inbox:changed', onChange);
   const heartbeat = () => socket.emit('inbox:presence:heartbeat', { tenantId });
   let interval: ReturnType<typeof setInterval> | undefined;
@@ -128,7 +118,30 @@ export function createNodeInboxEventListener(apiUrl: string, getBearerToken: () 
   });
   socket.on('disconnect', () => { clearInterval(interval); interval = undefined; onPresence(null); });
   socket.connect();
-  return () => { clearInterval(interval); socket.removeAllListeners(); socket.disconnect(); };
+  return () => { clearInterval(interval); close(); socket.removeAllListeners(); };
+}
+
+function createAuthorizedSocket(apiUrl: string, getBearerToken: () => Promise<string | null>) {
+  let closed = false;
+  let lastToken: string | null = null;
+  const socket = io(new URL(apiUrl).origin, {
+    autoConnect: false,
+    auth: (callback) => {
+      Promise.resolve().then(getBearerToken).then((token) => {
+        if (closed) return callback({ token: '' });
+        lastToken = token;
+        callback({ token: token ?? '' });
+      }).catch(() => callback({ token: '' }));
+    },
+  });
+  socket.on('disconnect', (reason) => {
+    if (closed || reason !== 'io server disconnect') return;
+    const disconnectedToken = lastToken;
+    Promise.resolve().then(getBearerToken).then((token) => {
+      if (!closed && token && token !== disconnectedToken) socket.connect();
+    }).catch(() => undefined);
+  });
+  return { socket, close: () => { closed = true; socket.disconnect(); } };
 }
 export { createOrganizationKeys } from './organization-keys.js';
 export type { EditRecoveryRecord, EditRecoveryStore } from '@safetech/inheriti-client-sdk/node-base';

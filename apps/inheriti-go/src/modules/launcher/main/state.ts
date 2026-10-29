@@ -1,6 +1,5 @@
 import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
 import type { InternalBuild, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
-import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
 import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
 import { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
@@ -67,17 +66,19 @@ export class TraySession {
     const apiUrl = deployment === 'local' ? localOverrides?.apiUrl || config.apiUrl : config.apiUrl;
     const issuer = deployment === 'local' ? localOverrides?.issuer || config.issuer : config.issuer;
     this.auth = new TrayAuthRuntime(deployment, apiUrl, issuer, config.environment);
-    this.organizationKeyVault = new OrganizationKeyVault(deployment, () => this.auth.getAccessToken(), issuer);
+    this.organizationKeyVault = new OrganizationKeyVault(deployment, async () => (await this.auth.sessions.load())?.principal, issuer);
     this.organizationKeys = createOrganizationKeys({ apiUrl, environment: config.environment, getBearerToken: () => this.auth.getAccessToken(),
       keyVault: this.organizationKeyVault });
     this.inbox = new TrayInbox(apiUrl, config.environment, () => this.auth.getAccessToken(),
+      async () => (await this.auth.sessions.load())?.principal,
       (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), () => {
         if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
         return this.organization.selectedId;
       }, (signal) => this.inboxPublisher?.(signal), () => this.inboxStatePublisher?.());
     this.proDevice = createTraySafeKeyPro(deployment, this.custodianPrompt);
     this.quickPlans = new TrayQuickPlans(apiUrl, config.environment, () => this.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession));
-    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.auth.getAccessToken(), (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
+    this.planEdit = new TrayPlanEdit(apiUrl, config.environment, () => this.auth.getAccessToken(),
+      async () => (await this.auth.sessions.load())?.principal, (id, signal, onRelaySession) => this.organizationKeys.resolve(id, signal, onRelaySession), {
       selectCustodianDevice: () => this.custodianPrompt.choose(!!this.proDevice),
       proDevice: this.proDevice,
     });
@@ -224,7 +225,7 @@ export class TraySession {
       onChange();
       await this.auth.sessions.save(session);
       committed = true;
-      this.accountName = accountNameFromIdToken(session?.idToken);
+      this.accountName = session.principal.subject;
       await this.discover(authorization.signal);
       await this.refreshAccountSummaries();
     } catch (error) {
@@ -276,7 +277,7 @@ export class TraySession {
         if (revision !== this.authenticationRevision || core !== this.auth.core) return;
         const saved = await this.auth.sessions.load();
         if (revision !== this.authenticationRevision || core !== this.auth.core) return;
-        this.accountName = accountNameFromIdToken(saved?.idToken);
+        this.accountName = saved?.principal.subject;
         await this.discover();
         if (revision !== this.authenticationRevision || core !== this.auth.core) return;
         await this.refreshAccountSummaries();
@@ -448,7 +449,7 @@ export class TraySession {
         await this.organizationKeys.clear();
       } else {
         await this.organizationKeys.forget();
-        await this.auth.core.auth.clear();
+        try { await this.auth.core.auth.clear(); } catch {}
         await this.auth.sessions.clear();
         this.auth.renew();
       }

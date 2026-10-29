@@ -7,10 +7,16 @@ import type { CommandContext } from './context.js';
 
 export function registerAuthCommands(deps: CommandContext): vscode.Disposable[] {
   const { sessions, core, changeOrganization, refresh, render, keyOwner, revision } = deps;
-  let pendingCallback: ((uri: string) => void) | undefined;
+  let pendingCallback: ((uri: string | undefined) => void) | undefined;
+  let transition: Promise<void> = Promise.resolve();
+  const serialize = (operation: () => Promise<void>): Promise<void> => {
+    const next = transition.then(operation);
+    transition = next.catch(() => undefined);
+    return next;
+  };
   return [
     vscode.window.registerUriHandler({ handleUri: (uri) => pendingCallback?.(uri.toString(true)) }),
-    vscode.commands.registerCommand('inheriti.signIn', async () => {
+    vscode.commands.registerCommand('inheriti.signIn', () => serialize(async () => {
       const started = revision();
       try {
         await vscode.window.withProgress(
@@ -35,16 +41,26 @@ export function registerAuthCommands(deps: CommandContext): vscode.Disposable[] 
       }
       await changeOrganization();
       await refresh();
-    }),
-    vscode.commands.registerCommand('inheriti.signOut', async () => {
+    })),
+    vscode.commands.registerCommand('inheriti.signOut', () => {
+      pendingCallback?.(undefined);
+      return serialize(async () => {
+      let revocationFailed = false;
       try {
         await core(false).auth.clear();
+      } catch {
+        revocationFailed = true;
       } finally {
         await sessions.clear();
         await changeOrganization();
         render({ kind: 'SIGNED_OUT' });
       }
+      if (revocationFailed) {
+        await vscode.window.showWarningMessage('Signed out locally. Server session revocation could not be confirmed.');
+        return;
+      }
       await vscode.window.showInformationMessage('Signed out of Inheriti.');
+      });
     }),
   ];
 }

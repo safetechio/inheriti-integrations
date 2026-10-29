@@ -1,5 +1,4 @@
 import type { OperatorSession, createOrganizationKeys } from '@safetech/inheriti-elements-core/node';
-import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import type { TrayInbox } from '../../inbox/main/inbox.js';
 import type { CustodianPrompt } from '../../quick-plan/main/custodian-prompt.js';
 import type { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
@@ -65,7 +64,7 @@ export class TrayAccountSwitcher {
       if (session) await this.auth.enroll(session);
       await this.auth.activate(subject);
       if (!await this.auth.getAccessToken()) throw new Error('reauthentication_required');
-      const name = accountNameFromIdToken((await this.auth.sessions.load())?.idToken);
+      const name = (await this.auth.sessions.load())?.principal.subject;
       await this.organization.discover(undefined, (message) => onReady(name, message));
       await this.refresh(true);
     } finally {

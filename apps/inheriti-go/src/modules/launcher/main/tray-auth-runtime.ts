@@ -18,7 +18,7 @@ export class TrayAuthRuntime {
       audience: 'inheriti-integrations-api',
       environment,
       redirectUri: 'http://127.0.0.1/oauth/callback',
-      scopes: ['openid', 'profile', 'offline_access'],
+      scopes: ['openid', 'profile'],
     };
     this.store = new ProtectedOperatorSessionStore(deployment, issuer);
     this.activeCore = this.createCore();
@@ -88,8 +88,17 @@ export class TrayAuthRuntime {
 
   async clearAll(additionalScopes: string[]): Promise<void> {
     this.renewIfRetired();
-    await this.store.clearAll(additionalScopes);
-    this.renew();
+    const sessions = await this.store.allSessions();
+    try {
+      for (const session of sessions) {
+        const store = new MemoryOperatorSessionStore();
+        await store.save(session);
+        try { await this.createCore(store).auth.clear(); } catch {}
+      }
+    } finally {
+      await this.store.clearAll(additionalScopes);
+      this.renew();
+    }
   }
 
   async activate(subject: string): Promise<void> {
@@ -100,7 +109,7 @@ export class TrayAuthRuntime {
   }
 
   async authorize(openBrowser: (url: string) => Promise<void>, signal: AbortSignal, core = this.activeCore): Promise<OperatorSession> {
-    this.configuration.scopes = ['openid', 'profile', 'offline_access'];
+    this.configuration.scopes = ['openid', 'profile'];
     const attempt = async () => {
       const callbackUrl = await waitForCallback(async (redirectUri) => {
         if (this.pendingAuthorization) await untilCanceled(this.pendingAuthorization.catch(() => undefined), signal);
@@ -114,12 +123,7 @@ export class TrayAuthRuntime {
       }, openBrowser, signal);
       return core.auth.completeAuthorizationCode(callbackUrl) as Promise<OperatorSession>;
     };
-    try { return await attempt(); }
-    catch (error) {
-      if (!(error instanceof Error) || (error.message !== 'invalid_scope' && !('code' in error && error.code === 'invalid_scope'))) throw error;
-      this.configuration.scopes = ['openid', 'profile'];
-      return attempt();
-    }
+    return attempt();
   }
 
   private createCore(sessions: OperatorSessionStore = this.store): NodeIntegrationCore {

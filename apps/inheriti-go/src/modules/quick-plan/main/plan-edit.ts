@@ -63,7 +63,9 @@ export class TrayPlanEdit {
   private accessAbort: AbortController | undefined;
   private accessPromise: Promise<void> | undefined;
 
-  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly getAccessToken: () => Promise<string | undefined>, private readonly acquireKey?: (organizationId: string, signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly custodian?: Pick<Parameters<typeof createPlanEditOperations>[0], 'selectCustodianDevice' | 'proDevice'>) {}
+  constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE', private readonly getAccessToken: () => Promise<string | undefined>,
+    private readonly getPrincipal: () => Promise<{ issuer: string; subject: string } | undefined>,
+    private readonly acquireKey?: (organizationId: string, signal?: AbortSignal, onRelaySession?: () => void) => Promise<string>, private readonly custodian?: Pick<Parameters<typeof createPlanEditOperations>[0], 'selectCustodianDevice' | 'proDevice'>) {}
 
   state(): PlanEditState {
     let available = false;
@@ -525,11 +527,8 @@ export class TrayPlanEdit {
   }
 
   private async actor(): Promise<string> {
-    const token = await this.getAccessToken();
-    const segment = token?.split('.')[1];
-    if (!segment) throw new Error('reauthentication_required');
-    const claims: unknown = JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
-    if (!claims || typeof claims !== 'object' || !('sub' in claims) || typeof claims.sub !== 'string' || !claims.sub) throw new Error('reauthentication_required');
-    return claims.sub;
+    const principal = await this.getPrincipal();
+    if (!principal || typeof principal.subject !== 'string' || !principal.subject) throw new Error('reauthentication_required');
+    return principal.subject;
   }
 }

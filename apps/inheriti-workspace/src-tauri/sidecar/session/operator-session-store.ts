@@ -21,6 +21,7 @@ export class WorkspaceOperatorSessionStore implements OperatorSessionStore {
     try { stored = JSON.parse(value); } catch { stored = undefined; }
     if (!this.valid(stored)) {
       await this.clear();
+      await this.markSignedOut();
       return undefined;
     }
     this.memory = stored;
@@ -69,10 +70,12 @@ export class WorkspaceOperatorSessionStore implements OperatorSessionStore {
   private valid(value: unknown): value is OperatorSession {
     if (!value || typeof value !== 'object') return false;
     const session = value as Partial<OperatorSession>;
-    return session.principal?.issuer === this.issuer && typeof session.principal.subject === 'string' && !!session.principal.subject &&
+    return session.kind === 'business' && session.principal?.issuer === this.issuer && typeof session.principal.subject === 'string' && !!session.principal.subject &&
+      typeof session.familyId === 'string' && !!session.familyId &&
       typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&
       typeof session.expiresAt === 'number' && Number.isFinite(session.expiresAt) &&
-      (session.refreshToken === undefined || typeof session.refreshToken === 'string') &&
-      (session.refreshExpiresAt === undefined || typeof session.refreshExpiresAt === 'number');
+      typeof session.sessionExpiresAt === 'number' && Number.isFinite(session.sessionExpiresAt) &&
+      typeof session.refreshToken === 'string' && !!session.refreshToken &&
+      !('idToken' in session) && !('refreshExpiresAt' in session);
   }
 }
