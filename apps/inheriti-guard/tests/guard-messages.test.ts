@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isGuardContentRequest, isGuardRequest } from '../src/shared/messages.js';
+import { isGuardContentRequest, isGuardRequest, isSidePanelRequest } from '../src/shared/messages.js';
 
 describe('Guard message boundary', () => {
   it('accepts the exact typed UI requests', () => {
@@ -22,5 +22,18 @@ describe('Guard message boundary', () => {
     expect(isGuardContentRequest({ type: 'guard-content:csp-violation' })).toBe(true);
     expect(isGuardContentRequest({ type: 'guard-content:csp-violation', blockedURI: 'https://secret.example?q=token#hash' })).toBe(false);
     expect(isGuardContentRequest({ type: 'guard-content:blocked', kind: 'navigation-blocked' })).toBe(false);
+  });
+
+  it('accepts only bounded account actions from the side panel', () => {
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: 'profile-a' })).toBe(true);
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: 'profile-a', expectedGeneration: 2 })).toBe(true);
+    expect(isSidePanelRequest({ type: 'remove-account', accountId: 'profile-a' })).toBe(true);
+    expect(isSidePanelRequest({ type: 'select-account-organization', accountId: 'profile-b', organizationId: 'org-1' })).toBe(true);
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: '', token: 'secret' })).toBe(false);
+    expect(isSidePanelRequest({ type: 'remove-account', accountId: 'profile-a', token: 'secret' })).toBe(false);
+    expect(isSidePanelRequest({ type: 'select-account-organization', accountId: 'profile-b', organizationId: '' })).toBe(false);
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: 'a'.repeat(513) })).toBe(false);
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: 'profile-a', expectedGeneration: -1 })).toBe(false);
+    expect(isSidePanelRequest({ type: 'switch-account', accountId: 'profile-a', expectedGeneration: '2' })).toBe(false);
   });
 });

@@ -31,3 +31,19 @@ export async function signIn(auth: OperatorAuthFacade, signal?: AbortSignal): Pr
   await auth.completeAuthorizationCode(callback);
   throwIfCanceled(signal);
 }
+
+export async function chooseAnotherSafeIdAccount(issuer: string): Promise<void> {
+  const url = new URL(issuer);
+  if (!url.pathname.endsWith('/')) url.pathname += '/';
+  const cookies = await chrome.cookies.getAll({ url: url.toString() });
+  const sessionCookies = new Set(['KEYCLOAK_IDENTITY', 'KEYCLOAK_SESSION', 'AUTH_SESSION_ID', 'KC_AUTH_SESSION_HASH', 'KC_RESTART']);
+  for (const cookie of cookies) {
+    if (cookie.path !== url.pathname || !sessionCookies.has(cookie.name)) continue;
+    const cookieUrl = new URL(cookie.path, url.origin);
+    if (cookie.secure) cookieUrl.protocol = 'https:';
+    const removed = await chrome.cookies.remove({
+      url: cookieUrl.toString(), name: cookie.name, storeId: cookie.storeId,
+    });
+    if (removed === null) throw new Error('safeid_account_choice_unavailable');
+  }
+}

@@ -2,11 +2,14 @@ import { useTheme } from '@modules/_shared/ui/theme/AppTheme';
 import { ActivityIndicator, Alert, Box, Text } from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
+import type { SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
 
 export interface SignInGateProps {
   status: 'checking' | 'signed-out' | 'signed-in' | 'error';
   message: string | null;
   loginInProgress: boolean;
+  accounts: SavedAccount[];
+  onActivateAccount: (key: string) => Promise<void>;
   onLogin: () => Promise<void>;
   onCancel: () => Promise<void>;
 }
@@ -15,6 +18,8 @@ export function SignInGate({
   status,
   message,
   loginInProgress,
+  accounts,
+  onActivateAccount,
   onLogin,
   onCancel,
 }: SignInGateProps) {
@@ -69,6 +74,15 @@ export function SignInGate({
           </Box>
         ) : null}
         {message ? <Alert>{message}</Alert> : null}
+        {status !== 'checking' && accounts.map((account, index) => (
+          <Button
+            key={account.key}
+            title={`Continue with saved account${accounts.length > 1 ? ` ${index + 1}` : ''}`}
+            variant="outlined"
+            block
+            onPress={() => { void onActivateAccount(account.key); }}
+          />
+        ))}
         {status !== 'checking' ? (
           <Button
             title="Sign in with SafeID"

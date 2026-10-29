@@ -61,8 +61,16 @@
           </details>
           <p id="organization-status" role="status"></p>
         </div>
-        <button class="header-sign-out" id="forget-master-key" type="button" hidden></button>
-        <button class="header-sign-out" id="sign-out" type="button" hidden>Sign out</button>
+        <details class="account-menu">
+          <summary class="account-trigger" aria-label="Choose SafeID account"><span class="account-trigger-avatar" aria-hidden="true"></span></summary>
+          <div class="account-popover">
+            <ul id="account-list" class="account-list" aria-label="Saved SafeID accounts"></ul>
+            <button class="header-sign-out account-add" id="add-account" type="button"><span aria-hidden="true">＋</span> Add another account</button>
+            <p id="account-status" class="account-status" role="status"></p>
+            <button class="header-sign-out account-logoff" id="sign-out" type="button" hidden>Log out</button>
+            <button class="header-sign-out account-logoff" id="sign-out-all" type="button">Log out of all accounts</button>
+          </div>
+        </details>
       </section>
       <div class="panel-tabs plan-tabs" role="tablist" aria-label="Plan Access views">
         <button id="site-tab" role="tab" aria-selected="true" aria-controls="site-panel" tabindex="0" type="button">This site</button>
@@ -137,6 +145,7 @@
           <button class="icon-button" id="reload-plans" type="button" title="Refresh plans" aria-label="Refresh plans">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6" /></svg>
           </button>
+          <button class="header-sign-out key-clear" id="forget-master-key" type="button" hidden></button>
         </div>
         <div class="resume-reveal" id="resume-reveal" hidden>
           <p id="resume-reveal-message" aria-live="polite"></p>
@@ -155,7 +164,7 @@
               <span class="section-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-5 5v3H5v10h14V11h-2V8a5 5 0 0 0-5-5Zm-3 8V8a3 3 0 0 1 6 0v3" /></svg>
               </span>
-              <div><h2 id="access-title">Access plan</h2><p class="access-plan" id="access-plan"></p></div>
+              <div><h2 id="access-title">Access plan</h2><p class="access-plan" id="access-plan"></p><p class="access-account" id="access-account"></p></div>
             </div>
             <button class="modal-close" id="close-access" type="button" aria-label="Close Access">×</button>
           </div>

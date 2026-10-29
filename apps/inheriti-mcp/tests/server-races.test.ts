@@ -134,6 +134,34 @@ it('does not clear a newer login after an older admission check rejects', async 
   expect(newClear).not.toHaveBeenCalled();
 });
 
+it('revokes the retired Business session while a new login remains isolated', async () => {
+  const tools = new MetadataTools() as any;
+  const revoke = deferred<void>();
+  const oldClear = vi.fn(() => revoke.promise);
+  const oldStoreClear = vi.fn();
+  tools.core = { auth: { clear: oldClear } };
+  tools.sessions = { clear: oldStoreClear };
+  const signingOut = tools.logout();
+  await vi.waitFor(() => expect(oldClear).toHaveBeenCalledOnce());
+  const newClear = vi.fn();
+  tools.core = { auth: { clear: newClear } };
+  revoke.resolve();
+  await expect(signingOut).resolves.toMatchObject({ signedOut: true });
+  expect(oldStoreClear).toHaveBeenCalledOnce();
+  expect(newClear).not.toHaveBeenCalled();
+});
+
+it('clears MCP memory when Business revocation fails', async () => {
+  const tools = new MetadataTools() as any;
+  const clear = vi.fn().mockRejectedValue(new Error('network unavailable'));
+  const local = vi.fn();
+  tools.core = { auth: { clear } };
+  tools.sessions = { clear: local };
+  await expect(tools.logout()).resolves.toMatchObject({ signedOut: true });
+  expect(clear).toHaveBeenCalledOnce();
+  expect(local).toHaveBeenCalledOnce();
+});
+
 it('starts a fresh browser login after successful login and later session loss', async () => {
   const tools = new MetadataTools() as any;
   tools.silentAttempted = true;

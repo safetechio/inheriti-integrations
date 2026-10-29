@@ -4,7 +4,9 @@ import { registerWindowEvents } from './window.js';
 
 let window: BrowserWindow | undefined;
 let quitting = false;
-export type TrayAction = string | { kind: 'OPEN_INBOX'; organizationId: string; conversationId?: string };
+const regularWindowHeight = process.platform === 'linux' ? 756 : 676;
+let regularWindowBounds: { width: number; height: number } | undefined;
+export type TrayAction = string | { kind: 'OPEN_INBOX'; organizationId: string; conversationId?: string; accountSubject?: string };
 declare const __INHERITI_DEPLOYMENT__: string | undefined;
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
 const displayName = app.getName();
@@ -17,18 +19,29 @@ export function prepareToQuit(): void {
   quitting = true;
 }
 
+export function setSignOutConfirmationSize(compact: boolean): void {
+  if (!window || window.isDestroyed()) return;
+  const bounds = window.getBounds();
+  const targetHeight = compact ? 286 : regularWindowBounds?.height ?? bounds.height;
+  if (bounds.height === targetHeight) return;
+  window.setResizable(true);
+  window.setSize(bounds.width, targetHeight);
+  window.setResizable(false);
+}
+
 export function showLauncher(action?: TrayAction): void {
   if (!app.isReady()) return;
   if (action && typeof action !== 'string' && (action.kind !== 'OPEN_INBOX' ||
     typeof action.organizationId !== 'string' || !action.organizationId || action.organizationId.length > 200 ||
-    (action.conversationId !== undefined && (typeof action.conversationId !== 'string' || !action.conversationId || action.conversationId.length > 200)))) return;
+    (action.conversationId !== undefined && (typeof action.conversationId !== 'string' || !action.conversationId || action.conversationId.length > 200)) ||
+    (action.accountSubject !== undefined && (typeof action.accountSubject !== 'string' || !action.accountSubject || action.accountSubject.length > 500)))) return;
   const creating = !window || window.isDestroyed();
   if (creating) {
     const linuxWindow = process.platform === 'linux';
     if (linuxWindow) app.setName(`inheriti-go-${deployment}`);
     window = new BrowserWindow({
       width: linuxWindow ? 448 : 404,
-      height: linuxWindow ? 756 : 676,
+      height: regularWindowHeight,
       useContentSize: !linuxWindow,
       show: false,
       resizable: false,
@@ -43,6 +56,7 @@ export function showLauncher(action?: TrayAction): void {
         sandbox: true,
       },
     });
+    regularWindowBounds = window.getBounds();
     window.setMenu(null);
     registerWindowEvents(window, action, () => quitting);
     void window.loadFile(join(import.meta.dirname, 'launcher.html'));

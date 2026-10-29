@@ -157,7 +157,7 @@ it('ignores an unread response that finishes after sign-out', async () => {
 it('refreshes the dot after the read IPC callback', async () => {
   let unreadCount = 1;
   const session = { setPublisher: vi.fn(), setInboxPublisher: vi.fn(), setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }] }),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }] }),
     listOrganizationInboxConversations: vi.fn(async () => ({ items: [{ unreadCount }], total: 1 })) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(mock.setTrayUnread).toHaveBeenLastCalledWith(true));
@@ -171,7 +171,7 @@ it('shows an OS notification for an unread message while the tray is visible', a
   const setInboxPublisher = vi.fn();
   const listInboxMessages = vi.fn(async () => ({ items: [{ id: 'message-1', senderMemberId: 'other', recipientStatus: 'UNREAD' }] }));
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'), listInboxMessages };
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'), listInboxMessages };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
   const publish = setInboxPublisher.mock.calls[0]![0];
@@ -189,7 +189,7 @@ it('notifies for an unread message in another authorized organization without ch
     items: [{ id: 'conversation-b', unreadCount: id === 'org-b' ? 1 : 0 }], total: 1,
   }));
   const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
     listOrganizationInboxConversations, listInboxMessages: vi.fn(), registeredInboxMemberId: vi.fn() };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
@@ -201,7 +201,7 @@ it('notifies for an unread message in another authorized organization without ch
   expect(session.registeredInboxMemberId).not.toHaveBeenCalled();
   expect(mock.send).not.toHaveBeenCalledWith('tray:inbox-changed', expect.anything());
   mock.notifications[0]!.emit('click');
-  expect(mock.showLauncher).toHaveBeenLastCalledWith({ kind: 'OPEN_INBOX', organizationId: 'org-b', conversationId: 'conversation-b' });
+  expect(mock.showLauncher).toHaveBeenLastCalledWith({ kind: 'OPEN_INBOX', organizationId: 'org-b', conversationId: 'conversation-b', accountSubject: 'subject-a' });
 });
 
 it('drops an old account’s delayed unread response after another account signs in', async () => {
@@ -211,7 +211,7 @@ it('drops an old account’s delayed unread response after another account signs
   let finish!: (page: { items: { id: string; unreadCount: number }[]; total: number }) => void;
   const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
     inboxSessionRevision: () => revision,
-    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
     listOrganizationInboxConversations: vi.fn((id: string) => id === 'org-b'
       ? new Promise<{ items: { id: string; unreadCount: number }[]; total: number }>((resolve) => { finish = resolve; })
       : Promise.resolve({ items: [], total: 0 })) };
@@ -226,6 +226,49 @@ it('drops an old account’s delayed unread response after another account signs
   expect(mock.showNotification).not.toHaveBeenCalled();
 });
 
+it('closes old account notices and ignores their clicks after activation', async () => {
+  const setInboxPublisher = vi.fn();
+  const setPublisher = vi.fn();
+  let revision = 1;
+  const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    inboxSessionRevision: () => revision,
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }] }),
+    registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    listInboxMessages: vi.fn(async () => ({ items: [{ id: 'message-a', senderMemberId: 'other', recipientStatus: 'UNREAD' }] })),
+    listOrganizationInboxConversations: vi.fn(async () => ({ items: [], total: 0 })) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ conversationId: 'conversation-a', messageId: 'message-a', status: 'AVAILABLE' });
+  await vi.waitFor(() => expect(mock.showNotification).toHaveBeenCalledOnce());
+  revision = 2;
+  setPublisher.mock.calls[0]![0]();
+  expect(mock.closeNotification).toHaveBeenCalledOnce();
+  expect(mock.setTrayUnread).toHaveBeenCalledWith(false);
+  mock.notifications[0]!.emit('click');
+  expect(mock.showLauncher).not.toHaveBeenCalledWith(expect.objectContaining({ organizationId: 'org-a' }));
+});
+
+it('does not notify from a delayed old account event after activation', async () => {
+  const setInboxPublisher = vi.fn();
+  const setPublisher = vi.fn();
+  let revision = 1;
+  let finishMember!: (id: string) => void;
+  const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
+    inboxSessionRevision: () => revision,
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }] }),
+    registeredInboxMemberId: vi.fn(() => new Promise<string>((resolve) => { finishMember = resolve; })) };
+  registerAppEvents(session as never, undefined, 'dev');
+  await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
+  setInboxPublisher.mock.calls[0]![0]({ kind: 'CONVERSATIONS', tenantId: 'org-a', conversationId: 'conversation-a',
+    action: 'ADD', memberId: 'member-b', memberName: 'Ana', participantRevision: 1 });
+  await vi.waitFor(() => expect(finishMember).toBeTypeOf('function'));
+  revision = 2;
+  setPublisher.mock.calls[0]![0]();
+  finishMember('member-a');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(mock.showNotification).not.toHaveBeenCalled();
+});
+
 it('keeps a pending other-organization notification through a routine selection and membership refresh', async () => {
   const setInboxPublisher = vi.fn();
   const setPublisher = vi.fn();
@@ -233,7 +276,7 @@ it('keeps a pending other-organization notification through a routine selection 
   let finish!: (page: { items: { id: string; unreadCount: number }[]; total: number }) => void;
   const session = { setPublisher, setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
     inboxSessionRevision: () => 1,
-    state: () => ({ status: 'signed-in', selectedId, organizations: [{ id: 'org-a' }, { id: 'org-b' }, { id: 'org-c' }] }),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId, organizations: [{ id: 'org-a' }, { id: 'org-b' }, { id: 'org-c' }] }),
     listOrganizationInboxConversations: vi.fn((id: string) => id === 'org-b'
       ? new Promise<{ items: { id: string; unreadCount: number }[]; total: number }>((resolve) => { finish = resolve; })
       : Promise.resolve({ items: [], total: 0 })) };
@@ -252,7 +295,7 @@ it('retries an unconfirmed other-organization message and ignores its conversati
   const setInboxPublisher = vi.fn();
   let unreadCount = 0;
   const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ status: 'signed-in', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a', organizations: [{ id: 'org-a' }, { id: 'org-b' }] }),
     listOrganizationInboxConversations: vi.fn(async () => ({ items: [{ id: 'conversation-b', unreadCount }], total: 1 })) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
@@ -273,7 +316,7 @@ it('opens the notified conversation and dismisses its notice when read', async (
   let unreadCount = 1;
   const setInboxPublisher = vi.fn();
   const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ status: 'signed-in', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
     listInboxConversations: vi.fn(async () => ({ items: [{ id: 'conversation-1', unreadCount }], total: 1 })),
     listInboxMessages: vi.fn(async () => ({ items: [
       { id: 'message-1', senderMemberId: 'other', recipientStatus: 'UNREAD' },
@@ -285,7 +328,7 @@ it('opens the notified conversation and dismisses its notice when read', async (
   publish({ conversationId: 'conversation-1', messageId: 'message-1', status: 'AVAILABLE' });
   await vi.waitFor(() => expect(mock.notifications).toHaveLength(1));
   mock.notifications[0]!.emit('click');
-  expect(mock.showLauncher).toHaveBeenLastCalledWith({ kind: 'OPEN_INBOX', organizationId: 'org-a', conversationId: 'conversation-1' });
+  expect(mock.showLauncher).toHaveBeenLastCalledWith({ kind: 'OPEN_INBOX', organizationId: 'org-a', conversationId: 'conversation-1', accountSubject: 'subject-a' });
   expect(mock.closeNotification).toHaveBeenCalledOnce();
 
   publish({ conversationId: 'conversation-1', messageId: 'message-2', status: 'AVAILABLE' });
@@ -300,7 +343,7 @@ it('dismisses a delayed message notice if the conversation was already read', as
   let finishMessages!: (value: { items: { id: string; senderMemberId: string; recipientStatus: string }[] }) => void;
   const setInboxPublisher = vi.fn();
   const session = { setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ status: 'signed-in', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
     listInboxConversations: vi.fn(async () => ({ items: [{ id: 'conversation-1', unreadCount }], total: 1 })),
     listInboxMessages: vi.fn(() => new Promise((resolve) => { finishMessages = resolve; })) };
   registerAppEvents(session as never, undefined, 'dev');
@@ -319,7 +362,7 @@ it('notifies for an unread normal parent without opening its ciphertext', async 
   const listInboxParentMetadata = vi.fn(async () => ({ items: [{ parentId: 'parent-1', senderMemberId: 'other', sequence: 3 }],
     readThroughSequence: 1 }));
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
     listInboxMessages: vi.fn(async () => ({ items: [] })), listInboxParentMetadata };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
@@ -335,7 +378,7 @@ it('finds normal-only messages after the mixed-parent metadata lookup misses', a
   const listNormalInboxMetadata = vi.fn(async () => ({ items: [{ parentId: 'normal-1', senderMemberId: 'other', sequence: 3 }],
     readThroughSequence: 1 }));
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
     listInboxMessages: vi.fn(async () => ({ items: [] })), listInboxParentMetadata, listNormalInboxMetadata };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
@@ -348,7 +391,7 @@ it('finds normal-only messages after the mixed-parent metadata lookup misses', a
 it('notifies for a remote open receipt and a failed send without exposing content', async () => {
   const setInboxPublisher = vi.fn();
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a') };
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a') };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
   const publish = setInboxPublisher.mock.calls[0]![0];
@@ -364,7 +407,7 @@ it('notifies for a remote open receipt and a failed send without exposing conten
 it('notifies once for detailed conversation membership events only', async () => {
   const setInboxPublisher = vi.fn();
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a') };
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a') };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
   const publish = setInboxPublisher.mock.calls[0]![0];
@@ -384,7 +427,7 @@ it('retries a conversation notification after member identity lookup fails', asy
   const setInboxPublisher = vi.fn();
   const registeredInboxMemberId = vi.fn().mockRejectedValueOnce(new Error('auth unavailable')).mockResolvedValue('member-a');
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId };
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());
   const publish = setInboxPublisher.mock.calls[0]![0];
@@ -399,7 +442,7 @@ it('retries a conversation notification after member identity lookup fails', asy
 it('does not notify for a message sent by the signed-in member', async () => {
   const setInboxPublisher = vi.fn();
   const session = { clearRevealed: vi.fn(), setPublisher: vi.fn(), setInboxPublisher, setInboxStatePublisher: vi.fn(), restore: vi.fn(),
-    state: () => ({ selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
+    state: () => ({ status: 'signed-in', activeSubject: 'subject-a', selectedId: 'org-a' }), registeredInboxMemberId: vi.fn(async () => 'member-a'),
     listInboxMessages: vi.fn(async () => ({ items: [{ id: 'message-1', senderMemberId: 'member-a', recipientStatus: 'UNREAD' }] })) };
   registerAppEvents(session as never, undefined, 'dev');
   await vi.waitFor(() => expect(setInboxPublisher).toHaveBeenCalledOnce());

@@ -31,7 +31,7 @@ export function registerTrayEvents(appUrl?: string, deployment = 'prod', onCheck
     { type: 'separator' },
     { label: messages.openLauncher, click: () => showLauncher() },
     { type: 'separator' },
-    ...(businessDeployment(deployment) && HOST_FEATURE_FLAGS[businessDeployment(deployment)!].planCreation ? [
+    ...(deployment === 'local' || (businessDeployment(deployment) && HOST_FEATURE_FLAGS[businessDeployment(deployment)!].planCreation) ? [
       { label: messages.createPrivatePlanMenu, click: () => showLauncher(messages.savePrivately) },
       { label: messages.createTeamPlanMenu, click: () => showLauncher(messages.shareWithTeam) },
       { label: messages.editPlanAssetMenu, click: () => showLauncher(messages.addOrEditAsset) },

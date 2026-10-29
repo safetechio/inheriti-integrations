@@ -170,6 +170,9 @@ describe('ImporterToolRepo', () => {
     });
 
     expect(result).toEqual({ id: sentBody.id, expiresAt: '2026-01-01T00:00:00.000Z' });
+    expect(transport.request).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/integrations/v1/organizations/org-1/importer-tool/staged-items',
+    }));
     expect(sentBody.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );

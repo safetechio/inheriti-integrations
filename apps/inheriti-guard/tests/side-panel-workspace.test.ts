@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const main = readFileSync(new URL('../src/side-panel/main.ts', import.meta.url), 'utf8');
+const main = ['main.ts', 'main/accounts.ts', 'main/dom.ts', 'main/overlay.ts', 'main/plans.ts', 'main/workspace.ts']
+  .map((file) => readFileSync(new URL(`../src/side-panel/${file}`, import.meta.url), 'utf8')).join('\n');
 const html = readFileSync(new URL('../src/side-panel/index.html', import.meta.url), 'utf8');
 
 describe('side-panel access workspace', () => {
@@ -97,5 +98,41 @@ describe('side-panel access workspace', () => {
     expect(html).toContain('id="autofill-panel"');
     expect(html).toContain('id="fields-panel"');
     expect(main).toContain("['ArrowLeft', 'ArrowRight', 'Home', 'End']");
+  });
+
+  it('keeps account destinations grouped, confirmed, and free of credential markup', () => {
+    expect(html).toContain('id="account-list"');
+    expect(html).toContain('id="add-account"');
+    expect(html).toContain('aria-describedby="account-add-note"');
+    expect(html).toContain('even if canceled. Other apps may ask you to sign in again');
+    expect(html).toContain('id="sign-out-all"');
+    expect(html).toContain('id="access-account"');
+    expect(main).toContain("type: 'switch-account'");
+    expect(main).toContain("type: 'select-account-organization'");
+    expect(main).toContain('window.confirm(confirmation)');
+    expect(main).toContain("el('strong', 'account-label', account.label)");
+    expect(main).toContain('`Switch to ${account.label} and ${name}?`');
+    expect(main).not.toContain('innerHTML');
+  });
+
+  it('masks protected content during Add Account and avoids promising an expired account was selected', () => {
+    expect(main).toContain("addAccount.addEventListener('click', () => {");
+    expect(main).toContain("renderPanel({ kind: 'SIGNING_IN' });\n  await startAccountAddition");
+    expect(main).toContain("() => requestState('sign-in', true)");
+    expect(main).toContain('Use Add account to sign in again as ${account.label}.');
+    expect(main).toContain('const needsSignIn = account.needsSignIn === true;');
+    expect(main).not.toContain('account.expiresAt <= Date.now()');
+    expect(main).not.toContain("if (needsSignIn) { void requestState('sign-in')");
+  });
+
+  it('masks and reconfirms when another panel changes the active profile', () => {
+    for (const key of ['inheriti.activeOperatorProfile', 'inheriti.operatorSessionGeneration']) {
+      expect(main).toContain(key);
+    }
+    expect(main).not.toContain("'inheriti.operatorProfiles'");
+    expect(main).toContain("renderPanel({ kind: 'LOADING' });\n    planAccessPanel.setAttribute('aria-busy', 'true');\n    void reconfirmAccountContext();");
+    expect(main).toContain("confirmedPanelState(() => send({ type: 'load-plans' })");
+    expect(main).toContain('expectedGeneration: panelGeneration');
+    expect(main).toContain('startedRevision !== contextRevision');
   });
 });

@@ -4,7 +4,7 @@ import InMemoryOrganizationKeyVault from '@modules/organization/infrastructure/i
 
 const useGetRawSelectedOrganizationId = vi.fn();
 const useSwitchToOrganization = vi.fn();
-const useOrgSubscriptionStatus = vi.fn();
+const useGetSelectedOrganization = vi.fn();
 const useSelectedOrganizationMemberCapabilities = vi.fn();
 const useAuthenticatedCookieSession = vi.fn();
 const useService = vi.fn();
@@ -18,7 +18,7 @@ vi.mock('@modules/organization/infrastructure/importer-api', () => ({
   useGetSelectedOrganizationId: () => useGetRawSelectedOrganizationId()?.data ?? null,
   useGetRawSelectedOrganizationId: (...args: unknown[]) => useGetRawSelectedOrganizationId(...args),
   useSwitchToOrganization: (...args: unknown[]) => useSwitchToOrganization(...args),
-  useOrgSubscriptionStatus: (...args: unknown[]) => useOrgSubscriptionStatus(...args),
+  useGetSelectedOrganization: (...args: unknown[]) => useGetSelectedOrganization(...args),
   useSelectedOrganizationMemberCapabilities: (...args: unknown[]) =>
     useSelectedOrganizationMemberCapabilities(...args),
 }));
@@ -53,13 +53,9 @@ describe('organization switch tenant isolation', () => {
       session: sessionIdentity,
     });
     useGetRawSelectedOrganizationId.mockReturnValue({ data: 'org-a' });
-    useOrgSubscriptionStatus.mockReturnValue({
-      isCreationBlocked: false,
-      organizationId: 'org-b',
-      loading: false,
-    });
+    useGetSelectedOrganization.mockReturnValue({ data: { id: 'org-b' }, loading: false });
     useSelectedOrganizationMemberCapabilities.mockReturnValue({
-      canStartPlanCreation: true,
+      canAccessStagedItems: true,
       loading: false,
     });
 
@@ -97,13 +93,9 @@ describe('organization switch tenant isolation', () => {
     useService.mockReturnValue(vault);
     useAuthenticatedCookieSession.mockReturnValue({ session: sessionIdentity });
     useGetRawSelectedOrganizationId.mockReturnValue({ data: 'org-a' });
-    useOrgSubscriptionStatus.mockReturnValue({
-      isCreationBlocked: false,
-      organizationId: 'org-c',
-      loading: false,
-    });
+    useGetSelectedOrganization.mockReturnValue({ data: { id: 'org-c' }, loading: false });
     useSelectedOrganizationMemberCapabilities.mockReturnValue({
-      canStartPlanCreation: true,
+      canAccessStagedItems: true,
       loading: false,
     });
     useSwitchToOrganization.mockReturnValue({

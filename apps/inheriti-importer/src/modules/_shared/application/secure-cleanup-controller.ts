@@ -19,6 +19,11 @@ class SecureCleanupController {
     const tasks = [...this.#tasks];
     await Promise.allSettled(tasks.map((task) => Promise.resolve().then(task)));
   }
+
+  async runAllStrict(): Promise<void> {
+    const tasks = [...this.#tasks];
+    await Promise.all(tasks.map((task) => Promise.resolve().then(task)));
+  }
 }
 
 export const secureCleanup = new SecureCleanupController();

@@ -2,8 +2,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const handlers = vi.hoisted(() => new Map<string, (...args: unknown[]) => unknown>());
 vi.mock('electron', () => ({ ipcMain: { handle: (name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler) } }));
+vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
+  isAvailable() { return true; }
+} }));
 
 import { registerInboxIpc } from '../src/modules/inbox/main/ipc.js';
+import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
 import type { TraySession } from '../src/modules/launcher/main/state.js';
 
 beforeEach(() => handlers.clear());
@@ -34,6 +38,20 @@ it.each([Object.assign(new Error('forbidden'), { status: 403 }), new Error('netw
     expect(session.signOut).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
   });
+
+it('keeps the current session when a canceled Inbox preparation reports late token expiry', async () => {
+  let rejectToken!: (error: Error) => void;
+  const token = new Promise<string>((_resolve, reject) => { rejectToken = reject; });
+  const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', () => token, async () => ({ issuer: 'https://issuer.test', subject: 'user-1' }));
+  const session = { prepareInbox: () => identity.prepare('org-a'), signOut: vi.fn() };
+  registerInboxIpc(session as unknown as TraySession, vi.fn());
+
+  const preparing = handlers.get('tray:inbox-prepare')!({});
+  identity.cancelPreparation();
+  rejectToken(Object.assign(new Error('operator_token_expired'), { code: 'operator_token_expired' }));
+  await expect(preparing).resolves.toEqual({ status: 'missing' });
+  expect(session.signOut).not.toHaveBeenCalled();
+});
 
 it('logs only safe file send failure metadata', async () => {
   const error = Object.assign(new Error('secret file contents'), { status: 503, code: 'secret', requestId: 'req_123', token: 'secret' });

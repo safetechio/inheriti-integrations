@@ -17,6 +17,7 @@ export interface PlanRow {
 }
 
 const MESSAGES: Readonly<Record<string, string>> = {
+  reauthentication_required: 'Session expired — sign in again',
   operator_reauthentication_required: 'Session expired — sign in again',
   plan_request_rate_limited: 'Too many requests — try again shortly',
   elements_api_unavailable: 'The plan service is unavailable — try again shortly',

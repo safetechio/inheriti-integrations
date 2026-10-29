@@ -1,4 +1,4 @@
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
+import { createNodeIntegrationCore, INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from './configuration.js';
 import { FileOperatorSessionStore } from './session-store.js';
@@ -35,7 +35,10 @@ export function createCliContext(
   organizationId?: string,
 ): CliContext {
   const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
-  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault);
+  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault, configuration.business, {
+    apiUrl: configuration.apiUrl, issuer: configuration.issuer, clientId: configuration.interactiveClientId,
+    audience: configuration.business ? 'inheriti-integrations-api' : 'inheriti-elements-api', environment: configuration.environment,
+  });
   const source = createCliMasterKeySource(configuration);
   const authConfiguration: NodeIntegrationCoreOptions['configuration'] = {
     issuer: configuration.issuer,
@@ -45,9 +48,9 @@ export function createCliContext(
     redirectUri: configuration.redirectUri,
     scopes: configuration.scopes,
   };
-  const core = createNodeIntegrationCore({
+  const options: NodeIntegrationCoreOptions = {
     apiUrl: configuration.apiUrl,
-    ...(configuration.business ? { business: true as const, ...(organizationId ? { organizationId } : {}) }
+    ...(configuration.business ? { business: true as const, businessAuthority: INTEGRATION_AUTHORITY, ...(organizationId ? { organizationId } : {}) }
       : { applicationId: configuration.applicationId! }),
     // Declared, not composed: the SDK decides between deriving and asking the device that holds the
     // key, and speaks the relay protocol. This host only says what it has.
@@ -57,7 +60,20 @@ export function createCliContext(
     liveConfirmation: configuration.environment,
     configuration: authConfiguration,
     sessions,
-  });
+  };
+  const initialCore = createNodeIntegrationCore(options);
+  const core = configuration.business ? createNodeIntegrationCore({
+    ...options,
+    auth: {
+      beginAuthorizationCode: (input) => initialCore.auth.beginAuthorizationCode(input),
+      completeAuthorizationCode: (callback) => sessions.withExclusiveAccess(() => initialCore.auth.completeAuthorizationCode(callback)),
+      beginDeviceAuthorization: () => initialCore.auth.beginDeviceAuthorization(),
+      pollDeviceAuthorization: (signal) => sessions.withExclusiveAccess(() => initialCore.auth.pollDeviceAuthorization(signal)),
+      getAccessToken: () => sessions.withExclusiveAccess(() => initialCore.auth.getAccessToken()),
+      refresh: () => sessions.withExclusiveAccess(() => initialCore.auth.refresh()),
+      clear: () => sessions.withExclusiveAccess(() => initialCore.auth.clear()),
+    },
+  }) : initialCore;
   const safeKeyPro = createCliSafeKeyPro(configuration);
   return { core, authConfiguration, sessions, keyVault, keyOwner: configuration.business ? 'Organisation' : 'Application',
     ...(safeKeyPro ? { safeKeyPro } : {}) };

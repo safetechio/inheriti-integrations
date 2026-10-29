@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setActiveOrganizationAccount } from '@modules/organization/infrastructure/selected-organization-api';
 import {
   createCoreSessionBridge,
   ImporterApiProvider,
@@ -18,7 +19,6 @@ import {
   useGetJoinedOrganizations,
   useGetMyOrganization,
   useMasterKeySession,
-  useOrgSubscriptionStatus,
 } from '@modules/organization/infrastructure/importer-api';
 import type { ElectronHttpTransport } from '@shared/infrastructure/transport/electron-http-transport';
 
@@ -50,6 +50,8 @@ function setup(
       return { status: 200, body: { result: response } };
     }),
   } as unknown as ElectronHttpTransport;
+  const authSession = vi.fn(() => responder({ method: 'GET', path: '/auth/session' }));
+  Object.assign(window, { inheriti: { auth: { session: authSession } } });
   const vault: OrganizationKeyVault = {
     get: vi.fn(async () => null),
     set: vi.fn(async () => undefined),
@@ -75,14 +77,17 @@ function setup(
       </ImporterApiProvider>
     </QueryClientProvider>
   );
-  return { transport, vault, authProvider, socket, wrapper };
+  return { transport, authSession, vault, authProvider, socket, wrapper };
 }
 
 describe('Importer API provider', () => {
   beforeEach(() => {
     localStorage.clear();
-    localStorage.setItem('selectedOrganizationId', 'org-1');
+    setActiveOrganizationAccount('account-a');
+    localStorage.setItem('selectedOrganizationId:account-a', 'org-1');
   });
+
+  afterEach(() => setActiveOrganizationAccount(null));
 
   it('joins the API tenant room for Organization Key delivery', () => {
     const { socket, wrapper } = setup(() => session);
@@ -109,9 +114,9 @@ describe('Importer API provider', () => {
     const requests: Array<{ path: string; query?: unknown }> = [];
     const { wrapper } = setup((request) => {
       requests.push(request);
-      if (request.path === '/user/session') return session;
-      if (request.path === '/user/profile') return { id: 'owner-1', email: 'me@example.com' };
-      if (request.path === '/organizations')
+      if (request.path === '/auth/session') return session;
+      if (request.path === '/integrations/v1/importer/profile') return { id: 'owner-1', email: 'me@example.com' };
+      if (request.path === '/integrations/v1/importer/organizations')
         return {
           items: [
             { id: 'owned', name: 'Owned', userId: 'owner-1' },
@@ -160,8 +165,8 @@ describe('Importer API provider', () => {
     const requests: Array<{ path: string; query?: unknown }> = [];
     const { wrapper } = setup((request) => {
       requests.push(request);
-      if (request.path === '/user/session') return session;
-      if (request.path === '/user/profile') return { email: 'me@example.com' };
+      if (request.path === '/auth/session') return session;
+      if (request.path === '/integrations/v1/importer/profile') return { email: 'me@example.com' };
       if (request.path.endsWith('/members'))
         return { items: [{ id: 'member-1', email: 'me@example.com' }], total: 1 };
       return null;
@@ -176,8 +181,8 @@ describe('Importer API provider', () => {
 
   it('shares one confirmation across consumers and purges the replaced session family', async () => {
     let current = session;
-    const { transport, vault, wrapper } = setup((request) => {
-      if (request.path === '/user/session') return current;
+    const { authSession, vault, wrapper } = setup((request) => {
+      if (request.path === '/auth/session') return current;
       return null;
     });
     const { result } = renderHook(
@@ -186,7 +191,7 @@ describe('Importer API provider', () => {
     );
     await waitFor(() => expect(result.current.first.status).toBe('AUTHENTICATED'));
     expect(result.current.first.session).toEqual(result.current.second.session);
-    expect(vi.mocked(transport.request)).toHaveBeenCalledTimes(1);
+    expect(authSession).toHaveBeenCalledTimes(1);
     current = { ...session, sessionFamilyId: 'family-2' };
     await act(() => result.current.second.confirmSession());
     expect(vault.clearSession).toHaveBeenCalledWith('family-1');
@@ -198,8 +203,8 @@ describe('Importer API provider', () => {
     const bridge = createCoreSessionBridge();
     const listener = vi.fn();
     const unsubscribe = bridge.subscribeAuthState(listener);
-    const { transport, wrapper } = setup(
-      (request) => (request.path === '/user/session' ? current : null),
+    const { authSession, wrapper } = setup(
+      (request) => (request.path === '/auth/session' ? current : null),
       bridge.update,
     );
     const { result } = renderHook(() => useAuthenticatedCookieSession(), { wrapper });
@@ -208,7 +213,7 @@ describe('Importer API provider', () => {
     current = { ...session, sessionFamilyId: 'family-2', userId: 'user-2' };
     await act(() => result.current.confirmSession());
     expect(await bridge.getIdentityId()).toBe('user-2');
-    vi.mocked(transport.request).mockResolvedValueOnce({ status: 401, body: {} });
+    authSession.mockResolvedValueOnce(null);
     await act(() => result.current.confirmSession());
     expect(await bridge.getIdentityId()).toBeUndefined();
     expect(listener.mock.calls).toEqual([[false], [true], [false], [true], [false]]);
@@ -216,17 +221,17 @@ describe('Importer API provider', () => {
   });
 
   it('preserves a confirmed descriptor on server errors and expires it on authorization failure', async () => {
-    const { transport, vault, wrapper } = setup((request) =>
-      request.path === '/user/session' ? session : null,
+    const { authSession, vault, wrapper } = setup((request) =>
+      request.path === '/auth/session' ? session : null,
     );
     const { result } = renderHook(() => useAuthenticatedCookieSession(), { wrapper });
     await waitFor(() => expect(result.current.status).toBe('AUTHENTICATED'));
-    vi.mocked(transport.request).mockResolvedValueOnce({ status: 500, body: {} });
+    authSession.mockRejectedValueOnce(new Error('server_unavailable'));
     await act(() => result.current.confirmSession());
     expect(result.current.status).toBe('ERROR');
     expect(result.current.session?.sessionFamilyId).toBe('family-1');
     expect(vault.clearSession).not.toHaveBeenCalled();
-    vi.mocked(transport.request).mockResolvedValueOnce({ status: 401, body: {} });
+    authSession.mockResolvedValueOnce(null);
     await act(() => result.current.confirmSession());
     expect(result.current.status).toBe('EXPIRED');
     expect(result.current.session).toBeNull();
@@ -234,14 +239,11 @@ describe('Importer API provider', () => {
   });
 
   it('reconfirms after login, resets on logout, and accepts a different login session', async () => {
-    const { transport, vault, authProvider, wrapper } = setup(() => null);
-    vi.mocked(transport.request)
-      .mockResolvedValueOnce({ status: 401, body: {} })
-      .mockResolvedValueOnce({ status: 200, body: { result: session } })
-      .mockResolvedValueOnce({
-        status: 200,
-        body: { result: { ...session, sessionFamilyId: 'family-2', userId: 'user-2' } },
-      });
+    const { authSession, vault, authProvider, wrapper } = setup(() => null);
+    authSession
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce({ ...session, sessionFamilyId: 'family-2', userId: 'user-2' });
     const { result } = renderHook(() => useAuthenticatedCookieSession(), { wrapper });
     await waitFor(() => expect(result.current.status).toBe('EXPIRED'));
     act(() => authProvider.dispatch?.({ type: 'SIGN_IN' }));
@@ -255,23 +257,20 @@ describe('Importer API provider', () => {
   });
 
   it('ignores a confirmation response from an earlier auth epoch', async () => {
-    let resolveOld!: (value: { status: number; body: { result: typeof session } }) => void;
-    const oldConfirmation = new Promise<{ status: number; body: { result: typeof session } }>(
+    let resolveOld!: (value: typeof session) => void;
+    const oldConfirmation = new Promise<typeof session>(
       (resolve) => {
         resolveOld = resolve;
       },
     );
-    const { transport, authProvider, wrapper } = setup(() => null);
-    vi.mocked(transport.request)
+    const { authSession, authProvider, wrapper } = setup(() => null);
+    authSession
       .mockImplementationOnce(() => oldConfirmation)
-      .mockResolvedValueOnce({
-        status: 200,
-        body: { result: { ...session, sessionFamilyId: 'new-family' } },
-      });
+      .mockResolvedValueOnce({ ...session, sessionFamilyId: 'new-family' });
     const { result } = renderHook(() => useAuthenticatedCookieSession(), { wrapper });
     act(() => authProvider.dispatch?.({ type: 'SIGN_IN' }));
     await waitFor(() => expect(result.current.session?.sessionFamilyId).toBe('new-family'));
-    resolveOld({ status: 200, body: { result: session } });
+    resolveOld(session);
     await act(async () => oldConfirmation);
     expect(result.current.session?.sessionFamilyId).toBe('new-family');
   });
@@ -279,7 +278,7 @@ describe('Importer API provider', () => {
   it('resets a failed master-key attempt and becomes ready on retry', async () => {
     let attempts = 0;
     const { wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
+      if (request.path === '/auth/session') return session;
       if (request.path.endsWith('/master-key-session')) {
         attempts += 1;
         if (attempts === 1) throw new Error('failed');
@@ -303,7 +302,7 @@ describe('Importer API provider', () => {
       resolveCreation = resolve;
     });
     const { transport, wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
+      if (request.path === '/auth/session') return session;
       if (request.path.endsWith('/master-key-session')) return creation;
       return null;
     });
@@ -316,45 +315,9 @@ describe('Importer API provider', () => {
     await waitFor(() =>
       expect(vi.mocked(transport.request)).toHaveBeenCalledWith(
         expect.objectContaining({
-          path: '/organizations/org-1/master-key-session/late-session/cancel',
+          path: '/integrations/v1/organizations/org-1/master-key-session/late-session/cancel',
         }),
       ),
     );
-  });
-
-  it.each([
-    [null, true],
-    [{ status: 'ACTIVE' }, false],
-    [{ status: 'TRIALING' }, false],
-    [{ status: 'PAUSED' }, true],
-    [{ status: 'ACTIVE', paymentMethod: { state: 'failed' } }, true],
-    [{ status: 'ACTIVE', standbyPeriod: { status: 'ACTIVE' } }, true],
-    [{ status: 'ACTIVE', standbyPeriod: { status: 'EXPIRED' } }, true],
-    [{ status: 'ACTIVE', lifecycle: { accessMode: 'READ_ONLY' } }, true],
-    [{ status: 'PAUSED', lifecycle: { accessMode: 'FULL' } }, false],
-  ])('derives subscription eligibility from %j', async (subscription, blocked) => {
-    const { wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
-      if (request.path === '/organizations/org-1') return { id: 'org-1', name: 'Org' };
-      if (request.path.endsWith('/subscriptions/details')) return subscription;
-      return null;
-    });
-    const { result } = renderHook(() => useOrgSubscriptionStatus(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.isCreationBlocked).toBe(blocked);
-  });
-
-  it('blocks legacy organizations in standby even with an active subscription', async () => {
-    const { wrapper } = setup((request) => {
-      if (request.path === '/user/session') return session;
-      if (request.path === '/organizations/org-1') {
-        return { id: 'org-1', name: 'Org', standbyPeriodInfo: { id: 'standby-1' } };
-      }
-      if (request.path.endsWith('/subscriptions/details')) return { status: 'ACTIVE' };
-      return null;
-    });
-    const { result } = renderHook(() => useOrgSubscriptionStatus(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.isCreationBlocked).toBe(true);
   });
 });

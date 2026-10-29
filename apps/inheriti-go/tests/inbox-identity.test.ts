@@ -14,6 +14,8 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
 
 const token = (sid: string) => `header.${Buffer.from(JSON.stringify({ iss: 'https://issuer.test', sub: 'user-1', sid })).toString('base64url')}.signature`;
+const businessToken = `header.${Buffer.from(JSON.stringify({ iss: 'https://business.test', sub: 'local-user-1' })).toString('base64url')}.signature`;
+const principal = async () => ({ issuer: 'https://issuer.test', subject: 'user-1' });
 const envelope = (result?: unknown) => ({ ok: true, result });
 
 describe('Tray Inbox identity', () => {
@@ -21,8 +23,19 @@ describe('Tray Inbox identity', () => {
 
   it('passes authentication expiry through preparation for session cleanup', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     await expect(identity.prepare('org-1')).rejects.toThrow('inbox_identity_http_401');
+  });
+
+  it.each(['cancelPreparation', 'clear'] as const)('does not forward a stale authentication failure after %s', async (cancel) => {
+    let rejectToken!: (error: Error) => void;
+    const pendingToken = new Promise<string>((_resolve, reject) => { rejectToken = reject; });
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', () => pendingToken, principal);
+    const preparing = identity.prepare('org-1');
+    identity[cancel]();
+    rejectToken(Object.assign(new Error('operator_token_expired'), { code: 'operator_token_expired' }));
+    await expect(preparing).resolves.toEqual({ status: 'missing' });
+    expect(identity.state()).toEqual({ status: 'missing' });
   });
 
   it('restores the same device keys across logins and never sends private material', async () => {
@@ -36,14 +49,16 @@ describe('Tray Inbox identity', () => {
       return { ok: true, json: async () => envelope({ memberId: 'member-1' }) };
     });
     vi.stubGlobal('fetch', fetcher);
-    const first = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const first = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await first.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
+    const legacyPath = [...stored.keys()][0];
     expect(registered).toEqual({ encryptionPublicKey: expect.any(String), signingPublicKey: expect.any(String) });
     expect(JSON.stringify(registered)).not.toContain('Private');
-    const second = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'));
+    const second = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => businessToken, principal);
     expect(await second.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(stored.size).toBe(1);
+    expect([...stored.keys()][0]).toBe(legacyPath);
   });
 
   it('finds an existing member after restart without requesting the organization key', async () => {
@@ -59,8 +74,8 @@ describe('Tray Inbox identity', () => {
       } : null) };
     });
     vi.stubGlobal('fetch', fetcher);
-    await new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a')).prepare('org-1');
-    const restarted = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'));
+    await new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal).prepare('org-1');
+    const restarted = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-b'), principal);
     expect(await restarted.registeredMemberId('org-1')).toBe('member-1');
     expect(restarted.state()).toEqual({ status: 'missing' });
     expect(fetcher).toHaveBeenCalledTimes(3);
@@ -80,7 +95,7 @@ describe('Tray Inbox identity', () => {
       } : null) };
     });
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     const run = vi.fn().mockResolvedValue('done');
     expect(await identity.withIdentity('org-1', run)).toBe('done');
@@ -105,7 +120,7 @@ describe('Tray Inbox identity', () => {
         signingKeyFingerprint: (await import('node:crypto')).createHash('sha256').update(Buffer.from(registered.signingPublicKey, 'base64')).digest('hex'),
       } : null) };
     }));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     await identity.prepare('org-1');
     let finish!: (value: string) => void;
     const pending = identity.withIdentity('org-1', async () => new Promise<string>((resolve) => { finish = resolve; }));
@@ -128,7 +143,7 @@ describe('Tray Inbox identity', () => {
       } : null) };
     }));
     let currentToken = token('login-a');
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => currentToken);
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => currentToken, principal);
     await identity.prepare('org-1');
     let finish!: (value: string) => void;
     const first = identity.withIdentity('org-1', () => new Promise<string>((resolve) => { finish = resolve; }));
@@ -155,7 +170,7 @@ describe('Tray Inbox identity', () => {
 
   it('refuses an active remote identity without matching local private keys', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => envelope({ status: 'ACTIVE', signingKeyFingerprint: 'other' }) }));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toMatchObject({ status: 'replacement_required' });
     expect(stored.size).toBe(0);
   });
@@ -163,7 +178,7 @@ describe('Tray Inbox identity', () => {
   it('does not register after revocation', async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => envelope({ status: 'REVOKED', signingKeyFingerprint: 'other' }) });
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toEqual({ status: 'replacement_required', message: 'Secure Chat access was revoked on this computer.' });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(stored.size).toBe(0);
@@ -188,7 +203,7 @@ describe('Tray Inbox identity', () => {
       return { ok: true, json: async () => envelope(current) };
     });
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(() => identity.replace('org-1')).toThrow('inbox_replacement_not_required');
     expect(await identity.prepare('org-1')).toMatchObject({ status: 'replacement_required' });
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -215,7 +230,7 @@ describe('Tray Inbox identity', () => {
         .createHash('sha256').update(Buffer.from(submitted.signingPublicKey, 'base64')).digest('hex') };
       throw new Error('response lost');
     }));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toMatchObject({ status: 'replacement_required' });
     expect(await identity.replace('org-1')).toMatchObject({ status: 'replacement_required' });
     expect(await identity.replace('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
@@ -234,7 +249,7 @@ describe('Tray Inbox identity', () => {
         .createHash('sha256').update(Buffer.from(submitted.signingPublicKey, 'base64')).digest('hex') };
       return { ok: true, json: async () => envelope(current) };
     }));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toMatchObject({ status: 'replacement_required' });
     expect(await identity.replace('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(posts).toBe(1);
@@ -244,7 +259,7 @@ describe('Tray Inbox identity', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init: RequestInit) => ({
       ok: true, json: async () => envelope(init.method === 'GET' ? null : { memberId: 'member-1' }),
     })));
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     expect(await identity.prepare('org-1')).toEqual({ status: 'ready', memberId: 'member-1' });
     expect(stored.size).toBe(1);
   });
@@ -253,7 +268,7 @@ describe('Tray Inbox identity', () => {
     let finishLookup!: (response: { ok: boolean; json: () => Promise<unknown> }) => void;
     const fetcher = vi.fn().mockReturnValue(new Promise((resolve) => { finishLookup = resolve; }));
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     const preparing = identity.prepare('org-1');
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     identity.clear();
@@ -266,7 +281,7 @@ describe('Tray Inbox identity', () => {
     const finish: Array<(response: { ok: boolean; json: () => Promise<unknown> }) => void> = [];
     const fetcher = vi.fn().mockImplementation(() => new Promise((resolve) => { finish.push(resolve); }));
     vi.stubGlobal('fetch', fetcher);
-    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'));
+    const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', async () => token('login-a'), principal);
     const oldRequest = identity.prepare('org-1');
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     identity.clear();

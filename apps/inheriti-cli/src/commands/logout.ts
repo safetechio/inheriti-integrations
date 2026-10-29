@@ -6,10 +6,12 @@ import type { Terminal } from '../output.js';
  * state an operator runs this to escape.
  */
 export async function logout(context: CliContext, terminal: Terminal): Promise<number> {
+  const clearedBefore = context.sessions.successfulClearCount;
   try {
     await context.core.auth.clear();
-  } finally {
-    await context.sessions.clear();
+  } catch (error) {
+    if (context.sessions.successfulClearCount === clearedBefore) throw error;
+    terminal.writeError('The local session was cleared, but server revocation could not be confirmed.');
   }
   terminal.write('Signed out.');
   return 0;

@@ -38,7 +38,7 @@ if (typecheck.status !== 0) process.exit(typecheck.status ?? 1);
 // the manifest declares the worker as a module and the CSP allows only self-hosted scripts.
 await build({
   entryPoints: {
-    'background/service-worker': resolve(source, 'background/service-worker.ts'),
+    'background/service-worker': resolve(source, 'background/service-worker/main.ts'),
     'side-panel/main': resolve(source, 'side-panel/main.ts'),
     'safekey-popup/main': resolve(source, 'safekey-popup/main.ts'),
     'blocked/main': resolve(source, 'blocked/main.ts'),
@@ -128,8 +128,11 @@ for (const page of ['side-panel', 'safekey-popup', 'blocked']) {
 }
 await cp(resolve(source, 'side-panel', 'font-app.ttf'), resolve(output, 'side-panel', 'font-app.ttf'));
 await cp(resolve(source, 'side-panel', 'assets'), resolve(output, 'side-panel', 'assets'), { recursive: true });
+const versionName = packageVersionForDeployment(packageManifest.version, deployment);
+const localName = `${sourceManifest.name} · LOCAL · v${versionName}`;
 const manifest = { ...sourceManifest, version: packageManifest.version,
-  version_name: packageVersionForDeployment(packageManifest.version, deployment),
+  version_name: versionName,
+  ...(deployment === 'local' ? { name: localName, short_name: localName } : {}),
   key: manifestKeyForBuild(deployment, sourceManifest.key) };
 await writeFile(
   resolve(output, 'manifest.json'),

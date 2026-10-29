@@ -19,7 +19,7 @@ export function usage(environmentVariables: Readonly<Record<string, string | und
 inheriti <command>
 
   login              Sign in using the browser
-  logout             Clear the local session
+  logout             Sign out and clear the local session
   organizations list List Inheriti® Business organisations and the selected one
   organizations use [id] Select an Inheriti® Business organisation
   ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
@@ -76,7 +76,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     return 'Usage: inheriti secrets <exec|resolve>\n\nRun reveal-authorized secret delivery.';
   const details: Readonly<Record<string, string>> = {
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
-    logout: `Usage: inheriti logout\n\nClear the locally stored operator session. This does not delete plans or plan data.`,
+    logout: `Usage: inheriti logout\n\nSign out and clear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Inheriti® Business organisations or select one for this account.`,
     automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
       `create|activate|member|revoke>\n\nManage Inheriti® Business automation connections and grants locally. ` +

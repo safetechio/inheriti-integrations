@@ -73,4 +73,12 @@ it('passes only bounded Secure Chat identifiers to the launcher', () => {
   vi.mocked(launcher.webContents.send).mockClear();
   showLauncher({ ...action, conversationId: 'x'.repeat(201) });
   expect(launcher.webContents.send).not.toHaveBeenCalled();
+  const targeted = { ...action, accountSubject: 'subject-a' };
+  showLauncher(targeted);
+  expect(launcher.webContents.send).toHaveBeenLastCalledWith('tray:action', targeted);
+  vi.mocked(launcher.webContents.send).mockClear();
+  showLauncher({ ...action, accountSubject: '' });
+  showLauncher({ ...action, accountSubject: 'x'.repeat(501) });
+  showLauncher({ ...action, accountSubject: 123 } as never);
+  expect(launcher.webContents.send).not.toHaveBeenCalled();
 });

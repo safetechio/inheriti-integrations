@@ -39,6 +39,73 @@ it('retries a saved session only from the trusted Tray renderer', async () => {
   expect(restore).toHaveBeenCalledOnce();
 });
 
+it('publishes a neutral transition before completing a trusted account activation', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  let status = 'signed-in';
+  let finish!: () => void;
+  const activation = new Promise<void>((resolve) => { finish = resolve; });
+  const activateAccount = vi.fn(() => { status = 'restoring'; return activation; });
+  const publish = vi.fn();
+  const publishInbox = vi.fn();
+  registerTrayIpc({ state: () => ({ status }), activateAccount } as never, () => ({ webContents }) as never,
+    publish, undefined, undefined, publishInbox);
+  const switchAccount = mock.handlers.get('tray:activate-account')!;
+  await expect(switchAccount({ sender: webContents, senderFrame: {} }, 'subject-b')).rejects.toThrow('Untrusted renderer');
+  await expect(switchAccount(event, '')).rejects.toThrow('invalid_account');
+  expect(activateAccount).not.toHaveBeenCalled();
+  const switching = switchAccount(event, 'subject-b');
+  expect(activateAccount).toHaveBeenCalledWith('subject-b');
+  expect(publish).toHaveBeenCalledTimes(1);
+  expect(status).toBe('restoring');
+  status = 'signed-in';
+  finish();
+  await expect(switching).resolves.toEqual({ status: 'signed-in' });
+  expect(publish).toHaveBeenCalledTimes(2);
+  expect(publishInbox).toHaveBeenCalledOnce();
+});
+
+it('cancels Add Account without signing out the current account', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const event = { sender: webContents, senderFrame: frame };
+  let status = 'signed-in';
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  const signOut = vi.fn();
+  const addAccount = vi.fn(() => { status = 'authorizing'; return pending; });
+  const cancelAccountAuthorization = vi.fn(async () => { status = 'signed-in'; finish(); });
+  registerTrayIpc({ state: () => ({ status, activeSubject: 'subject-a' }), addAccount, cancelAccountAuthorization, signOut } as never,
+    () => ({ webContents }) as never, vi.fn());
+  const add = mock.handlers.get('tray:add-account')!;
+  const cancel = mock.handlers.get('tray:cancel-account-authorization')!;
+  await expect(cancel({ sender: webContents, senderFrame: {} })).rejects.toThrow('Untrusted renderer');
+  expect(cancelAccountAuthorization).not.toHaveBeenCalled();
+  const adding = add(event);
+  expect(status).toBe('authorizing');
+  await expect(cancel(event)).resolves.toEqual({ status: 'signed-in', activeSubject: 'subject-a' });
+  await expect(adding).resolves.toEqual({ status: 'signed-in', activeSubject: 'subject-a' });
+  expect(signOut).not.toHaveBeenCalled();
+});
+
+it('signs out all accounts only from the trusted Tray renderer', async () => {
+  const frame = {};
+  const webContents = { mainFrame: frame };
+  const signOutAll = vi.fn(async () => {});
+  const publish = vi.fn();
+  const publishInbox = vi.fn();
+  registerTrayIpc({ state: () => ({ status: 'signed-out', accounts: [] }), signOutAll } as never,
+    () => ({ webContents }) as never, publish, undefined, undefined, publishInbox);
+  const all = mock.handlers.get('tray:sign-out-all')!;
+  await expect(all({ sender: webContents, senderFrame: {} })).rejects.toThrow('Untrusted renderer');
+  expect(signOutAll).not.toHaveBeenCalled();
+  await expect(all({ sender: webContents, senderFrame: frame })).resolves.toEqual({ status: 'signed-out', accounts: [] });
+  expect(signOutAll).toHaveBeenCalledOnce();
+  expect(publish).toHaveBeenCalledOnce();
+  expect(publishInbox).toHaveBeenCalledOnce();
+});
+
 it('notifies only after confirmed protection or update using generic text', async () => {
   const frame = {};
   const webContents = { mainFrame: frame };

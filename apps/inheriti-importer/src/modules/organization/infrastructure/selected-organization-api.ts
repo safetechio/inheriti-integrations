@@ -1,16 +1,49 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { unwrapList, useApiQuery } from '@shared/infrastructure/importer-api/http';
 
-const selectedOrganizationKey = 'selectedOrganizationId';
+let activeAccountKey: string | null = null;
+const preferenceListeners = new Set<() => void>();
+
+function subscribeToSelectedOrganization(listener: () => void) {
+  preferenceListeners.add(listener);
+  return () => { preferenceListeners.delete(listener); };
+}
+
+function notifySelectedOrganization() {
+  for (const listener of preferenceListeners) listener();
+}
+
+const selectedOrganizationKey = () =>
+  activeAccountKey ? `selectedOrganizationId:${activeAccountKey}` : null;
+
+export function getSelectedOrganizationSnapshot() {
+  const key = selectedOrganizationKey();
+  return key ? localStorage.getItem(key) : null;
+}
+
+export function setActiveOrganizationAccount(key: string | null) {
+  activeAccountKey = key;
+  notifySelectedOrganization();
+}
+
+export function getActiveOrganizationAccount() {
+  return activeAccountKey;
+}
+
+export function setSelectedOrganizationForActive(accountKey: string, organizationId: string) {
+  if (!accountKey || activeAccountKey !== accountKey) throw new Error('AUTH_CONTEXT_CHANGED');
+  localStorage.setItem(`selectedOrganizationId:${accountKey}`, organizationId);
+  notifySelectedOrganization();
+}
 
 export function useGetRawSelectedOrganizationId() {
-  const data = localStorage.getItem(selectedOrganizationKey);
+  const data = useSyncExternalStore(subscribeToSelectedOrganization, getSelectedOrganizationSnapshot);
   return { data, loading: false };
 }
 
 export function useGetSelectedOrganizationId() {
-  return localStorage.getItem(selectedOrganizationKey);
+  return useSyncExternalStore(subscribeToSelectedOrganization, getSelectedOrganizationSnapshot);
 }
 
 export function useSwitchToOrganization() {
@@ -19,9 +52,12 @@ export function useSwitchToOrganization() {
   return {
     loading,
     switchToOrganization: async (organizationId: string) => {
+      const accountKey = activeAccountKey;
+      if (!accountKey) throw new Error('AUTH_ACCOUNT_NOT_ACTIVE');
       setLoading(true);
       try {
-        localStorage.setItem(selectedOrganizationKey, organizationId);
+        if (activeAccountKey !== accountKey) return;
+        setSelectedOrganizationForActive(accountKey, organizationId);
         await queryClient.invalidateQueries();
       } finally {
         setLoading(false);
@@ -37,6 +73,7 @@ type Organization = {
   settings?: OrganizationSettings;
   standbyPeriod?: unknown;
   standbyPeriodInfo?: unknown;
+  isActivationPending?: boolean;
 };
 
 type OrganizationSettings = {
@@ -57,18 +94,18 @@ export function useGetSelectedOrganization() {
   const id = useGetSelectedOrganizationId();
   return useApiQuery<Organization>(
     ['organization', id],
-    id ? `/organizations/${encodeURIComponent(id)}` : null,
+    id ? `/integrations/v1/organizations/${encodeURIComponent(id)}` : null,
   );
 }
 
 export function useGetMyOrganization(options?: { enabled?: boolean }) {
   const organizations = useApiQuery<Organization[] | { items?: Organization[] }>(
     ['organizations'],
-    options?.enabled === false ? null : '/organizations',
+    options?.enabled === false ? null : '/integrations/v1/importer/organizations',
   );
   const profile = useApiQuery<{ id: string }>(
     ['profile'],
-    options?.enabled === false ? null : '/user/profile',
+    options?.enabled === false ? null : '/integrations/v1/importer/profile',
   );
   return {
     ...organizations,
@@ -82,11 +119,11 @@ export function useGetMyOrganization(options?: { enabled?: boolean }) {
 export function useGetJoinedOrganizations(options?: { enabled?: boolean }) {
   const organizations = useApiQuery<Organization[] | { items?: Organization[] }>(
     ['organizations'],
-    options?.enabled === false ? null : '/organizations',
+    options?.enabled === false ? null : '/integrations/v1/importer/organizations',
   );
   const profile = useApiQuery<{ id: string }>(
     ['profile'],
-    options?.enabled === false ? null : '/user/profile',
+    options?.enabled === false ? null : '/integrations/v1/importer/profile',
   );
   return {
     ...organizations,
@@ -103,7 +140,7 @@ export function useGetIdentity() {
     firstName?: string;
     lastName?: string;
     email?: string;
-  }>(['profile'], '/user/profile');
+  }>(['profile'], '/integrations/v1/importer/profile');
   return {
     ...result,
     identity: result.data

@@ -20,7 +20,7 @@ import {
 } from './contracts';
 
 const RuntimeContext = createContext<RuntimeValue | null>(null);
-const AuthContext = createContext({ authInitialized: false, isLoggedIn: false });
+const AuthContext = createContext({ authInitialized: false, isLoggedIn: false, notice: null as string | null, accountsRevision: 0 });
 type SessionValue = {
   status: AuthSessionStatus;
   session: AuthSessionDescriptor | null;
@@ -81,12 +81,14 @@ export function ImporterApiProvider({
   onSessionChange?: (status: AuthSessionStatus, session: AuthSessionDescriptor | null) => void;
 }) {
   const [auth, dispatch] = useReducer(
-    (state: { authInitialized: boolean; isLoggedIn: boolean }, action: AuthAction) => {
-      if (action.type === 'SIGN_IN') return { authInitialized: true, isLoggedIn: true };
-      if (action.type === 'SIGN_OUT') return { authInitialized: true, isLoggedIn: false };
-      return { authInitialized: true, isLoggedIn: state.isLoggedIn };
+    (state: { authInitialized: boolean; isLoggedIn: boolean; notice: string | null; accountsRevision: number }, action: AuthAction) => {
+      if (action.type === 'SIGN_IN') return { authInitialized: true, isLoggedIn: true, notice: null, accountsRevision: state.accountsRevision };
+      if (action.type === 'SIGN_OUT') return { authInitialized: true, isLoggedIn: false, notice: null, accountsRevision: state.accountsRevision };
+      if (action.type === 'NOTICE') return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: String(action.userData ?? ''), accountsRevision: state.accountsRevision };
+      if (action.type === 'ACCOUNTS_CHANGED') return { authInitialized: state.authInitialized, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision + 1 };
+      return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision };
     },
-    { authInitialized: false, isLoggedIn: false },
+    { authInitialized: false, isLoggedIn: false, notice: null, accountsRevision: 0 },
   );
   const [sessionState, setSessionState] = useState<{
     status: AuthSessionStatus;
@@ -105,23 +107,9 @@ export function ImporterApiProvider({
     const epoch = authEpochRef.current;
     const confirmation = (async () => {
       setSessionState((current) => ({ status: 'CONFIRMING', session: current.session }));
-      const response = await transport.request<{ result?: unknown }>({
-        method: 'GET',
-        path: '/user/session',
-        returnErrorResponse: true,
-      });
+      const value = await window.inheriti?.auth?.session();
       if (epoch !== authEpochRef.current) return;
-      if (response.status === 401 || response.status === 403) {
-        const previous = sessionRef.current;
-        if (previous) await vault.clearSession(previous.sessionFamilyId);
-        setSessionState({ status: 'EXPIRED', session: null });
-        return;
-      }
-      if (response.status < 200 || response.status >= 300) {
-        setSessionState((current) => ({ status: 'ERROR', session: current.session }));
-        return;
-      }
-      const next = parseSessionDescriptor(response.body.result);
+      const next = parseSessionDescriptor(value);
       if (!next) {
         const previous = sessionRef.current;
         if (previous) await vault.clearSession(previous.sessionFamilyId);
@@ -144,7 +132,7 @@ export function ImporterApiProvider({
       });
     confirmationRef.current = confirmation;
     return confirmation;
-  }, [transport, vault]);
+  }, [vault]);
   useEffect(() => {
     void confirmSession();
   }, [confirmSession]);

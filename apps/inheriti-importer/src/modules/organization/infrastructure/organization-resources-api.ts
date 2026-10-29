@@ -22,7 +22,7 @@ export function useFindActiveOrganizationPlanCategoriesByCriteria(
   >(
     ['categories', id],
     id && options?.enabled !== false
-      ? `/organizations/${encodeURIComponent(id)}/plan-categories`
+      ? `/integrations/v1/organizations/${encodeURIComponent(id)}/plan-categories`
       : null,
     whereQuery([{ field: 'status', operator: '==', value: 'ACTIVE' }]),
   );
@@ -44,15 +44,13 @@ export function useSaveOrganizationPlanCategory() {
     }) => {
       setLoading(true);
       try {
-        const saved = await request<{ id: string }>(
+        const saved = await request<void>(
           transport,
           'POST',
-          `/organizations/${encodeURIComponent(category.organizationId)}/plan-categories`,
+          `/integrations/v1/organizations/${encodeURIComponent(category.organizationId)}/plan-categories`,
           {
             id: category.id,
             name: category.name,
-            status: category.status,
-            createdAt: category.createdAt.toISOString(),
           },
         );
         await queryClient.invalidateQueries({ queryKey: ['categories', category.organizationId] });
@@ -76,7 +74,7 @@ export function useFindSelectedOrganizationPlanCreationTeamsByCriteria(
   >(
     ['teams', id],
     id && options?.enabled !== false
-      ? `/organizations/${encodeURIComponent(id)}/member-plan-creation-teams`
+      ? `/integrations/v1/organizations/${encodeURIComponent(id)}/member-plan-creation-teams`
       : null,
     whereQuery([{ field: 'status', operator: '==', value: 'ACTIVE' }]),
   );
@@ -96,10 +94,10 @@ export function useFindActiveOrganizationMembersByCriteria(
     ...(filter?.email ? [{ field: 'email', operator: '==', value: filter.email }] : []),
   ];
   const result = useApiQuery<
-    Array<{ id: string; email?: string }> | { items?: Array<{ id: string; email?: string }> }
+    Array<{ id: string; email?: string; role?: { name?: string } }> | { items?: Array<{ id: string; email?: string; role?: { name?: string } }> }
   >(
     ['members', id, filter?.email],
-    id && options?.enabled !== false ? `/organizations/${encodeURIComponent(id)}/members` : null,
+    id && options?.enabled !== false ? `/integrations/v1/organizations/${encodeURIComponent(id)}/members` : null,
     whereQuery(where),
   );
   return { ...result, data: result.data ? toRecord(unwrapList(result.data)) : undefined };
@@ -107,7 +105,7 @@ export function useFindActiveOrganizationMembersByCriteria(
 
 export function useGetCurrentMember() {
   const id = useGetSelectedOrganizationId();
-  const profile = useApiQuery<{ email?: string }>(['profile'], '/user/profile');
+  const profile = useApiQuery<{ email?: string }>(['profile'], '/integrations/v1/importer/profile');
   const members = useFindActiveOrganizationMembersByCriteria(
     { organizationId: id ?? undefined, email: profile.data?.email },
     undefined,
@@ -124,7 +122,7 @@ export function useGetOrganizationPlanCreationStorageLayerSummary(organizationId
   return useApiQuery<{ activeDataStorageLayerCount: number }>(
     ['storage-summary', organizationId],
     organizationId
-      ? `/organizations/${encodeURIComponent(organizationId)}/storage-layers/plan-creation-summary`
+      ? `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/storage-layers/plan-creation-summary`
       : null,
   );
 }

@@ -78,7 +78,7 @@ describe('Chrome MV3 manifest', () => {
         'side-panel/assets/safekey-mobile.png', 'side-panel/font-app.ttf'],
       matches: ['https://*/*'],
     });
-    const worker = await readFile(new URL('../src/background/service-worker.ts', import.meta.url), 'utf8');
+    const worker = await readFile(new URL('../src/background/service-worker/main.ts', import.meta.url), 'utf8');
     expect(worker).toContain('chrome.webNavigation?.onBeforeNavigate.addListener');
     expect(worker).toContain('guard.inlineNavigation(details)');
   });

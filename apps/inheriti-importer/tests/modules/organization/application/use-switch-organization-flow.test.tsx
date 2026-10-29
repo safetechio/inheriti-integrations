@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 
 const useGetSelectedOrganizationId = vi.fn();
 const useSwitchToOrganization = vi.fn();
-const useOrgSubscriptionStatus = vi.fn();
+const useGetSelectedOrganization = vi.fn();
 const useSelectedOrganizationMemberCapabilities = vi.fn();
 const useAuthenticatedCookieSession = vi.fn();
 const useService = vi.fn();
@@ -16,46 +16,61 @@ vi.mock('@shared/infrastructure/importer-api', () => ({
 vi.mock('@modules/organization/infrastructure/importer-api', () => ({
   useGetSelectedOrganizationId: (...args: unknown[]) => useGetSelectedOrganizationId(...args),
   useSwitchToOrganization: (...args: unknown[]) => useSwitchToOrganization(...args),
-  useOrgSubscriptionStatus: (...args: unknown[]) => useOrgSubscriptionStatus(...args),
+  useGetSelectedOrganization: (...args: unknown[]) => useGetSelectedOrganization(...args),
   useSelectedOrganizationMemberCapabilities: (...args: unknown[]) =>
     useSelectedOrganizationMemberCapabilities(...args),
 }));
 
 import useSwitchOrganizationFlow from '@modules/organization/application/use-switch-organization-flow';
+import { setActiveOrganizationAccount } from '@modules/organization/infrastructure/selected-organization-api';
 
 function stubSdk({
   selectedOrganizationId,
   statusOrganizationId,
-  isCreationBlocked = false,
-  canStartPlanCreation = true,
+  isActivationPending = false,
+  canAccessStagedItems = true,
   loading = false,
-  accessRestrictionMessage,
 }: {
   selectedOrganizationId: string | null;
   statusOrganizationId?: string;
-  isCreationBlocked?: boolean;
-  canStartPlanCreation?: boolean;
+  isActivationPending?: boolean;
+  canAccessStagedItems?: boolean;
   loading?: boolean;
-  accessRestrictionMessage?: string;
 }) {
   useGetSelectedOrganizationId.mockReturnValue(selectedOrganizationId);
-  useOrgSubscriptionStatus.mockReturnValue({
-    isCreationBlocked,
-    accessRestrictionMessage,
-    organizationId: statusOrganizationId,
+  useGetSelectedOrganization.mockReturnValue({
+    data: statusOrganizationId ? { id: statusOrganizationId, isActivationPending } : undefined,
     loading,
   });
-  useSelectedOrganizationMemberCapabilities.mockReturnValue({ canStartPlanCreation, loading });
+  useSelectedOrganizationMemberCapabilities.mockReturnValue({ canAccessStagedItems, loading });
   useAuthenticatedCookieSession.mockReturnValue({
     session: { sessionFamilyId: 'family-1', userId: 'user-1' },
   });
 }
 
 afterEach(() => {
+  setActiveOrganizationAccount(null);
   vi.clearAllMocks();
 });
 
 describe('useSwitchOrganizationFlow', () => {
+  it('does not write the old organization choice after the account changes during key purge', async () => {
+    let releasePurge: () => void = () => {};
+    const clearOrganization = vi.fn(() => new Promise<void>((resolve) => { releasePurge = resolve; }));
+    const switchToOrganization = vi.fn().mockResolvedValue(undefined);
+    useService.mockReturnValue({ clearOrganization });
+    useSwitchToOrganization.mockReturnValue({ switchToOrganization });
+    stubSdk({ selectedOrganizationId: 'org-a', statusOrganizationId: 'org-a' });
+    setActiveOrganizationAccount('account-a');
+    const { result } = renderHook(() => useSwitchOrganizationFlow());
+
+    let transition: Promise<void> = Promise.resolve();
+    act(() => { transition = result.current.selectOrganization('org-b'); });
+    setActiveOrganizationAccount('account-b');
+    await act(async () => { releasePurge(); await transition; });
+
+    expect(switchToOrganization).not.toHaveBeenCalled();
+  });
   it('purges the outgoing organization key before switching, then reaches ready', async () => {
     const order: string[] = [];
     const clearOrganization = vi.fn(async () => {
@@ -84,7 +99,7 @@ describe('useSwitchOrganizationFlow', () => {
     stubSdk({
       selectedOrganizationId: 'org-b',
       statusOrganizationId: 'org-b',
-      canStartPlanCreation: true,
+      canAccessStagedItems: true,
     });
     useService.mockReturnValue({ clearOrganization });
     useSwitchToOrganization.mockReturnValue({ switchToOrganization });
@@ -118,8 +133,7 @@ describe('useSwitchOrganizationFlow', () => {
     stubSdk({
       selectedOrganizationId: 'org-b',
       statusOrganizationId: 'org-b',
-      isCreationBlocked: true,
-      accessRestrictionMessage: 'This organisation is on standby.',
+      isActivationPending: true,
     });
 
     const { result } = renderHook(() => useSwitchOrganizationFlow());

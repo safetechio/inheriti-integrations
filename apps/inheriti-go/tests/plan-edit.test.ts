@@ -20,6 +20,8 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
 import { TrayPlanEdit } from '../src/modules/quick-plan/main/plan-edit.js';
 
 const token = `header.${Buffer.from(JSON.stringify({ sub: 'actor-1' })).toString('base64url')}.signature`;
+const businessToken = `header.${Buffer.from(JSON.stringify({ iss: 'https://business.test', sub: 'local-user-1' })).toString('base64url')}.signature`;
+const principal = async () => ({ issuer: 'https://issuer.test', subject: 'actor-1' });
 const asset = { type: 'PLAIN-TEXT', meta: { name: 'Note' }, secret: { text: 'secret' } } as const;
 
 beforeEach(() => {
@@ -41,7 +43,7 @@ describe('TrayPlanEdit', () => {
     mock.listAssets.mockRejectedValueOnce(Object.assign(new Error('private diagnostic'), {
       code: 'plan_governance_reconfiguration_required',
     }));
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -49,7 +51,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state().message).not.toContain('private diagnostic');
   });
   it.each(['add', 'replace'] as const)('keeps a pre-write %s governance failure out of recovery', async (operation) => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     if (operation === 'replace') await edit.listAssets('plan-1', () => {});
@@ -65,7 +67,7 @@ describe('TrayPlanEdit', () => {
     expect(mock.values.get('plan-edit/attempt')).toMatchObject({ startedAdd: false });
   });
   it('keeps recovery after a governance failure once saving has begun', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.add.mockImplementationOnce(async (_planId, _editId, _shares, _asset, progress) => {
@@ -79,7 +81,7 @@ describe('TrayPlanEdit', () => {
   });
   it('does not offer Discard edit when listing plans fails without a saved attempt', async () => {
     mock.list.mockRejectedValueOnce(new Error('offline'));
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     expect(edit.state()).toMatchObject({ status: 'error', canDiscard: false, plans: [], message: 'Could not load plans. Try again.' });
@@ -88,13 +90,13 @@ describe('TrayPlanEdit', () => {
   });
   it('asks for sign-in when the SDK cannot refresh an expired session', async () => {
     mock.list.mockRejectedValueOnce(Object.assign(new Error('The operator must authenticate again'), { code: 'reauthentication_required' }));
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     expect(edit.state()).toMatchObject({ status: 'error', canDiscard: false, needsSignIn: true, message: 'Your session expired. Sign in and try again.' });
   });
   it('reports context, start, and SDK opening progress while listing assets', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const seen: string[] = [];
@@ -108,7 +110,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state().phase).toBeUndefined();
   });
   it('keeps a failed access step and retries the saved edit session', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -122,7 +124,7 @@ describe('TrayPlanEdit', () => {
     expect(mock.start).toHaveBeenCalledTimes(1);
   });
   it('names custodian setup when a SafeKey PRO write fails', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -134,7 +136,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state()).toMatchObject({ status: 'error', phase: 'connecting_safekey_pro', message: 'Could not configure the custodian share. Retry this step.' });
   });
   it('does not blame configuration for a later reconstruction failure', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -146,7 +148,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state()).toMatchObject({ status: 'error', phase: 'reconstructing', message: 'Could not open the protected plan. Retry this step.' });
   });
   it('shows the device status when SafeKey PRO rejects a write', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -158,7 +160,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state().message).toBe('SafeKey PRO rejected the custodian share write (device code FD). Retry this step.');
   });
   it('explains a full SafeKey PRO without discarding the edit', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -169,7 +171,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state()).toMatchObject({ status: 'error', canDiscard: true, message: 'SafeKey PRO has no free space. Use SafeKey Desktop Tool to free space, then retry this step.' });
   });
   it('does not describe a missing device identity as a missing plan share during configuration', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockImplementationOnce(async (_planId, _editId, _approval, progress) => {
@@ -184,7 +186,7 @@ describe('TrayPlanEdit', () => {
     let finishStart!: () => void;
     mock.context.mockImplementationOnce(() => new Promise((resolve) => { finishContext = () => resolve({ idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, masterKeyEncrypted: false }); }));
     mock.start.mockImplementationOnce(() => new Promise((resolve) => { finishStart = () => resolve({ id: 'edit-1' }); }));
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const pending = edit.add('plan-1', asset, () => {});
@@ -198,7 +200,7 @@ describe('TrayPlanEdit', () => {
     mock.context.mockResolvedValueOnce({ idempotencyKey: 'key-1', mode: 'GOVERNED', totalShares: 2, masterKeyEncrypted: true });
     let releaseKey!: () => void;
     const acquireKey = vi.fn(() => new Promise<string>((resolve) => { releaseKey = () => resolve('cached-by-sdk'); }));
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, acquireKey);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal, acquireKey);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const access = edit.listAssets('plan-1', () => {});
@@ -211,7 +213,7 @@ describe('TrayPlanEdit', () => {
   });
   it('does not start authentication when the organization key cannot be loaded', async () => {
     mock.context.mockResolvedValueOnce({ idempotencyKey: 'key-1', mode: 'GOVERNED', totalShares: 2, masterKeyEncrypted: true });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, async () => { throw new Error('key_unavailable'); });
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal, async () => { throw new Error('key_unavailable'); });
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -221,7 +223,7 @@ describe('TrayPlanEdit', () => {
   it('shows SafeKey Mobile approval while a fresh edit key is pending', async () => {
     let release!: () => void;
     const key = new Promise<string>((resolve) => { release = () => resolve('key'); });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.add.mockImplementationOnce(async (_planId, _editId, _shares, _asset, _progress, onRelaySession) => {
@@ -237,7 +239,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state().keyStatus).toBeUndefined();
   });
   it('shows key access only when the SDK requests it', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const seen: Array<{ phase: string | undefined; keyStatus: string | undefined }> = [];
@@ -263,7 +265,7 @@ describe('TrayPlanEdit', () => {
     });
     mock.cancel.mockImplementationOnce(async () => { mock.values.delete('plan-edit/attempt'); });
 
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const access = edit.listAssets('plan-1', () => {});
@@ -290,7 +292,7 @@ describe('TrayPlanEdit', () => {
       return [];
     });
     mock.cancel.mockImplementationOnce(async () => { mock.values.delete('plan-edit/attempt'); });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const access = edit.listAssets('plan-1', () => {});
@@ -307,7 +309,7 @@ describe('TrayPlanEdit', () => {
   });
   it('retains the edit checkpoint when closing a canceled edit fails', async () => {
     mock.listAssets.mockResolvedValueOnce([]);
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -319,7 +321,7 @@ describe('TrayPlanEdit', () => {
     expect(mock.discard).not.toHaveBeenCalled();
   });
   it('reports ordered update phases and retains the failed step for recovery', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     const seen: string[] = [];
@@ -334,7 +336,7 @@ describe('TrayPlanEdit', () => {
     expect(edit.state()).toMatchObject({ status: 'recovery-required', phase: 'distributing_validators' });
   });
   it('allows a selected eligible plan and preserves the server idempotency key for retry', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     expect(edit.state().plans).toEqual([{ id: 'plan-1', name: 'One', assetCount: 1, assetNames: ['Note'] }]);
@@ -347,7 +349,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('denies an unlisted plan and unavailable checkpoint', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await expect(edit.add('another-plan', asset, () => {})).rejects.toThrow('plan_unavailable');
@@ -357,7 +359,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('reveals only selected asset and replaces it under the same edit session', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -376,7 +378,7 @@ describe('TrayPlanEdit', () => {
       { id: 'plan-1', name: 'One', status: 'PROTECTED', assetSummary: { count: 1, types: ['PLAIN-TEXT'], names: ['Note'] } },
       { id: 'plan-2', name: 'Two', status: 'PROTECTED', assetSummary: { count: 1, types: ['PLAIN-TEXT'], names: ['Note'] } },
     ], nextCursor: null });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -390,7 +392,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('rejects changing the selected asset type', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -399,7 +401,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('blocks cleanup and organization changes while revealing an asset', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -415,7 +417,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('returns existing media as IPC-safe base64 without changing metadata', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.listAssets.mockResolvedValueOnce([{ id: 'media-1', type: 'DOCUMENT', name: 'Document', isMedia: true }]);
@@ -429,7 +431,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('retains recovery after a conflict returned from replacement', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -441,7 +443,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('clears revealed state on hide without losing a recovery checkpoint', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -454,7 +456,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('discards a hidden precommit edit before reopening the asset list', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -468,7 +470,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('discards a hidden precommit edit before adding an asset', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -483,7 +485,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('rejects a reveal that completes after the window hides', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.listAssets('plan-1', () => {});
@@ -497,7 +499,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('does not start an edit after context denies VIEW-only access', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.context.mockRejectedValue(new Error('plan_scope_denied'));
@@ -508,7 +510,7 @@ describe('TrayPlanEdit', () => {
 
   it('rejects a checkpoint from another organization before starting', async () => {
     mock.values.set('plan-edit/attempt', { actor: 'actor-1', organizationId: 'org-2', planId: 'plan-1', idempotencyKey: 'old-key', mode: 'DIRECT', totalShares: 2 });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     await edit.add('plan-1', asset, () => {});
@@ -518,15 +520,15 @@ describe('TrayPlanEdit', () => {
   });
 
   it('recovers a saved edit without creating another asset', async () => {
-    const original = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const original = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await original.selectOrganization('org-1');
     await original.load(() => {});
     mock.add.mockResolvedValueOnce({ status: 'RECOVERY_REQUIRED' });
     await original.add('plan-1', asset, () => {});
-    expect(mock.values.has('plan-edit/attempt')).toBe(true);
+    expect(mock.values.get('plan-edit/attempt')).toMatchObject({ actor: 'actor-1' });
     mock.add.mockClear();
     mock.recover.mockImplementationOnce(async () => { mock.values.delete('plan-edit/attempt'); return { status: 'UPDATED' }; });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => businessToken, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     expect(edit.state().status).toBe('recovery-required');
@@ -537,7 +539,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('keeps a saved write in recovery when recovery rejects with a governance error', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.add.mockResolvedValueOnce({ status: 'RECOVERY_REQUIRED' });
@@ -553,7 +555,7 @@ describe('TrayPlanEdit', () => {
   });
 
   it('discards a failed asset update and retains its checkpoint until the server aborts', async () => {
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.add.mockResolvedValueOnce({ status: 'RECOVERY_REQUIRED' });
@@ -571,7 +573,7 @@ describe('TrayPlanEdit', () => {
 
   it('uses only local cleanup when discarding another actor checkpoint', async () => {
     mock.values.set('plan-edit/attempt', { actor: 'prior-actor', organizationId: 'org-1', planId: 'plan-1', idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, editId: 'edit-1', startedAdd: true });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     expect(edit.state().actorMismatch).toBe(true);
@@ -584,7 +586,7 @@ describe('TrayPlanEdit', () => {
 
   it('clears a mismatched local merge checkpoint after an explicit discard', async () => {
     mock.values.set('plan-edit/attempt', { actor: 'actor-1', organizationId: 'org-1', planId: 'plan-1', idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, editId: 'edit-1' });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.load(() => {});
     mock.discard.mockRejectedValueOnce(new Error('edit_checkpoint_session_mismatch'));
@@ -598,7 +600,7 @@ describe('TrayPlanEdit', () => {
 
   it('preserves an ambiguous edit across sign-out before opening the picker', async () => {
     mock.values.set('plan-edit/attempt', { actor: 'actor-1', organizationId: 'org-1', planId: 'plan-1', idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2, editId: 'edit-1', startedAdd: true });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await expect(edit.selectOrganization('org-2')).rejects.toThrow('edit_recovery_required');
     await edit.clear();
@@ -609,7 +611,7 @@ describe('TrayPlanEdit', () => {
 
   it('does not silently discard another actor checkpoint on sign-out', async () => {
     mock.values.set('plan-edit/attempt', { actor: 'prior-actor', organizationId: 'org-1', planId: 'plan-1', idempotencyKey: 'key-1', mode: 'DIRECT', totalShares: 2 });
-    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+    const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
     await edit.selectOrganization('org-1');
     await edit.clear();
     expect(mock.values.has('plan-edit/attempt')).toBe(true);
@@ -622,7 +624,7 @@ it.each([
   ['edit_moderation_denied', 'pending_moderation'], ['edit_moderation_expired', 'pending_moderation'], ['edit_moderation_canceled', 'pending_moderation'],
   ['edit_session_expired', undefined],
 ])('opens a fresh session after terminal access failure %s', async (code, phase) => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   mock.listAssets.mockRejectedValueOnce(new Error(code));
@@ -642,7 +644,7 @@ it.each([
 });
 
 it('retains a write checkpoint after terminal approval failure', async () => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   mock.add.mockRejectedValueOnce(new Error('edit_authentication_denied'));
@@ -654,7 +656,7 @@ it('retains a write checkpoint after terminal approval failure', async () => {
 });
 
 it('does not discard another actor terminal checkpoint on retry', async () => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   mock.values.set('plan-edit/attempt', { actor: 'other', organizationId: 'org-1', planId: 'plan-1', editId: 'edit-1', terminalAccessFailure: true });
@@ -665,7 +667,7 @@ it('does not discard another actor terminal checkpoint on retry', async () => {
 
 
 it('retains the terminal checkpoint when server abort fails', async () => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   mock.listAssets.mockRejectedValueOnce(new Error('edit_moderation_denied'));
@@ -679,7 +681,7 @@ it('retains the terminal checkpoint when server abort fails', async () => {
 });
 
 it('updates moderator decisions in the same phase, retains terminal details and clears them on retry', async () => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   const pending = { requiredApprovals: 2, approvedModerators: 0, moderators: [{ id: 'moderator-1', displayName: 'Ada', status: 'PENDING' as const }] };
@@ -702,7 +704,7 @@ it('updates moderator decisions in the same phase, retains terminal details and 
 });
 
 it('clears moderator progress on dismissal and ignores delayed progress from the old access', async () => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   let report!: (phase: string, approvals: unknown) => void;
@@ -724,7 +726,7 @@ it('clears moderator progress on dismissal and ignores delayed progress from the
 });
 
 it.each(['add', 'replace'] as const)('ignores delayed moderator progress after %s is dismissed', async (operation) => {
-  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token);
+  const edit = new TrayPlanEdit('https://example.test/integrations/', 'TEST', async () => token, principal);
   await edit.selectOrganization('org-1');
   await edit.load(() => {});
   if (operation === 'replace') await edit.listAssets('plan-1', () => {});

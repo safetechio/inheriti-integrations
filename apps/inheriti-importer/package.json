@@ -28,12 +28,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
-    "package": "pnpm run release:prod",
-    "release": "pnpm run lint && pnpm run package"
+    "package": "yarn release:prod",
+    "release": "yarn lint && yarn package"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@safetech/inheriti-core-sdk": "4.0.38",
+    "@safetech/inheriti-elements-core": "workspace:*",
     "@safetech/safekey-sdk": "1.0.1",
     "@tanstack/react-query": "^5.90.20",
     "fflate": "0.7.5",

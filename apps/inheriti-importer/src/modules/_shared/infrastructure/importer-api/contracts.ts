@@ -24,7 +24,7 @@ export interface OrganizationKeyVault {
 }
 
 export type AuthAction = {
-  type: 'SIGN_IN' | 'SIGN_OUT' | 'AUTH_READY';
+  type: 'SIGN_IN' | 'SIGN_OUT' | 'AUTH_READY' | 'NOTICE' | 'ACCOUNTS_CHANGED';
   userData?: unknown;
 };
 

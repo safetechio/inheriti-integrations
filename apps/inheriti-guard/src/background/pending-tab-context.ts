@@ -57,6 +57,11 @@ export class PendingTabContextStore {
   }
 
   public clearDraft(): void { this.draft = undefined; }
+
+  public clear(): void {
+    this.context = undefined;
+    this.draft = undefined;
+  }
 }
 
 function webOrigin(url: string): string | undefined {

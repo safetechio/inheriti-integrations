@@ -206,6 +206,36 @@ button {
   z-index: 1000;
 }
 
+[role='button']:focus-visible .account-summary {
+  box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.18);
+}
+
+.account-menu-current,
+.account-destination-group,
+.account-menu-action,
+.account-menu-remove {
+  border-bottom: 1px solid var(--line);
+}
+
+.account-menu-action:hover,
+.account-menu-organization:hover,
+.account-menu-remove:hover {
+  background: var(--primary-5);
+}
+
+.account-menu-organization {
+  padding-left: 48px;
+}
+
+.account-menu-signout-all {
+  background: #fff0f1;
+  border-radius: 0 0 8px 8px;
+}
+
+.account-menu-signout-all:hover {
+  background: #ffcfd4;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -844,3 +874,17 @@ tbody tr:hover td {
     padding: 32px 18px;
   }
 }
+
+.account-menu-avatar { position: relative; flex: none; background: #2962ff; }
+.account-menu-current { min-height: 88px; padding: 12px 16px; }
+.account-menu-option { min-height: 54px; padding: 8px 27px; border-bottom: 1px solid #eaecf0; }
+.account-menu-option:hover, .account-menu-add:hover { background: #f4f8ff; }
+.account-menu-destination { border-bottom: 1px solid #eaecf0; }
+.account-menu-destination .account-menu-option { border-bottom: 0; padding-right: 8px; }
+.account-menu-remove { min-height: 54px; padding: 8px 16px; }
+.account-menu-remove:hover { background: #fff1f1; }
+.account-menu-add { min-height: 42px; padding: 8px 27px; }
+.account-menu-signout-all { min-height: 38px; background: #fff1f1; }
+.account-menu-signout-all:hover { background: #fee4e2; }
+
+.account-menu-notice { z-index: 1001; max-width: calc(100vw - 24px); box-shadow: 0 12px 28px #10182824; overflow-wrap: anywhere; }

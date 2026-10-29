@@ -41,7 +41,7 @@ export class WorkspaceSession {
       scopes: ['openid', 'profile'],
     };
     this.configuration = configuration;
-    this.sessions = new WorkspaceOperatorSessionStore(deployment, configuration.issuer);
+    this.sessions = new WorkspaceOperatorSessionStore(deployment, configuration.issuer, { apiUrl: config.apiUrl, audience: configuration.audience, clientId: configuration.clientId, environment: configuration.environment });
     this.core = dependencies?.core ?? createNodeIntegrationCore({
       apiUrl: config.apiUrl,
       business: true,
@@ -81,11 +81,16 @@ export class WorkspaceSession {
     await this.signInPending?.catch(() => undefined);
     try {
       await this.core.auth.clear();
-      await this.sessions.markSignedOut();
     }
     finally {
-      this.organizations = [];
-      this.selectedId = undefined;
+      try { await this.sessions.clear(); }
+      finally {
+        try { await this.sessions.markSignedOut(); }
+        finally {
+          this.organizations = [];
+          this.selectedId = undefined;
+        }
+      }
     }
   }
 

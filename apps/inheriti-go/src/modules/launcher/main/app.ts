@@ -22,13 +22,14 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   };
   let stopLinuxLock: (() => void) | undefined;
   let refreshOnShow: (() => void) | undefined;
-  const seenInboxMessages = new Set<string>();
+  let seenInboxMessages = new Set<string>();
   const sessionRevision = () => session.inboxSessionRevision?.() ?? 0;
   let seenRevision = sessionRevision();
   const notices = new Set<Notification>();
   const unreadNotices = new Map<string, Notification>();
-  const notify = (body: string, target?: { organizationId: string; conversationId: string }, untilRead = false): void => {
+  const notify = (body: string, target?: { organizationId: string; conversationId: string; accountSubject: string }, untilRead = false): void => {
     if (!Notification.isSupported()) return;
+    const revision = sessionRevision();
     const key = untilRead && target ? `${target.organizationId}:${target.conversationId}` : undefined;
     if (key) unreadNotices.get(key)?.close();
     const notice = new Notification({ title: messages.appName, body, timeoutType: untilRead ? 'never' : 'default' });
@@ -40,7 +41,9 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     });
     notice.on('click', () => {
       notice.close();
-      showLauncher(target ? { kind: 'OPEN_INBOX', ...target } : undefined);
+      if (revision !== sessionRevision()) return;
+      showLauncher(target ? { kind: 'OPEN_INBOX', organizationId: target.organizationId, conversationId: target.conversationId,
+        accountSubject: target.accountSubject } : undefined);
     });
     notice.show();
     if (!untilRead) {
@@ -52,6 +55,13 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
   let badgeRequest = 0;
   let badgeRefreshing = false;
   let badgePending = false;
+  const clearPreviousAccount = (): void => {
+    seenInboxMessages = new Set<string>();
+    seenRevision = sessionRevision();
+    ++badgeRequest;
+    setTrayUnread(false);
+    for (const notice of notices) notice.close();
+  };
   const scanBadge = async () => {
     const state = session.state();
     const revision = sessionRevision();
@@ -119,7 +129,7 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     catch { console.warn('Could not enable Inheriti Go launch at login.'); }
     const publishState = () => {
       const revision = sessionRevision();
-      if (revision !== seenRevision) { seenInboxMessages.clear(); seenRevision = revision; }
+      if (revision !== seenRevision) clearPreviousAccount();
       if (session.state().status === 'signed-out') {
         seenInboxMessages.clear();
         for (const notice of notices) notice.close();
@@ -131,11 +141,19 @@ export function registerAppEvents(session: TraySession, appUrl: string | undefin
     session.setPublisher(publishState);
     session.setInboxPublisher((signal) => {
       const revision = sessionRevision();
-      if (revision !== seenRevision) { seenInboxMessages.clear(); seenRevision = revision; }
+      if (revision !== seenRevision) clearPreviousAccount();
       const selectedId = session.state().selectedId;
       if (!signal || !('tenantId' in signal) || !signal.tenantId || signal.tenantId === selectedId) publishInboxChanged(signal);
       if (signal && 'kind' in signal && signal.kind === 'PRESENCE') return;
-      void notifyInboxEvent(session, signal, seenInboxMessages, notify).finally(() => { void refreshBadge(); });
+      void notifyInboxEvent(session, signal, seenInboxMessages, (body, target, untilRead) => {
+        if (revision !== sessionRevision()) return;
+        if (!target) { notify(body, undefined, untilRead); return; }
+        const state = session.state();
+        if (state.status !== 'signed-in' || typeof state.activeSubject !== 'string' ||
+          !state.activeSubject || state.activeSubject.length > 500) return;
+        notify(body, { organizationId: target.organizationId, conversationId: target.conversationId,
+          accountSubject: state.activeSubject }, untilRead);
+      }).finally(() => { void refreshBadge(); });
     });
     session.setInboxStatePublisher(() => publishInbox(session));
     registerTrayEvents(appUrl, deployment, () => { void checkForUpdates(session, publishUpdateProgress); });
@@ -267,12 +285,12 @@ function publishInboxChanged(signal?: TrayInboxSignal): void {
 async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | undefined, seen: Set<string>,
   notify: (body: string, target?: { organizationId: string; conversationId: string }, untilRead?: boolean) => void): Promise<void> {
   if (!signal) return;
+  const revision = session.inboxSessionRevision?.() ?? 0;
   const organizationId = ('tenantId' in signal && signal.tenantId) || session.state().selectedId;
   if (!organizationId) return;
   if (organizationId !== session.state().selectedId) {
     if ('kind' in signal || signal.status !== 'AVAILABLE' || signal.recipientStatus ||
       session.state().status !== 'signed-in' || !session.state().organizations.some(({ id }) => id === organizationId)) return;
-    const revision = session.inboxSessionRevision?.() ?? 0;
     const key = `${revision}:${organizationId}:${signal.messageId}:AVAILABLE`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -352,6 +370,7 @@ async function notifyInboxEvent(session: TraySession, signal: TrayInboxSignal | 
         if (!normalParent || normalParent.senderMemberId === memberId || normalParent.sequence <= normal.readThroughSequence) return;
       }
     }
+    if (revision !== (session.inboxSessionRevision?.() ?? 0)) return;
     publishInboxChanged({ kind: 'NEW_MESSAGE' });
     notify('You have a new Secure Chat message.', { organizationId, conversationId: signal.conversationId }, true);
   } catch {

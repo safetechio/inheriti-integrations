@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const panel = readFileSync(new URL('../src/side-panel/index.html', import.meta.url), 'utf8');
-const panelMain = readFileSync(new URL('../src/side-panel/main.ts', import.meta.url), 'utf8');
+const panelMain = ['main.ts', 'main/guard.ts']
+  .map((file) => readFileSync(new URL(`../src/side-panel/${file}`, import.meta.url), 'utf8')).join('\n');
 const blockedMain = readFileSync(new URL('../src/blocked/main.ts', import.meta.url), 'utf8');
 const manifest = JSON.parse(readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 

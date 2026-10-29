@@ -36,8 +36,9 @@ Open in development, disabled in packaged builds.
   supplies an in-memory-only `OrganizationKeyVault`, so the key does not survive a renderer
   reload, an app restart, or a crash, and is purged on cancel, organisation
   switch, logout, and app close.
-- HTTP-only cookies and API/Keycloak tokens are held by the **main process**; the
-  renderer calls a typed transport over IPC and never receives a token or cookie.
+- Business operator tokens are held by the **main process** in per-account
+  protected storage when available; the renderer calls a typed transport over
+  IPC and never receives an operator token.
 - The secure-cleanup controller (`modules/_shared`) runs best-effort buffer/temp
   wiping on source replacement, logout, cancellation, and app close.
 
@@ -50,5 +51,5 @@ in [ADR 0001](adr/0001-organization-key-boundary.md).
 
 ## Auth
 
-Keycloak PKCE runs in a controlled window; the OIDC callback is owned by the main
-process, which exchanges and holds the Business API session.
+SafeID PKCE runs through the system browser; the loopback OIDC callback is owned
+by the main process, which exchanges and holds the Business operator session.

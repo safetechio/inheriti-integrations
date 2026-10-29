@@ -6,6 +6,7 @@ import {
   type CoreModuleConfig,
 } from '@safetech/inheriti-core-sdk';
 import { ElectronHttpTransport } from '@modules/_shared/infrastructure/transport/electron-http-transport';
+import { mainOwnedBearerRequestStrategy } from '@modules/_shared/infrastructure/transport/main-owned-bearer-request-strategy';
 import { secureCleanup } from '@modules/_shared/application/secure-cleanup-controller';
 import { createCoreSessionBridge, ImporterApiProvider } from '@shared/infrastructure/importer-api';
 import { createElectronAuthProvider } from '@modules/auth/infrastructure/electron-auth-provider';
@@ -36,6 +37,7 @@ export function ImporterRuntime({ children }: { children: ReactNode }) {
         // Electron bridge, but a Core SDK fallback (e.g. its Socket.IO URL
         // builder) must not silently target a hardcoded dev URL.
         apiUrl: __API_ORIGIN__ || 'http://localhost:3000',
+        requestStrategy: mainOwnedBearerRequestStrategy,
         transport: async (input, init) => {
           const url = new URL(String(input));
           const method = (init?.method || 'GET').toUpperCase() as
@@ -44,7 +46,6 @@ export function ImporterRuntime({ children }: { children: ReactNode }) {
             method,
             path: `${url.pathname}${url.search}`,
             body: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body,
-            skipCsrf: url.pathname === '/csrf',
             signal: init?.signal ?? undefined,
           });
           return new Response(JSON.stringify(response.body ?? null), {
@@ -56,7 +57,12 @@ export function ImporterRuntime({ children }: { children: ReactNode }) {
     [transport],
   );
   const organizationKeyVault = useMemo(() => new InMemoryOrganizationKeyVault(), []);
-  const authProvider = useMemo(() => createElectronAuthProvider(() => secureCleanup.runAll()), []);
+  const authProvider = useMemo(() => createElectronAuthProvider(async (strict = false) => {
+    const cleanup = strict ? secureCleanup.runAllStrict() : secureCleanup.runAll();
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await cleanup;
+  }), []);
   useEffect(
     () => secureCleanup.register(() => organizationKeyVault.clearAllSessions()),
     [organizationKeyVault],

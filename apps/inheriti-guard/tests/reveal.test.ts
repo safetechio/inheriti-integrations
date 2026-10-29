@@ -594,6 +594,26 @@ describe('Chrome reveal controller', () => {
     expect((instance.withReveal as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toBe('plan-1');
   });
 
+  it('does not restore a prior account reveal after shutdown overtakes recovery', async () => {
+    const recovery = {
+      planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',
+      intent: { kind: 'FIELD', selector: 'prod-db.username', origin: 'https://db.example.test', tabId: 7 },
+    };
+    values.set('inheriti.openReveal', recovery);
+    let release!: () => void;
+    (storage.get as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise((resolve) => {
+      release = () => resolve({ 'inheriti.openReveal': recovery });
+    }));
+    const controller = new ChromeRevealController(async () => asCore(core()), storage);
+    const recovering = controller.recoverAbandoned();
+    await vi.waitFor(() => expect(storage.get).toHaveBeenCalledOnce());
+    await controller.shutdown();
+    release();
+    await recovering;
+    expect(controller.current()).toEqual({ kind: 'IDLE' });
+    expect(values.has('inheriti.openReveal')).toBe(false);
+  });
+
   it('reconciles an interrupted key release and permits canceling its pending intent', async () => {
     values.set('inheriti.openReveal', {
       planId: 'plan-1', deadline: '2030-01-01T00:00:00.000Z',

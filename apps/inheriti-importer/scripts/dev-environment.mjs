@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertEnvironment, runPnpm } from './environment.mjs';
+import { assertEnvironment, runYarn } from './environment.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const environment = process.argv[2];
 assertEnvironment(environment);
 
-await runPnpm(
+await runYarn(
   [
     'exec',
     'concurrently',
