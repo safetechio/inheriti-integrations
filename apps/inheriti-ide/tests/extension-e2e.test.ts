@@ -5,6 +5,7 @@ const fixture = vi.hoisted(() => {
   const cores = new Map<string, ReturnType<typeof makeCore>>();
   const makeCore = (organizationId?: string) => ({
     organizationId,
+    auth: { clear: vi.fn(async () => undefined) },
     getAccessToken: vi.fn(async () => 'token'),
     listOrganizations: vi.fn(async () => [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }]),
     listPlans: vi.fn(async (options?: { cursor: string }) => organizationId === 'org-b'
@@ -19,7 +20,7 @@ const fixture = vi.hoisted(() => {
     })),
     forgetMasterKey: vi.fn(async () => undefined),
   });
-  return { commands, cores, makeCore, quickPick: vi.fn(), information: vi.fn(async () => undefined), error: vi.fn(async () => undefined), shown: vi.fn(), tree: undefined as unknown, provider: undefined as unknown };
+  return { commands, cores, makeCore, quickPick: vi.fn(), information: vi.fn(async () => undefined), warning: vi.fn(async () => undefined), error: vi.fn(async () => undefined), shown: vi.fn(), tree: undefined as unknown, provider: undefined as unknown };
 });
 
 vi.mock('../src/elements.js', () => ({
@@ -70,6 +71,7 @@ vi.mock('vscode', () => {
       registerUriHandler: () => ({ dispose() {} }),
       showQuickPick: fixture.quickPick,
       showInformationMessage: fixture.information,
+      showWarningMessage: fixture.warning,
       showErrorMessage: fixture.error,
       showTextDocument: fixture.shown,
       setStatusBarMessage: vi.fn(),
@@ -132,5 +134,12 @@ describe('IDE extension host workflow', () => {
     expect(api.currentRows().map((row) => row.label)).toEqual(['Organization: Beta', 'Beta Plan']);
     expect(fixture.cores.get('org-a')?.forgetMasterKey).toHaveBeenCalledTimes(2);
     expect(fixture.cores.get('org-b')?.listPlans).toHaveBeenCalled();
+
+    fixture.cores.get('unscoped')?.auth.clear.mockRejectedValueOnce(new Error('offline'));
+    await fixture.commands.get('inheriti.signOut')?.();
+    expect(fixture.cores.get('unscoped')?.auth.clear).toHaveBeenCalledOnce();
+    expect(stored.has('inheriti.operatorSession')).toBe(false);
+    expect(api.currentRows()[0]?.label).toBe('Not signed in');
+    expect(fixture.warning).toHaveBeenCalledWith(expect.stringContaining('Signed out locally'));
   });
 });

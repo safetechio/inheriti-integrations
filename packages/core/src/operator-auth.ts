@@ -136,6 +136,8 @@ export class MemoryOAuthTransactionStore implements OAuthTransactionStore {
 
 export interface OperatorAuthOptions {
   configuration: OperatorAuthConfiguration;
+  apiUrl?: string;
+  business?: true;
   /** Secure, host-specific storage. The defaults are in-memory and lose the session on exit. */
   sessions?: OperatorSessionStore;
   transactions?: OAuthTransactionStore;
@@ -153,6 +155,7 @@ export interface OperatorAuthOptions {
 export interface OperatorAuthRuntime {
   OperatorAuthClient: new (options: {
     configuration: OperatorAuthConfiguration;
+    businessApiUrl?: string | undefined;
     transport: OperatorAuthTransport;
     tokenValidator: OperatorTokenValidator;
     sessions: OperatorSessionStore;
@@ -171,9 +174,11 @@ export interface OperatorAuthRuntime {
  * verification (D025).
  */
 export function composeOperatorAuth(runtime: OperatorAuthRuntime, options: OperatorAuthOptions): OperatorAuthFacade {
+  if (options.business && !options.apiUrl) throw new Error('Business operator auth requires an API URL');
   const authFetch = options.authFetchImpl ?? options.fetchImpl;
   return new runtime.OperatorAuthClient({
     configuration: options.configuration,
+    businessApiUrl: options.business ? options.apiUrl : undefined,
     transport: new runtime.HttpOperatorAuthTransport(authFetch),
     tokenValidator: options.tokenValidator
       ?? new JwksOperatorTokenValidator(options.configuration.issuer, authFetch,

@@ -112,7 +112,9 @@ export function createAccountRuntime(deps: {
   async function panelState(action: 'sign-in' | 'sign-out' | 'load-plans' | 'forget-master-key'): Promise<PanelState> {
     try {
       if (action === 'sign-out') {
-        await sessions.clear();
+        try { await (await core()).auth.clear(); }
+        catch { /* Local sign-out still completes if revocation is unavailable. */ }
+        finally { await sessions.clear(); }
         return { kind: 'SIGNED_OUT' };
       }
       if (action === 'sign-in') return authorizeAccount();
@@ -265,7 +267,11 @@ export function createAccountRuntime(deps: {
       return { ok: false, error: 'plan-request-failed' };
     }
     await closeAccountContext();
-    await sessions.remove(accountId);
+    try {
+      const configuration = resolveConfiguration(await readStoredConfiguration(localStorage, chrome.storage.session));
+      await createCore(configuration, await sessions.forProfile(accountId)).auth.clear();
+    } catch { /* Removing the local account does not depend on network revocation. */ }
+    finally { await sessions.remove(accountId); }
     const state = await panelState('load-plans');
     if (state.kind !== 'ERROR' && state.kind !== 'SIGNED_OUT') await overlayPermissions.restore();
     return { ok: true, state: await withAccounts(state) };
@@ -311,6 +317,14 @@ export function createAccountRuntime(deps: {
     if (heldCore !== undefined) await heldCore.value.forgetMasterKey().catch(() => undefined);
     heldCore = undefined;
   }
+  async function revokeAllSessions(): Promise<void> {
+    const configuration = resolveConfiguration(await readStoredConfiguration(localStorage, chrome.storage.session));
+    const profiles = await configuredProfiles();
+    await Promise.allSettled(profiles.filter((profile) => !profile.needsSignIn).map(async (profile) => {
+      const client = createCore(configuration, await sessions.forProfile(profile.id));
+      await client.auth.clear();
+    }));
+  }
   return { core, selectedOrganization, panelState, withAccounts, closeAccountContext, switchAccount,
-    removeAccount, masterKeyStatus, selectOrganization, forgetHeldCore };
+    removeAccount, masterKeyStatus, selectOrganization, forgetHeldCore, revokeAllSessions };
 }

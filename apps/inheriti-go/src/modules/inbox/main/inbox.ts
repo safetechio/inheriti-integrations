@@ -39,11 +39,12 @@ export class TrayInbox {
 
   constructor(private readonly apiUrl: string, private readonly environment: 'TEST' | 'LIVE',
     private readonly token: () => Promise<string | undefined>,
+    getPrincipal: () => Promise<{ issuer: string; subject: string } | undefined>,
     private readonly resolveKey: (organizationId: string, signal: AbortSignal, onRelaySession?: () => void) => Promise<string>,
     private readonly selectedOrganization: () => string,
     private readonly onSignal?: (signal?: TrayInboxSignal) => void,
     onIdentityState?: () => void) {
-    this.identity = new TrayInboxIdentity(apiUrl, environment, token, onIdentityState);
+    this.identity = new TrayInboxIdentity(apiUrl, environment, token, getPrincipal, onIdentityState);
     this.read = new InboxReadAck(this.identity, () => this.client(), resolveKey);
   }
 
@@ -146,8 +147,10 @@ export class TrayInbox {
   listen(): void {
     if (!this.stopSignals && this.onSignal) {
       const tenantId = this.selectedOrganization();
-      this.stopSignals = createNodeInboxEventListener(this.apiUrl, async () => (await this.token()) ?? null,
+      let active = true;
+      const stop = createNodeInboxEventListener(this.apiUrl, async () => (await this.token()) ?? null,
         (signal) => {
+          if (!active || this.transitioning) return;
           if (signal.tenantId !== this.selectedOrganization() && !('messageId' in signal) && signal.kind !== 'CONVERSATIONS') return;
           if ('kind' in signal) {
             if (signal.kind === 'CONVERSATIONS') {
@@ -164,12 +167,13 @@ export class TrayInbox {
           if (signal.memberId) update.memberId = signal.memberId;
           if (signal.memberName) update.memberName = signal.memberName;
           this.onSignal?.(update);
-        }, () => this.onSignal?.(), tenantId, (snapshot) => {
-          if (tenantId !== this.selectedOrganization()) return;
+        }, () => { if (active) this.onSignal?.(); }, tenantId, (snapshot) => {
+          if (!active || this.transitioning || tenantId !== this.selectedOrganization()) return;
           this.onSignal?.(snapshot
             ? { kind: 'PRESENCE', tenantId, memberIds: snapshot.memberIds, checkedAt: snapshot.checkedAt, connected: true }
             : { kind: 'PRESENCE', tenantId, connected: false });
         });
+      this.stopSignals = () => { active = false; stop(); };
     }
   }
   listMessages(conversationId: string, input?: { status?: 'PREPARING' | 'AVAILABLE' | 'FAILED'; limit?: number; offset?: number }) {

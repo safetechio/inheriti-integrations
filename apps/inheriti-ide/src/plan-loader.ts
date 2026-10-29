@@ -16,8 +16,8 @@ export async function loadPlans(core: () => NodeIntegrationCore): Promise<PlanVi
   } catch (error) {
     return { kind: 'ERROR', code: codeOf(error) };
   }
-  if (!(await client.getAccessToken())) return { kind: 'SIGNED_OUT' };
   try {
+    if (!(await client.getAccessToken())) return { kind: 'SIGNED_OUT' };
     const plans = await listPlanSummaries(client);
     return plans.length === 0 ? { kind: 'EMPTY' } : { kind: 'PLANS', plans };
   } catch (error) {

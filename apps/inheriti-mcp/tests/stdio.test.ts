@@ -21,7 +21,7 @@ async function bundleMcp(deployment?: string) {
     platform: 'node',
     format: 'esm',
     target: 'node22',
-    external: ['@google-cloud/secret-manager'],
+    external: ['@google-cloud/secret-manager', 'cbor-extract'],
     define: {
       __INHERITI_PRODUCTION_BUILD__: 'false',
       __INHERITI_DEPLOYMENT__: deployment === undefined ? 'undefined' : JSON.stringify(deployment),

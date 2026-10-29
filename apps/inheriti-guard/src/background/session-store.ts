@@ -40,6 +40,7 @@ export function operatorProfileId(session: OperatorSession): string {
 }
 
 function accountLabel(session: OperatorSession): string | undefined {
+  if ('kind' in session && session.kind === 'business') return undefined;
   const payload = session.idToken?.split('.')[1];
   if (!payload) return undefined;
   try {
@@ -102,6 +103,23 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
       if (new Set(profiles.map(({ id }) => id)).size !== profiles.length
         || (active !== undefined && (typeof active !== 'string' || !profiles.some(({ id, session }) => id === active && session !== undefined))))
         throw new Error('invalid_operator_profiles');
+      let discardedLegacyBusiness = false;
+      for (const profile of profiles) {
+        const session = profile.session;
+        if (!session || ('kind' in session && session.kind === 'business')) continue;
+        const audience = session.principal.audience;
+        if (audience !== 'inheriti-integrations-api'
+          && (!Array.isArray(audience) || !audience.includes('inheriti-integrations-api'))) continue;
+        delete profile.session;
+        discardedLegacyBusiness = true;
+      }
+      if (discardedLegacyBusiness) {
+        const next: Registry = { profiles, generation: empty.generation + 1 };
+        if (typeof active === 'string' && profiles.some(({ id, session }) => id === active && session !== undefined)) next.active = active;
+        await this.clearKeys();
+        await this.write(next);
+        return next;
+      }
       return { profiles, generation: empty.generation, ...(active === undefined ? {} : { active }) };
     } catch {
       await this.area.remove([PROFILES_KEY, ACTIVE_KEY]);

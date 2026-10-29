@@ -331,11 +331,18 @@ describe('login', () => {
 });
 
 describe('logout', () => {
-  it('clears both the SDK session and the file, even when the SDK throws', async () => {
-    const context = contextWith({ auth: { clear: async () => { throw new Error('already gone'); } } });
+  it('reports a revoke failure after the SDK clears the local session', async () => {
+    const context = contextWith();
+    const state = context as unknown as { sessions: { clear(): Promise<void> }; core: { auth: { clear(): Promise<void> } }; cleared: string[] };
+    state.core.auth.clear = async () => {
+      await state.sessions.clear();
+      throw new Error('already gone');
+    };
     const terminal = recordingTerminal(true);
-    await expect(logout(context, terminal)).rejects.toBeTruthy();
-    expect((context as unknown as { cleared: string[] }).cleared).toContain('sessions');
+    await expect(logout(context, terminal)).resolves.toBe(0);
+    expect(state.cleared).toEqual(['sessions']);
+    expect(terminal.errors).toEqual(['The local session was cleared, but server revocation could not be confirmed.']);
+    expect(terminal.lines).toEqual(['Signed out.']);
   });
 });
 

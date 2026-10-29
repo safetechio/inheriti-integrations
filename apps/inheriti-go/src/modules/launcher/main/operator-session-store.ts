@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
-import { accountNameFromIdToken } from '../../auth/main/account-name.js';
 import { ProtectedCheckpoint } from './protected-checkpoint.js';
 
-type ProfileRecord = { generation: number; session?: OperatorSession; memoryOnly?: boolean };
+type ProfileRecord = { generation: number; session?: OperatorSession; reauthSubject?: string; memoryOnly?: boolean };
 type ProfileRegistry = { profiles: Map<string, ProfileRecord>; memoryActiveSubject: string | undefined };
 export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again' };
 
@@ -40,6 +39,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       return this.bind(subject, record);
     }
     this.discardLegacySession();
+    this.discardLegacyProfiles();
     const active = this.checkpoint.getItem<unknown>(`${this.path}/active`);
     const subject = this.boundSubject ?? active ?? this.registry.memoryActiveSubject;
     if (typeof subject !== 'string' || !subject) return undefined;
@@ -110,22 +110,31 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       return [...this.registry.profiles.entries()].filter(([, record]) => !!record.session).map(([subject]) => subject);
     }
     this.discardLegacySession();
+    this.discardLegacyProfiles();
     return this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
       .map((record) => record.session!.principal.subject);
   }
 
-  async accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> {
-    if (this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0)) return { accounts: [], activeSubject: undefined };
-    if (this.checkpoint.isAvailable()) this.discardLegacySession();
+  async allSessions(): Promise<OperatorSession[]> {
+    if (this.isRetired) return [];
+    if (this.checkpoint.isAvailable()) this.discardLegacyProfiles();
     const records = this.checkpoint.isAvailable()
       ? this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && !!value.session)
       : [...this.registry.profiles.values()].filter((record) => !!record.session);
+    return records.flatMap((record) => record.session ? [record.session] : []);
+  }
+
+  async accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> {
+    if (this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0)) return { accounts: [], activeSubject: undefined };
+    if (this.checkpoint.isAvailable()) { this.discardLegacySession(); this.discardLegacyProfiles(); }
+    const records = this.checkpoint.isAvailable()
+      ? this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) => this.validRecord(value) && (!!value.session || !!value.reauthSubject))
+      : [...this.registry.profiles.values()].filter((record) => !!record.session || !!record.reauthSubject);
     const accounts = records.flatMap((record) => {
       const session = record.session;
-      if (!session) return [];
-      const usable = session.expiresAt > Date.now() || !!session.refreshToken &&
-        (session.refreshExpiresAt === undefined || session.refreshExpiresAt > Date.now());
-      return [{ subject: session.principal.subject, name: accountNameFromIdToken(session.idToken) ?? session.principal.subject,
+      if (!session) return record.reauthSubject ? [{ subject: record.reauthSubject, name: record.reauthSubject, status: 'sign-in-again' as const }] : [];
+      const usable = session.kind === 'business' && session.sessionExpiresAt > Date.now();
+      return [{ subject: session.principal.subject, name: session.principal.subject,
         status: usable ? 'ready' as const : 'sign-in-again' as const }];
     });
     const active = this.checkpoint.isAvailable() ? this.checkpoint.getItem<unknown>(`${this.path}/active`) : this.registry.memoryActiveSubject;
@@ -235,20 +244,34 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     if (this.checkpoint.getItem(this.path) !== null) this.checkpoint.removeItem(this.path);
   }
 
+  private discardLegacyProfiles(): void {
+    const records = this.checkpoint.searchItems<ProfileRecord>(`${this.path}/profile/`, (value) =>
+      !!value && typeof value === 'object' && !!value.session && !this.valid(value.session));
+    for (const record of records) {
+      const subject = record.session?.principal?.subject;
+      if (typeof subject !== 'string' || !subject || !Number.isSafeInteger(record.generation) || record.generation < 1) continue;
+      this.writeProfile(subject, { generation: record.generation + 1, reauthSubject: subject });
+    }
+  }
+
   private validRecord(value: unknown): value is ProfileRecord {
     if (!value || typeof value !== 'object') return false;
     const record = value as Partial<ProfileRecord>;
     return typeof record.generation === 'number' && Number.isSafeInteger(record.generation) && record.generation > 0 &&
-      (record.session === undefined || this.valid(record.session));
+      (record.session === undefined || this.valid(record.session)) &&
+      (record.reauthSubject === undefined || typeof record.reauthSubject === 'string' && !!record.reauthSubject);
   }
 
   private valid(value: unknown): value is OperatorSession {
     if (!value || typeof value !== 'object') return false;
     const session = value as Partial<OperatorSession>;
-    return session.principal?.issuer === this.issuer && typeof session.principal.subject === 'string' && !!session.principal.subject &&
+    return session.kind === 'business' && session.principal?.issuer === this.issuer &&
+      typeof session.principal.subject === 'string' && !!session.principal.subject &&
+      typeof session.familyId === 'string' && !!session.familyId &&
       typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&
       typeof session.expiresAt === 'number' && Number.isFinite(session.expiresAt) &&
-      (session.refreshToken === undefined || typeof session.refreshToken === 'string') &&
-      (session.refreshExpiresAt === undefined || typeof session.refreshExpiresAt === 'number');
+      typeof session.sessionExpiresAt === 'number' && Number.isFinite(session.sessionExpiresAt) &&
+      typeof session.refreshToken === 'string' && !!session.refreshToken &&
+      !('idToken' in session) && !('refreshExpiresAt' in session);
   }
 }

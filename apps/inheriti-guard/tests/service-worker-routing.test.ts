@@ -5,6 +5,7 @@ const fillBatch = vi.fn(async (_batch: unknown, _initiator?: string) => [{ selec
 const fillField = vi.fn(async () => ({ kind: 'DONE', message: 'Filled.' }));
 const clearSession = vi.fn(async () => { mockProfiles = mockProfiles.filter((profile) => !profile.active); mockGeneration += 1; });
 const clearAllSessions = vi.fn(async () => { mockProfiles = []; mockGeneration += 1; });
+const clearAuth = vi.fn(async (_profileId?: string) => undefined);
 const signInMock = vi.fn(async (_auth?: unknown, _signal?: AbortSignal) => undefined);
 const shutdownReveal = vi.fn(async () => undefined);
 const abortPlanAccess = vi.fn(async (_planId: string, _expectedRevealId?: string) => ({ kind: 'DONE', message: 'Access aborted.' }));
@@ -108,7 +109,7 @@ vi.mock('../src/background/plans.js', () => ({
     coreOrganizations.push(organizationId);
     coreProfiles.push(_sessions.profileId);
     return {
-    auth: {},
+    auth: { clear: async () => clearAuth(_sessions.profileId) },
     forgetMasterKey: vi.fn(async () => undefined),
     hasMasterKey,
     getAccessToken: async () => 'operator-token',
@@ -202,7 +203,7 @@ beforeEach(() => {
   hasMasterKey.mockReset().mockResolvedValue(false);
   loadCachedKey.mockReset().mockResolvedValue(undefined);
   loadPlansMock.mockClear();
-  fillBatch.mockClear(); fillField.mockClear(); clearSession.mockClear(); clearAllSessions.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
+  fillBatch.mockClear(); fillField.mockClear(); clearSession.mockClear(); clearAllSessions.mockClear(); clearAuth.mockClear(); signInMock.mockClear(); shutdownReveal.mockClear(); abortPlanAccess.mockClear(); cancelPending.mockClear(); reconcileReveal.mockClear();
   listOrganizationsMock.mockReset().mockImplementation(async () => businessOrganizations);
   mockProfiles = [{ id: 'account-a', issuer: 'https://safeid.test', environment: 'TEST',
     authorizedParty: 'chrome-test', subject: 'user-a', expiresAt: Date.now() + 60_000, active: true }];
@@ -495,9 +496,11 @@ describe('service worker access routing', () => {
     expect(await request({ type: 'remove-account', accountId: 'account-b' }))
       .toMatchObject({ ok: true, state: { accounts: [{ id: 'account-a', active: true }] } });
     expect(vi.mocked(chrome.scripting.registerContentScripts).mock.calls.length).toBeGreaterThan(registrations);
+    expect(clearAuth).toHaveBeenCalledWith('account-b');
     expect(clearAllSessions).not.toHaveBeenCalled();
     await request({ type: 'guard:secure-logoff' });
     expect(mockProfiles).toEqual([]);
+    expect(clearAuth).toHaveBeenCalledWith('account-a');
   });
 
   it('reads cached key status without reloading plans and reflects acquisition and clearing', async () => {
@@ -681,6 +684,7 @@ describe('service worker access routing', () => {
       protectedField: loaded.protectedFields[0], pageTarget: loaded.pageTargets[0], source: 'MANUAL',
     } })).resolves.toEqual({ ok: false, error: 'stale-page-context' });
     expect(clearSession).toHaveBeenCalledOnce();
+    expect(clearAuth).toHaveBeenCalledOnce();
   });
 
   it('invalidates selected fields on a same-URL page reload', async () => {

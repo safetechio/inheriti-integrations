@@ -20,6 +20,7 @@ vi.mock('@napi-rs/keyring', () => ({
 }));
 
 const session = (issuer = 'https://issuer.test'): OperatorSession => ({
+  kind: 'business', familyId: 'family-1', sessionExpiresAt: 2_000_000_000_000,
   accessToken: 'private-access-token', refreshToken: 'private-refresh-token', tokenType: 'Bearer', expiresAt: 2_000_000_000_000,
   principal: { issuer, audience: 'test', authorizedParty: 'viewer', environment: 'TEST', subject: 'member', sessionId: 'session', tokenId: 'token', scopes: [] },
 });
@@ -56,7 +57,17 @@ it('rejects wrong-issuer and corrupt sessions and reports failed deletion', asyn
   await held.save(session());
   backend.deletionFails = true;
   await expect(held.clear()).rejects.toThrow('operator_session_clear_failed');
-  expect(backend.values.size).toBe(1);
+  expect(backend.values.size).toBe(2);
+});
+
+it('removes a saved SafeID-only session at Business cutover', async () => {
+  const held = new WorkspaceOperatorSessionStore('dev', 'https://issuer.test');
+  await held.save(session());
+  const [key] = backend.values.keys();
+  const legacy = { ...session(), kind: undefined, familyId: undefined, sessionExpiresAt: undefined, idToken: 'provider-id-token' };
+  backend.values.set(key!, JSON.stringify(legacy));
+  expect(await new WorkspaceOperatorSessionStore('dev', 'https://issuer.test').load()).toBeUndefined();
+  expect(await new WorkspaceOperatorSessionStore('dev', 'https://issuer.test').wasSignedOut()).toBe(true);
 });
 
 it('keeps an explicit sign-out marker across restarts until explicit sign-in clears it', async () => {

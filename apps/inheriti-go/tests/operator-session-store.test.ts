@@ -19,8 +19,8 @@ vi.mock('electron', () => ({
 import { ProtectedOperatorSessionStore } from '../src/modules/launcher/main/operator-session-store.js';
 
 const session = (issuer: string): OperatorSession => ({
-  accessToken: 'private-access-token', refreshToken: 'private-refresh-token', idToken: 'private-id-token',
-  tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+  kind: 'business', familyId: 'family', accessToken: 'private-access-token', refreshToken: 'private-refresh-token',
+  tokenType: 'Bearer', expiresAt: Date.now() + 60_000, sessionExpiresAt: Date.now() + 120_000,
   principal: { issuer, audience: 'test', authorizedParty: 'go', environment: 'TEST', subject: 'member',
     sessionId: 'session', tokenId: 'token', scopes: [] },
 });
@@ -108,6 +108,33 @@ it('discards a legacy session while preserving account data for a fresh sign-in'
   await store.save(original);
   expect(store.selectedOrganization()).toBe('org-a');
   expect(await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load()).toEqual(original);
+});
+
+it('removes stored SafeID credentials from a saved profile and asks for sign-in again', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const issuer = 'https://issuer.test';
+  const store = new ProtectedOperatorSessionStore('dev', issuer);
+  const original = session(issuer);
+  await store.save(original);
+  const file = join(secure.directory, 'protected-checkpoint');
+  const values = JSON.parse(Buffer.from(readFileSync(file, 'utf8'), 'base64').toString().slice('encrypted:'.length)) as Record<string, unknown>;
+  const profilePath = Object.keys(values).find((key) => key.includes('/profile/'))!;
+  values[profilePath] = { generation: 1, session: {
+    accessToken: 'safe-id-access', refreshToken: 'safe-id-refresh', idToken: 'safe-id-id',
+    tokenType: 'Bearer', expiresAt: Date.now() + 60_000, principal: original.principal,
+  } };
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(file, Buffer.from(`encrypted:${JSON.stringify(values)}`).toString('base64'));
+
+  const restarted = new ProtectedOperatorSessionStore('dev', issuer);
+  expect(await restarted.load()).toBeUndefined();
+  expect(await restarted.accountSummaries()).toEqual({ activeSubject: undefined, accounts: [
+    { subject: 'member', name: 'member', status: 'sign-in-again' },
+  ] });
+  expect(readFileSync(file, 'utf8')).not.toContain('safe-id-refresh');
+  const sanitized = Buffer.from(readFileSync(file, 'utf8'), 'base64').toString().slice('encrypted:'.length);
+  expect(sanitized).not.toContain('safe-id-refresh');
+  expect(sanitized).not.toContain('safe-id-id');
 });
 
 it('keeps profiles and preferences separate across activation and duplicate enrollment', async () => {
@@ -341,8 +368,8 @@ it('exposes only non-secret saved-account summaries', async () => {
   secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
   const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
   const first = session('https://issuer.test');
-  const expired = { accessToken: 'other-access', idToken: 'private-id-token', tokenType: first.tokenType, expiresAt: Date.now() - 1,
-    principal: { ...first.principal, subject: 'other' } };
+  const expired = { ...first, accessToken: 'other-access', expiresAt: Date.now() - 1,
+    sessionExpiresAt: Date.now() - 1, principal: { ...first.principal, subject: 'other' } };
   await store.save(first);
   await store.enroll(expired);
   expect(await store.accountSummaries()).toEqual({ activeSubject: 'member', accounts: [

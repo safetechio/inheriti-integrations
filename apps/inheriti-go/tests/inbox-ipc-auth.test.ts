@@ -42,7 +42,7 @@ it.each([Object.assign(new Error('forbidden'), { status: 403 }), new Error('netw
 it('keeps the current session when a canceled Inbox preparation reports late token expiry', async () => {
   let rejectToken!: (error: Error) => void;
   const token = new Promise<string>((_resolve, reject) => { rejectToken = reject; });
-  const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', () => token);
+  const identity = new TrayInboxIdentity('https://api.test/integrations/', 'TEST', () => token, async () => ({ issuer: 'https://issuer.test', subject: 'user-1' }));
   const session = { prepareInbox: () => identity.prepare('org-a'), signOut: vi.fn() };
   registerInboxIpc(session as unknown as TraySession, vi.fn());
 

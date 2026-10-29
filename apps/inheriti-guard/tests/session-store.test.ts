@@ -162,12 +162,42 @@ describe('SessionStorageOperatorSessionStore', () => {
 
   it('keeps a readable SafeID label after a credential is revoked', async () => {
     const store = new SessionStorageOperatorSessionStore(sessionArea().area);
-    const session = login('b');
-    session.idToken = `header.${Buffer.from(JSON.stringify({ name: 'E2E Manager' })).toString('base64url')}.signature`;
+    const session = Object.assign(login('b'), {
+      idToken: `header.${Buffer.from(JSON.stringify({ name: 'E2E Manager' })).toString('base64url')}.signature`,
+    });
     await enroll(store, session);
     expect((await store.profiles())[0]?.label).toBe('E2E Manager');
     await (await store.forProfile(operatorProfileId(session))).clear();
     expect((await store.profiles())[0]?.label).toBe('E2E Manager');
+  });
+
+  it('discards saved provider credentials for Business while retaining the account row', async () => {
+    const { area, values } = sessionArea();
+    const store = new SessionStorageOperatorSessionStore(area);
+    const session = login('business-user');
+    session.principal.audience = 'inheriti-integrations-api';
+    await enroll(store, session);
+    values.set(MASTER_KEY_CACHE_PREFIX + 'org-a', 'a'.repeat(64));
+
+    expect(await new SessionStorageOperatorSessionStore(area).load()).toBeUndefined();
+    expect((await store.profiles())[0]).toMatchObject({ subject: 'business-user', needsSignIn: true, active: false });
+    expect(String(values.get('inheriti.operatorProfiles'))).not.toContain('business-user-refresh');
+    expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-a')).toBe(false);
+  });
+
+  it('stores a Business session without a provider ID token or refresh credential', async () => {
+    const { area, values } = sessionArea();
+    const store = new SessionStorageOperatorSessionStore(area);
+    const session = Object.assign(login('business-user'), {
+      kind: 'business' as const, familyId: 'family-1', sessionExpiresAt: Date.now() + 300_000,
+    });
+    session.principal.audience = 'inheriti-integrations-api';
+    await enroll(store, session);
+    expect((await store.profiles())[0]?.label).toBe('business-user');
+    expect(await store.load()).toEqual(session);
+    const persisted = String(values.get('inheriti.operatorProfiles'));
+    expect(persisted).toContain('family-1');
+    expect(persisted).not.toContain('idToken');
   });
 
   it('fails closed on malformed profiles and leaves unrelated storage intact', async () => {

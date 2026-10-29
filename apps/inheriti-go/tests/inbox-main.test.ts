@@ -29,6 +29,7 @@ vi.mock('@safetech/inheriti-elements-core/inbox', () => ({ createNodeInbox: mock
 
 import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
 import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
+const principal = async () => ({ issuer: 'https://issuer.test', subject: 'user-1' });
 
 const identity = {
   tenantId: 'org-a',
@@ -70,7 +71,7 @@ describe('Tray Secure Chat main process', () => {
     mock.sealInheritiFileKey.mockResolvedValue('sealed');
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('protected_file_claim_unavailable');
     expect(cancelInboxFileAccess).toHaveBeenCalledOnce();
@@ -96,7 +97,7 @@ describe('Tray Secure Chat main process', () => {
     mock.showSaveDialog.mockImplementation(async () => { selectedOrganization = 'org-b'; return { canceled: true }; });
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => selectedOrganization);
     await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('inbox_file_save_cancelled');
     expect(cancelOriginal).toHaveBeenCalledExactlyOnceWith(protectedInput.conversationId,
@@ -124,7 +125,7 @@ describe('Tray Secure Chat main process', () => {
       mock.showSaveDialog.mockResolvedValue({ canceled: false, filePath });
       vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
         run(identity, new AbortController().signal));
-      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
         async () => 'a'.repeat(64), () => 'org-a');
       await expect(inbox.openProtectedFile(protectedInput)).resolves.toMatchObject({ acknowledgement: 'PENDING' });
       expect(await readFile(filePath)).toEqual(Buffer.from([1, 2, 3]));
@@ -151,7 +152,7 @@ describe('Tray Secure Chat main process', () => {
       mock.showSaveDialog.mockResolvedValue({ canceled: false, filePath });
       vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
         run(identity, new AbortController().signal));
-      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
         async () => 'a'.repeat(64), () => 'org-a');
       await expect(inbox.openProtectedFile(protectedInput)).rejects.toThrow('acknowledgement outcome unknown');
       expect(await readFile(filePath)).toEqual(Buffer.from([1, 2, 3]));
@@ -162,7 +163,7 @@ describe('Tray Secure Chat main process', () => {
   it('forwards device changes as participant refresh signals for the selected organization', async () => {
     mock.createNodeInbox.mockReturnValue({ listConversations: vi.fn().mockResolvedValue({ items: [] }) });
     const onSignal = vi.fn();
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a', onSignal);
     await inbox.listConversations();
     const onChange = mock.createNodeInboxEventListener.mock.calls[0]![2];
@@ -174,7 +175,7 @@ describe('Tray Secure Chat main process', () => {
   it('scopes presence snapshots and disconnects to the selected organization', () => {
     const onSignal = vi.fn();
     let organizationId = 'org-a';
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => organizationId, onSignal);
     inbox.listen();
     expect(mock.createNodeInboxEventListener.mock.calls[0]![4]).toBe('org-a');
@@ -193,7 +194,7 @@ describe('Tray Secure Chat main process', () => {
     const createConversation = vi.fn().mockResolvedValue({ id: 'conversation-a' });
     mock.createNodeInbox.mockReturnValue({ createConversation });
     vi.spyOn(TrayInboxIdentity.prototype, 'registeredMemberId').mockResolvedValueOnce('member-a');
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     await inbox.createConversation('Project handover', ['member-b']);
     expect(createConversation).toHaveBeenCalledExactlyOnceWith('Project handover', ['member-a', 'member-b']);
@@ -205,7 +206,7 @@ describe('Tray Secure Chat main process', () => {
     mock.createNodeInbox.mockReturnValue({ sendNormal });
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     const sending = inbox.sendNormal('conversation', 'parent', 'message');
     await vi.waitFor(() => expect(sendNormal).toHaveBeenCalledOnce());
@@ -222,7 +223,7 @@ describe('Tray Secure Chat main process', () => {
     let finishPreparation!: (state: { status: 'ready'; memberId: string }) => void;
     const prepare = vi.spyOn(TrayInboxIdentity.prototype, 'prepare').mockReturnValue(new Promise((resolve) => { finishPreparation = resolve; }));
     const cancel = vi.spyOn(TrayInboxIdentity.prototype, 'cancelPreparation').mockImplementation(() => {});
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     const pending = inbox.prepare();
     expect(prepare).toHaveBeenCalledExactlyOnceWith('org-a');
@@ -239,7 +240,7 @@ describe('Tray Secure Chat main process', () => {
   it('continues to block account transitions during device replacement and file transfer', async () => {
     let finishReplacement!: (state: { status: 'ready'; memberId: string }) => void;
     vi.spyOn(TrayInboxIdentity.prototype, 'replace').mockReturnValue(new Promise((resolve) => { finishReplacement = resolve; }));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     const replacing = inbox.replace();
     expect(() => inbox.beginAccountTransition()).toThrow('inbox_operation_busy');
@@ -259,7 +260,7 @@ describe('Tray Secure Chat main process', () => {
     vi.spyOn(TrayInboxIdentity.prototype, 'registeredMemberId').mockReturnValue(new Promise((resolve) => { finishMember = resolve; }));
     const createConversation = vi.fn().mockResolvedValue({ id: 'conversation-a' });
     mock.createNodeInbox.mockReturnValue({ createConversation });
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     const creating = inbox.createConversation('Project handover', ['member-b']);
     expect(() => inbox.assertIdle()).toThrow('inbox_operation_busy');
@@ -272,7 +273,7 @@ describe('Tray Secure Chat main process', () => {
   it('forwards conversation and recipient changes only for the selected organization', async () => {
     mock.createNodeInbox.mockReturnValue({ listConversations: vi.fn().mockResolvedValue({ items: [] }) });
     const onSignal = vi.fn();
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a', onSignal);
     inbox.listen();
     const onChange = mock.createNodeInboxEventListener.mock.calls[0]![2];
@@ -293,7 +294,7 @@ describe('Tray Secure Chat main process', () => {
     const client = { sendFile: vi.fn() };
     mock.createNodeInbox.mockReturnValue(client);
     let selectedOrganization = 'org-a';
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => selectedOrganization);
 
     const sending = inbox.sendFile('conversation', '2030-01-01T00:00:00.000Z');
@@ -314,7 +315,7 @@ describe('Tray Secure Chat main process', () => {
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
     const resolveKey = vi.fn().mockRejectedValue(new Error('organization_key_unavailable'));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       resolveKey, () => 'org-a');
 
     await expect(inbox.sendFile('conversation', '2030-01-01T00:00:00.000Z'))
@@ -336,7 +337,7 @@ describe('Tray Secure Chat main process', () => {
     mock.createNodeInbox.mockReturnValue(client);
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
 
     await expect(inbox.openFile('conversation', 'message')).resolves.toMatchObject({ acknowledgement: 'PENDING' });
@@ -363,7 +364,7 @@ describe('Tray Secure Chat main process', () => {
     mock.createNodeInbox.mockReturnValue(client);
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
 
     const opening = inbox.openFileForPlan('conversation', 'message', (file) => {
@@ -388,7 +389,7 @@ describe('Tray Secure Chat main process', () => {
     });
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     const opening = inbox.openFileForPlan('conversation', 'message', () => inbox.hide());
     await expect(opening).rejects.toBeTruthy();
@@ -404,7 +405,7 @@ describe('Tray Secure Chat main process', () => {
       mock.createNodeInbox.mockReturnValue(client);
       vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
         run(identity, new AbortController().signal));
-      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
         async () => 'a'.repeat(64), () => 'org-a');
       const delivered = vi.fn();
       const opening = inbox.openFileForPlan('conversation', 'message', delivered);
@@ -427,7 +428,7 @@ describe('Tray Secure Chat main process', () => {
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
     const resolveKey = vi.fn().mockResolvedValue('a'.repeat(64));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', resolveKey, () => 'org-a');
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal, resolveKey, () => 'org-a');
     const segments = [{ text: 'Hello ' }, { protectedText: 'secret', expiresAt: '2030-01-01T00:00:00.000Z' }];
     await inbox.sendParent('conversation', 'parent-1', segments);
     expect(client.sendParent).toHaveBeenCalledWith({ conversationId: 'conversation', parentId: 'parent-1',
@@ -453,7 +454,7 @@ describe('Tray Secure Chat main process', () => {
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
     const resolveKey = vi.fn();
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       resolveKey, () => 'org-a');
     await expect(inbox.listNormal('conversation')).resolves.toMatchObject({
       items: [{ parentId: 'parent-1', text: 'hello' }], unreadCount: 0, readThroughSequence: 4,
@@ -482,7 +483,7 @@ describe('Tray Secure Chat main process', () => {
     });
     vi.spyOn(TrayInboxIdentity.prototype, 'withIdentity').mockImplementation(async (_organizationId, run) =>
       run(identity, new AbortController().signal));
-    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token', principal,
       async () => 'a'.repeat(64), () => 'org-a');
     expect((await inbox.listNormal('conversation')).items[0]?.recipientStatuses).toEqual(normalReceipts);
     expect((await inbox.listParents('conversation')).items[0]?.recipientStatuses).toEqual(parentReceipts);
