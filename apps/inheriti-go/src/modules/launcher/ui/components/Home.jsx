@@ -9,7 +9,7 @@ export function organizationDisplayName(organization, organizations = []) {
   return `${organization.name} · ${ambiguous ? organization.id : suffix}`;
 }
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOutAll, signOutDisabled, status, notice, accountName, accountRole, pendingInboxControls }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, accountRole, pendingInboxControls }) {
   const accountMenuRef = useRef(null);
   useEffect(() => {
     const closeOutside = (event) => {
@@ -53,6 +53,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
               {account.status === 'sign-in-again' && <small>Sign in again</small>}</span>
           </button>)}
           <button id="add-account" type="button" disabled={signOutDisabled} onClick={onAddAccount}><span aria-hidden="true">＋</span>Add another account</button>
+          <button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>Log out of this account</button>
           <button id="sign-out-all" type="button" disabled={signOutDisabled} onClick={onSignOutAll}>{otherAccounts.length ? 'Log out of all accounts' : 'Log out'}</button>
         </div>
       </details>

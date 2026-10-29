@@ -304,6 +304,7 @@ export function LauncherApp({ messages }) {
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
     onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
     onOpenApp={() => void session.openApp()}
+    onSignOut={() => { closeInbox(); setInboxHasNew(false); setPendingInboxAction(null); void flow.signOut(); }}
     onSignOutAll={() => setConfirmSignOutAll(true)}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName} accountRole={state.accountRole}

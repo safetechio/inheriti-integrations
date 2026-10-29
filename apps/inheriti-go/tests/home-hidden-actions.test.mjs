@@ -32,6 +32,8 @@ it('keeps saved accounts in the profile menu and organisations in their own sele
   expect(markup.match(/Shared Company/g)).toHaveLength(1);
   expect(markup).toContain('aria-label="Open account menu"');
   expect(markup).toContain('class="tray-account-option"');
+  expect(markup).toContain('id="sign-out"');
+  expect(markup).toContain('Log out of this account');
   expect(markup).toContain('Log out of all accounts');
   expect(markup).toContain('id="add-account"');
   expect(markup).not.toContain('refreshToken');
