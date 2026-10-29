@@ -7,7 +7,7 @@ export function useGetMasterKeyConfigurationStatus(organizationId?: string) {
   const result = useApiQuery<{ configured?: boolean }>(
     ['master-key-status', organizationId],
     organizationId
-      ? `/organizations/${encodeURIComponent(organizationId)}/master-key-configuration-status`
+      ? `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/master-key-configuration-status`
       : null,
   );
   return { ...result, data: Boolean(result.data?.configured) };
@@ -17,7 +17,7 @@ export function useGetMasterKeySeed(organizationId?: string, options?: { enabled
   const result = useApiQuery<{ seed?: string }>(
     ['master-key-seed', organizationId],
     organizationId && options?.enabled !== false
-      ? `/organizations/${encodeURIComponent(organizationId)}/master-key-seed`
+      ? `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/master-key-seed`
       : null,
   );
   return { ...result, data: result.data?.seed ?? null };
@@ -32,7 +32,7 @@ export function useVerifyMasterKeyPassphrase() {
           await request<{ valid?: boolean }>(
             transport,
             'POST',
-            `/organizations/${encodeURIComponent(orgId)}/verify-passphrase`,
+            `/integrations/v1/organizations/${encodeURIComponent(orgId)}/verify-passphrase`,
             { verifier },
           )
         )?.valid,
@@ -103,7 +103,7 @@ export function useMasterKeySession({
         sessionId?: string;
         envelopeId?: string;
         relayToken?: string;
-      }>(transport, 'POST', `/organizations/${encodeURIComponent(orgId)}/master-key-session`, {
+      }>(transport, 'POST', `/integrations/v1/organizations/${encodeURIComponent(orgId)}/master-key-session`, {
         clientPublicKey: pair.publicKeyBase64,
         ...(planId && flow ? { planId, flow } : {}),
       });
@@ -147,7 +147,7 @@ function cancelMasterKeySession(
   return request(
     transport,
     'POST',
-    `/organizations/${encodeURIComponent(orgId)}/master-key-session/${encodeURIComponent(sessionId)}/cancel`,
+    `/integrations/v1/organizations/${encodeURIComponent(orgId)}/master-key-session/${encodeURIComponent(sessionId)}/cancel`,
     {},
   );
 }

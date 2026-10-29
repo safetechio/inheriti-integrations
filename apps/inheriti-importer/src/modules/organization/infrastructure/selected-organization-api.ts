@@ -17,25 +17,13 @@ function notifySelectedOrganization() {
 const selectedOrganizationKey = () =>
   activeAccountKey ? `selectedOrganizationId:${activeAccountKey}` : null;
 
-function getSelectedOrganizationSnapshot() {
+export function getSelectedOrganizationSnapshot() {
   const key = selectedOrganizationKey();
   return key ? localStorage.getItem(key) : null;
 }
 
-export function setActiveOrganizationAccount(key: string | null, migrateLegacy = false) {
+export function setActiveOrganizationAccount(key: string | null) {
   activeAccountKey = key;
-  if (!key || !migrateLegacy) {
-    notifySelectedOrganization();
-    return;
-  }
-  const legacy = localStorage.getItem('selectedOrganizationId');
-  if (legacy === null) {
-    notifySelectedOrganization();
-    return;
-  }
-  const scopedKey = `selectedOrganizationId:${key}`;
-  if (localStorage.getItem(scopedKey) === null) localStorage.setItem(scopedKey, legacy);
-  localStorage.removeItem('selectedOrganizationId');
   notifySelectedOrganization();
 }
 
@@ -106,18 +94,18 @@ export function useGetSelectedOrganization() {
   const id = useGetSelectedOrganizationId();
   return useApiQuery<Organization>(
     ['organization', id],
-    id ? `/organizations/${encodeURIComponent(id)}` : null,
+    id ? `/integrations/v1/organizations/${encodeURIComponent(id)}` : null,
   );
 }
 
 export function useGetMyOrganization(options?: { enabled?: boolean }) {
   const organizations = useApiQuery<Organization[] | { items?: Organization[] }>(
     ['organizations'],
-    options?.enabled === false ? null : '/organizations',
+    options?.enabled === false ? null : '/integrations/v1/importer/organizations',
   );
   const profile = useApiQuery<{ id: string }>(
     ['profile'],
-    options?.enabled === false ? null : '/user/profile',
+    options?.enabled === false ? null : '/integrations/v1/importer/profile',
   );
   return {
     ...organizations,
@@ -131,11 +119,11 @@ export function useGetMyOrganization(options?: { enabled?: boolean }) {
 export function useGetJoinedOrganizations(options?: { enabled?: boolean }) {
   const organizations = useApiQuery<Organization[] | { items?: Organization[] }>(
     ['organizations'],
-    options?.enabled === false ? null : '/organizations',
+    options?.enabled === false ? null : '/integrations/v1/importer/organizations',
   );
   const profile = useApiQuery<{ id: string }>(
     ['profile'],
-    options?.enabled === false ? null : '/user/profile',
+    options?.enabled === false ? null : '/integrations/v1/importer/profile',
   );
   return {
     ...organizations,
@@ -152,7 +140,7 @@ export function useGetIdentity() {
     firstName?: string;
     lastName?: string;
     email?: string;
-  }>(['profile'], '/user/profile');
+  }>(['profile'], '/integrations/v1/importer/profile');
   return {
     ...result,
     identity: result.data

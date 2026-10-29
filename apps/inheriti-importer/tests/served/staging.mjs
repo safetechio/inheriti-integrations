@@ -202,7 +202,7 @@ async function startImporter() {
   proxy = createServer((incoming, outgoing) => {
     const isStage =
       incoming.method === 'POST' &&
-      /^\/organizations\/[^/]+\/importer-tool\/staged-items$/.test(incoming.url ?? '');
+      /^\/integrations\/v1\/organizations\/[^/]+\/importer-tool\/staged-items$/.test(incoming.url ?? '');
     const chunks = [];
     if (isStage) incoming.on('data', (chunk) => chunks.push(chunk));
     const upstream = httpRequest(
@@ -280,7 +280,6 @@ async function startImporter() {
       INHERITI_API_ORIGIN: appApiOrigin,
       SAFEID_URL: safeIdUrl,
       SAFEID_REALM: 'inheriti-business-e2e',
-      SAFEID_CLIENT_ID: 'inheriti-business-integrations-interactive',
       E2E_IMPORTER_URL_FILE: urlFile,
     },
   });
@@ -401,11 +400,16 @@ try {
   const stagedId = responseBody.result?.id;
   assert.ok(stagedId);
   recordOracleResult(evidenceDir, { id: 'post-201-envelope-only-response', passed: true });
-  const staged = await authenticatedApiRequest(
-    owner.page,
-    'get',
-    `/organizations/${organizationId}/importer-tool/staged-items`,
+  const stagedResponse = await window.evaluate(
+    (id) => window.inheriti.api.request({
+      method: 'GET',
+      path: `/integrations/v1/organizations/${id}/importer-tool/staged-items`,
+      organizationId: id,
+    }),
+    organizationId,
   );
+  assert.equal(stagedResponse.status, 200);
+  const staged = stagedResponse.body;
   const items = Array.isArray(staged.result)
     ? staged.result
     : (staged.result?.items ?? staged.result?.data);

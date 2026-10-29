@@ -12,9 +12,6 @@ const mainSource = [
   ...readdirSync(resolve(electronRoot, 'lib'))
     .filter((name) => name.endsWith('.cjs'))
     .map((name) => readFileSync(resolve(electronRoot, 'lib', name), 'utf8')),
-  ...readdirSync(resolve(electronRoot, 'lib/auth'))
-    .filter((name) => name.endsWith('.cjs'))
-    .map((name) => readFileSync(resolve(electronRoot, 'lib/auth', name), 'utf8')),
   ...readdirSync(resolve(electronRoot, 'ipc'))
     .filter((name) => name.endsWith('.cjs'))
     .map((name) => readFileSync(resolve(electronRoot, 'ipc', name), 'utf8')),
@@ -59,13 +56,13 @@ describe('Electron security contract', () => {
   it('limits the local Organization Key simulator to its dedicated relay channel', () => {
     expect(mainSource).toContain("handle('development:deliverMasterKey'");
     expect(mainSource).toContain(
-      'path: `/organizations/${encodeURIComponent(organizationId)}/master-key-relay`',
+      'path: `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/master-key-relay`',
     );
     expect(mainSource).toContain('if (app.isPackaged) throw new Error');
   });
 
   it('validates API method and absolute path at the main-process boundary', () => {
-    expect(mainSource).toContain('request.path must be an absolute API path');
+    expect(mainSource).toContain('Unsupported Business API path');
     expect(mainSource).toContain('Unsupported method: ${method}');
     expect(mainSource).toContain("['GET', 'POST', 'PUT', 'PATCH', 'DELETE']");
   });
@@ -76,9 +73,11 @@ describe('Electron security contract', () => {
   });
 
   it('keeps OIDC and socket credentials in the main process', () => {
-    expect(mainSource).toContain("code_challenge_method: 'S256'");
-    expect(mainSource).toContain("path: '/user/login'");
-    expect(mainSource).toContain('extraHeaders: cookieHeader');
+    expect(mainSource).toContain("import('@safetech/inheriti-elements-core/node')");
+    expect(mainSource).toContain('request.setHeader(\'Authorization\', `Bearer ${token}`)');
+    expect(mainSource).toContain('auth: async (callback) =>');
+    expect(mainSource).not.toContain("path: '/user/login'");
+    expect(mainSource).not.toContain('extraHeaders: cookieHeader');
     expect(mainSource).toContain(
       "const SOCKET_EVENTS = new Set(['tenant_changed', 'master_key_delivered'])",
     );

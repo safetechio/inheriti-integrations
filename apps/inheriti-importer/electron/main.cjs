@@ -2,11 +2,9 @@ const { app, BrowserWindow, Menu } = require('electron');
 
 const { loadEnvironment } = require('./lib/environment.cjs');
 
-// Populates `process.env` before any other module below captures an
-// env-derived constant (API_ORIGIN, SAFEID_*) at its own module-load time.
 loadEnvironment({ isPackaged: app.isPackaged, electronDir: __dirname });
 
-const { initializeSessions } = require('./lib/api-session.cjs');
+const { OperatorRuntime } = require('./lib/operator-runtime.cjs');
 const { createWindow } = require('./lib/window.cjs');
 const { register: registerVault } = require('./ipc/vault.cjs');
 const { register: registerApi } = require('./ipc/api.cjs');
@@ -14,9 +12,17 @@ const { register: registerSocket } = require('./ipc/socket.cjs');
 const { register: registerAuth } = require('./ipc/auth.cjs');
 const { register: registerUpdates } = require('./ipc/updates.cjs');
 
-const sessionsReady = app.whenReady().then(initializeSessions);
+const deployment = process.env.INHERITI_ENV || 'local';
+const environment = deployment === 'prod' ? 'LIVE' : 'TEST';
+const issuer = `${(process.env.SAFEID_URL || '').replace(/\/$/, '')}/realms/${process.env.SAFEID_REALM || ''}`;
+const runtime = new OperatorRuntime({
+  environment,
+  apiOrigin: process.env.INHERITI_API_ORIGIN || '',
+  issuer,
+});
+const runtimeReady = app.whenReady().then(() => runtime.initialize());
 
-sessionsReady.then(() => {
+runtimeReady.then(() => {
   if (app.isPackaged) Menu.setApplicationMenu(null);
   createWindow(__dirname);
   app.on('activate', () => {
@@ -34,7 +40,7 @@ app.on('web-contents-created', (_event, contents) => {
 });
 
 registerVault();
-registerApi(sessionsReady);
-registerSocket(sessionsReady);
-registerAuth(sessionsReady);
-registerUpdates();
+registerApi(runtimeReady, runtime);
+registerSocket(runtimeReady, runtime);
+registerAuth(runtimeReady, runtime);
+registerUpdates(runtimeReady, runtime);

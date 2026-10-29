@@ -97,7 +97,7 @@ describe('createElectronAuthProvider account transitions', () => {
 
     await provider.activateAccount('account-b', 'org-b');
 
-    expect(api.request).toHaveBeenCalledWith({ method: 'GET', path: '/organizations' });
+    expect(api.request).toHaveBeenCalledWith({ method: 'GET', path: '/integrations/v1/importer/organizations' });
     expect(values.get('selectedOrganizationId:account-b')).toBe('org-b');
     expect(provider.dispatch).toHaveBeenLastCalledWith({
       type: 'SIGN_IN',
@@ -475,8 +475,8 @@ describe('createElectronAuthProvider account transitions', () => {
     });
   });
 
-  it('migrates the old organization preference only after a fresh login', async () => {
-    const values = new Map<string, string>([['selectedOrganizationId', 'org-old']]);
+  it('does not reuse another account organization preference after a fresh login', async () => {
+    const values = new Map<string, string>([['selectedOrganizationId:account-a', 'org-a']]);
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => {
@@ -489,7 +489,7 @@ describe('createElectronAuthProvider account transitions', () => {
     const auth = {
       session: vi.fn(async () => null),
       login: vi.fn(async () => ({ userId: 'A' })),
-      accounts: vi.fn(async () => [{ key: 'account-a', subject: 'A', active: true }]),
+      accounts: vi.fn(async () => [{ key: 'account-b', subject: 'B', active: true }]),
     };
     // @ts-expect-error test-only bridge stub
     globalThis.window.inheriti = { auth };
@@ -497,9 +497,8 @@ describe('createElectronAuthProvider account transitions', () => {
     provider.dispatch = vi.fn();
 
     await provider.restoreSession();
-    expect(values.get('selectedOrganizationId')).toBe('org-old');
     await provider.login();
-    expect(values.get('selectedOrganizationId')).toBeUndefined();
-    expect(values.get('selectedOrganizationId:account-a')).toBe('org-old');
+    expect(values.get('selectedOrganizationId:account-a')).toBe('org-a');
+    expect(values.get('selectedOrganizationId:account-b')).toBeUndefined();
   });
 });

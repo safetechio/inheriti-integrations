@@ -1,7 +1,9 @@
+import { getSelectedOrganizationSnapshot } from '@modules/organization/infrastructure/selected-organization-api';
+
 /**
  * Renderer-side Business API transport. It forwards every
  * request over the preload bridge to the Electron main process, which holds the
- * cookie jar and attaches CSRF. The renderer never sees a token or cookie.
+ * operator session and attaches its bearer token. The renderer never sees a token.
  *
  * Typed against the local request and response shape.
  */
@@ -12,7 +14,6 @@ export interface HttpRequestLike {
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
   signal?: AbortSignal;
-  skipCsrf?: boolean;
   returnErrorResponse?: boolean;
 }
 
@@ -37,7 +38,7 @@ export class ElectronHttpTransport {
       path: request.path,
       query: request.query,
       body: request.body,
-      skipCsrf: request.skipCsrf,
+      organizationId: getSelectedOrganizationSnapshot() ?? undefined,
     });
 
     if (request.signal?.aborted) {

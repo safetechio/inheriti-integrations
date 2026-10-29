@@ -15,7 +15,7 @@ export function useSelectedOrganizationMemberCapabilities() {
   const id = useGetSelectedOrganizationId();
   const result = useApiQuery<Capabilities>(
     ['capabilities', id],
-    id ? `/organizations/${encodeURIComponent(id)}/member-capabilities` : null,
+    id ? `/integrations/v1/organizations/${encodeURIComponent(id)}/member-capabilities` : null,
   );
   return {
     canAccessStagedItems: result.data?.canAccessStagedItems ?? false,

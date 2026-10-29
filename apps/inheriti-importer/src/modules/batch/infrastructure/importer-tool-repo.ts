@@ -191,7 +191,7 @@ export class ImporterToolRequestError extends Error {
 }
 
 function stagedItemsPath(organizationId: string, id?: string): string {
-  const base = `/organizations/${encodeURIComponent(organizationId)}/importer-tool/staged-items`;
+  const base = `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/importer-tool/staged-items`;
   return id ? `${base}/${encodeURIComponent(id)}` : base;
 }
 

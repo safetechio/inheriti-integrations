@@ -5,15 +5,15 @@ const {
   reconnectBusinessSocket,
 } = require('../lib/business-socket.cjs');
 
-function register(sessionsReady) {
+function register(runtimeReady, runtime) {
   handle('socket:subscribe', async (event, request) => {
-    await sessionsReady;
-    return subscribeBusinessSocket(event.sender, request);
+    await runtimeReady;
+    return subscribeBusinessSocket(runtime, event.sender, request);
   });
   handle('socket:unsubscribe', (_event, request) => unsubscribeBusinessSocket(request));
   handle('socket:reconnect', async () => {
-    await sessionsReady;
-    return reconnectBusinessSocket();
+    await runtimeReady;
+    return reconnectBusinessSocket(runtime);
   });
 }
 

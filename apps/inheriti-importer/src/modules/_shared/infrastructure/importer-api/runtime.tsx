@@ -107,23 +107,9 @@ export function ImporterApiProvider({
     const epoch = authEpochRef.current;
     const confirmation = (async () => {
       setSessionState((current) => ({ status: 'CONFIRMING', session: current.session }));
-      const response = await transport.request<{ result?: unknown }>({
-        method: 'GET',
-        path: '/user/session',
-        returnErrorResponse: true,
-      });
+      const value = await window.inheriti?.auth?.session();
       if (epoch !== authEpochRef.current) return;
-      if (response.status === 401 || response.status === 403) {
-        const previous = sessionRef.current;
-        if (previous) await vault.clearSession(previous.sessionFamilyId);
-        setSessionState({ status: 'EXPIRED', session: null });
-        return;
-      }
-      if (response.status < 200 || response.status >= 300) {
-        setSessionState((current) => ({ status: 'ERROR', session: current.session }));
-        return;
-      }
-      const next = parseSessionDescriptor(response.body.result);
+      const next = parseSessionDescriptor(value);
       if (!next) {
         const previous = sessionRef.current;
         if (previous) await vault.clearSession(previous.sessionFamilyId);
@@ -146,7 +132,7 @@ export function ImporterApiProvider({
       });
     confirmationRef.current = confirmation;
     return confirmation;
-  }, [transport, vault]);
+  }, [vault]);
   useEffect(() => {
     void confirmSession();
   }, [confirmSession]);

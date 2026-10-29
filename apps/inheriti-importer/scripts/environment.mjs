@@ -5,7 +5,6 @@ export const environments = ['dev', 'stg', 'prod'];
 export const runtimeEnvironmentKeys = [
   'INHERITI_API_ORIGIN',
   'SAFEID_URL',
-  'SAFEID_CLIENT_ID',
   'SAFEID_REALM',
   'WEB_APP_URL',
 ];
@@ -27,21 +26,17 @@ export function readEnvironment(environment, root) {
     environment,
     INHERITI_API_ORIGIN: values.INHERITI_API_ORIGIN,
     SAFEID_URL: values.SAFEID_URL,
-    SAFEID_CLIENT_ID: values.SAFEID_CLIENT_ID,
     SAFEID_REALM: values.SAFEID_REALM,
     WEB_APP_URL: values.WEB_APP_URL,
   };
 }
 
-export function runPnpm(args, options = {}) {
-  const pnpmPath = process.env.npm_execpath;
-  const command = pnpmPath ? process.execPath : process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
-  const commandArgs = pnpmPath ? [pnpmPath, ...args] : ['pnpm', ...args];
+export function runYarn(args, options = {}) {
+  const command = process.platform === 'win32' ? 'yarn.cmd' : 'yarn';
   return new Promise((resolve, reject) => {
-    const child = spawn(command, commandArgs, {
+    const child = spawn(command, args, {
       cwd: options.cwd,
-      env: options.env || process.env,
-      shell: !pnpmPath && process.platform === 'win32',
+      env: { ...process.env, ...options.env, COREPACK_ENABLE_PROJECT_SPEC: '0' },
       stdio: 'inherit',
     });
     child.once('error', reject);
@@ -50,7 +45,7 @@ export function runPnpm(args, options = {}) {
         resolve();
         return;
       }
-      reject(new Error(`pnpm ${args.join(' ')} failed (${signal || code})`));
+      reject(new Error(`yarn ${args.join(' ')} failed (${signal || code})`));
     });
   });
 }

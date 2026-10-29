@@ -111,7 +111,7 @@ node tests/served/multi-account.mjs
 node tests/served/staging.mjs
 ```
 
-Run them sequentially: both own and tear down the same disposable `business-e2e` stack. The account lane checks real Electron sign-in, account and organization switching, restart, revocation, and sign-out. Its fixture activates disposable organizations directly to isolate session behavior. The staging lane uses a real organization-key claim and a development SafeKey release simulator, then verifies encrypted staging creates a `NOT_CREATED` draft and no normal Plan. Each writes a redacted manifest under `bussiness/feature-e2e/evidence/` with source revisions and an Importer tree fingerprint.
+Run them sequentially: both own and tear down the same disposable `business-e2e` stack. The account lane checks real Electron sign-in, account and organization switching, restart or reauthentication when protected storage is unavailable, revocation, and sign-out. Its fixture activates disposable organizations directly to isolate session behavior. The staging lane uses a real organization-key claim and a development SafeKey release simulator, then verifies encrypted staging creates a `NOT_CREATED` draft and no normal Plan. Each writes a redacted manifest under `bussiness/feature-e2e/evidence/` with source revisions and an Importer tree fingerprint.
 
 On Linux, smoke-test a fresh unpacked release with:
 

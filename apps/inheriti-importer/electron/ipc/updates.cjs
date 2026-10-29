@@ -1,9 +1,9 @@
 const { handle } = require('../lib/ipc-guard.cjs');
 const { availableUpdate, installUpdate } = require('../lib/updates.cjs');
 
-function register(sessionsReady) {
-  handle('update:check', () => availableUpdate());
-  handle('update:install', (_event, id) => installUpdate(id));
+function register(runtimeReady, runtime) {
+  handle('update:check', async () => { await runtimeReady; return availableUpdate(runtime); });
+  handle('update:install', async (_event, id) => { await runtimeReady; return installUpdate(id, runtime); });
 }
 
 module.exports = { register };

@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 
 vi.mock('@shared/infrastructure/importer-api/http', () => ({
   useApiQuery: (_key: unknown, path: string | null) => ({
-    data: path?.startsWith('/organizations/') && !path.endsWith('/member-capabilities')
-      ? { id: path.split('/')[2], isActivationPending: false }
+    data: path?.startsWith('/integrations/v1/organizations/') && !path.endsWith('/member-capabilities')
+      ? { id: path.split('/')[4], isActivationPending: false }
       : path?.endsWith('/member-capabilities')
         ? { canAccessStagedItems: true }
         : undefined,

@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const useAuthProvider = vi.fn();
 const useGetIdentity = vi.fn();
+const useGetCurrentMember = vi.fn();
 const useGetSelectedOrganization = vi.fn();
 const useSwitchToOrganization = vi.fn();
 const useGetJoinedOrganizations = vi.fn();
@@ -25,8 +26,16 @@ vi.mock('@modules/organization/infrastructure/importer-api', () => ({
   useGetMyOrganization: (...args: unknown[]) => useGetMyOrganization(...args),
 }));
 
+vi.mock('@modules/organization/infrastructure/organization-resources-api', () => ({
+  useGetCurrentMember: (...args: unknown[]) => useGetCurrentMember(...args),
+}));
+
 import { AppShell } from '@modules/import/ui/components/AppShell';
 import { setActiveOrganizationAccount } from '@modules/organization/infrastructure/selected-organization-api';
+
+beforeEach(() => {
+  useGetCurrentMember.mockReturnValue({ member: { id: 'member-1' } });
+});
 
 afterEach(() => {
   setActiveOrganizationAccount(null);
@@ -107,7 +116,7 @@ describe('AppShell account-menu organization switcher', () => {
     });
     expect(screen.queryByRole('menuitem', { name: 'Switch to B and open Shared' })).toBeNull();
   });
-  it('groups destinations by account and confirms both account and organization', async () => {
+  it('confirms a saved account switch and then lets the organization gate select its workspace', async () => {
     const activateAccount = vi.fn().mockResolvedValue(undefined);
     useAuthProvider.mockReturnValue({
       accounts: vi.fn().mockResolvedValue([
@@ -125,6 +134,7 @@ describe('AppShell account-menu organization switcher', () => {
         {
           accountKey: 'account-b',
           subject: 'B',
+          displayName: 'B',
           status: 'ready',
           organizations: [
             { id: 'org-aaaa1111', name: 'Shared' },
@@ -151,18 +161,18 @@ describe('AppShell account-menu organization switcher', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Open account menu/ }));
     fireEvent.click(
-      await screen.findByRole('menuitem', { name: 'Switch to B and open Shared (aaaa1111)' }),
+      await screen.findByRole('menuitem', { name: 'Switch to account B' }),
     );
-    expect(screen.getByText(/Switch to B and open Shared \(aaaa1111\)/)).toBeTruthy();
+    expect(screen.getByText('Switch to B?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(activateAccount).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Open account menu/ }));
     fireEvent.click(
-      await screen.findByRole('menuitem', { name: 'Switch to B and open Shared (aaaa1111)' }),
+      await screen.findByRole('menuitem', { name: 'Switch to account B' }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Switch account' }));
-    await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('account-b', 'org-aaaa1111'));
+    await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('account-b', undefined));
   });
   it('keeps the current account when Add Account returns the active identity', async () => {
     const activateAccount = vi.fn();
@@ -301,7 +311,7 @@ describe('AppShell account-menu organization switcher', () => {
       </AppShell>,
     );
     fireEvent.click(opener);
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Switch to account B' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Switch to account Saved account' }));
     expect(activateAccount).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Switch account' }));
     await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('account-b', undefined));
@@ -344,7 +354,7 @@ describe('AppShell account-menu organization switcher', () => {
     fireEvent.keyUp(account, { key: ' ' });
     fireEvent.click(account);
     expect(screen.getByRole('menu', { name: 'Account' })).toBeTruthy();
-    const signOut = screen.getByRole('menuitem', { name: 'Sign out' });
+    const signOut = screen.getByRole('menuitem', { name: 'Log out' });
     fireEvent.keyDown(signOut, { key: 'Enter' });
     fireEvent.keyUp(signOut, { key: 'Enter' });
     fireEvent.click(signOut);

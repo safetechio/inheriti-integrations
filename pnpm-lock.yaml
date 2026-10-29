@@ -126,6 +126,9 @@ importers:
       '@safetech/inheriti-core-sdk':
         specifier: 4.0.38
         version: 4.0.38(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@1.7.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+      '@safetech/inheriti-elements-core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@safetech/safekey-sdk':
         specifier: 1.0.1
         version: 1.0.1

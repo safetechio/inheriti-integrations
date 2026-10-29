@@ -1,50 +1,26 @@
-const { app, session } = require('electron');
-const { randomBytes } = require('node:crypto');
+const { app } = require('electron');
 const { handle } = require('../lib/ipc-guard.cjs');
-const { captureActiveContext, isCurrent } = require('../lib/api-session.cjs');
-const { apiFetch, ensureCsrf, resetCsrfToken } = require('../lib/api-transport.cjs');
+const { bearerApiFetch, relayApiFetch } = require('../lib/api-transport.cjs');
 
-function register(sessionsReady) {
+function register(runtimeReady, runtime) {
   handle('api:request', async (_event, request) => {
-    await sessionsReady;
-    const capture = captureActiveContext();
-    const context = capture.context;
-    if (!context) throw new Error('AUTH_SIGNED_OUT');
+    await runtimeReady;
+    const capture = runtime.capture();
+    if (!capture.subject) throw new Error('AUTH_SIGNED_OUT');
     const method = String(request?.method || 'GET').toUpperCase();
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       throw new Error(`Unsupported method: ${method}`);
     }
-    if (typeof request?.path !== 'string' || !request.path.startsWith('/')) {
-      throw new Error('request.path must be an absolute API path');
+    if (typeof request?.path !== 'string' || !request.path.startsWith('/integrations/v1/')) {
+      throw new Error('Unsupported Business API path');
     }
-
-    if (!request.skipCsrf && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      await ensureCsrf(context);
-    }
-    if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
-
-    const send = () =>
-      apiFetch({
-        method,
-        path: request.path,
-        query: request.query,
-        body: request.body,
-        skipCsrf: request.skipCsrf,
-        context,
-      });
-
-    let response = await send();
-    if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
-
-    // A rejected CSRF token: refresh once and retry.
-    if (response.status === 419 || response.status === 403) {
-      resetCsrfToken(context);
-      await ensureCsrf(context);
-      if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
-      response = await send();
-    }
-
-    if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+    const token = await runtime.getAccessToken(capture);
+    if (!token || !runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+    const response = await bearerApiFetch({
+      method, path: request.path, query: request.query, body: request.body,
+      token, environment: runtime.environment, organizationId: request.organizationId,
+    });
+    if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
     return response;
   });
 
@@ -66,17 +42,10 @@ function register(sessionsReady) {
       throw new Error('Invalid encrypted Organization Key');
     }
 
-    return apiFetch({
-      method: 'POST',
-      context: {
-        session: session.fromPartition(`inheriti-relay-${randomBytes(16).toString('hex')}`),
-        csrfToken: null,
-        csrfInFlight: null,
-      },
-      path: `/organizations/${encodeURIComponent(organizationId)}/master-key-relay`,
+    return relayApiFetch({
+      path: `/integrations/v1/organizations/${encodeURIComponent(organizationId)}/master-key-relay`,
       body: { sessionId, encryptedMasterKey },
-      skipCsrf: true,
-      authorization: `Bearer ${relayToken}`,
+      token: relayToken,
     });
   });
 }

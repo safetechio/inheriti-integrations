@@ -11,6 +11,8 @@ const useSelectedOrganizationMemberCapabilities = vi.fn();
 const useGetSelectedOrganizationId = vi.fn();
 const useSwitchToOrganization = vi.fn();
 const useService = vi.fn();
+const useGetIdentity = vi.fn();
+const useGetCurrentMember = vi.fn();
 
 vi.mock('@shared/infrastructure/importer-api', () => ({
   useAuthProvider: (...args: unknown[]) => useAuthProvider(...args),
@@ -20,6 +22,8 @@ vi.mock('@shared/infrastructure/importer-api', () => ({
 }));
 
 vi.mock('@modules/organization/infrastructure/importer-api', () => ({
+  useGetIdentity: (...args: unknown[]) => useGetIdentity(...args),
+  useGetCurrentMember: (...args: unknown[]) => useGetCurrentMember(...args),
   useGetJoinedOrganizations: (...args: unknown[]) => useGetJoinedOrganizations(...args),
   useGetMyOrganization: (...args: unknown[]) => useGetMyOrganization(...args),
   useGetSelectedOrganization: (...args: unknown[]) => useGetSelectedOrganization(...args),
@@ -27,6 +31,10 @@ vi.mock('@modules/organization/infrastructure/importer-api', () => ({
     useSelectedOrganizationMemberCapabilities(...args),
   useGetSelectedOrganizationId: (...args: unknown[]) => useGetSelectedOrganizationId(...args),
   useSwitchToOrganization: (...args: unknown[]) => useSwitchToOrganization(...args),
+}));
+
+vi.mock('@modules/organization/infrastructure/organization-resources-api', () => ({
+  useGetCurrentMember: (...args: unknown[]) => useGetCurrentMember(...args),
 }));
 
 import { AuthGate } from '@modules/auth/ui';
@@ -89,6 +97,8 @@ function stubReadyOrganization(
 }
 
 beforeEach(() => {
+  useGetIdentity.mockReturnValue({ identity: { fullName: 'Ada', email: 'ada@example.com' } });
+  useGetCurrentMember.mockReturnValue({ member: { id: 'member-1' } });
   useAuthenticatedCookieSession.mockReturnValue({
     status: 'AUTHENTICATED',
     confirmSession: vi.fn().mockResolvedValue(undefined),
@@ -134,7 +144,7 @@ describe('AuthGate — restore / sign-in / cancel', () => {
 
     render(<AuthGate>content</AuthGate>);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue as B' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with saved account' }));
     await waitFor(() => expect(activateAccount).toHaveBeenCalledWith('account-b'));
   });
 
@@ -148,7 +158,7 @@ describe('AuthGate — restore / sign-in / cancel', () => {
     stubAuthState({ authInitialized: true, isLoggedIn: false });
     view.rerender(<AuthGate>content</AuthGate>);
 
-    expect(await screen.findByRole('button', { name: 'Continue as B' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Continue with saved account' })).toBeTruthy();
     expect(accounts).toHaveBeenCalled();
   });
 
@@ -161,11 +171,11 @@ describe('AuthGate — restore / sign-in / cancel', () => {
     useAuthProvider.mockReturnValue(makeAuthProvider({ accounts }));
     stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 0 });
     const view = render(<AuthGate>content</AuthGate>);
-    expect(await screen.findByRole('button', { name: 'Continue as B' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Continue with saved account' })).toBeTruthy();
 
     stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 1 });
     view.rerender(<AuthGate>content</AuthGate>);
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Continue as B' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Continue with saved account' })).toBeNull());
   });
 
   it('ignores a late saved-account list from before sign-out-all completed', async () => {
@@ -191,7 +201,7 @@ describe('AuthGate — restore / sign-in / cancel', () => {
     await act(async () => {
       resolveOld([{ key: 'account-b', subject: 'B', active: false }]);
     });
-    expect(screen.queryByRole('button', { name: 'Continue as B' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue with saved account' })).toBeNull();
   });
 
   it('clicking sign-in calls the provider login and lets a cancel abort it', async () => {
@@ -249,8 +259,8 @@ describe('AuthGate — organization selection and sign-out', () => {
     );
 
     expect(
-      await screen.findByText('That organisation is no longer available for this account.'),
-    ).toBeTruthy();
+      (await screen.findAllByText('That organisation is no longer available for this account.')).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByTestId('protected')).toBeNull();
   });
   it('renders imported children once signed in, an organization is selectable, and the cookie session is confirmed', async () => {

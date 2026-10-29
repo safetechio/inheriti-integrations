@@ -34,13 +34,11 @@ try {
     apiOrigin: process.env.INHERITI_API_ORIGIN,
     safeIdUrl: process.env.SAFEID_URL,
     safeIdRealm: process.env.SAFEID_REALM,
-    safeIdClientId: process.env.SAFEID_CLIENT_ID,
   }));
   assert.equal(runtime.isPackaged, true);
   assert.ok(runtime.apiOrigin);
   assert.ok(runtime.safeIdUrl);
   assert.ok(runtime.safeIdRealm);
-  assert.ok(runtime.safeIdClientId);
   assert.equal(await window.title(), 'Inheriti® Importer');
   console.log(JSON.stringify({ status: 'passed', runtime }, null, 2));
 } finally {

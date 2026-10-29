@@ -18,7 +18,6 @@ export type ElectronAuthProvider = AuthProviderInstance & {
   restoreSession: () => Promise<void>;
   login: () => Promise<unknown>;
   cancelLogin: () => Promise<void>;
-  loginWithSafeID: () => Promise<unknown>;
   accounts: () => Promise<SavedAccount[]>;
   destinations: () => Promise<AccountDestinations[]>;
   addAccount: () => Promise<void>;
@@ -30,7 +29,7 @@ export type ElectronAuthProvider = AuthProviderInstance & {
 };
 
 /**
- * Electron owns the SafeID/cookie flow. The renderer only receives the
+ * Electron owns the operator session. The renderer only receives the
  * non-sensitive session result and dispatches the Importer auth state transition.
  */
 export function createElectronAuthProvider(
@@ -66,12 +65,9 @@ export function createElectronAuthProvider(
     if (transitionBlocked?.())
       throw new Error('Finish or discard the current import before changing accounts.');
   }
-  async function syncActiveAccount(migrateLegacy = false) {
+  async function syncActiveAccount() {
     const accounts = await window.inheriti?.auth?.accounts?.();
-    setActiveOrganizationAccount(
-      accounts?.find((account) => account.active)?.key ?? null,
-      migrateLegacy,
-    );
+    setActiveOrganizationAccount(accounts?.find((account) => account.active)?.key ?? null);
   }
 
   const provider = {
@@ -99,7 +95,7 @@ export function createElectronAuthProvider(
       try {
         if (enrollmentStartedAt !== enrollmentCancellation) throw new Error('AUTH_CANCELLED');
         const session = await auth.login();
-        await syncActiveAccount(true);
+        await syncActiveAccount();
         provider.dispatch?.({ type: 'SIGN_IN', userData: session ?? {} });
         return session;
       } catch (error) {
@@ -110,9 +106,6 @@ export function createElectronAuthProvider(
         }
         throw error;
       }
-    },
-    async loginWithSafeID() {
-      return provider.login?.();
     },
     async cancelLogin() {
       enrollmentCancellation++;
@@ -157,7 +150,7 @@ export function createElectronAuthProvider(
         if (organizationId) {
           const response = await window.inheriti?.api?.request({
             method: 'GET',
-            path: '/organizations',
+            path: '/integrations/v1/importer/organizations',
           });
           const result = (response?.body as { result?: { items?: Array<{ id?: string }> } })
             ?.result;

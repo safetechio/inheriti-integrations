@@ -5,8 +5,7 @@ const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { apiFetch, ensureCsrf } = require('./api-transport.cjs');
-const { captureActiveContext, isCurrent } = require('./api-session.cjs');
+const { bearerApiFetch } = require('./api-transport.cjs');
 
 const channel = process.env.INHERITI_ENV || 'dev';
 const version = app.isPackaged ? app.getVersion() : `${app.getVersion()}-${channel}.0`;
@@ -73,17 +72,20 @@ async function runWindowsInstaller(destination, start = spawn) {
   app.quit();
 }
 
-async function availableUpdate() {
+async function request(runtime, method, path) {
+  const capture = runtime.capture();
+  if (!capture.subject) throw new Error('AUTH_SIGNED_OUT');
+  const token = await runtime.getAccessToken(capture);
+  if (!token || !runtime.isCurrent(capture)) throw new Error('AUTH_SESSION_EXPIRED');
+  const response = await bearerApiFetch({ method, path, token, environment: runtime.environment });
+  if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+  return response;
+}
+
+async function availableUpdate(runtime) {
   if (!app.isPackaged) return { version, update: null };
   try {
-    const capture = captureActiveContext();
-    if (!capture.context) throw new Error('AUTH_SIGNED_OUT');
-    const response = await apiFetch({
-      method: 'GET',
-      path: '/integrations/internal-builds',
-      context: capture.context,
-    });
-    if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+    const response = await request(runtime, 'GET', '/integrations/v1/internal-builds');
     if (response.status !== 200) throw new Error('Could not check for Importer updates');
     const items = response.body?.result?.items;
     if (!Array.isArray(items)) throw new Error('Invalid update catalog');
@@ -106,16 +108,10 @@ async function availableUpdate() {
   }
 }
 
-async function installUpdate(id) {
+async function installUpdate(id, runtime) {
   if (!app.isPackaged) throw new Error('Updates require an installed Importer');
-  const capture = captureActiveContext();
-  if (!capture.context) throw new Error('AUTH_SIGNED_OUT');
-  const response = await apiFetch({
-    method: 'GET',
-    path: '/integrations/internal-builds',
-    context: capture.context,
-  });
-  if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+  const capture = runtime.capture();
+  const response = await request(runtime, 'GET', '/integrations/v1/internal-builds');
   if (response.status !== 200) throw new Error('Could not verify update');
   const item = response.body?.result?.items?.find((entry) => entry.id === id);
   if (
@@ -134,14 +130,9 @@ async function installUpdate(id) {
     !item.fileName.endsWith({ win32: '.exe', darwin: '.dmg', linux: '.AppImage' }[process.platform])
   )
     throw new Error('Invalid update');
-  await ensureCsrf(capture.context);
-  if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
-  const link = await apiFetch({
-    context: capture.context,
-    method: 'POST',
-    path: `/integrations/internal-builds/${encodeURIComponent(id)}/download`,
-  });
-  if (!isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+  if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
+  const link = await request(runtime, 'POST', `/integrations/v1/internal-builds/${encodeURIComponent(id)}/download`);
+  if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
   if (
     (link.status !== 200 && link.status !== 201) ||
     typeof link.body?.url !== 'string' ||

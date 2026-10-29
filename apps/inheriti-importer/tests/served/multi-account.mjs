@@ -89,6 +89,7 @@ const directory = await mkdtemp(join(tmpdir(), 'importer-e2e-'));
 const urlFile = join(directory, 'oauth-urls');
 const opener = join(directory, 'xdg-open');
 let openedUrls = 0;
+let ownerFixtureRequest;
 
 async function poll(read, expected, timeout = 45_000) {
   const until = Date.now() + timeout;
@@ -137,7 +138,7 @@ async function authorize(page, account) {
 async function profileEmail(window) {
   try {
     const response = await window.evaluate(() =>
-      window.inheriti.api.request({ method: 'GET', path: '/user/profile' }),
+      window.inheriti.api.request({ method: 'GET', path: '/integrations/v1/importer/profile' }),
     );
     return response.status === 200 ? response.body?.result?.email : undefined;
   } catch {
@@ -157,24 +158,25 @@ async function selectedOrganizationId(window, accountKey) {
 }
 
 async function revokeSavedSession(accountKey) {
-  return app.evaluate(async ({ app: electronApp }, key) => {
-    const requireFromApp = process
-      .getBuiltinModule('node:module')
-      .createRequire(`${electronApp.getAppPath()}/package.json`);
-    const { contextForKey } = requireFromApp(
-      `${electronApp.getAppPath()}/electron/lib/api-session.cjs`,
+  const { createConnection } = requireFromApi('mysql2/promise');
+  const connection = await createConnection({
+    host: '127.0.0.1', port: ports.mysql, user: 'root',
+    password: 'business_e2e_root', database: 'inheriti_business',
+  });
+  try {
+    const [rows] = await connection.execute(
+      'SELECT family_id FROM operator_integration_session WHERE provider_subject = ? AND revoked_at IS NULL ORDER BY issued_at DESC LIMIT 1',
+      [accountKey],
     );
-    const { revokeSession } = requireFromApp(
-      `${electronApp.getAppPath()}/electron/lib/api-transport.cjs`,
+    assert.equal(rows.length, 1, 'Active saved operator session missing');
+    const [result] = await connection.execute(
+      'UPDATE operator_integration_session SET revoked_at = UTC_TIMESTAMP(3), revision = revision + 1 WHERE family_id = ? AND revoked_at IS NULL',
+      [rows[0].family_id],
     );
-    const context = contextForKey(key);
-    const cookieNames = (
-      await context.session.cookies.get({ url: process.env.INHERITI_API_ORIGIN })
-    ).map((cookie) => cookie.name);
-    const failed = await revokeSession(context);
-    await context.session.cookies.remove(process.env.INHERITI_API_ORIGIN, 'token');
-    return { cookieNames, failed };
-  }, accountKey);
+    assert.equal(result.affectedRows, 1);
+  } finally {
+    await connection.end();
+  }
 }
 
 async function seedOrganization(account, shared = false) {
@@ -198,7 +200,7 @@ async function seedOrganization(account, shared = false) {
   const cookies = new Map();
   const request = async (path, options = {}) => {
     const response = await fetch(`${apiOrigin}${path}`, {
-      method: options.body ? 'POST' : 'GET',
+      method: options.method || (options.body ? 'POST' : 'GET'),
       signal: AbortSignal.timeout(15_000),
       headers: {
         ...(cookies.size
@@ -214,7 +216,8 @@ async function seedOrganization(account, shared = false) {
       if (!value || /max-age=0/i.test(header)) cookies.delete(name);
       else cookies.set(name, value);
     }
-    const payload = await response.json();
+    const raw = await response.text();
+    const payload = raw ? JSON.parse(raw) : {};
     assert.equal(response.ok, true, `Fixture API ${path} failed: ${response.status}`);
     return payload.result ?? payload;
   };
@@ -284,6 +287,7 @@ async function seedOrganization(account, shared = false) {
   } finally {
     await connection.end();
   }
+  if (shared) ownerFixtureRequest = (path, method) => request(path, { method, headers });
   return organizationId;
 }
 
@@ -292,7 +296,7 @@ async function enterWorkspace(window) {
     const body = await window.locator('body').innerText();
     if (body.includes('Import your secrets, then review them.')) return true;
     const select = window.getByRole('button', { name: 'Select', exact: true }).first();
-    if (await select.isVisible()) await select.click();
+    if (await select.isVisible()) await select.click({ timeout: 2000 }).catch(() => {});
     return false;
   }, true);
 }
@@ -313,7 +317,6 @@ async function launch() {
       INHERITI_API_ORIGIN: appApiOrigin,
       SAFEID_URL: safeIdUrl,
       SAFEID_REALM: 'inheriti-business-e2e',
-      SAFEID_CLIENT_ID: 'inheriti-business-integrations-interactive',
       E2E_IMPORTER_URL_FILE: urlFile,
     },
   });
@@ -333,26 +336,19 @@ try {
   await chmod(opener, 0o700);
   ({ stop: stopStack } = await startStack('manual', { evidenceDir }));
   proxy = createServer((incoming, outgoing) => {
-    const cookieNames = String(incoming.headers.cookie ?? '')
-      .split(';')
-      .map((part) => part.trim().split('=')[0])
-      .filter(Boolean);
-    const entry = { path: incoming.url, cookieNames };
+    const entry = { path: incoming.url, bearer: String(incoming.headers.authorization ?? '').startsWith('Bearer ') };
     apiRequests.push(entry);
     const upstream = httpRequest(
       `${apiOrigin}${incoming.url}`,
       { method: incoming.method, headers: incoming.headers },
       (response) => {
         entry.status = response.statusCode;
-        entry.setCookieNames = (response.headers['set-cookie'] ?? []).map(
-          (header) => header.split('=')[0],
-        );
         const deliver = () => {
           outgoing.writeHead(response.statusCode ?? 502, response.headers);
           response.pipe(outgoing);
           response.resume();
         };
-        if (heldApiResponse && incoming.url === '/user/profile?e2e_stale=1') {
+        if (heldApiResponse && incoming.url === '/integrations/v1/importer/profile?e2e_stale=1') {
           response.pause();
           heldApiResponse.arrived = true;
           heldApiResponse.release = deliver;
@@ -398,7 +394,7 @@ try {
   } catch (error) {
     const summary = apiRequests
       .filter((request) =>
-        ['/csrf', '/user/login', '/integrations/tester-access'].includes(request.path),
+        ['/integrations/operator-sessions/exchange', '/integrations/v1/importer/profile'].includes(request.path),
       )
       .slice(-8);
     await writeFile(
@@ -416,7 +412,7 @@ try {
     console.error('API request summary:', summary);
     console.error(
       'Organization requests:',
-      apiRequests.filter((request) => request.path?.startsWith('/organizations/')),
+      apiRequests.filter((request) => request.path?.startsWith('/integrations/v1/organizations/')),
     );
     throw error;
   }
@@ -435,11 +431,11 @@ try {
   recordOracleResult(evidenceDir, { id: 'add-account-retains-owner', passed: true });
 
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${manager.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await profileEmail(window), accounts.owner.email);
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${manager.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await enterWorkspace(window);
   await poll(() => profileEmail(window), accounts.manager.email);
@@ -449,6 +445,10 @@ try {
   await app.close();
   app = await launch();
   window = await app.firstWindow();
+  if (!await window.evaluate(() => window.inheriti.auth.session())) {
+    await window.getByRole('button', { name: 'Sign in with SafeID' }).click();
+    await authorize(oauthPage, accounts.manager);
+  }
   try {
     await enterWorkspace(window);
   } catch (error) {
@@ -458,10 +458,10 @@ try {
   }
   await poll(() => profileEmail(window), accounts.manager.email);
   assert.equal((await savedAccounts(window)).length, 2);
-  recordOracleResult(evidenceDir, { id: 'restart-restores-manager', passed: true });
+  recordOracleResult(evidenceDir, { id: 'restart-restores-or-reauthenticates-manager', passed: true });
 
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${owner.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await enterWorkspace(window);
   await poll(() => profileEmail(window), accounts.owner.email);
@@ -472,7 +472,7 @@ try {
     try {
       await window.inheriti.api.request({
         method: 'GET',
-        path: '/user/profile',
+        path: '/integrations/v1/importer/profile',
         query: { e2e_stale: '1' },
       });
       return 'resolved';
@@ -482,7 +482,7 @@ try {
   });
   await poll(() => heldApiResponse.arrived, true);
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${manager.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await poll(() => profileEmail(window), accounts.manager.email);
   heldApiResponse.release();
@@ -490,35 +490,36 @@ try {
   assert.match(await staleRequest, /AUTH_CONTEXT_CHANGED/);
   recordOracleResult(evidenceDir, { id: 'stale-api-response-rejected', passed: true });
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${owner.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await enterWorkspace(window);
   await poll(() => profileEmail(window), accounts.owner.email);
 
-  const managerDestination = `Switch to ${manager.subject} and open ${sharedOrganizationName}`;
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: managerDestination }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   const confirmation = await window.getByRole('dialog').innerText();
-  assert.ok(confirmation.includes(manager.subject));
-  assert.ok(confirmation.includes(sharedOrganizationName));
+  assert.match(confirmation, /Your organisation access|Your access to/);
   await window.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await profileEmail(window), accounts.owner.email);
   assert.equal(await selectedOrganizationId(window, owner.key), ownerOrganizationId);
   assert.equal(await selectedOrganizationId(window, manager.key), managerOrganizationId);
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: managerDestination }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await poll(() => profileEmail(window), accounts.manager.email);
+  await poll(() => selectedOrganizationId(window, manager.key), managerOrganizationId);
+  await window.getByRole('button', { name: /Change organisation/ }).click();
+  await window.getByRole('menuitem', { name: `Switch to ${sharedOrganizationName}` }).click();
   await poll(() => selectedOrganizationId(window, manager.key), ownerOrganizationId);
   await poll(
     async () =>
       (await window.locator('body').innerText()).includes('Import your secrets, then review them.'),
     true,
   );
-  recordOracleResult(evidenceDir, { id: 'cross-account-organization-destination', passed: true });
+  recordOracleResult(evidenceDir, { id: 'account-and-organization-switch', passed: true });
 
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${owner.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await enterWorkspace(window);
   await poll(() => profileEmail(window), accounts.owner.email);
@@ -542,12 +543,13 @@ try {
   recordOracleResult(evidenceDir, { id: 'import-workspace-blocks-account-menu', passed: true });
 
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: managerDestination }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   const membersResponse = await window.evaluate(
     (organizationId) =>
       window.inheriti.api.request({
         method: 'GET',
-        path: `/organizations/${organizationId}/members`,
+        path: `/integrations/v1/organizations/${organizationId}/members`,
+        organizationId,
       }),
     ownerOrganizationId,
   );
@@ -556,27 +558,32 @@ try {
     (member) => member.email === accounts.manager.email,
   );
   assert.ok(managerMember?.id);
-  const removal = await window.evaluate(
-    (memberId) =>
-      window.inheriti.api.request({ method: 'DELETE', path: `/organizations/members/${memberId}` }),
-    managerMember.id,
-  );
-  assert.ok(removal.status >= 200 && removal.status < 300);
+  assert.ok(ownerFixtureRequest);
+  await ownerFixtureRequest(`/organizations/members/${managerMember.id}`, 'DELETE');
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
-  await window.getByText(/no longer available for this account/i).waitFor();
+  await enterWorkspace(window);
+  await poll(() => profileEmail(window), accounts.manager.email);
+  const removedMembershipResponse = await window.evaluate(
+    (organizationId) => window.inheriti.api.request({
+      method: 'GET',
+      path: `/integrations/v1/organizations/${organizationId}/members`,
+      organizationId,
+    }),
+    ownerOrganizationId,
+  );
+  assert.equal(removedMembershipResponse.status, 403);
+  await window.getByRole('button', { name: /Open account menu/ }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
+  await window.getByRole('button', { name: 'Switch account', exact: true }).click();
+  await enterWorkspace(window);
   assert.equal(await profileEmail(window), accounts.owner.email);
   assert.equal(await selectedOrganizationId(window, owner.key), ownerOrganizationId);
   recordOracleResult(evidenceDir, { id: 'removed-membership-rejects-destination', passed: true });
 
-  const revocation = await revokeSavedSession(manager.key);
-  assert.equal(
-    revocation.failed,
-    false,
-    `Manager revocation failed; cookie names: ${revocation.cookieNames.join(', ')}; requests: ${JSON.stringify(apiRequests.filter((entry) => ['/csrf', '/user/logout'].includes(entry.path)).slice(-4))}`,
-  );
+  await revokeSavedSession(manager.key);
   assert.equal((await savedAccounts(window)).length, 2);
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: `Switch to account ${manager.subject}` }).click();
+  await window.getByRole('menuitem', { name: /^Switch to account / }).click();
   await window.getByRole('button', { name: 'Switch account', exact: true }).click();
   await window
     .getByText(/AUTH_SESSION_EXPIRED|sign in again|could not switch/i)

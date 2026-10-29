@@ -1,173 +1,130 @@
+const { shell } = require('electron');
 const { handle } = require('../lib/ipc-guard.cjs');
-const {
-  activeContext,
-  captureActiveContext,
-  isCurrent,
-  contextForKey,
-  activateContext,
-  removeContext,
-  removeAllContexts,
-  listContexts,
-} = require('../lib/api-session.cjs');
-const { apiFetch, authCookieNames, revokeSession } = require('../lib/api-transport.cjs');
+const { bearerApiFetch } = require('../lib/api-transport.cjs');
 const { disconnectBusinessSocket } = require('../lib/business-socket.cjs');
-const {
-  loginWithSafeID,
-  cancelPendingAuth,
-  cancelPendingAuthAndWait,
-} = require('../lib/safeid-auth.cjs');
 
-function register(sessionsReady) {
-  let activationRevision = 0;
+function register(runtimeReady, runtime) {
+  let pendingController;
+  let pendingLogin;
 
-  handle('auth:login', async () => {
-    await sessionsReady;
-    ++activationRevision;
-    return loginWithSafeID();
-  });
+  async function requestFor(subject, path) {
+    const token = await runtime.getAccountAccessToken(subject);
+    if (!token) return null;
+    const response = await bearerApiFetch({
+      method: 'GET', path, token, environment: runtime.environment,
+    });
+    return runtime.accounts.includes(subject) ? response : null;
+  }
 
-  handle('auth:add', async () => {
-    await sessionsReady;
-    return loginWithSafeID(true);
-  });
+  async function session() {
+    const capture = runtime.capture();
+    if (!capture.subject) return null;
+    const local = await runtime.sessionDescriptor();
+    if (!local || !runtime.isCurrent(capture)) return null;
+    const token = await runtime.getAccessToken(capture);
+    if (!token || !runtime.isCurrent(capture)) return null;
+    const response = await bearerApiFetch({
+      method: 'GET', path: '/integrations/v1/importer/profile', token,
+      environment: runtime.environment,
+    });
+    if (!runtime.isCurrent(capture)) return null;
+    if (response.status === 401 || response.status === 403) return null;
+    if (response.status !== 200) throw new Error('AUTH_PROFILE_UNAVAILABLE');
+    const userId = response.body?.result?.id;
+    if (typeof userId !== 'string' || !userId) return null;
+    return {
+      sessionFamilyId: local.sessionFamilyId,
+      userId,
+      expiresAt: local.expiresAt,
+    };
+  }
 
-  handle('auth:accounts', async () => {
-    await sessionsReady;
-    return listContexts();
-  });
-
-  handle('auth:destinations', async () => {
-    await sessionsReady;
-    const accounts = listContexts();
-    const results = await Promise.all(
-      accounts.map(async ({ key, subject }) => {
-        const context = contextForKey(key);
-        if (!context) return null;
-        let response;
-        try {
-          response = await apiFetch({ method: 'GET', path: '/organizations', context });
-        } catch (error) {
-          if (contextForKey(key) !== context || context.revoked) return null;
-          throw error;
-        }
-        if (contextForKey(key) !== context || context.revoked) return null;
-        if (response.status === 401 || response.status === 403)
-          return {
-            context,
-            accountKey: key,
-            subject,
-            status: 'sign_in_required',
-            organizations: [],
-          };
-        if (response.status !== 200) throw new Error('AUTH_DESTINATIONS_FAILED');
-        const items = response.body?.result?.items;
-        if (!Array.isArray(items)) throw new Error('AUTH_DESTINATIONS_INVALID');
-        const profileResponse = await apiFetch({ method: 'GET', path: '/user/profile', context }).catch(() => null);
-        if (contextForKey(key) !== context || context.revoked) return null;
-        const profile = profileResponse?.status === 200 ? profileResponse.body?.result : null;
-        const displayName = [profile?.firstName, profile?.lastName]
-          .filter((part) => typeof part === 'string' && part.trim())
-          .join(' ').trim().slice(0, 80);
-        return {
-          context,
-          accountKey: key,
-          subject,
-          status: 'ready',
-          displayName: displayName || (typeof profile?.email === 'string' ? profile.email.slice(0, 80) : ''),
-          email: typeof profile?.email === 'string' ? profile.email.slice(0, 120) : '',
-          organizations: items
-            .filter((item) => typeof item?.id === 'string' && typeof item?.name === 'string')
-            .map((item) => ({ id: item.id, name: item.name })),
-        };
-      }),
-    );
-    return results
-      .filter(
-        (result) =>
-          result && contextForKey(result.accountKey) === result.context && !result.context.revoked,
-      )
-      .map(({ accountKey, subject, status, displayName, email, organizations }) => ({
-        accountKey,
-        subject,
-        status,
-        ...(displayName ? { displayName } : {}),
-        ...(email ? { email } : {}),
-        organizations,
-      }));
-  });
-
-  handle('auth:activate', async (_event, key) => {
-    await sessionsReady;
-    const revision = ++activationRevision;
-    const context = contextForKey(key);
-    if (!context) throw new Error('AUTH_ACCOUNT_NOT_FOUND');
-    const res = await apiFetch({ method: 'GET', path: '/user/session', context });
-    if (res.status !== 200) throw new Error('AUTH_SESSION_EXPIRED');
-    const access = await apiFetch({ method: 'GET', path: '/integrations/tester-access', context });
-    if (access.status !== 200) throw new Error('AUTH_ACCESS_DENIED');
-    if (revision !== activationRevision) throw new Error('AUTH_CONTEXT_CHANGED');
-    disconnectBusinessSocket();
-    activateContext(context);
-    return res.body?.result ?? null;
-  });
-
-  handle('auth:remove', async (_event, key) => {
-    await sessionsReady;
-    await cancelPendingAuthAndWait();
-    const context = contextForKey(key);
-    if (!context) return { remoteRevocationFailed: false };
-    ++activationRevision;
-    if (context === activeContext()) disconnectBusinessSocket();
-    const remoteRevocationFailed = await removeContext(context, revokeSession);
-    return { remoteRevocationFailed };
-  });
-
-  handle('auth:logoutAll', async () => {
-    await sessionsReady;
-    await cancelPendingAuthAndWait();
-    ++activationRevision;
-    disconnectBusinessSocket();
-    const remoteRevocationFailed = await removeAllContexts(revokeSession);
-    return { remoteRevocationFailed };
-  });
-
-  handle('auth:cancel', async () => {
-    cancelPendingAuth();
-  });
-
-  handle('auth:logout', async () => {
-    await sessionsReady;
-    await cancelPendingAuthAndWait();
-    ++activationRevision;
-    const context = activeContext();
-    disconnectBusinessSocket();
-    const remoteRevocationFailed = (await removeContext(context, revokeSession)) || false;
-    return { remoteRevocationFailed };
-  });
-
-  handle('auth:session', async () => {
-    await sessionsReady;
-    const capture = captureActiveContext();
-    if (!capture.context) return null;
+  async function login(activate = true) {
+    if (pendingLogin) throw new Error('AUTH_IN_PROGRESS');
+    const previous = runtime.capture();
+    pendingController = new AbortController();
+    const pending = runtime.login((url) => shell.openExternal(url), pendingController.signal, { activate });
+    pendingLogin = pending;
     try {
-      const res = await apiFetch({
-        method: 'GET',
-        path: '/user/session',
-        context: capture.context,
-      });
-      if (!isCurrent(capture)) return null;
-      console.info(
-        '[auth] session check:',
-        res.status,
-        'cookies:',
-        await authCookieNames(capture.context),
-      );
-      return res.status === 200 ? (res.body?.result ?? null) : null;
-    } catch {
-      console.info('[auth] session check failed, cookies:', await authCookieNames(capture.context));
-      return null;
+      await pending;
+      if (runtime.isCurrent(previous) && !activate) return null;
+      disconnectBusinessSocket();
+      const descriptor = await session();
+      if (!descriptor) throw new Error('AUTH_SESSION_EXPIRED');
+      return descriptor;
+    } finally {
+      if (pendingLogin === pending) {
+        pendingLogin = undefined;
+        pendingController = undefined;
+      }
     }
+  }
+
+  async function cancelPending() {
+    pendingController?.abort();
+    if (pendingLogin) await pendingLogin.catch(() => {});
+  }
+
+  handle('auth:login', async () => { await runtimeReady; return login(); });
+  handle('auth:add', async () => { await runtimeReady; return login(false); });
+  handle('auth:accounts', async () => {
+    await runtimeReady;
+    return runtime.accounts.map((subject) => ({ key: subject, subject, active: subject === runtime.activeSubject }));
   });
+  handle('auth:destinations', async () => {
+    await runtimeReady;
+    const subjects = Array.from(runtime.accounts);
+    const results = await Promise.all(subjects.map(async (subject) => {
+      const organizations = await requestFor(subject, '/integrations/v1/importer/organizations');
+      if (!organizations || organizations.status === 401 || organizations.status === 403)
+        return { accountKey: subject, subject, status: 'sign_in_required', organizations: [] };
+      if (organizations.status !== 200 || !Array.isArray(organizations.body?.result?.items))
+        throw new Error('AUTH_DESTINATIONS_FAILED');
+      const profile = await requestFor(subject, '/integrations/v1/importer/profile');
+      const person = profile?.status === 200 ? profile.body?.result : null;
+      const displayName = [person?.firstName, person?.lastName]
+        .filter((part) => typeof part === 'string' && part.trim()).join(' ').trim().slice(0, 80);
+      return {
+        accountKey: subject, subject, status: 'ready',
+        displayName: displayName || (typeof person?.email === 'string' ? person.email.slice(0, 80) : ''),
+        email: typeof person?.email === 'string' ? person.email.slice(0, 120) : '',
+        organizations: organizations.body.result.items
+          .filter((item) => typeof item?.id === 'string' && typeof item?.name === 'string')
+          .map((item) => ({ id: item.id, name: item.name })),
+      };
+    }));
+    return results.filter((result) => runtime.accounts.includes(result.subject));
+  });
+  handle('auth:activate', async (_event, subject) => {
+    await runtimeReady;
+    const response = await requestFor(subject, '/integrations/v1/importer/profile');
+    if (response?.status !== 200) throw new Error('AUTH_SESSION_EXPIRED');
+    disconnectBusinessSocket();
+    runtime.activate(subject);
+    const descriptor = await session();
+    if (!descriptor) throw new Error('AUTH_SESSION_EXPIRED');
+    return descriptor;
+  });
+  handle('auth:remove', async (_event, subject) => {
+    await runtimeReady;
+    await cancelPending();
+    if (subject === runtime.activeSubject) disconnectBusinessSocket();
+    return runtime.remove(subject);
+  });
+  handle('auth:logoutAll', async () => {
+    await runtimeReady;
+    await cancelPending();
+    disconnectBusinessSocket();
+    return runtime.logoutAll();
+  });
+  handle('auth:cancel', cancelPending);
+  handle('auth:logout', async () => {
+    await runtimeReady;
+    await cancelPending();
+    disconnectBusinessSocket();
+    return runtime.activeSubject ? runtime.remove(runtime.activeSubject) : { remoteRevocationFailed: false };
+  });
+  handle('auth:session', async () => { await runtimeReady; return session(); });
 }
 
 module.exports = { register };

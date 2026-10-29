@@ -22,7 +22,7 @@ interface InheritiDesktop {
       path: string;
       query?: Record<string, unknown>;
       body?: unknown;
-      skipCsrf?: boolean;
+      organizationId?: string;
     }) => Promise<{ status: number; body: unknown }>;
   };
   development: {
