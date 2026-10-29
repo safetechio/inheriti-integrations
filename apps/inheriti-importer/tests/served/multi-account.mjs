@@ -601,10 +601,19 @@ try {
 
   await window.getByRole('button', { name: /Open account menu/ }).click();
   await window.getByRole('menuitem', { name: `Remove saved account ${manager.subject}` }).click();
+  await window.getByRole('button', { name: 'Remove account', exact: true }).click();
   await poll(async () => (await savedAccounts(window)).length, 1);
   assert.equal(await profileEmail(window), accounts.owner.email);
   await window.getByRole('button', { name: /Open account menu/ }).click();
-  await window.getByRole('menuitem', { name: 'Sign out all accounts' }).click();
+  await window.getByRole('menuitem', { name: 'Add account' }).click();
+  await authorize(oauthPage, accounts.manager);
+  await poll(async () => (await savedAccounts(window)).length, 2);
+  const readded = await savedAccounts(window);
+  assert.equal(readded.find((account) => account.active)?.key, owner.key);
+  assert.equal(readded.find((account) => !account.active)?.key, manager.key);
+  assert.equal(await profileEmail(window), accounts.owner.email);
+  await window.getByRole('button', { name: /Open account menu/ }).click();
+  await window.getByRole('menuitem', { name: 'Log out of all accounts' }).click();
   await window.getByRole('button', { name: 'Sign out all', exact: true }).click();
   await poll(async () => (await savedAccounts(window)).length, 0);
   await window.getByRole('button', { name: 'Sign in with SafeID' }).waitFor();

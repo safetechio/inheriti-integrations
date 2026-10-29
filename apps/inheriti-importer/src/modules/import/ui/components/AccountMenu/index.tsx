@@ -1,4 +1,5 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import type { SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
 import { useGetIdentity } from '@modules/organization/infrastructure/importer-api';
 import { useGetCurrentMember } from '@modules/organization/infrastructure/organization-resources-api';
 import { BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
@@ -24,6 +25,7 @@ export function AccountMenu({
   const { identity } = useGetIdentity();
   const { member } = useGetCurrentMember();
   const menu = useAccountMenu(closeMenu);
+  const [pendingRemoval, setPendingRemoval] = useState<SavedAccount | null>(null);
   const {
     accounts,
     destinations,
@@ -116,6 +118,10 @@ export function AccountMenu({
               accounts={accounts}
               destinations={destinations}
               onSwitch={menu.requestSwitch}
+              onRemove={(account) => {
+                closeMenu();
+                setPendingRemoval(account);
+              }}
             />
             <Pressable accessibilityRole="menuitem" accessibilityLabel="Add account" onPress={menu.addAccount}>
               <Box className="account-menu-add" flexDirection="row" alignItems="center" gap="m">
@@ -147,6 +153,24 @@ export function AccountMenu({
             {pendingAccount?.organization
               ? `Your access to ${pendingAccount.organization.name} will be checked before the workspace opens.`
               : 'Your organisation access will be checked before the workspace opens.'}
+          </Text>
+        </BaseModal>
+        <BaseModal
+          visible={Boolean(pendingRemoval)}
+          title="Remove saved account?"
+          onDismiss={() => setPendingRemoval(null)}
+          footer={
+            <>
+              <Button title="Cancel" variant="plain" onPress={() => setPendingRemoval(null)} />
+              <Button title="Remove account" color="danger" onPress={() => {
+                if (pendingRemoval) menu.removeAccount(pendingRemoval);
+                setPendingRemoval(null);
+              }} />
+            </>
+          }
+        >
+          <Text variant="bodySmall" color="gray">
+            This saved login will be removed from this device.
           </Text>
         </BaseModal>
         <BaseModal

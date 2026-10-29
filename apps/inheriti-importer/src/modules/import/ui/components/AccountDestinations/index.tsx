@@ -5,10 +5,12 @@ export function AccountDestinations({
   accounts,
   destinations,
   onSwitch,
+  onRemove,
 }: {
   accounts: SavedAccount[];
   destinations: Destinations[];
   onSwitch: (account: SavedAccount) => void;
+  onRemove: (account: SavedAccount) => void;
 }) {
   return (
     <>
@@ -17,13 +19,14 @@ export function AccountDestinations({
         const name = destination?.displayName && destination.displayName !== destination.email
           ? destination.displayName : 'Saved account';
         return (
-          <Pressable
-            key={account.key}
-            accessibilityRole="menuitem"
-            accessibilityLabel={`Switch to account ${name}`}
-            onPress={() => onSwitch(account)}
-          >
-            <Box className="account-menu-option" flexDirection="row" alignItems="center" gap="m">
+          <Box key={account.key} className="account-menu-destination" flexDirection="row" alignItems="center">
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityLabel={`Switch to account ${name}`}
+              onPress={() => onSwitch(account)}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              <Box className="account-menu-option" flexDirection="row" alignItems="center" gap="m">
               <Box className="account-menu-avatar" width={34} height={34} borderRadius="pill" alignItems="center" justifyContent="center">
                 <Text color="white" style={{ fontWeight: 400, fontSize: 13 }}>
                   {name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}
@@ -35,8 +38,18 @@ export function AccountDestinations({
                 </Text>
                 {destination?.status === 'sign_in_required' ? <Text variant="bodySmall" color="gray">Sign in again</Text> : null}
               </Box>
-            </Box>
-          </Pressable>
+              </Box>
+            </Pressable>
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityLabel={`Remove saved account ${account.subject}`}
+              onPress={() => onRemove(account)}
+            >
+              <Box className="account-menu-remove" justifyContent="center">
+                <Text variant="bodySmall" color="danger">Remove</Text>
+              </Box>
+            </Pressable>
+          </Box>
         );
       })}
     </>
