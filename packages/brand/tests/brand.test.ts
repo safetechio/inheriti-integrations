@@ -7,7 +7,7 @@ describe('brand primitives', () => {
   });
 
   it('provides canonical InheritiGuard browser branding without replacing Elements exports', () => {
-    expect(inheritiGuardBrand.productName).toBe('InheritiGuard');
+    expect(inheritiGuardBrand.productName).toBe('Inheriti® Guard');
     expect(inheritiGuardBrand.description).toContain('Protection Plan Access');
     expect(inheritiGuardBrand.colors.primary).toMatch(/^#[0-9A-F]{6}$/u);
     expect(inheritiGuardShield.viewBox).toBe('0 0 26 32');

@@ -279,7 +279,7 @@ export class GuardController {
       'secure-logoff': 'Inheriti sessions and scoped site data were cleared.',
     };
     await chrome.notifications.create({ type: 'basic', iconUrl: 'icons/icon-128.png',
-      title: 'InheritiGuard', message: messages[kind] }).catch(() => undefined);
+      title: 'Inheriti® Guard', message: messages[kind] }).catch(() => undefined);
   }
 }
 

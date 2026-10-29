@@ -4,16 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <title>InheritiGuard</title>
+    <title>Inheriti® Guard</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="app-header">
-      <div class="brand" aria-label="InheritiGuard">
+      <div class="brand" aria-label="Inheriti® Guard">
         <svg class="brand-mark" viewBox="0 0 26 32" aria-hidden="true">
           <path />
         </svg>
-        <span class="brand-name"><strong>InheritiGuard</strong><span class="brand-subtitle">Unified protection</span><span id="guard-version"></span></span>
+        <span class="brand-name"><strong>Inheriti® Guard</strong><span class="brand-subtitle">Unified protection</span></span>
       </div>
       <div class="header-actions">
         <div class="product-statuses" aria-label="Product status">
@@ -24,11 +24,11 @@
     </header>
     <main id="app-main" data-authenticated="pending">
       <aside class="migration-notice" id="migration-notice" role="status" hidden>
-        <strong>InheritiGuard now includes Plan Access.</strong>
+        <strong>Inheriti® Guard now includes Plan Access.</strong>
         <span>Your Browser Protection settings were preserved.</span>
         <button id="dismiss-migration" type="button" aria-label="Dismiss update notice">×</button>
       </aside>
-      <div class="product-tabs" role="tablist" aria-label="InheritiGuard sections">
+      <div class="product-tabs" role="tablist" aria-label="Inheriti® Guard sections">
         <button id="plan-access-tab" role="tab" aria-selected="true" aria-controls="plan-access-panel" tabindex="0" type="button">Plan Access</button>
         <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button">Browser Protection</button>
         <button id="activity-tab" role="tab" aria-selected="false" aria-controls="activity-panel" tabindex="-1" type="button">Activity</button>
@@ -54,13 +54,6 @@
       </section>
       <section class="account-area" id="account-area" aria-label="Plan Access account" hidden>
         <span id="access-header-status" class="sr-only">Plan Access: signed out</span>
-        <div class="account-heading">
-          <strong>SafeID accounts</strong>
-          <button class="header-sign-out" id="add-account" type="button" aria-describedby="account-add-note">Add account</button>
-        </div>
-        <p id="account-add-note" class="account-add-note">Add account clears your SafeID browser sign-in, even if canceled. Other apps may ask you to sign in again; saved Guard accounts stay available.</p>
-        <ul id="account-list" class="account-list" aria-label="Saved SafeID accounts"></ul>
-        <p id="account-status" class="account-status" role="status"></p>
         <div class="organization-choice" id="organization-choice" hidden>
           <details id="organization-menu">
             <summary id="organization-summary" aria-label="Choose organization">Choose an organization</summary>
@@ -68,9 +61,16 @@
           </details>
           <p id="organization-status" role="status"></p>
         </div>
-        <button class="header-sign-out" id="forget-master-key" type="button" hidden></button>
-        <button class="header-sign-out" id="sign-out" type="button" hidden>Sign out this account</button>
-        <button class="header-sign-out" id="sign-out-all" type="button">Sign out all (Secure Logoff)</button>
+        <details class="account-menu">
+          <summary class="account-trigger" aria-label="Choose SafeID account"><span class="account-trigger-avatar" aria-hidden="true"></span></summary>
+          <div class="account-popover">
+            <ul id="account-list" class="account-list" aria-label="Saved SafeID accounts"></ul>
+            <button class="header-sign-out account-add" id="add-account" type="button"><span aria-hidden="true">＋</span> Add another account</button>
+            <p id="account-status" class="account-status" role="status"></p>
+            <button class="header-sign-out account-logoff" id="sign-out" type="button" hidden>Log out</button>
+            <button class="header-sign-out account-logoff" id="sign-out-all" type="button">Log out of all accounts</button>
+          </div>
+        </details>
       </section>
       <div class="panel-tabs plan-tabs" role="tablist" aria-label="Plan Access views">
         <button id="site-tab" role="tab" aria-selected="true" aria-controls="site-panel" tabindex="0" type="button">This site</button>
@@ -145,6 +145,7 @@
           <button class="icon-button" id="reload-plans" type="button" title="Refresh plans" aria-label="Refresh plans">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6" /></svg>
           </button>
+          <button class="header-sign-out key-clear" id="forget-master-key" type="button" hidden></button>
         </div>
         <div class="resume-reveal" id="resume-reveal" hidden>
           <p id="resume-reveal-message" aria-live="polite"></p>

@@ -96,7 +96,7 @@ export function useFindActiveOrganizationMembersByCriteria(
     ...(filter?.email ? [{ field: 'email', operator: '==', value: filter.email }] : []),
   ];
   const result = useApiQuery<
-    Array<{ id: string; email?: string }> | { items?: Array<{ id: string; email?: string }> }
+    Array<{ id: string; email?: string; role?: { name?: string } }> | { items?: Array<{ id: string; email?: string; role?: { name?: string } }> }
   >(
     ['members', id, filter?.email],
     id && options?.enabled !== false ? `/organizations/${encodeURIComponent(id)}/members` : null,

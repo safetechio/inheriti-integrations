@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignedOut } from './components/SignedOut.jsx';
 import { Home, organizationDisplayName } from './components/Home.jsx';
+import { AccountAvatar } from '../../_shared/ui/components/AccountAvatar.jsx';
+import { ScreenFooter } from '../../_shared/ui/components/ScreenFooter.jsx';
+import { useAppVersion } from './hooks/useAppVersion.js';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
 import { PlanEditPanel } from '../../quick-plan/ui/PlanEditPanel.jsx';
 import { CustodianPrompt } from '../../quick-plan/ui/CustodianPrompt.jsx';
@@ -17,7 +20,8 @@ import { clearInboxConversationCache } from '../../inbox/ui/hooks/useInboxConver
 const deployment = typeof __INHERITI_DEPLOYMENT__ === 'undefined' ? 'dev' : __INHERITI_DEPLOYMENT__;
 
 export function LauncherApp({ messages }) {
-  useEffect(() => { document.title = deployment === 'prod' ? messages.appName : `${messages.appName} · ${deployment.toUpperCase()}`; }, [messages]);
+  const version = useAppVersion();
+  useEffect(() => { document.title = `${messages.appName}${deployment === 'prod' ? '' : ` · ${deployment.toUpperCase()}`}${version ? ` · v${version}` : ''}`; }, [messages, version]);
   const session = useTraySession(messages);
   const [updateProgress, setUpdateProgress] = useState(null);
   useEffect(() => {
@@ -41,6 +45,7 @@ export function LauncherApp({ messages }) {
   const [switchingAccount, setSwitchingAccount] = useState(false);
   const [confirmSignOutAll, setConfirmSignOutAll] = useState(false);
   const [signingOutAll, setSigningOutAll] = useState(false);
+  useEffect(() => { void window.inheritiTray.setSignOutConfirmationSize(confirmSignOutAll); }, [confirmSignOutAll]);
   const switchingOrganization = useRef(false);
   const blockedInboxSwitch = useRef(false);
   const previousAccount = useRef(null);
@@ -242,26 +247,30 @@ export function LauncherApp({ messages }) {
   if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
-  if (confirmSignOutAll) return <main className="tray-screen tray-account-confirmation">
+  if (confirmSignOutAll) return <main className="tray-screen tray-account-confirmation tray-sign-out-confirmation">
     <div className="tray-scroll tray-account-confirmation-content">
       <h1>Sign out all accounts?</h1>
       <p>This removes every saved account and its organisation keys from this device. You will need to sign in again to use them.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
     </div>
-    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus disabled={signingOutAll} onClick={() => setConfirmSignOutAll(false)}>Cancel</button><button type="button" disabled={signingOutAll} onClick={() => void signOutAll()}>Sign out all accounts</button></div>
+    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus disabled={signingOutAll} onClick={() => setConfirmSignOutAll(false)}>Cancel</button><button type="button" className="button-sign-out" disabled={signingOutAll} onClick={() => void signOutAll()}>Sign out all accounts</button></div>
   </main>;
   if (switchingAccount || state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
   if (pendingAccountSwitch) return <main className="tray-screen tray-account-confirmation">
+    <header className="tray-screen-header"><div className="tray-screen-heading"><h1>Switch account</h1></div></header>
     <div className="tray-scroll tray-account-confirmation-content">
-      <h1>Switch account?</h1>
-      <p>Account: <strong>{pendingAccountSwitch.account.name}</strong></p>
-      <p>Organisation: <strong>{pendingAccountSwitch.organization
-        ? organizationDisplayName(pendingAccountSwitch.organization, pendingAccountSwitch.account.organizations)
-        : 'Choose after switching'}</strong></p>
-      <p>Your current account will stay saved. Active work must finish before switching.</p>
+      <section className="tray-account-confirmation-card">
+        <div className="tray-account-confirmation-person"><AccountAvatar name={pendingAccountSwitch.account.name} />
+          <div><span>Account: </span><strong>{pendingAccountSwitch.account.name}</strong></div>
+        </div>
+        <div className="tray-account-confirmation-organization"><span>Organisation: </span><strong>{pendingAccountSwitch.organization
+          ? organizationDisplayName(pendingAccountSwitch.organization, pendingAccountSwitch.account.organizations)
+          : 'Choose after switching'}</strong></div>
+      </section>
+      <p className="tray-account-confirmation-note">Your current account will stay saved. Active work must finish before switching.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
     </div>
-    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus onClick={() => { if (pendingAccountSwitch.targetAction) setTargetInboxStatus('Secure Chat notification pending for this account.'); setPendingAccountSwitch(null); }}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></div>
+    <ScreenFooter><button type="button" className="button-secondary" autoFocus onClick={() => { if (pendingAccountSwitch.targetAction) setTargetInboxStatus('Secure Chat notification pending for this account.'); setPendingAccountSwitch(null); }}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></ScreenFooter>
   </main>;
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
@@ -294,10 +303,10 @@ export function LauncherApp({ messages }) {
     canEdit={!!state.selectedId && state.assetCatalog?.length > 0 && editState.available && !editFlow.busy && !flow.busy && !flow.preparing}
     onCreate={() => { editFlow.close(); flow.openCapture(); }} onEdit={() => void editFlow.open()}
     onOpenInbox={() => { setInboxHasNew(false); setInboxOpen(true); }} inboxHasNew={inboxHasNew}
-    onOpenApp={() => void session.openApp()} onSignOut={() => { closeInbox(); setInboxHasNew(false); setPendingInboxAction(null); void flow.signOut(); }}
+    onOpenApp={() => void session.openApp()}
     onSignOutAll={() => setConfirmSignOutAll(true)}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
-    notice={status !== messages.signedIn ? status : ''} accountName={state.accountName}
+    notice={status !== messages.signedIn ? status : ''} accountName={state.accountName} accountRole={state.accountRole}
   />;
 
   return <main className="tray-screen">

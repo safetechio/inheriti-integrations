@@ -8,6 +8,7 @@ import type { TrayAuthRuntime } from './tray-auth-runtime.js';
 export class TrayOrganizationContext {
   private known: BusinessOrganization[] = [];
   private selected: string | undefined;
+  private role: string | undefined;
   private revision = 0;
   private selections = 0;
 
@@ -18,12 +19,14 @@ export class TrayOrganizationContext {
 
   get organizations(): BusinessOrganization[] { return this.known; }
   get selectedId(): string | undefined { return this.selected; }
+  get selectedRole(): string | undefined { return this.role; }
   get pendingSelections(): number { return this.selections; }
 
   reset(): void {
     ++this.revision;
     this.known = [];
     this.selected = undefined;
+    this.role = undefined;
   }
 
   invalidate(): void { ++this.revision; }
@@ -44,6 +47,8 @@ export class TrayOrganizationContext {
       await this.planEdit.selectOrganization(id);
       await this.quickPlans.selectOrganization(id);
       this.selected = id;
+      this.role = undefined;
+      try { this.role = await this.auth.currentRole(id); } catch { /* The role is optional in the menu. */ }
       try { this.auth.sessions.saveSelectedOrganization(id); } catch { /* Organisation selection still works without a saved preference. */ }
     } finally {
       this.selections -= 1;
@@ -66,6 +71,7 @@ export class TrayOrganizationContext {
       this.inbox.clear();
       this.planEdit.reset();
       this.selected = this.known.length === 1 ? this.known[0]?.id : undefined;
+      this.role = undefined;
     }
     if (this.selected) {
       try { this.auth.sessions.saveSelectedOrganization(this.selected); } catch { /* The active organisation remains usable. */ }
@@ -75,6 +81,10 @@ export class TrayOrganizationContext {
       if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
       await this.planEdit.selectOrganization(this.selected);
       if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
+      let role: string | undefined;
+      try { role = await this.auth.currentRole(this.selected); } catch { /* The role is optional in the menu. */ }
+      if (signal?.aborted || revision !== this.revision || core !== this.auth.core) return;
+      this.role = role;
       onReady(this.known.length === 0 ? messages.noOrganizations : undefined);
       this.inbox.listen();
       return;
@@ -103,7 +113,13 @@ export class TrayOrganizationContext {
       this.inbox.clear();
       this.planEdit.reset();
       this.selected = undefined;
+      this.role = undefined;
       await this.clearKeys();
+    } else if (selectedId) {
+      let role: string | undefined;
+      try { role = await this.auth.currentRole(selectedId); } catch { /* The role is optional in the menu. */ }
+      if (revision !== this.revision || !this.isSignedIn() || this.selected !== selectedId) return { changed: false, message: undefined };
+      this.role = role;
     }
     return { changed: true, message: organizations.length === 0 ? messages.noOrganizations : undefined };
   }

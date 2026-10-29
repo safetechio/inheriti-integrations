@@ -10,7 +10,6 @@ import useSelectCurrentOrganization from '@modules/organization/application/use-
 
 type PendingAccount = {
   key: string;
-  subject: string;
   organization?: { id: string; name: string };
 };
 
@@ -58,7 +57,7 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
 
   function requestSwitch(account: SavedAccount, organization?: { id: string; name: string }) {
     closeMenu();
-    setPendingAccount({ key: account.key, subject: account.subject, organization });
+    setPendingAccount({ key: account.key, organization });
   }
 
   function removeAccount(account: SavedAccount) {
@@ -95,7 +94,7 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
       .catch((error: unknown) => {
         if (error instanceof Error && error.message === 'AUTH_ACCOUNT_ALREADY_ACTIVE') {
           setAccountError('This account is already active.');
-        } else if (error instanceof Error && error.message !== 'AUTH_CANCELLED') {
+        } else if (error instanceof Error && !/(?:^|\W)AUTH_CANCELLED(?:$|\W)/u.test(error.message)) {
           setAccountError(error.message);
         }
       })

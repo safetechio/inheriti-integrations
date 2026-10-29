@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('inheritiTray', {
   select: (id: string): Promise<TrayState> => ipcRenderer.invoke('tray:select', id),
   signOut: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out'),
   signOutAll: (): Promise<TrayState> => ipcRenderer.invoke('tray:sign-out-all'),
+  setSignOutConfirmationSize: (compact: boolean): Promise<void> => ipcRenderer.invoke('tray:sign-out-confirmation-size', compact),
   inboxPrepare: (): Promise<InboxIdentityState> => ipcRenderer.invoke('tray:inbox-prepare'),
   inboxNormalPreparation: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-normal-preparation', conversationId),
   inboxNormalMessages: (conversationId: string): Promise<unknown> => ipcRenderer.invoke('tray:inbox-normal-messages', conversationId),

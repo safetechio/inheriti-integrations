@@ -1,8 +1,8 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useGetIdentity } from '@modules/organization/infrastructure/importer-api';
-import { BaseModal, Box, Icon, Pressable, Text } from '@modules/_shared/ui/components';
+import { useGetCurrentMember } from '@modules/organization/infrastructure/organization-resources-api';
+import { BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
-import { UpdateStatus } from '@modules/_shared/ui/components/UpdateStatus';
 import { AccountDestinations } from '../AccountDestinations';
 import { useAccountMenu } from './hooks/use-account-menu';
 
@@ -22,6 +22,7 @@ export function AccountMenu({
   disabled?: boolean;
 }) {
   const { identity } = useGetIdentity();
+  const { member } = useGetCurrentMember();
   const menu = useAccountMenu(closeMenu);
   const {
     accounts,
@@ -40,6 +41,11 @@ export function AccountMenu({
     identity?.fullName && identity.fullName !== 'Unknown'
       ? identity.fullName
       : (identity?.email ?? 'Account');
+
+  const notice = accountError || (authNotice && !/(?:^|\W)AUTH_CANCELLED(?:$|\W)/u.test(authNotice) ? authNotice : null);
+  const pendingDestination = destinations.find((destination) => destination.accountKey === pendingAccount?.key);
+  const pendingName = pendingDestination?.displayName && pendingDestination.displayName !== pendingDestination.email
+    ? pendingDestination.displayName : 'this saved account';
 
   return (
     <>
@@ -63,28 +69,10 @@ export function AccountMenu({
             closeOrganizationMenu(false);
           }}
         >
-          <Box
-            className="account-summary"
-            flexDirection="row"
-            alignItems="center"
-            gap="s"
-            style={{ cursor: 'pointer' }}
-          >
-            <Box
-              width={32}
-              height={32}
-              borderRadius="pill"
-              backgroundColor="primary10"
-              alignItems="center"
-              justifyContent="center"
-            >
-              <Icon name="user" size={18} color="primary" label="User" />
-            </Box>
-            <Box style={{ maxWidth: 180 }}>
-              <Text variant="bodySmall" color="gray120" numberOfLines={1}>
-                {displayName}
-              </Text>
-            </Box>
+          <Box className="account-summary account-menu-avatar" width={40} height={40} borderRadius="pill" alignItems="center" justifyContent="center">
+            <Text color="white" style={{ fontWeight: 400, fontSize: 13 }}>
+              {displayName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}
+            </Text>
           </Box>
         </Pressable>
         {open ? (
@@ -95,11 +83,9 @@ export function AccountMenu({
             position="absolute"
             top="100%"
             right={0}
-            width={320}
-            padding="s"
-            gap="s"
+            width={340}
             backgroundColor="white"
-            borderRadius="m"
+            borderRadius="s"
             borderWidth={1}
             borderColor="gray10"
             style={{
@@ -110,9 +96,17 @@ export function AccountMenu({
               overflowY: 'auto',
             }}
           >
-            <Text variant="bodySmall" color="gray120" style={{ padding: 8 }}>
-              {displayName}
-            </Text>
+            <Box className="account-menu-current" flexDirection="row" alignItems="center" gap="m">
+              <Box className="account-menu-avatar" width={56} height={56} borderRadius="pill" alignItems="center" justifyContent="center">
+                <Text color="white" style={{ fontWeight: 400, fontSize: 19 }}>
+                  {displayName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}
+                </Text>
+              </Box>
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="bodySmall" color="primary200" numberOfLines={1} style={{ fontWeight: 700 }}>{displayName}</Text>
+                {member?.role?.name ? <Text variant="bodySmall" color="gray" numberOfLines={1}>{member.role.name.replace(/Tenant/g, 'Organisation')}</Text> : null}
+              </Box>
+            </Box>
             {destinationsLoading ? (
               <Text variant="bodySmall" color="gray">
                 Loading accounts…
@@ -122,96 +116,58 @@ export function AccountMenu({
               accounts={accounts}
               destinations={destinations}
               onSwitch={menu.requestSwitch}
-              onRemove={menu.removeAccount}
-              onSelectCurrentOrganization={menu.selectCurrentOrganization}
             />
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityLabel="Add account"
-              onPress={menu.addAccount}
-            >
-              <Box padding="s">
-                <Text variant="bodySmall" color="gray120">
-                  Add account
-                </Text>
+            <Pressable accessibilityRole="menuitem" accessibilityLabel="Add account" onPress={menu.addAccount}>
+              <Box className="account-menu-add" flexDirection="row" alignItems="center" gap="m">
+                <Box width={34} height={34} alignItems="center" justifyContent="center">
+                  <Text color="primary" style={{ fontSize: 20, lineHeight: 20 }}>＋</Text>
+                </Box>
+                <Text variant="bodySmall" color="gray120">Add another account</Text>
               </Box>
             </Pressable>
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityLabel="Sign out"
-              onPress={menu.signOut}
-            >
-              <Box
-                flexDirection="row"
-                alignItems="center"
-                gap="s"
-                padding="s"
-                borderRadius="s"
-                style={{ cursor: 'pointer' }}
-              >
-                <Icon name="logout" size={16} color="gray" label="Sign out" />
-                <Text variant="bodySmall" color="gray120">
-                  Sign out
-                </Text>
+            <Pressable accessibilityRole="menuitem" accessibilityLabel={accounts.length > 1 ? 'Log out of all accounts' : 'Log out'} onPress={accounts.length > 1 ? menu.requestSignOutAll : menu.signOut}>
+              <Box className="account-menu-signout-all" alignItems="center" justifyContent="center">
+                <Text variant="bodySmall" color="danger">{accounts.length > 1 ? 'Log out of all accounts' : 'Log out'}</Text>
               </Box>
             </Pressable>
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityLabel="Sign out all accounts"
-              onPress={menu.requestSignOutAll}
-            >
-              <Box padding="s">
-                <Text variant="bodySmall" color="gray120">
-                  Sign out all accounts
-                </Text>
-              </Box>
-            </Pressable>
-            <UpdateStatus />
           </Box>
         ) : null}
         <BaseModal
           visible={Boolean(pendingAccount)}
-          title="Switch account?"
-          description={
-            pendingAccount?.organization
-              ? `Switch to ${pendingAccount.subject} and open ${pendingAccount.organization.name}? Access will be checked before the workspace opens.`
-              : `Open ${pendingAccount?.subject ?? ''}? Organisation access will be checked before the workspace opens.`
-          }
+          title={`Switch to ${pendingName}?`}
           onDismiss={() => setPendingAccount(null)}
           footer={
             <>
               <Button title="Cancel" variant="plain" onPress={() => setPendingAccount(null)} />
-              <Button
-                title="Switch account"
-                onPress={menu.activatePendingAccount}
-              />
+              <Button title="Switch account" onPress={menu.activatePendingAccount} />
             </>
           }
         >
-          <Box />
+          <Text variant="bodySmall" color="gray">
+            {pendingAccount?.organization
+              ? `Your access to ${pendingAccount.organization.name} will be checked before the workspace opens.`
+              : 'Your organisation access will be checked before the workspace opens.'}
+          </Text>
         </BaseModal>
         <BaseModal
           visible={confirmSignOutAll}
           title="Sign out all accounts?"
-          description="Every saved login on this device will be removed."
           onDismiss={() => setConfirmSignOutAll(false)}
           footer={
             <>
               <Button title="Cancel" variant="plain" onPress={() => setConfirmSignOutAll(false)} />
-              <Button
-                title="Sign out all"
-                color="danger"
-                onPress={menu.signOutAll}
-              />
+              <Button title="Sign out all" color="danger" onPress={menu.signOutAll} />
             </>
           }
         >
-          <Box />
-        </BaseModal>
-        {accountError || authNotice ? (
-          <Text variant="bodySmall" color="danger">
-            {accountError || authNotice}
+          <Text variant="bodySmall" color="gray">
+            Every saved login on this device will be removed.
           </Text>
+        </BaseModal>
+        {notice ? (
+          <Box className="account-menu-notice" accessibilityRole="alert" position="absolute" right={0} top="100%" width={340} padding="s" backgroundColor="white" borderRadius="s" borderWidth={1} borderColor="gray10">
+            <Text variant="bodySmall" color="danger">{notice}</Text>
+          </Box>
         ) : null}
       </Box>
     </>

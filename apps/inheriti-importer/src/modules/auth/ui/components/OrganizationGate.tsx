@@ -6,6 +6,8 @@ import useSwitchOrganizationFlow from '@modules/organization/application/use-swi
 import OrganizationOptionRow from '@modules/organization/ui/components/OrganizationOptionRow';
 import { organizationDisplayName } from '@modules/organization/application/organization-display-name';
 import { useAuthState } from '@shared/infrastructure/importer-api';
+import { AppHeader } from '@modules/import/ui/components/AppHeader';
+import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import { useEffect, type ReactNode } from 'react';
 
 export default function OrganizationGate({
@@ -83,16 +85,12 @@ export default function OrganizationGate({
   if (selectedId && !accessLoading && accessMatchesSelection && canUse) return <>{children}</>;
 
   return (
-    <Box
-      position="absolute"
-      top={0}
-      right={0}
-      bottom={0}
-      left={0}
-      justifyContent="center"
-      alignItems="center"
-      padding="l"
-    >
+    <Box className="app">
+      <header className="titlebar">
+        <Box className="brand"><BrandLogo business className="brand-logo" /></Box>
+        <AppHeader dirtyCount={0} accountActionsDisabled={phase === 'switching' || phase === 'checking'} showOrganizationMenu={false} />
+      </header>
+      <Box justifyContent="center" alignItems="center" padding="l">
       <Box maxWidth={520} width="100%" backgroundColor="white" borderRadius="s">
         <Box
           flexDirection="row"
@@ -190,6 +188,7 @@ export default function OrganizationGate({
         >
           <Button title="Sign out" variant="plain" size="sm" onPress={onSignOut} />
         </Box>
+      </Box>
       </Box>
     </Box>
   );

@@ -9,11 +9,13 @@ export function AppHeader({
   accountActionsDisabled,
   discardSummary,
   onConfirmDiscardAll,
+  showOrganizationMenu = true,
 }: {
   dirtyCount: number;
   accountActionsDisabled?: boolean;
   discardSummary?: DiscardSummary;
   onConfirmDiscardAll?: () => void;
+  showOrganizationMenu?: boolean;
 }) {
   const [organizationMenuOpen, setOrganizationMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -58,13 +60,15 @@ export function AppHeader({
       {discardSummary && onConfirmDiscardAll ? (
         <DiscardAllControl summary={discardSummary} onConfirm={onConfirmDiscardAll} />
       ) : null}
-      <OrganizationMenu
-        menuRef={organizationMenuRef}
-        open={organizationMenuOpen}
-        setOpen={setOrganizationMenuOpen}
-        closeMenu={closeOrganizationMenu}
-        closeAccountMenu={closeAccountMenu}
-      />
+      {showOrganizationMenu ? (
+        <OrganizationMenu
+          menuRef={organizationMenuRef}
+          open={organizationMenuOpen}
+          setOpen={setOrganizationMenuOpen}
+          closeMenu={closeOrganizationMenu}
+          closeAccountMenu={closeAccountMenu}
+        />
+      ) : null}
       <AccountMenu
         menuRef={accountMenuRef}
         open={accountMenuOpen}

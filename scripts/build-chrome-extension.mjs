@@ -128,8 +128,11 @@ for (const page of ['side-panel', 'safekey-popup', 'blocked']) {
 }
 await cp(resolve(source, 'side-panel', 'font-app.ttf'), resolve(output, 'side-panel', 'font-app.ttf'));
 await cp(resolve(source, 'side-panel', 'assets'), resolve(output, 'side-panel', 'assets'), { recursive: true });
+const versionName = packageVersionForDeployment(packageManifest.version, deployment);
+const localName = `${sourceManifest.name} · LOCAL · v${versionName}`;
 const manifest = { ...sourceManifest, version: packageManifest.version,
-  version_name: packageVersionForDeployment(packageManifest.version, deployment),
+  version_name: versionName,
+  ...(deployment === 'local' ? { name: localName, short_name: localName } : {}),
   key: manifestKeyForBuild(deployment, sourceManifest.key) };
 await writeFile(
   resolve(output, 'manifest.json'),

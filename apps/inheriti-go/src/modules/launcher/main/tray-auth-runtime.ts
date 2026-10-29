@@ -27,6 +27,21 @@ export class TrayAuthRuntime {
   get core(): NodeIntegrationCore { return this.activeCore; }
   get sessions(): ProtectedOperatorSessionStore { return this.store; }
   getAccessToken(): Promise<string | undefined> { return this.activeCore.auth.getAccessToken(); }
+  async currentRole(organizationId: string): Promise<string | undefined> {
+    const token = await this.getAccessToken();
+    if (!token) return undefined;
+    const response = await fetch(new URL('v1/organizations', this.apiUrl), {
+      headers: { authorization: `Bearer ${token}`, 'x-elements-environment': this.environment },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return undefined;
+    const body: unknown = await response.json();
+    const result = body && typeof body === 'object' && 'result' in body ? body.result : undefined;
+    const items = result && typeof result === 'object' && 'items' in result ? result.items : undefined;
+    if (!Array.isArray(items)) return undefined;
+    const organization = items.find((item) => item && typeof item === 'object' && item.id === organizationId);
+    return typeof organization?.roleName === 'string' ? organization.roleName.slice(0, 80) : undefined;
+  }
   accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> { return this.store.accountSummaries(); }
 
   renewIfRetired(): void { if (this.store.isRetired) this.renew(); }

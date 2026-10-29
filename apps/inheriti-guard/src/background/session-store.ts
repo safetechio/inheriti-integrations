@@ -45,8 +45,11 @@ function accountLabel(session: OperatorSession): string | undefined {
   try {
     const bytes = Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), (character) => character.charCodeAt(0));
     const claims = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-    const value = [claims.name, claims.preferred_username, claims.email]
-      .find((claim) => typeof claim === 'string' && claim.trim().length > 0);
+    const fullName = [claims.given_name, claims.family_name]
+      .filter((claim): claim is string => typeof claim === 'string' && claim.trim().length > 0).join(' ');
+    const value = [claims.name, fullName, claims.nickname, claims.preferred_username]
+      .find((claim) => typeof claim === 'string' && claim.trim().length > 0 && !claim.includes('@')
+        && claim !== claims.sub && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu.test(claim));
     return typeof value === 'string' ? value.trim().slice(0, 80) : undefined;
   } catch { return undefined; }
 }

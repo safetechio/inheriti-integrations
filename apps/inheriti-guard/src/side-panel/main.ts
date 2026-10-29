@@ -14,7 +14,6 @@ import { createKeyStatusRefresh } from './main/key-status.js';
 import { planRows } from './main/plans.js';
 
 const origin = required('origin');
-required('guard-version').textContent = `v${chrome.runtime.getManifest().version_name ?? chrome.runtime.getManifest().version}`;
 const appMain = required<HTMLElement>('app-main');
 const planAccessPanel = required<HTMLElement>('plan-access-panel');
 const panelTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.plan-tabs [role="tab"]'));
@@ -28,6 +27,7 @@ const passwordCount = required('password-count');
 const pageFieldList = required('page-field-list');
 const signIn = required<HTMLButtonElement>('sign-in');
 const signOut = required<HTMLButtonElement>('sign-out');
+const signOutAll = required<HTMLButtonElement>('sign-out-all');
 const signedOutError = required<HTMLParagraphElement>('signed-out-error');
 const openOptions = required<HTMLButtonElement>('open-options');
 const forgetKey = required<HTMLButtonElement>('forget-master-key');
@@ -41,6 +41,10 @@ const accountArea = required<HTMLElement>('account-area');
 const addAccount = required<HTMLButtonElement>('add-account');
 const accountList = required<HTMLUListElement>('account-list');
 const accountStatus = required<HTMLParagraphElement>('account-status');
+const accountMenu = accountList.closest<HTMLDetailsElement>('.account-menu');
+if (accountMenu === null) throw new Error('Missing account menu');
+const accountTrigger = accountArea.querySelector<HTMLElement>('.account-trigger');
+if (accountTrigger === null) throw new Error('Missing account trigger');
 const organizationChoice = required<HTMLElement>('organization-choice');
 const organizationMenu = required<HTMLDetailsElement>('organization-menu');
 const organizationSummary = required<HTMLElement>('organization-summary');
@@ -216,9 +220,10 @@ async function selectPageFirstCandidate(candidate: PageFirstFieldCandidate): Pro
 
 /** API values are assigned through textContent and are never interpreted as markup. */
 function renderKeyStatus(keyOwner: 'Application' | 'Organization', loaded: boolean): void {
-  forgetKey.textContent = loaded ? `${keyOwner} key loaded · Clear` : `${keyOwner} key not loaded`;
+  forgetKey.textContent = `Clear ${keyOwner.toLowerCase()} key`;
   forgetKey.title = loaded ? `Clear the ${keyOwner.toLowerCase()} key from memory. You'll need to load it again before the next reveal.` : '';
   forgetKey.disabled = !loaded;
+  forgetKey.hidden = !loaded || planAccessPanel.dataset.authenticated !== 'true';
 }
 
 const refreshKeyStatus = createKeyStatusRefresh(send,
@@ -231,7 +236,7 @@ function renderPanel(state: PanelState): void {
   planAccessPanel.setAttribute('aria-busy', 'false');
   const accounts = state.accounts ?? [];
   planAccessPanel.dataset.hasAccounts = String(accounts.length > 0);
-  renderAccounts(accountList, accountStatus, accounts, accountAction);
+  renderAccounts(accountList, accounts, accountAction);
   const activeAccount = accounts.find((account) => account.active);
   const activeOrganization = state.organizations?.find((organization) => organization.id === state.organizationId);
   accessAccount.textContent = activeAccount === undefined ? ''
@@ -248,8 +253,9 @@ function renderPanel(state: PanelState): void {
 
 function renderOrganizationChoice(state: PanelState): void {
   const organizations = state.organizations;
-  const needsOrganization = state.kind === 'SELECT_ORGANIZATION';
-  organizationChoice.hidden = organizations === undefined;
+  const hasActiveAccount = state.accounts?.some((account) => account.active) === true;
+  const needsOrganization = state.kind === 'SELECT_ORGANIZATION' && hasActiveAccount;
+  organizationChoice.hidden = organizations === undefined || !hasActiveAccount;
   planAccessPanel.dataset.organization = needsOrganization ? 'required' : 'selected';
   if (organizations === undefined) return;
   organizationMenu.open = false;
@@ -272,8 +278,9 @@ function renderOrganizationChoice(state: PanelState): void {
 }
 
 function renderAuthenticationState(state: PanelState, accountCount: number): void {
-  const needsOrganization = state.kind === 'SELECT_ORGANIZATION';
-  const signedIn = state.kind === 'LOADING' || state.kind === 'EMPTY' || state.kind === 'PLANS' || needsOrganization;
+  const hasActiveAccount = state.accounts?.some((account) => account.active) === true;
+  const needsOrganization = state.kind === 'SELECT_ORGANIZATION' && hasActiveAccount;
+  const signedIn = hasActiveAccount && (state.kind === 'LOADING' || state.kind === 'EMPTY' || state.kind === 'PLANS' || needsOrganization);
   appMain.dataset.authenticated = String(signedIn);
   planAccessPanel.dataset.authenticated = String(signedIn);
   authStatus.textContent = state.kind === 'SIGNING_IN' ? 'Signing in' : state.kind === 'ERROR' ? 'Needs attention' : signedIn ? 'Signed in' : 'Signed out';
@@ -282,7 +289,8 @@ function renderAuthenticationState(state: PanelState, accountCount: number): voi
   signIn.disabled = state.kind === 'SIGNING_IN';
   signIn.textContent = state.kind === 'SIGNING_IN' ? 'Signing in…' : 'Sign in';
   accountArea.hidden = !signedIn && accountCount === 0;
-  signOut.hidden = !signedIn;
+  signOut.hidden = !signedIn || accountCount !== 1;
+  signOutAll.hidden = !signedIn || accountCount <= 1;
   // The plans list carries an error only once signed in; before that this is the one place to say it.
   signedOutError.hidden = state.kind !== 'ERROR';
   signedOutError.textContent = state.kind === 'ERROR' ? messageFor(state.code, Boolean(state.organizationId)) : '';
@@ -293,7 +301,7 @@ function renderAuthenticationState(state: PanelState, accountCount: number): voi
   signIn.hidden = signedIn || needsConfiguration;
   addAccount.disabled = state.kind === 'LOADING' || state.kind === 'SIGNING_IN' || needsConfiguration;
   planTools.hidden = !signedIn || needsOrganization;
-  forgetKey.hidden = !signedIn || needsOrganization || state.kind === 'LOADING';
+  forgetKey.hidden = !signedIn || needsOrganization || state.kind === 'LOADING' || forgetKey.disabled;
 }
 
 async function accountAction(request: Extract<SidePanelRequest, { type: 'switch-account' | 'remove-account' | 'select-account-organization' | 'select-organization' | 'sign-out' }>, confirmation?: string): Promise<void> {
@@ -356,6 +364,7 @@ planFilter.addEventListener('input', applyFilter);
 signIn.addEventListener('click', () => { renderPanel({ kind: 'SIGNING_IN' }); void requestState('sign-in'); });
 addAccount.addEventListener('click', () => { void addAnotherAccount(); });
 async function addAnotherAccount(): Promise<void> {
+  if (!window.confirm('Add another account? This clears your SafeID browser sign-in, even if canceled. Other apps may ask you to sign in again; saved Inheriti® Guard accounts stay available.')) return;
   const startedRevision = contextRevision;
   if (accessDialog.open) accessDialog.close();
   if (assetsDialog.open) assetsDialog.close();
@@ -400,8 +409,12 @@ reloadPlans.addEventListener('click', () => { renderPanel({ kind: 'LOADING' }); 
 organizationMenu.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') { organizationMenu.open = false; organizationSummary.focus(); }
 });
+accountMenu.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { accountMenu.open = false; accountTrigger.focus(); }
+});
 document.addEventListener('click', (event) => {
   if (!organizationMenu.contains(event.target as Node)) organizationMenu.open = false;
+  if (!accountMenu.contains(event.target as Node)) accountMenu.open = false;
 });
 const workspacePanel = initializeWorkspacePanel(workspaceState, send,
   () => { void requestState('load-plans'); }, refreshKeyStatus, showPageFirstChooser);

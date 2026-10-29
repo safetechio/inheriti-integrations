@@ -48,6 +48,8 @@ interface InheritiDesktop {
         accountKey: string;
         subject: string;
         status: 'ready' | 'sign_in_required';
+        displayName?: string;
+        email?: string;
         organizations: Array<{ id: string; name: string }>;
       }>
     >;

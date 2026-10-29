@@ -31,6 +31,7 @@ export class TrayInbox {
   private readonly identity: TrayInboxIdentity;
   private readonly read: InboxReadAck;
   private stopSignals: (() => void) | undefined;
+  private signalRevision = 0;
   private transfer: AbortController | undefined;
   private pendingOperations = 0;
   private transitioning = false;
@@ -69,7 +70,7 @@ export class TrayInbox {
     this.identity.cancelPreparation();
   }
   endAccountTransition(): void { this.transitioning = false; }
-  clear(): void { this.cancelTransfer(); this.stopSignals?.(); this.stopSignals = undefined; this.read.clear(); this.identity.clear(); this.cachedClient = undefined; }
+  clear(): void { ++this.signalRevision; this.cancelTransfer(); this.stopSignals?.(); this.stopSignals = undefined; this.read.clear(); this.identity.clear(); this.cachedClient = undefined; }
   hide(): void { this.cancelTransfer(); this.identity.cancelOperation(); }
   cancelTransfer(): void { this.transfer?.abort(); }
 
@@ -146,9 +147,15 @@ export class TrayInbox {
   listen(): void {
     if (!this.stopSignals && this.onSignal) {
       const tenantId = this.selectedOrganization();
+      const revision = ++this.signalRevision;
+      const isCurrent = () => {
+        if (revision !== this.signalRevision || this.transitioning) return false;
+        try { return this.selectedOrganization() === tenantId; } catch { return false; }
+      };
       this.stopSignals = createNodeInboxEventListener(this.apiUrl, async () => (await this.token()) ?? null,
         (signal) => {
-          if (signal.tenantId !== this.selectedOrganization() && !('messageId' in signal) && signal.kind !== 'CONVERSATIONS') return;
+          if (!isCurrent()) return;
+          if (signal.tenantId !== tenantId && !('messageId' in signal) && signal.kind !== 'CONVERSATIONS') return;
           if ('kind' in signal) {
             if (signal.kind === 'CONVERSATIONS') {
               this.onSignal?.({ kind: 'CONVERSATIONS', tenantId: signal.tenantId, ...(signal.conversationId ? { conversationId: signal.conversationId } : {}),
@@ -164,8 +171,8 @@ export class TrayInbox {
           if (signal.memberId) update.memberId = signal.memberId;
           if (signal.memberName) update.memberName = signal.memberName;
           this.onSignal?.(update);
-        }, () => this.onSignal?.(), tenantId, (snapshot) => {
-          if (tenantId !== this.selectedOrganization()) return;
+        }, () => { if (isCurrent()) this.onSignal?.(); }, tenantId, (snapshot) => {
+          if (!isCurrent()) return;
           this.onSignal?.(snapshot
             ? { kind: 'PRESENCE', tenantId, memberIds: snapshot.memberIds, checkedAt: snapshot.checkedAt, connected: true }
             : { kind: 'PRESENCE', tenantId, connected: false });

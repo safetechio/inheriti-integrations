@@ -66,13 +66,14 @@ function applySecurityPolicies(win) {
 // than derived from this file's location, so `dist/`, `.env.*`, and asset
 // paths stay correct regardless of where this module lives.
 function createWindow(electronDir) {
+  const windowTitle = `Inheriti® Importer · v${app.getVersion()}`;
   const win = new BrowserWindow({
     width: 1320,
     height: 880,
     minWidth: 980,
     minHeight: 680,
     backgroundColor: '#F8FBFF',
-    title: 'Inheriti® Importer',
+    title: windowTitle,
     icon: path.join(
       electronDir,
       app.isPackaged ? '../dist/favicon.png' : '../src/assets/brand/inheriti-favicon.png',
@@ -90,6 +91,11 @@ function createWindow(electronDir) {
       // frame isn't painted until an unrelated input event wakes it up.
       backgroundThrottling: false,
     },
+  });
+
+  win.webContents.on('page-title-updated', (event) => {
+    event.preventDefault();
+    win.setTitle(windowTitle);
   });
 
   applySecurityPolicies(win);

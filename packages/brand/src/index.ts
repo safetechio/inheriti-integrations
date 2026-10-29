@@ -12,8 +12,8 @@ export const elementsWordmark = Object.freeze({ text: 'INHERITI', publishable: f
 
 /** Canonical product identity for browser surfaces and release metadata. */
 export const inheritiGuardBrand = Object.freeze({
-  productName: 'InheritiGuard',
-  shortName: 'InheritiGuard',
+  productName: 'Inheriti® Guard',
+  shortName: 'Inheriti® Guard',
   description: 'Browser Protection and Protection Plan Access',
   colors: Object.freeze({
     ink: '#101828',

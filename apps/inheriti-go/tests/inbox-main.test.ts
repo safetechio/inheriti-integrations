@@ -189,6 +189,24 @@ describe('Tray Secure Chat main process', () => {
     expect(onSignal).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores queued Inbox events after an account switch clears the organization', () => {
+    const onSignal = vi.fn();
+    let selected = true;
+    const inbox = new TrayInbox('https://api.test/integrations/', 'TEST', async () => 'token',
+      async () => 'a'.repeat(64), () => {
+        if (!selected) throw new Error('organization_required');
+        return 'org-a';
+      }, onSignal);
+    inbox.listen();
+    const listener = mock.createNodeInboxEventListener.mock.calls[0]!;
+    selected = false;
+    inbox.clear();
+    expect(() => listener[2]({ tenantId: 'org-a', kind: 'PARTICIPANTS' })).not.toThrow();
+    expect(() => listener[3]()).not.toThrow();
+    expect(() => listener[5](null)).not.toThrow();
+    expect(onSignal).not.toHaveBeenCalled();
+  });
+
   it('includes the creator when starting a conversation from the member picker', async () => {
     const createConversation = vi.fn().mockResolvedValue({ id: 'conversation-a' });
     mock.createNodeInbox.mockReturnValue({ createConversation });

@@ -122,7 +122,7 @@ export function connectSafeKeyProPanel(): void {
           onTouch: () => {
             pinForm.hidden = true; touch.hidden = false;
             title.textContent = 'Confirm on SafeKey PRO';
-            intro.textContent = 'Keep your device connected while InheritiGuard opens the plan.';
+            intro.textContent = 'Keep your device connected while Inheriti® Guard opens the plan.';
             status.textContent = 'Press and release when Chrome asks. Several touches may be needed.';
           },
         });

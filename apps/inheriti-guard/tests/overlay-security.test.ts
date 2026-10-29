@@ -42,7 +42,7 @@ describe('in-page overlay security surface', () => {
 
   it('explains distinct sign-in, load failure, and empty suggestion states', async () => {
     const source = await readFile(new URL('../src/content/overlay.ts', import.meta.url), 'utf8');
-    for (const text of ['Sign in to use autofill', 'Plans could not be loaded', 'InheritiGuard did not respond',
+    for (const text of ['Sign in to use autofill', 'Plans could not be loaded', 'Inheriti® Guard did not respond',
       'No plans support autofill', 'Selected plan unavailable', 'No autofill fields found', 'No matching ${semantic} field']) {
       expect(source).toContain(text);
     }

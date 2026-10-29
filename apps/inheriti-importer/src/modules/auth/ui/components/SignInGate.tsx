@@ -74,10 +74,10 @@ export function SignInGate({
           </Box>
         ) : null}
         {message ? <Alert>{message}</Alert> : null}
-        {status !== 'checking' && accounts.map((account) => (
+        {status !== 'checking' && accounts.map((account, index) => (
           <Button
             key={account.key}
-            title={`Continue as ${account.subject}`}
+            title={`Continue with saved account${accounts.length > 1 ? ` ${index + 1}` : ''}`}
             variant="outlined"
             block
             onPress={() => { void onActivateAccount(account.key); }}

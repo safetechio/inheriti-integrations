@@ -1,6 +1,6 @@
-import { ScreenFooter } from '../../../_shared/ui/components/ScreenFooter.jsx';
-import { ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
-import { useAppVersion } from '../hooks/useAppVersion.js';
+import { useEffect, useRef } from 'react';
+import { AccountAvatar } from '../../../_shared/ui/components/AccountAvatar.jsx';
+import { ChevronDownIcon, ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
 
 export function organizationDisplayName(organization, organizations = []) {
   if (organizations.filter(({ name }) => name === organization.name).length < 2) return organization.name;
@@ -9,48 +9,57 @@ export function organizationDisplayName(organization, organizations = []) {
   return `${organization.name} · ${ambiguous ? organization.id : suffix}`;
 }
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, pendingInboxControls }) {
-  const version = useAppVersion();
-  const initials = accountName?.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '✓';
+export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOutAll, signOutDisabled, status, notice, accountName, accountRole, pendingInboxControls }) {
+  const accountMenuRef = useRef(null);
+  useEffect(() => {
+    const closeOutside = (event) => {
+      if (accountMenuRef.current?.open && !accountMenuRef.current.contains(event.target)) accountMenuRef.current.open = false;
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && accountMenuRef.current?.open) {
+        accountMenuRef.current.open = false;
+        accountMenuRef.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeOnEscape); };
+  }, []);
   const firstName = accountName?.trim().split(/\s+/u)[0];
+  const otherAccounts = accounts.filter((account) => account.subject !== activeSubject);
   return <main className="tray-screen tray-home">
     <p id="status" className="sr-only" role="status">{status}</p>
     <header className="tray-home-header">
-      <span>Select organisation:</span>
       <label className="tray-organization-picker">
         <span className="sr-only">{messages.organization}</span>
         <select id="organization" value={selectedId || ''} onChange={(event) => onOrganizationChange(event.target.value)} disabled={!organizations.length}>
           <option value="">{messages.chooseOrganization}</option>
           {organizations.map((organization) => <option value={organization.id} key={organization.id}>{organizationDisplayName(organization, organizations)}</option>)}
         </select>
+        <ChevronDownIcon />
       </label>
+      <details className="tray-account-menu" ref={accountMenuRef}>
+        <summary aria-label="Open account menu" title={accountName || 'Your account'} tabIndex={0}><AccountAvatar name={accountName} online /></summary>
+        <div className="tray-account-popover">
+          <h2 className="sr-only">Saved accounts</h2>
+          <div className="tray-account-group is-active">
+            <AccountAvatar name={accountName} />
+            <span className="tray-account-details"><strong title={accountName}>{accountName}</strong>{accountRole && <small>{accountRole}</small>}<small className="tray-account-status">{status}</small></span>
+          </div>
+          {otherAccounts.map((account) => <button className="tray-account-option" type="button" key={account.subject}
+            disabled={signOutDisabled} onClick={() => account.status === 'ready' ? onChooseAccount(account) : onAddAccount()}>
+            <AccountAvatar name={account.name} />
+            <span><strong title={account.name}>{account.name}</strong>
+              {account.status === 'sign-in-again' && <small>Sign in again</small>}</span>
+          </button>)}
+          <button id="add-account" type="button" disabled={signOutDisabled} onClick={onAddAccount}><span aria-hidden="true">＋</span>Add another account</button>
+          <button id="sign-out-all" type="button" disabled={signOutDisabled} onClick={onSignOutAll}>{otherAccounts.length ? 'Log out of all accounts' : 'Log out'}</button>
+        </div>
+      </details>
     </header>
     <div className="tray-scroll tray-home-content">
       {notice && <p className="tray-home-notice error" role="alert">{notice}</p>}
       {pendingInboxControls}
-      <section className="tray-home-section tray-saved-accounts" aria-labelledby="saved-accounts-heading">
-        <h2 id="saved-accounts-heading">Saved accounts</h2>
-        <div className="tray-account-groups">
-          {accounts.map((account) => <div className="tray-account-group" key={account.subject}>
-            <div className="tray-account-group-heading"><strong title={account.name}>{account.name}</strong>
-              {account.subject === activeSubject && <small>Current account</small>}
-              {account.subject !== activeSubject && <small>{account.status === 'sign-in-again' ? 'Sign in again' : 'Saved account'}</small>}
-            </div>
-            {account.status === 'sign-in-again' && <p>Use Add account to sign in again.</p>}
-            {account.status === 'ready' && account.organizations?.map((organization) => <button type="button" key={organization.id}
-              aria-current={account.subject === activeSubject && organization.id === selectedId ? 'true' : undefined}
-              disabled={signOutDisabled} onClick={() => account.subject === activeSubject ? onOrganizationChange(organization.id) : onChooseAccount(account, organization)}>
-              <span>{organizationDisplayName(organization, account.organizations)}</span><small>{account.subject === activeSubject ? 'This account' : `Switch to ${account.name}`}</small>
-            </button>)}
-            {account.status === 'ready' && !account.organizations?.length && (account.subject === activeSubject
-              ? <p>No organisations available.</p>
-              : <button type="button" disabled={signOutDisabled} onClick={() => onChooseAccount(account)}>Switch to this account to load organisations</button>)}
-          </div>)}
-          {!accounts.length && <p>No saved accounts found.</p>}
-        </div>
-        <button id="add-account" type="button" className="button-secondary" disabled={signOutDisabled} onClick={onAddAccount}>Add account</button>
-        <button id="sign-out-all" type="button" className="button-secondary" disabled={signOutDisabled} onClick={onSignOutAll}>Sign out all accounts</button>
-      </section>
       <section className="tray-hero">
         <h1>Hello{firstName ? ` ${firstName}` : ''} 👋</h1><p>Protect a secret in a few steps.</p>
       </section>
@@ -77,6 +86,5 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         </div>
       </div>
     </div>
-    <ScreenFooter><div className="tray-account"><span className="tray-account-avatar">{initials}</span><span><strong>{accountName || 'Your account'}</strong><small><i />{status}{version && <span className="tray-version">· v{version}</span>}</small></span></div><button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>Sign out this account</button></ScreenFooter>
   </main>;
 }

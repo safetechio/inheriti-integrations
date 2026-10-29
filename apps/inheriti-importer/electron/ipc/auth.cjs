@@ -62,11 +62,19 @@ function register(sessionsReady) {
         if (response.status !== 200) throw new Error('AUTH_DESTINATIONS_FAILED');
         const items = response.body?.result?.items;
         if (!Array.isArray(items)) throw new Error('AUTH_DESTINATIONS_INVALID');
+        const profileResponse = await apiFetch({ method: 'GET', path: '/user/profile', context }).catch(() => null);
+        if (contextForKey(key) !== context || context.revoked) return null;
+        const profile = profileResponse?.status === 200 ? profileResponse.body?.result : null;
+        const displayName = [profile?.firstName, profile?.lastName]
+          .filter((part) => typeof part === 'string' && part.trim())
+          .join(' ').trim().slice(0, 80);
         return {
           context,
           accountKey: key,
           subject,
           status: 'ready',
+          displayName: displayName || (typeof profile?.email === 'string' ? profile.email.slice(0, 80) : ''),
+          email: typeof profile?.email === 'string' ? profile.email.slice(0, 120) : '',
           organizations: items
             .filter((item) => typeof item?.id === 'string' && typeof item?.name === 'string')
             .map((item) => ({ id: item.id, name: item.name })),
@@ -78,10 +86,12 @@ function register(sessionsReady) {
         (result) =>
           result && contextForKey(result.accountKey) === result.context && !result.context.revoked,
       )
-      .map(({ accountKey, subject, status, organizations }) => ({
+      .map(({ accountKey, subject, status, displayName, email, organizations }) => ({
         accountKey,
         subject,
         status,
+        ...(displayName ? { displayName } : {}),
+        ...(email ? { email } : {}),
         organizations,
       }));
   });

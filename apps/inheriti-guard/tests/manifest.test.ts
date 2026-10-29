@@ -21,7 +21,7 @@ interface ChromeManifest {
 }
 
 describe('Chrome MV3 manifest', () => {
-  it('uses the InheritiGuard product identity and the canonical app version', async () => {
+  it('uses the Inheriti® Guard product identity and the canonical app version', async () => {
     const manifest = JSON.parse(
       await readFile(new URL('../src/manifest.json', import.meta.url), 'utf8'),
     ) as ChromeManifest;
@@ -30,8 +30,8 @@ describe('Chrome MV3 manifest', () => {
     ) as { readonly name: string; readonly version: string };
 
     expect(packageManifest.name).toBe('@safetech/inheritiguard-chrome-extension');
-    expect(manifest.name).toBe('InheritiGuard');
-    expect(manifest.short_name).toBe('InheritiGuard');
+    expect(manifest.name).toBe('Inheriti® Guard');
+    expect(manifest.short_name).toBe('Inheriti® Guard');
     expect(manifest.version).toBe(packageManifest.version);
   });
 
