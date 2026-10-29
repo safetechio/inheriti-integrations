@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): InheritiExtensionApi
   const plans = new PlanTreeProvider(context.globalStorageUri, () => keyOwner());
   let currentState: PlanViewState = { kind: 'SIGNED_OUT' };
   const render = (state: PlanViewState): void => { currentState = state; plans.render(state); };
-  const sessions = new SecretSessionStore(context.secrets);
+  const sessions = new SecretSessionStore(context.secrets, () => resolveConfiguration((key) => vscode.workspace.getConfiguration('inheriti').get<string>(key)));
   const activeReveals = new ActiveRevealRegistry();
   let selectedOrganization: BusinessOrganization | undefined;
   const cachedCores = new Map<string, NodeIntegrationCore>();

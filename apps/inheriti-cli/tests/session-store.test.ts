@@ -26,6 +26,20 @@ async function storeInTemporaryDirectory(): Promise<{ store: FileOperatorSession
 }
 
 describe('FileOperatorSessionStore', () => {
+  it('keeps a matching Business session and clears a session from another client', async () => {
+    const { path } = await storeInTemporaryDirectory();
+    const expected = { apiUrl: 'https://business.example/', issuer: session.principal.issuer,
+      clientId: session.principal.authorizedParty, audience: 'inheriti-integrations-api', environment: 'TEST' };
+    const stored = { ...session, principal: { ...session.principal, audience: expected.audience },
+      kind: 'business', familyId: 'family-1', sessionExpiresAt: Date.now() + 3_600_000 } as OperatorSession;
+    const current = new FileOperatorSessionStore(path, undefined, true, expected);
+    await current.save(stored);
+    await expect(current.load()).resolves.toEqual(stored);
+    const changed = new FileOperatorSessionStore(path, undefined, true, { ...expected, clientId: 'another-client' });
+    await expect(changed.load()).resolves.toBeUndefined();
+    await expect(readFile(path)).rejects.toBeTruthy();
+  });
+
   it('invalidates saved provider credentials in Business mode', async () => {
     const { path } = await storeInTemporaryDirectory();
     const provider = new FileOperatorSessionStore(path);
@@ -66,7 +80,8 @@ describe('FileOperatorSessionStore', () => {
     const path = resolve(home, 'session.json');
     const eventsPath = resolve(home, 'events.txt');
     await build({ entryPoints: [resolve(import.meta.dirname, '../src/session-store.ts')], outfile: modulePath,
-      bundle: true, platform: 'node', format: 'esm', external: ['@napi-rs/keyring'] });
+      bundle: true, platform: 'node', format: 'esm', external: ['@napi-rs/keyring'],
+      banner: { js: "import { createRequire as __nodeCreateRequire } from 'node:module';\nconst require = __nodeCreateRequire(import.meta.url);" } });
     const hold = `import { pathToFileURL } from 'node:url';
       const { FileOperatorSessionStore } = await import(pathToFileURL(process.argv[1]).href);
       await new FileOperatorSessionStore(process.argv[2]).withExclusiveAccess(async () => {

@@ -28,8 +28,8 @@ export type BrowserIntegrationCoreOptions = OperatorAuthOptions & {
   liveConfirmation?: string;
   /** Passed through to reconstruction; a host with no `Worker` (MV3) omits it. */
   reconstruction?: BrowserElementsClientOptions['reconstruction'];
-} & ({ applicationId: string; business?: never; organizationId?: never }
-  | { business: true; organizationId?: string; applicationId?: never });
+} & ({ applicationId: string; business?: never; organizationId?: never; businessAuthority?: never }
+  | { business: true; organizationId?: string; applicationId?: never; businessAuthority?: 'business' | 'safeid-oidc' });
 
 export type BrowserIntegrationCore = ElementsIntegrationCore<ListPlansInput, PlanPage, PlanDetail>;
 
@@ -86,4 +86,4 @@ export type { BusinessOrganization } from '@safetech/inheriti-client-sdk/browser
 // service worker never has to reach past its own entry to name a DMS gate.
 export { custodianShareCopy, hasRevealEnded, hasRevealFailed, revealGateCountdown, revealGateDeadline, revealModeOf, revealProgressMessage, stoppedByDeadManSwitch } from './index.js';
 export type { ListPlanLogsInput, PlanGovernanceView, PlanLog, PlanLogPage, RevealPhase, RevealProgress, ScopedRevealHandle, ScopedRevealOptions, ScopedRevealProgress } from './index.js';
-export { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';
+export { INTEGRATION_AUTHORITY, BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from './deployment.js';

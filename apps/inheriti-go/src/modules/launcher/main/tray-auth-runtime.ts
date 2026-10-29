@@ -20,7 +20,7 @@ export class TrayAuthRuntime {
       redirectUri: 'http://127.0.0.1/oauth/callback',
       scopes: ['openid', 'profile'],
     };
-    this.store = new ProtectedOperatorSessionStore(deployment, issuer);
+    this.store = new ProtectedOperatorSessionStore(deployment, issuer, { apiUrl, audience: this.configuration.audience, clientId: this.configuration.clientId, environment });
     this.activeCore = this.createCore();
   }
 

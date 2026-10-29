@@ -11,6 +11,7 @@ import type {
   ValidatedOperatorToken,
 } from '@safetech/inheriti-client-sdk';
 import type { ElementsEnvironment, OperatorAuthFacade } from './index.js';
+import { INTEGRATION_AUTHORITY } from './deployment.js';
 
 /**
  * The SDK defines `OperatorTokenValidator` as a port and ships no implementation, so without this
@@ -134,17 +135,17 @@ export class MemoryOAuthTransactionStore implements OAuthTransactionStore {
   async remove(key: string): Promise<void> { this.transactions.delete(key); }
 }
 
-export interface OperatorAuthOptions {
+export type OperatorAuthOptions = {
   configuration: OperatorAuthConfiguration;
   apiUrl?: string;
-  business?: true;
   /** Secure, host-specific storage. The defaults are in-memory and lose the session on exit. */
   sessions?: OperatorSessionStore;
   transactions?: OAuthTransactionStore;
   tokenValidator?: OperatorTokenValidator;
   fetchImpl?: typeof fetch;
   authFetchImpl?: typeof fetch;
-}
+} & ({ business: true; businessAuthority?: 'business' | 'safeid-oidc' }
+  | { business?: never; businessAuthority?: never });
 
 /**
  * The SDK classes an entrypoint supplies. The browser barrel and the Node entry export the same
@@ -156,6 +157,7 @@ export interface OperatorAuthRuntime {
   OperatorAuthClient: new (options: {
     configuration: OperatorAuthConfiguration;
     businessApiUrl?: string | undefined;
+    businessAuthority?: 'business' | 'safeid-oidc' | undefined;
     transport: OperatorAuthTransport;
     tokenValidator: OperatorTokenValidator;
     sessions: OperatorSessionStore;
@@ -175,10 +177,15 @@ export interface OperatorAuthRuntime {
  */
 export function composeOperatorAuth(runtime: OperatorAuthRuntime, options: OperatorAuthOptions): OperatorAuthFacade {
   if (options.business && !options.apiUrl) throw new Error('Business operator auth requires an API URL');
+  const businessAuthority = options.business ? options.businessAuthority ?? INTEGRATION_AUTHORITY : undefined;
+  if (businessAuthority === 'safeid-oidc' && options.configuration.audience !== 'inheriti-integrations-api') {
+    throw new Error('SafeID OIDC Business auth requires the inheriti-integrations-api audience');
+  }
   const authFetch = options.authFetchImpl ?? options.fetchImpl;
   return new runtime.OperatorAuthClient({
     configuration: options.configuration,
     businessApiUrl: options.business ? options.apiUrl : undefined,
+    businessAuthority,
     transport: new runtime.HttpOperatorAuthTransport(authFetch),
     tokenValidator: options.tokenValidator
       ?? new JwksOperatorTokenValidator(options.configuration.issuer, authFetch,

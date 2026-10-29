@@ -81,3 +81,12 @@ it('keeps an explicit sign-out marker across restarts until explicit sign-in cle
   expect(await new WorkspaceOperatorSessionStore('dev', 'https://issuer.test').wasSignedOut()).toBe(true);
   await expect(first.markSignedOut()).rejects.toThrow('operator_sign_out_marker_failed');
 });
+
+it('rejects sessions outside the configured API audience and client', async () => {
+  const store = new WorkspaceOperatorSessionStore('dev', 'https://issuer.test', { apiUrl: 'https://api.test/', audience: 'inheriti-integrations-api', clientId: 'viewer', environment: 'TEST' });
+  await expect(store.save(session())).rejects.toThrow('invalid_operator_session');
+  const matching = session();
+  matching.principal.audience = 'inheriti-integrations-api';
+  await store.save(matching);
+  expect(await store.load()).toEqual(matching);
+});

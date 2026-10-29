@@ -456,3 +456,13 @@ it('keeps profiles and other scoped data when atomic cleanup cannot write', asyn
   expect(await store.load()).toEqual(first);
   expect(checkpoint.getItem('organization-key/dev/same-issuer/account-a/org-a')).toBe('private-key');
 });
+
+it('rejects sessions outside the configured API audience and client', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test', { apiUrl: 'https://api.test/', audience: 'inheriti-integrations-api', clientId: 'go', environment: 'TEST' });
+  await expect(store.save(session('https://issuer.test'))).rejects.toThrow('Invalid operator session');
+  const matching = session('https://issuer.test');
+  matching.principal.audience = 'inheriti-integrations-api';
+  await store.save(matching);
+  expect(await store.load()).toEqual(matching);
+});

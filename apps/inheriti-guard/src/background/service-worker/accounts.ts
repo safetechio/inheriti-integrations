@@ -32,6 +32,7 @@ export function createAccountRuntime(deps: {
 
   async function configuredProfiles() {
     const configuration = resolveConfiguration(await readStoredConfiguration(localStorage, chrome.storage.session));
+    sessions.bind(configuration);
     return (await sessions.profiles()).filter((profile) => profile.issuer === configuration.issuer
       && profile.environment === configuration.environment && profile.authorizedParty === configuration.clientId);
   }
@@ -39,6 +40,7 @@ export function createAccountRuntime(deps: {
   async function core(organizationId?: string) {
     const stored = await readStoredConfiguration(localStorage, chrome.storage.session);
     const configuration = resolveConfiguration(stored);
+    sessions.bind(configuration);
     setKeyOwner(configuration.applicationId === undefined ? 'Organisation' : 'Application');
     const selected = configuration.applicationId === undefined
       ? organizationId ?? await selectedOrganization(configuration)

@@ -6,12 +6,17 @@ const path = require('node:path');
 const epochs = new Map();
 
 class ProtectedOperatorSessionStore {
-  constructor(environment, apiOrigin, issuer, subject) {
+  constructor(environment, apiOrigin, issuer, subject, authority = 'business', clientId = '', audience = 'inheriti-integrations-api') {
     if (![environment, apiOrigin, issuer, subject].every((value) => typeof value === 'string' && value))
       throw new Error('operator_account_invalid');
     this.issuer = issuer;
+    this.apiOrigin = apiOrigin;
+    this.environment = environment;
     this.subject = subject;
-    this.key = createHash('sha256').update(JSON.stringify([environment, apiOrigin, issuer, subject])).digest('hex');
+    this.authority = authority;
+    this.clientId = clientId;
+    this.audience = audience;
+    this.key = createHash('sha256').update(JSON.stringify([environment, apiOrigin, issuer, subject, authority, clientId, audience])).digest('hex');
     this.epoch = epochs.get(this.key) || 0;
     this.retired = false;
     this.memory = undefined;
@@ -78,13 +83,21 @@ class ProtectedOperatorSessionStore {
   }
 
   valid(session) {
-    return session && typeof session === 'object' && session.kind === 'business' &&
+    return session && typeof session === 'object' && session.kind === this.authority &&
       session.principal?.issuer === this.issuer && session.principal.subject === this.subject &&
-      typeof session.familyId === 'string' && !!session.familyId &&
+      session.principal.environment === this.environment &&
+      session.principal.authorizedParty === this.clientId &&
+      (session.principal.audience === this.audience ||
+        (Array.isArray(session.principal.audience) && session.principal.audience.includes(this.audience))) &&
+      (this.authority !== 'safeid-oidc-business' ||
+        (session.businessApiUrl === new URL('/integrations/', this.apiOrigin).toString() &&
+          session.audience === this.audience && session.clientId === this.clientId &&
+          session.environment === this.environment && session.issuer === this.issuer.replace(/\/+$/, ''))) &&
+      (this.authority !== 'business' || (typeof session.familyId === 'string' && !!session.familyId)) &&
       typeof session.accessToken === 'string' && !!session.accessToken &&
       typeof session.refreshToken === 'string' && !!session.refreshToken &&
       session.tokenType === 'Bearer' && Number.isFinite(session.expiresAt) &&
-      Number.isFinite(session.sessionExpiresAt);
+      (this.authority !== 'business' || Number.isFinite(session.sessionExpiresAt));
   }
 }
 

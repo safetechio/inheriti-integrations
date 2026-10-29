@@ -22,6 +22,21 @@ function secretStorage(): { secrets: SecretStorage; values: Map<string, string> 
 }
 
 describe('SecretSessionStore', () => {
+  it('keeps a matching Business session and clears a session from another client', async () => {
+    const { secrets, values } = secretStorage();
+    const config = { apiUrl: 'https://business.example/', business: true, issuer: session.principal.issuer,
+      clientId: session.principal.authorizedParty, environment: 'TEST' as const,
+      redirectUri: 'vscode://callback', scopes: ['openid'] };
+    const stored = { ...session, principal: { ...session.principal, audience: 'inheriti-integrations-api' },
+      kind: 'business' as const, familyId: 'family-1', sessionExpiresAt: Date.now() + 3_600_000 };
+    const current = new SecretSessionStore(secrets, () => config);
+    await current.save(stored);
+    await expect(current.load()).resolves.toEqual(stored);
+    const changed = new SecretSessionStore(secrets, () => ({ ...config, clientId: 'another-client' }));
+    await expect(changed.load()).resolves.toBeUndefined();
+    expect(values.size).toBe(0);
+  });
+
   it('is absent before the first sign-in', async () => {
     await expect(new SecretSessionStore(secretStorage().secrets).load()).resolves.toBeUndefined();
   });

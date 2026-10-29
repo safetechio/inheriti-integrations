@@ -27,9 +27,10 @@ Module._load = function (id: string, parent: unknown, isMain: boolean) {
 const { ProtectedOperatorSessionStore } = require('../electron/lib/operator-session-store.cjs');
 Module._load = originalLoad;
 const create = (subject = 'alice', apiOrigin = 'https://api') =>
-  new ProtectedOperatorSessionStore('dev', apiOrigin, 'https://issuer', subject);
+  new ProtectedOperatorSessionStore('TEST', apiOrigin, 'https://issuer', subject, 'business', 'business-client');
 const session = (subject = 'alice') => ({
-  kind: 'business', principal: { issuer: 'https://issuer', subject }, familyId: 'family',
+  kind: 'business', principal: { issuer: 'https://issuer', subject, environment: 'TEST',
+    authorizedParty: 'business-client', audience: 'inheriti-integrations-api' }, familyId: 'family',
   accessToken: 'secret-access', refreshToken: 'secret-refresh', tokenType: 'Bearer',
   expiresAt: 1000, sessionExpiresAt: 2000,
 });
@@ -51,6 +52,22 @@ it('encrypts round trips and isolates accounts', async () => {
     const bytes = readFileSync(join(secure.directory, file));
     expect(bytes.toString()).not.toContain('secret-refresh');
   }
+});
+
+it('does not reuse a session across authority or client changes', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'importer-session-'));
+  await create().save(session());
+  const otherAuthority = new ProtectedOperatorSessionStore('TEST', 'https://api', 'https://issuer', 'alice',
+    'safeid-oidc-business', 'business-client');
+  const otherClient = new ProtectedOperatorSessionStore('TEST', 'https://api', 'https://issuer', 'alice',
+    'business', 'other-client');
+  expect(await otherAuthority.load()).toBeUndefined();
+  expect(await otherClient.load()).toBeUndefined();
+});
+
+it('rejects a session without a refresh credential', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'importer-session-'));
+  await expect(create().save({ ...session(), refreshToken: '' })).rejects.toThrow('Invalid operator session');
 });
 
 it('uses memory only when protection is unavailable', async () => {

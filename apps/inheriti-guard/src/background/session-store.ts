@@ -1,6 +1,8 @@
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
 import { MASTER_KEY_CACHE_PREFIX } from '../shared/stored-configuration.js';
 import { operatorSessionIdentity } from './session-key-vault.js';
+import type { ChromeConfiguration } from '../shared/configuration.js';
+import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/browser';
 
 const LEGACY_SESSION_KEY = 'inheriti.operatorSession';
 const PROFILES_KEY = 'inheriti.operatorProfiles';
@@ -22,6 +24,7 @@ export interface OperatorProfileSummary {
 
 interface Profile {
   id: string;
+  context?: string;
   label?: string;
   epoch: number;
   issuer: string;
@@ -55,11 +58,12 @@ function accountLabel(session: OperatorSession): string | undefined {
   } catch { return undefined; }
 }
 
-function profileFor(session: OperatorSession, epoch: number): Profile {
+function profileFor(session: OperatorSession, epoch: number, context?: string): Profile {
   const profile: Profile = {
     id: operatorProfileId(session), epoch, issuer: session.principal.issuer, environment: session.principal.environment,
     authorizedParty: session.principal.authorizedParty, subject: session.principal.subject, session,
   };
+  if (context) profile.context = context;
   const label = accountLabel(session);
   if (label) profile.label = label;
   return profile;
@@ -68,8 +72,37 @@ function profileFor(session: OperatorSession, epoch: number): Profile {
 /** Credentials remain in memory-backed extension storage and never reach the panel or local storage. */
 export class SessionStorageOperatorSessionStore implements OperatorSessionStore {
   private queue: Promise<unknown> = Promise.resolve();
+  private context: ChromeConfiguration | undefined;
 
   public constructor(private readonly area: chrome.storage.StorageArea) {}
+
+  public bind(configuration: ChromeConfiguration): void { this.context = configuration; }
+
+  private contextKey(): string | undefined {
+    const configuration = this.context;
+    return configuration && JSON.stringify([INTEGRATION_AUTHORITY, configuration.apiUrl, configuration.environment,
+      configuration.issuer, configuration.clientId, configuration.applicationId ?? null]);
+  }
+
+  private matches(session: OperatorSession): boolean {
+    const configuration = this.context;
+    if (!configuration) return true;
+    const audience = configuration.applicationId === undefined ? 'inheriti-integrations-api' : 'inheriti-elements-api';
+    const kind = configuration.applicationId === undefined
+      ? (INTEGRATION_AUTHORITY === 'business' ? 'business' : 'safeid-oidc-business') : undefined;
+    return session.principal.issuer === configuration.issuer &&
+      session.principal.environment === configuration.environment &&
+      session.principal.authorizedParty === configuration.clientId &&
+      (session.principal.audience === audience ||
+        (Array.isArray(session.principal.audience) && session.principal.audience.includes(audience))) &&
+      (kind !== 'safeid-oidc-business' ||
+        ('businessApiUrl' in session && session.businessApiUrl === configuration.apiUrl &&
+          'audience' in session && session.audience === audience &&
+          'clientId' in session && session.clientId === configuration.clientId &&
+          'issuer' in session && session.issuer === configuration.issuer.replace(/\/+$/u, '') &&
+          'environment' in session && session.environment === configuration.environment)) &&
+      (kind === undefined ? !('kind' in session) : 'kind' in session && session.kind === kind);
+  }
 
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
     const result = this.queue.then(work, work);
@@ -107,19 +140,31 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
         || (active !== undefined && (typeof active !== 'string' || !profiles.some(({ id, session }) => id === active && session !== undefined))))
         throw new Error('invalid_operator_profiles');
       let discardedLegacyBusiness = false;
+      let migratedLegacyBusiness = false;
       for (const profile of profiles) {
         const session = profile.session;
-        if (!session || ('kind' in session && session.kind === 'business')) continue;
+        const compatibleLegacyBusiness = this.contextKey() !== undefined && profile.context === undefined && INTEGRATION_AUTHORITY === 'business'
+          && 'kind' in (session ?? {}) && session?.kind === 'business';
+        if (session && ((!compatibleLegacyBusiness && profile.context !== this.contextKey()) || !this.matches(session))) {
+          delete profile.session;
+          discardedLegacyBusiness = true;
+          continue;
+        }
+        if (session && compatibleLegacyBusiness) {
+          profile.context = this.contextKey()!;
+          migratedLegacyBusiness = true;
+        }
+        if (!session || ('kind' in session && (session.kind === 'business' || session.kind === 'safeid-oidc-business'))) continue;
         const audience = session.principal.audience;
         if (audience !== 'inheriti-integrations-api'
           && (!Array.isArray(audience) || !audience.includes('inheriti-integrations-api'))) continue;
         delete profile.session;
         discardedLegacyBusiness = true;
       }
-      if (discardedLegacyBusiness) {
-        const next: Registry = { profiles, generation: empty.generation + 1 };
+      if (discardedLegacyBusiness || migratedLegacyBusiness) {
+        const next: Registry = { profiles, generation: empty.generation + (discardedLegacyBusiness ? 1 : 0) };
         if (typeof active === 'string' && profiles.some(({ id, session }) => id === active && session !== undefined)) next.active = active;
-        await this.clearKeys();
+        if (discardedLegacyBusiness) await this.clearKeys();
         await this.write(next);
         return next;
       }
@@ -183,6 +228,7 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
           && operatorSessionIdentity(currentProfile.session) === bound.identity ? currentProfile.session : undefined;
       }),
       save: async (session) => {
+        if (!this.matches(session)) throw new Error('operator_session_changed');
         if (enrolled) return this.saveBound(enrolled.id, enrolled.identity, enrolled.epoch, session);
         return this.exclusive(async () => {
           const registry = await this.read();
@@ -191,7 +237,7 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
           const identity = operatorSessionIdentity(session)!;
           const profiles = registry.profiles.filter((profile) => profile.id !== id);
           const epoch = registry.generation + 1;
-          profiles.push(profileFor(session, epoch));
+          profiles.push(profileFor(session, epoch, this.contextKey()));
           await this.clearKeys();
           await this.write({ profiles, active: id, generation: epoch });
           enrolled = { id, identity, epoch };
@@ -221,7 +267,7 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
     return this.exclusive(async () => {
       const registry = await this.read();
       const profile = registry.profiles.find((item) => item.id === id);
-      if (!profile || profile.epoch !== epoch || operatorProfileId(session) !== id || operatorSessionIdentity(session) !== identity
+      if (!this.matches(session) || !profile || profile.epoch !== epoch || operatorProfileId(session) !== id || operatorSessionIdentity(session) !== identity
         || operatorSessionIdentity(profile.session) !== identity) throw new Error('operator_session_changed');
       profile.session = session;
       await this.write(registry);
@@ -230,6 +276,7 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
 
   public save(session: OperatorSession): Promise<void> {
     return this.exclusive(async () => {
+      if (!this.matches(session)) throw new Error('operator_session_changed');
       const registry = await this.read();
       const profile = registry.profiles.find(({ id }) => id === registry.active);
       if (!profile || operatorProfileId(session) !== profile.id

@@ -1,13 +1,16 @@
 /** Persist only the operator credential in the OS keyring; fail closed on sign-out state. */
 import { createHash } from 'node:crypto';
+import { INTEGRATION_AUTHORITY } from '../../../../../packages/core/src/deployment.js';
 import type { OperatorSession, OperatorSessionStore } from '../../../../../packages/core/src/node-base.js';
+
+type SessionScope = { apiUrl: string; audience: string; clientId: string; environment: string };
 
 export class WorkspaceOperatorSessionStore implements OperatorSessionStore {
   private readonly account: string;
   private memory: OperatorSession | undefined;
 
-  constructor(deployment: string, private readonly issuer: string) {
-    this.account = createHash('sha256').update(JSON.stringify([deployment, issuer])).digest('hex');
+  constructor(deployment: string, private readonly issuer: string, private readonly scope?: SessionScope) {
+    this.account = createHash('sha256').update(JSON.stringify(INTEGRATION_AUTHORITY === 'safeid-oidc' ? [deployment, issuer, 'safeid-oidc'] : [deployment, issuer])).digest('hex');
   }
 
   async load(): Promise<OperatorSession | undefined> {
@@ -70,7 +73,19 @@ export class WorkspaceOperatorSessionStore implements OperatorSessionStore {
   private valid(value: unknown): value is OperatorSession {
     if (!value || typeof value !== 'object') return false;
     const session = value as Partial<OperatorSession>;
-    return session.kind === 'business' && session.principal?.issuer === this.issuer && typeof session.principal.subject === 'string' && !!session.principal.subject &&
+    if (session.kind !== (INTEGRATION_AUTHORITY === 'safeid-oidc' ? 'safeid-oidc-business' : 'business')) return false;
+    if (session.principal?.issuer !== this.issuer) return false;
+    if (this.scope && (!(typeof session.principal.audience === 'string' ? session.principal.audience === this.scope.audience : Array.isArray(session.principal.audience) && session.principal.audience.includes(this.scope.audience)) || session.principal.authorizedParty !== this.scope.clientId ||
+      session.principal.environment !== this.scope.environment)) return false;
+    if (session.kind === 'safeid-oidc-business') return !!this.scope && session.businessApiUrl === this.scope.apiUrl &&
+      session.audience === this.scope.audience && session.clientId === this.scope.clientId &&
+      session.issuer === this.issuer && session.environment === this.scope.environment &&
+      typeof session.refreshToken === 'string' && !!session.refreshToken &&
+      (session.refreshExpiresAt === undefined || typeof session.refreshExpiresAt === 'number' && Number.isFinite(session.refreshExpiresAt)) &&
+      typeof session.principal.subject === 'string' && !!session.principal.subject &&
+      typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&
+      typeof session.expiresAt === 'number' && Number.isFinite(session.expiresAt);
+    return session.kind === 'business' && typeof session.principal.subject === 'string' && !!session.principal.subject &&
       typeof session.familyId === 'string' && !!session.familyId &&
       typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&
       typeof session.expiresAt === 'number' && Number.isFinite(session.expiresAt) &&

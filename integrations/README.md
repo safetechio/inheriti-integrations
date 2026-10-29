@@ -12,7 +12,7 @@ Use the [CLI step-by-step guide](../apps/inheriti-cli/docs/automation-setup.md) 
 4. Run `inheriti automations grant create --plan PLAN_ID --connection CONNECTION_ID --member MEMBER_ID`, then `inheriti automations grant activate --plan PLAN_ID --grant GRANT_ID`. The Business API checks the operator's permissions and records these changes.
 5. Use `inheriti automations list` and `inheriti automations grants PLAN_ID` to inspect safe metadata. Use `grant member`, `grant revoke`, or `automations disable` to change responsibility or end access.
 
-Setup requires a human Business session. Identity verification requires an interactive terminal and desktop window. It is enabled in the local and dev CLI builds. Provider proofs, private keys, and reconstructed fields are never CLI arguments or printed by these commands. The connection and grant lists show API metadata; they do not prove a provider can authenticate or that a live workload can use the plan. Local or mock tests do not replace provider E2E validation.
+Setup requires a human operator session under the deployment's selected authority. Identity verification requires an interactive terminal and desktop window. It is enabled in the local and dev CLI builds. Provider proofs, private keys, and reconstructed fields are never CLI arguments or printed by these commands. The connection and grant lists show API metadata; they do not prove a provider can authenticate or that a live workload can use the plan. Local or mock tests do not replace provider E2E validation.
 
 For a self-managed runner, choose **Custom runner (Portable)**. Ansible uses the connection matching its controller's identity; see the [Ansible lookup setup](./ansible/README.md), including the custom runner option.
 

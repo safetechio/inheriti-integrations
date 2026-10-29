@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  HOST_FEATURE_FLAGS, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
+  HOST_FEATURE_FLAGS, INTEGRATION_AUTHORITY, businessDeployment, createNodeIntegrationCore, latestIntegrationBuild, selectBusinessOrganization,
   MemoryOperatorSessionStore, readOrganizationPreferences, saveOrganizationPreferences, createAutomationSetupOperations, createAwsSecretPublisher,
 } from '@safetech/inheriti-elements-core/node-base';
 import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
@@ -95,7 +95,7 @@ export class MetadataTools {
       this.authConfiguration = { issuer: config.issuer, clientId: config.clientId, audience: 'inheriti-integrations-api',
         environment: config.environment, redirectUri: config.redirectUri, scopes: ['openid'] };
       this.core = createNodeIntegrationCore({
-        apiUrl: this.config.apiUrl, business: true, environment: this.config.environment,
+        apiUrl: this.config.apiUrl, business: true, businessAuthority: INTEGRATION_AUTHORITY, environment: this.config.environment,
         liveConfirmation: this.config.environment,
         configuration: this.authConfiguration,
         authFetchImpl: authFetch,
@@ -303,7 +303,7 @@ export class MetadataTools {
       this.assertGeneration(generation);
       if (version !== this.selectionVersion) throw coded('organization_selection_changed');
       const core = createNodeIntegrationCore({
-        apiUrl: this.config!.apiUrl, business: true, organizationId: id, environment: this.config!.environment,
+        apiUrl: this.config!.apiUrl, business: true, businessAuthority: INTEGRATION_AUTHORITY, organizationId: id, environment: this.config!.environment,
         liveConfirmation: this.config!.environment, auth: ready.core.auth,
         configuration: { issuer: this.config!.issuer, clientId: this.config!.clientId, audience: 'inheriti-integrations-api', environment: this.config!.environment, redirectUri: this.config!.redirectUri, scopes: ['openid'] },
         sessions: this.sessions,

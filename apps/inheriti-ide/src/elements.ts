@@ -1,4 +1,4 @@
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import { createNodeIntegrationCore, INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node';
 import type { NodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
 import type { OperatorSessionStore } from '@safetech/inheriti-elements-core';
 import type { ExtensionConfiguration } from './configuration.js';
@@ -14,7 +14,7 @@ export function createExtensionCore(
 ): NodeIntegrationCore {
   return createNodeIntegrationCore({
     apiUrl: configuration.apiUrl,
-    ...(configuration.business ? { business: true as const, ...(organizationId ? { organizationId } : {}) }
+    ...(configuration.business ? { business: true as const, businessAuthority: INTEGRATION_AUTHORITY, ...(organizationId ? { organizationId } : {}) }
       : { applicationId: configuration.applicationId! }),
     // Declared, not composed: with a passphrase stored the editor derives the key itself; without
     // one the SDK asks the device holding it. This host never chooses between the two.

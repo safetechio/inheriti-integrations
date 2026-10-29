@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OperatorSession } from '@safetech/inheriti-elements-core';
 import { MASTER_KEY_CACHE_PREFIX } from '../src/shared/stored-configuration.js';
 import { operatorProfileId, SessionStorageOperatorSessionStore } from '../src/background/session-store.js';
+import type { ChromeConfiguration } from '../src/shared/configuration.js';
 
 function login(subject: string, sessionId = subject): OperatorSession {
   return {
@@ -31,6 +32,52 @@ async function enroll(store: SessionStorageOperatorSessionStore, session: Operat
 }
 
 describe('SessionStorageOperatorSessionStore', () => {
+  it('keeps an OIDC Business session and accepts a bound refresh', async () => {
+    const { area } = sessionArea();
+    const store = new SessionStorageOperatorSessionStore(area);
+    const session = Object.assign(login('oidc-user'), { kind: 'safeid-oidc-business' as const,
+      businessApiUrl: 'https://api/integrations/', audience: 'inheriti-integrations-api',
+      clientId: 'elements-test-chrome', issuer: 'https://safeid.test/realms/elements', environment: 'TEST' as const });
+    session.principal.audience = 'inheriti-integrations-api';
+    await enroll(store, session);
+    const adapter = await store.forProfile(operatorProfileId(session));
+    await adapter.save({ ...session, accessToken: 'new-access' });
+    expect((await new SessionStorageOperatorSessionStore(area).load())?.accessToken).toBe('new-access');
+  });
+  it('keeps a compatible saved Business session when adding context binding', async () => {
+    const { area, values } = sessionArea();
+    const session = Object.assign(login('business-user'), {
+      kind: 'business' as const, familyId: 'family-1', sessionExpiresAt: Date.now() + 300_000,
+    });
+    session.principal.audience = 'inheriti-integrations-api';
+    const oldStore = new SessionStorageOperatorSessionStore(area);
+    await enroll(oldStore, session);
+    const upgraded = new SessionStorageOperatorSessionStore(area);
+    upgraded.bind({ apiUrl: 'https://api/integrations/', issuer: session.principal.issuer,
+      clientId: session.principal.authorizedParty, environment: 'TEST', scopes: ['openid'], masterKeyCustody: 'EXTERNAL' });
+    expect(await upgraded.load()).toEqual(session);
+    expect(JSON.parse(String(values.get('inheriti.operatorProfiles')))[0].context).toBeTruthy();
+    expect(await upgraded.load()).toEqual(session);
+  });
+  it('invalidates saved credentials when the configured client or API changes', async () => {
+    const { area } = sessionArea();
+    const store = new SessionStorageOperatorSessionStore(area);
+    const current = login('alice');
+    const configuration: ChromeConfiguration = { apiUrl: 'https://api-a/integrations/', issuer: current.principal.issuer,
+      clientId: current.principal.authorizedParty, environment: 'TEST', scopes: ['openid'], masterKeyCustody: 'EXTERNAL',
+      applicationId: 'application' };
+    store.bind(configuration);
+    await enroll(store, current);
+    const wrongMode = Object.assign(login('bob'), { kind: 'safeid-oidc-business' as const });
+    await expect(enroll(store, wrongMode)).rejects.toThrow('operator_session_changed');
+    store.bind({ ...configuration, clientId: 'other-client' });
+    expect(await store.load()).toBeUndefined();
+    expect((await store.profiles())[0]?.needsSignIn).toBe(true);
+    store.bind(configuration);
+    await enroll(store, current);
+    store.bind({ ...configuration, apiUrl: 'https://api-b/integrations/' });
+    expect(await store.load()).toBeUndefined();
+  });
   it('starts signed out and discards the legacy credential without adopting it', async () => {
     const { area, values } = sessionArea();
     values.set('inheriti.operatorSession', JSON.stringify(login('legacy')));

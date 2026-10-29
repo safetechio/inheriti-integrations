@@ -23,10 +23,17 @@ class OperatorRuntime {
   async initialize() {
     await app.whenReady();
     this.sdk = await this.loadCore();
+    this.authority = this.sdk.INTEGRATION_AUTHORITY;
+    this.sessionKind = this.authority === 'business' ? 'business' : 'safeid-oidc-business';
+    this.sessionEnvironment = this.environment;
+    this.clientId = this.sdk.BUSINESS_INTERACTIVE_CLIENT_ID;
+    this.audience = 'inheriti-integrations-api';
     this.indexFile = path.join(app.getPath('userData'), `operator-accounts-${this.environment}.json`);
     try {
       const index = JSON.parse(fs.readFileSync(this.indexFile, 'utf8'));
-      if (index.apiOrigin === this.apiOrigin && index.issuer === this.issuer && Array.isArray(index.subjects)) {
+      if (index.apiOrigin === this.apiOrigin && index.issuer === this.issuer &&
+        index.authority === this.authority && index.clientId === this.clientId &&
+        index.audience === this.audience && Array.isArray(index.subjects)) {
         this.accounts = index.subjects.filter((subject) => typeof subject === 'string' && subject);
         this.activeSubject = this.accounts.includes(index.activeSubject) ? index.activeSubject : undefined;
       }
@@ -37,7 +44,8 @@ class OperatorRuntime {
 
   store(subject) {
     if (!this.stores.has(subject) || !this.stores.get(subject).current())
-      this.stores.set(subject, new ProtectedOperatorSessionStore(this.environment, this.apiOrigin, this.issuer, subject));
+      this.stores.set(subject, new ProtectedOperatorSessionStore(this.sessionEnvironment, this.apiOrigin, this.issuer, subject,
+        this.sessionKind, this.clientId, this.audience));
     return this.stores.get(subject);
   }
 
@@ -65,8 +73,8 @@ class OperatorRuntime {
     return core;
   }
 
-  configuration() { return { issuer: this.issuer, clientId: this.sdk.BUSINESS_INTERACTIVE_CLIENT_ID,
-    audience: 'inheriti-integrations-api', environment: this.environment,
+  configuration() { return { issuer: this.issuer, clientId: this.clientId,
+    audience: this.audience, environment: this.environment,
     redirectUri: 'http://127.0.0.1/oauth/callback', scopes: ['openid', 'profile'] }; }
 
   rebuild() { this.activeCore = this.activeSubject ? this.accountCore(this.activeSubject) : undefined; }
@@ -102,8 +110,10 @@ class OperatorRuntime {
       if (!await this.getAccessToken(capture)) return null;
       const session = await store.load();
       if (!this.isCurrent(capture) || !session) return null;
-      return { sessionFamilyId: session.familyId, subject: session.principal.subject,
-        expiresAt: new Date(session.sessionExpiresAt).toISOString() };
+      const sessionId = session.kind === 'business' ? session.familyId : session.principal.sessionId;
+      if (typeof sessionId !== 'string' || !sessionId) return null;
+      return { sessionFamilyId: sessionId, subject: session.principal.subject,
+        expiresAt: new Date(session.kind === 'business' ? session.sessionExpiresAt : session.expiresAt).toISOString() };
     } catch (error) {
       if (!this.isCurrent(capture) || !await store.load()) return null;
       throw error;
@@ -136,7 +146,9 @@ class OperatorRuntime {
     await core.listOrganizations();
     signal?.throwIfAborted();
     const session = await sessions.load();
-    if (!session || session.kind !== 'business' || session.principal?.issuer !== this.issuer || !session.principal.subject)
+    if (!session || session.kind !== this.sessionKind || session.principal?.issuer !== this.issuer || !session.principal.subject ||
+      session.principal.environment !== this.sessionEnvironment || session.principal.authorizedParty !== this.clientId ||
+      session.principal.audience !== this.audience)
       throw new Error('operator_account_invalid');
     if (revision !== this.revision) throw new Error('operator_context_changed');
     return this.mutate(async () => {
@@ -238,6 +250,7 @@ class OperatorRuntime {
     fs.mkdirSync(path.dirname(this.indexFile), { recursive: true, mode: 0o700 });
     const temporary = `${this.indexFile}.tmp`;
     fs.writeFileSync(temporary, JSON.stringify({ apiOrigin: this.apiOrigin, issuer: this.issuer,
+      authority: this.authority, clientId: this.clientId, audience: this.audience,
       subjects: accounts, activeSubject }), { mode: 0o600 });
     fs.renameSync(temporary, this.indexFile);
   }

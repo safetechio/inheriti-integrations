@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
+import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node';
 import { ProtectedCheckpoint } from './protected-checkpoint.js';
 
+type SessionScope = { apiUrl: string; audience: string; clientId: string; environment: string };
 type ProfileRecord = { generation: number; session?: OperatorSession; reauthSubject?: string; memoryOnly?: boolean };
 type ProfileRegistry = { profiles: Map<string, ProfileRecord>; memoryActiveSubject: string | undefined };
 export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again' };
@@ -17,8 +19,8 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   private boundGeneration: number | undefined;
   private retired = false;
 
-  constructor(private readonly deployment: string, private readonly issuer: string, registry?: ProfileRegistry) {
-    this.path = `operator-session/${deployment}/${createHash('sha256').update(issuer).digest('hex')}`;
+  constructor(private readonly deployment: string, private readonly issuer: string, private readonly scope?: SessionScope, registry?: ProfileRegistry) {
+    this.path = `operator-session/${deployment}/${createHash('sha256').update(issuer).digest('hex')}${INTEGRATION_AUTHORITY === 'safeid-oidc' ? '/safeid-oidc' : ''}`;
     this.registry = registry ?? { profiles: new Map(), memoryActiveSubject: undefined };
     this.epoch = ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0;
     const registries = ProtectedOperatorSessionStore.registries.get(this.path) ?? new Set<ProfileRegistry>();
@@ -27,7 +29,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   }
 
   get isRetired(): boolean { return this.retired || this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0); }
-  fork(): ProtectedOperatorSessionStore { return new ProtectedOperatorSessionStore(this.deployment, this.issuer, this.registry); }
+  fork(): ProtectedOperatorSessionStore { return new ProtectedOperatorSessionStore(this.deployment, this.issuer, this.scope, this.registry); }
   retire(): void { this.retired = true; }
 
   async load(): Promise<OperatorSession | undefined> {
@@ -133,7 +135,9 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     const accounts = records.flatMap((record) => {
       const session = record.session;
       if (!session) return record.reauthSubject ? [{ subject: record.reauthSubject, name: record.reauthSubject, status: 'sign-in-again' as const }] : [];
-      const usable = session.kind === 'business' && session.sessionExpiresAt > Date.now();
+      const usable = this.valid(session) && (session.kind === 'safeid-oidc-business'
+        ? !!session.refreshToken && (session.refreshExpiresAt === undefined || session.refreshExpiresAt > Date.now())
+        : session.kind === 'business' && session.sessionExpiresAt > Date.now());
       return [{ subject: session.principal.subject, name: session.principal.subject,
         status: usable ? 'ready' as const : 'sign-in-again' as const }];
     });
@@ -265,7 +269,19 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   private valid(value: unknown): value is OperatorSession {
     if (!value || typeof value !== 'object') return false;
     const session = value as Partial<OperatorSession>;
-    return session.kind === 'business' && session.principal?.issuer === this.issuer &&
+    if (session.kind !== (INTEGRATION_AUTHORITY === 'safeid-oidc' ? 'safeid-oidc-business' : 'business')) return false;
+    if (session.principal?.issuer !== this.issuer) return false;
+    if (this.scope && (!(typeof session.principal.audience === 'string' ? session.principal.audience === this.scope.audience : Array.isArray(session.principal.audience) && session.principal.audience.includes(this.scope.audience)) || session.principal.authorizedParty !== this.scope.clientId ||
+      session.principal.environment !== this.scope.environment)) return false;
+    if (session.kind === 'safeid-oidc-business') return !!this.scope && session.businessApiUrl === this.scope.apiUrl &&
+      session.audience === this.scope.audience && session.clientId === this.scope.clientId &&
+      session.issuer === this.issuer && session.environment === this.scope.environment &&
+      typeof session.refreshToken === 'string' && !!session.refreshToken &&
+      (session.refreshExpiresAt === undefined || typeof session.refreshExpiresAt === 'number' && Number.isFinite(session.refreshExpiresAt)) &&
+      typeof session.principal.subject === 'string' && !!session.principal.subject &&
+      typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&
+      typeof session.expiresAt === 'number' && Number.isFinite(session.expiresAt);
+    return session.kind === 'business' &&
       typeof session.principal.subject === 'string' && !!session.principal.subject &&
       typeof session.familyId === 'string' && !!session.familyId &&
       typeof session.accessToken === 'string' && !!session.accessToken && session.tokenType === 'Bearer' &&

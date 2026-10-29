@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
+import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node-base';
 import { sessionIdentity } from './key-vault.js';
 
 export class SessionStoreUnreadable extends Error {
@@ -27,7 +28,8 @@ export function defaultSessionPath(environmentVariables: Readonly<Record<string,
  */
 export class FileOperatorSessionStore implements OperatorSessionStore {
   private completedClears = 0;
-  constructor(private readonly path: string, private readonly keys?: { clear(): Promise<void> }, private readonly business = false) {}
+  constructor(private readonly path: string, private readonly keys?: { clear(): Promise<void> }, private readonly business = false,
+    private readonly expected?: { apiUrl: string; issuer: string; clientId: string; audience: string; environment: string }) {}
 
   get successfulClearCount(): number { return this.completedClears; }
 
@@ -134,8 +136,20 @@ export class FileOperatorSessionStore implements OperatorSessionStore {
       throw new SessionStoreUnreadable('session_file_corrupt');
     }
     const stored = session as OperatorSession & { kind?: string; familyId?: string; sessionExpiresAt?: number };
-    if (this.business && (stored.kind !== 'business' || !stored.familyId || !stored.refreshToken
-      || !Number.isFinite(stored.sessionExpiresAt) || 'idToken' in stored)) {
+    const principal = stored.principal;
+    const expected = this.expected;
+    const matchingPrincipal = !expected || (principal?.issuer === expected.issuer
+      && principal.environment === expected.environment && principal.authorizedParty === expected.clientId
+      && (Array.isArray(principal.audience) ? principal.audience.includes(expected.audience) : principal.audience === expected.audience));
+    const matchingMode = this.business ? (INTEGRATION_AUTHORITY === 'business'
+      ? stored.kind === 'business' && !!stored.familyId && Number.isFinite(stored.sessionExpiresAt) && !('idToken' in stored)
+      : stored.kind === 'safeid-oidc-business' && (stored as typeof stored & { businessApiUrl?: string }).businessApiUrl === expected?.apiUrl
+        && (stored as typeof stored & { issuer?: string }).issuer === expected?.issuer
+        && (stored as typeof stored & { clientId?: string }).clientId === expected?.clientId
+        && (stored as typeof stored & { audience?: string }).audience === expected?.audience
+        && (stored as typeof stored & { environment?: string }).environment === expected?.environment)
+      : stored.kind !== 'business' && stored.kind !== 'safeid-oidc-business';
+    if (!matchingMode || !matchingPrincipal || (this.business && !stored.refreshToken)) {
       await this.clear();
       return undefined;
     }

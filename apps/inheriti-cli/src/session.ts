@@ -1,4 +1,4 @@
-import { createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node-base';
+import { createNodeIntegrationCore, INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from './configuration.js';
 import { FileOperatorSessionStore } from './session-store.js';
@@ -35,7 +35,10 @@ export function createCliContext(
   organizationId?: string,
 ): CliContext {
   const keyVault: CliKeyVault = new CliKeyVault(sessionPath, configuration.apiUrl, configuration.environment, () => sessions.load());
-  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault, configuration.business);
+  const sessions: FileOperatorSessionStore = new FileOperatorSessionStore(sessionPath, keyVault, configuration.business, {
+    apiUrl: configuration.apiUrl, issuer: configuration.issuer, clientId: configuration.interactiveClientId,
+    audience: configuration.business ? 'inheriti-integrations-api' : 'inheriti-elements-api', environment: configuration.environment,
+  });
   const source = createCliMasterKeySource(configuration);
   const authConfiguration: NodeIntegrationCoreOptions['configuration'] = {
     issuer: configuration.issuer,
@@ -47,7 +50,7 @@ export function createCliContext(
   };
   const options: NodeIntegrationCoreOptions = {
     apiUrl: configuration.apiUrl,
-    ...(configuration.business ? { business: true as const, ...(organizationId ? { organizationId } : {}) }
+    ...(configuration.business ? { business: true as const, businessAuthority: INTEGRATION_AUTHORITY, ...(organizationId ? { organizationId } : {}) }
       : { applicationId: configuration.applicationId! }),
     // Declared, not composed: the SDK decides between deriving and asking the device that holds the
     // key, and speaks the relay protocol. This host only says what it has.

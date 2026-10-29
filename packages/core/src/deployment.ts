@@ -1,4 +1,5 @@
 /** Business deployments. TEST/LIVE is the API classification, not the deployment selector. */
+export const INTEGRATION_AUTHORITY: 'business' | 'safeid-oidc' = 'business';
 export const BUSINESS_DEPLOYMENTS = {
   local: {
     apiUrl: 'http://business.localhost:3400/integrations/',

@@ -30,6 +30,7 @@ const revoked: string[] = [];
 let releaseOrganizations: (() => void) | undefined;
 let revokeWait: Promise<void> | undefined;
 const sdk = {
+  INTEGRATION_AUTHORITY: 'business',
   BUSINESS_INTERACTIVE_CLIENT_ID: 'business-client',
   MemoryOperatorSessionStore: class {
     session: unknown;
@@ -41,7 +42,8 @@ const sdk = {
     return {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}`, expiresAt: 1 }),
-        completeAuthorizationCode: async () => options.sessions.save({ kind: 'business', principal: { issuer: 'https://issuer', subject },
+        completeAuthorizationCode: async () => options.sessions.save({ kind: 'business', principal: { issuer: 'https://issuer', subject,
+          environment: options.configuration.environment, authorizedParty: 'business-client', audience: 'inheriti-integrations-api' },
           familyId: `family-${credentialSuffix}`, accessToken: `access-${credentialSuffix}`, refreshToken: `refresh-${credentialSuffix}`,
           tokenType: 'Bearer', expiresAt: 1000, sessionExpiresAt: 2000 }),
         getAccessToken: async () => (await options.sessions.load())?.accessToken,
@@ -51,8 +53,8 @@ const sdk = {
     };
   },
 };
-const create = async () => {
-  const runtime = new OperatorRuntime({ environment: 'dev', apiOrigin: 'https://api', issuer: 'https://issuer', loadCore: async () => sdk });
+const create = async (environment = 'TEST') => {
+  const runtime = new OperatorRuntime({ environment, apiOrigin: 'https://api', issuer: 'https://issuer', loadCore: async () => sdk });
   await runtime.initialize();
   return runtime;
 };
@@ -60,6 +62,14 @@ const openBrowser = async (authorizationUrl: string) => {
   const redirect = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
   await fetch(`${redirect}?code=code&state=state`);
 };
+
+it('enrolls and reloads a LIVE session under its classified environment', async () => {
+  const runtime = await create('LIVE');
+  await runtime.login(openBrowser);
+  expect(await runtime.store('alice').load()).toMatchObject({ principal: { environment: 'LIVE' } });
+  const restarted = await create('LIVE');
+  expect(await restarted.sessionDescriptor()).toMatchObject({ subject: 'alice' });
+});
 
 afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
@@ -127,7 +137,8 @@ it('fences a delayed old refresh across same-subject enrollment and restart', as
   const oldStore = runtime.store('alice');
   let release!: () => void;
   const delayedRefresh = new Promise<void>((resolve) => { release = resolve; })
-    .then(() => oldStore.save({ kind: 'business', principal: { issuer: 'https://issuer', subject: 'alice' },
+    .then(() => oldStore.save({ kind: 'business', principal: { issuer: 'https://issuer', subject: 'alice',
+      environment: 'TEST', authorizedParty: 'business-client', audience: 'inheriti-integrations-api' },
       familyId: 'family-old-rotation', accessToken: 'access-old-rotation', refreshToken: 'refresh-old-rotation',
       tokenType: 'Bearer', expiresAt: 1000, sessionExpiresAt: 2000 }));
   credentialSuffix = 'new';
