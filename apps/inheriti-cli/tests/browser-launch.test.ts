@@ -2,7 +2,8 @@ import { expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { openBrowser } from '../src/commands/login.js';
 
-vi.mock('node:child_process', () => ({
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
   spawn: vi.fn(() => ({ once: vi.fn(), unref: vi.fn() })),
 }));
 

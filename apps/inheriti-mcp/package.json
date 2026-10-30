@@ -15,7 +15,7 @@
   "dependencies": {
     "@google-cloud/secret-manager": "6.3.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "@safetech/inheriti-core-sdk": "4.0.38",
+    "@safetech/inheriti-core-sdk": "4.0.39",
     "@safetech/inheriti-elements-core": "workspace:*",
     "zod": "^4.4.3"
   }

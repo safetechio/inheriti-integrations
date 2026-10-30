@@ -88,7 +88,11 @@ describe('IDE extension host workflow', () => {
   it('selects and switches Business organizations, opens a plan, and inserts a revealed field', async () => {
     const stored = new Map<string, string>();
     const state = new Map<string, unknown>();
-    stored.set('inheriti.operatorSession', JSON.stringify({ principal: { subject: 'operator-1' } }));
+    stored.set('inheriti.operatorSession', JSON.stringify({
+      kind: 'business', refreshToken: 'refresh', familyId: 'family-1', sessionExpiresAt: Date.now() + 3_600_000,
+      principal: { subject: 'operator-1', issuer: 'https://issuer.example.test', environment: 'TEST',
+        authorizedParty: 'ide-client', audience: 'inheriti-integrations-api' },
+    }));
     const context = {
       subscriptions: [], globalStorageUri: vscode.Uri.parse('file:/avatars'),
       secrets: { get: async (key: string) => stored.get(key), store: async (key: string, value: string) => { stored.set(key, value); }, delete: async (key: string) => { stored.delete(key); } },

@@ -84,7 +84,7 @@ fn all_corpus_files_enter_one_authorized_session_as_opaque_bytes() {
     assert!(!manifest.files.is_empty());
     let events = Rc::new(RefCell::new(Vec::new()));
     let mut workspace = Workspace::new(RecordingRuntime(Rc::clone(&events)));
-    let mut expected = vec![Event::Start];
+    let mut expected = Vec::new();
     let mut authorizations = 0;
 
     for (index, fixture) in manifest.files.iter().enumerate() {
@@ -97,7 +97,7 @@ fn all_corpus_files_enter_one_authorized_session_as_opaque_bytes() {
         assert_eq!(bytes.len(), fixture.bytes, "{}", fixture.file);
         let name = fixture.file.as_str();
         let authorize = || {
-            // Opening starts the guest before requesting access. Later admissions
+            // The first authorization precedes guest startup. Later admissions
             // happen after the preceding file has been delivered and launched.
             assert_eq!(*events.borrow(), expected);
             authorizations += 1;
@@ -105,6 +105,7 @@ fn all_corpus_files_enter_one_authorized_session_as_opaque_bytes() {
         };
         if index == 0 {
             workspace.open_authorized(name, authorize).unwrap();
+            expected.push(Event::Start);
         } else {
             workspace.admit_authorized(name, authorize).unwrap();
         }
@@ -160,8 +161,8 @@ fn denied_first_file_tears_down_without_ingress_or_residue() {
             "denied"
         )))
     );
-    assert_eq!(*events.borrow(), [Event::Start, Event::Teardown]);
+    assert!(events.borrow().is_empty());
 
     workspace.close().unwrap();
-    assert_eq!(*events.borrow(), [Event::Start, Event::Teardown]);
+    assert!(events.borrow().is_empty());
 }

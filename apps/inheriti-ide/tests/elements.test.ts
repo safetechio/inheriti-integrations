@@ -3,7 +3,7 @@ import { createExtensionCore } from '../src/elements.js';
 import { resolveConfiguration } from '../src/configuration.js';
 
 const composed = vi.hoisted(() => vi.fn((_options: unknown) => ({})));
-vi.mock('@safetech/inheriti-elements-core/node', () => ({ createNodeIntegrationCore: composed }));
+vi.mock('@safetech/inheriti-elements-core/node', () => ({ createNodeIntegrationCore: composed, INTEGRATION_AUTHORITY: 'business' }));
 
 const configuration = resolveConfiguration((key) => ({
   apiUrl: 'http://business', issuer: 'http://issuer', clientId: 'vscode',
@@ -13,6 +13,7 @@ it('composes Business requests with the chosen organization and identity scope',
   createExtensionCore({ ...configuration, environment: 'LIVE' }, {} as never, {} as never, 'organization-one');
   expect(composed).toHaveBeenCalledWith(expect.objectContaining({
     business: true,
+    businessAuthority: 'business',
     liveConfirmation: 'LIVE',
     organizationId: 'organization-one',
     configuration: expect.objectContaining({ audience: 'inheriti-integrations-api', scopes: ['openid'] }),

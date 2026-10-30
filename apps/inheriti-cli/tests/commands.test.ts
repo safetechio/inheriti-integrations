@@ -36,6 +36,7 @@ describe('automation denial exit status', () => {
 /** Mirrors `ElementsIntegrationCore`, which delegates `getAccessToken` from `auth` to the top level. */
 function contextWith(overrides: Record<string, unknown> = {}): never {
   const cleared: string[] = [];
+  let successfulClearCount = 0;
   const auth = {
     getAccessToken: async () => 'access-token',
     clear: async () => { cleared.push('auth'); },
@@ -43,7 +44,8 @@ function contextWith(overrides: Record<string, unknown> = {}): never {
   };
   return {
     sessions: {
-      clear: async () => { cleared.push('sessions'); },
+      get successfulClearCount() { return successfulClearCount; },
+      clear: async () => { cleared.push('sessions'); successfulClearCount += 1; },
       load: async () => ({ principal: { issuer: 'issuer', environment: 'TEST', subject: 'operator' } }),
     },
     cleared,
@@ -264,6 +266,15 @@ describe('login', () => {
         },
         fetchImpl: async (input, init) => {
           if (String(input).endsWith('/integrations/v1/organizations')) return Response.json({ ok: true, result: { items: [] } });
+          if (String(input).endsWith('/integrations/operator-sessions/exchange')) {
+            expect(JSON.parse(String(init?.body))).toEqual({ providerAccessToken: 'access' });
+            return Response.json({ ok: true, result: {
+              accessToken: 'business-access', refreshToken: 'business-refresh', familyId: 'family-1',
+              accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+              sessionExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+              environment: 'TEST', clientId: configuration.clientId, providerIssuer: configuration.issuer, providerSubject: principal.subject,
+            } });
+          }
           if (String(input).endsWith('/.well-known/openid-configuration')) {
             return Response.json({ issuer: configuration.issuer, authorization_endpoint: 'https://issuer.test/authorize', token_endpoint: 'https://issuer.test/token' });
           }
