@@ -27,7 +27,6 @@ export function AccountMenu({
   const { member } = useGetCurrentMember();
   const menu = useAccountMenu(closeMenu);
   const [pendingRemoval, setPendingRemoval] = useState<SavedAccount | null>(null);
-  const [confirmAddAccount, setConfirmAddAccount] = useState(false);
   const {
     accounts,
     destinations,
@@ -136,7 +135,7 @@ export function AccountMenu({
             />
             <Pressable accessibilityRole="menuitem" accessibilityLabel="Add account" onPress={() => {
               closeMenu();
-              setConfirmAddAccount(true);
+              menu.addAccount();
             }}>
               <Box className="account-menu-add" flexDirection="row" alignItems="center" gap="m">
                 <Box width={34} height={34} alignItems="center" justifyContent="center">
@@ -152,24 +151,6 @@ export function AccountMenu({
             </Pressable>
           </Box>
         ) : null}
-        <BaseModal
-          visible={confirmAddAccount}
-          title="Add another account?"
-          onDismiss={() => setConfirmAddAccount(false)}
-          footer={
-            <>
-              <Button title="Cancel" variant="plain" onPress={() => setConfirmAddAccount(false)} />
-              <Button title="Continue" onPress={() => {
-                setConfirmAddAccount(false);
-                menu.addAccount();
-              }} />
-            </>
-          }
-        >
-          <Text variant="bodySmall" color="gray">
-            SafeID may sign out its browser session so you can enter a different email. Your saved Importer accounts remain available.
-          </Text>
-        </BaseModal>
         <BaseModal
           visible={Boolean(pendingAccount)}
           title={`Switch to ${pendingName}?`}

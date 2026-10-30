@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), changeParticipants: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
+const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), providerComplete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), changeParticipants: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
 
 vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ ProtectedCheckpoint: class {
   isAvailable() { return true; }
@@ -35,6 +35,10 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
   },
   businessUiRpId: () => undefined,
   createNodeIntegrationCore: mock.core,
+  createNodeProviderAuth: (configuration: { redirectUri: string }) => ({
+    beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}&state=check-state&prompt=none` }),
+    completeAuthorizationCode: mock.providerComplete,
+  }),
   createOrganizationKeys: () => ({ resolve: mock.acquireKey, clear: mock.keyClear, forget: mock.keyClear }),
   createNodeInboxEventListener: (...args: unknown[]) => { mock.listenInbox(...args); return mock.stopInbox; },
   suggestInboxTextAsset: (text: string) => ({ title: 'Saved message', assetType: 'PLAIN-TEXT', assetName: 'Saved message', fields: { text } }),
@@ -64,6 +68,7 @@ describe('TraySession', () => {
     vi.resetAllMocks();
     mock.checkpoint.clear();
     mock.core.mockImplementation(() => ({ auth: { beginAuthorizationCode: mock.begin, clear: mock.clear, completeAuthorizationCode: mock.complete, getAccessToken: mock.token }, listOrganizations: mock.organizations }));
+    mock.providerComplete.mockResolvedValue({ idToken: 'provider-id-token' });
     mock.organizations.mockResolvedValue([]);
     mock.teams.mockResolvedValue({ teams: [] });
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
@@ -255,7 +260,7 @@ describe('TraySession', () => {
   it('preserves active A when B fails tester preflight', async () => {
     mock.core.mockImplementation((options) => ({
       auth: {
-        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
             principal: scopedPrincipal(options.configuration.issuer, 'member-b') };
@@ -277,7 +282,12 @@ describe('TraySession', () => {
       principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     await session.signIn(() => {}, async (authorizationUrl) => {
-      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      const authorization = new URL(authorizationUrl);
+      const redirectUri = authorization.searchParams.get('redirect_uri')!;
+      if (authorization.searchParams.get('prompt') === 'none') {
+        const response = await fetch(`${redirectUri}?error=login_required&state=check-state`, { redirect: 'manual' });
+        expect(new URL(response.headers.get('location')!).searchParams.get('prompt')).toBe('login');
+      }
       await fetch(`${redirectUri}?code=code&state=state`);
     });
     expect(await durable.load()).toMatchObject({ principal: { subject: 'member-a' }, accessToken: 'access-a' });
@@ -431,11 +441,16 @@ describe('TraySession', () => {
     await session.restore();
     const openBrowser = async (url: string) => {
       let authorization = new URL(url);
+      if (authorization.searchParams.get('prompt') === 'none') {
+        const redirectUri = authorization.searchParams.get('redirect_uri')!;
+        const response = await fetch(`${redirectUri}?code=check-code&state=check-state`, { redirect: 'manual' });
+        return openBrowser(response.headers.get('location')!);
+      }
       if (authorization.pathname.endsWith('/protocol/openid-connect/logout')) {
         logoutUrls.push(authorization);
         const redirectUri = authorization.searchParams.get('post_logout_redirect_uri')!;
         const response = await fetch(`${redirectUri}?state=${authorization.searchParams.get('state')}`, { redirect: 'manual' });
-        authorization = new URL(response.headers.get('location')!);
+        return openBrowser(response.headers.get('location')!);
       }
       authorizationUrls.push(authorization);
       const redirectUri = authorization.searchParams.get('redirect_uri')!;
@@ -450,6 +465,7 @@ describe('TraySession', () => {
     await session.addAccount(() => {}, openBrowser);
     expect(logoutUrls).toHaveLength(1);
     expect(logoutUrls[0]!.searchParams.get('client_id')).toBe('interactive');
+    expect(logoutUrls[0]!.searchParams.get('id_token_hint')).toBe('provider-id-token');
     expect(authorizationUrls.map((url) => url.searchParams.get('prompt'))).toEqual([null, 'login']);
     for (const url of authorizationUrls) {
       expect(url.searchParams.get('state')).toBe('state-1');
@@ -488,7 +504,7 @@ describe('TraySession', () => {
     let offline = true;
     mock.core.mockImplementation((options) => ({
       auth: {
-        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer',
             expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', 'member-b') };
@@ -511,7 +527,12 @@ describe('TraySession', () => {
     expect(session.state().status).toBe('session-unavailable');
     offline = false;
     await session.signIn(() => {}, async (authorizationUrl) => {
-      const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+      const authorization = new URL(authorizationUrl);
+      const redirectUri = authorization.searchParams.get('redirect_uri')!;
+      if (authorization.searchParams.get('prompt') === 'none') {
+        const response = await fetch(`${redirectUri}?error=login_required&state=check-state`, { redirect: 'manual' });
+        expect(new URL(response.headers.get('location')!).searchParams.get('prompt')).toBe('login');
+      }
       await fetch(`${redirectUri}?code=code&state=state`);
     });
     expect(session.state()).toMatchObject({ status: 'signed-in', organizations: [{ id: 'org-b', name: 'B' }] });

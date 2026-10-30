@@ -155,7 +155,18 @@ class OperatorRuntime {
       logout.searchParams.set('post_logout_redirect_uri', redirectUri);
       logout.searchParams.set('state', logoutState);
       return { authorizationUrl: url.toString(), logoutUrl: logout.toString() };
-    }, openBrowser, signal);
+    }, openBrowser, signal, resetSafeId ? async (redirectUri) => {
+      const provider = this.sdk.createNodeProviderAuth({
+        issuer: this.issuer, clientId: this.clientId, audience: this.audience,
+        environment: this.environment, redirectUri, scopes: ['openid', 'profile'],
+      });
+      const started = await provider.beginAuthorizationCode({ prompt: 'none' });
+      return { authorizationUrl: started.authorizationUrl, complete: async (callbackUrl) => {
+        const session = await provider.completeAuthorizationCode(callbackUrl);
+        if (!session?.idToken) throw new Error('safeid_logout_hint_unavailable');
+        return session.idToken;
+      } };
+    } : undefined);
     signal?.throwIfAborted();
     await core.auth.completeAuthorizationCode(callback);
     signal?.throwIfAborted();
@@ -272,15 +283,19 @@ class OperatorRuntime {
   }
 }
 
-function waitForCallback(buildUrl, openBrowser, signal) {
+function waitForCallback(buildUrl, openBrowser, signal, prepareLogout) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('operator_authorization_canceled')); return; }
     let settled = false;
     let redirectUri;
     let canceledCloseTimer;
     let authorizationUrl;
+    let logoutUrl;
     let awaitingLogout = false;
+    let awaitingCheck = false;
     let logoutState;
+    let checkState;
+    let completeCheck;
     const server = createServer((request, response) => {
       if (settled) {
         if (canceledCloseTimer) clearTimeout(canceledCloseTimer);
@@ -293,6 +308,26 @@ function waitForCallback(buildUrl, openBrowser, signal) {
       try { url = new URL(request.url || '/', redirectUri); }
       catch { response.writeHead(400).end(); return; }
       if (url.pathname !== '/oauth/callback') { response.writeHead(404).end(); return; }
+      if (awaitingCheck) {
+        if (url.searchParams.get('state') !== checkState) {
+          response.writeHead(400).end(); finish(new Error('operator_callback_invalid')); return;
+        }
+        awaitingCheck = false;
+        if (url.searchParams.get('error') === 'login_required') {
+          response.writeHead(302, { location: authorizationUrl, 'cache-control': 'no-store' }).end(); return;
+        }
+        if (url.searchParams.has('error') || !url.searchParams.has('code')) {
+          response.writeHead(400).end(); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
+        }
+        Promise.resolve(completeCheck(url.toString())).then((idToken) => {
+          if (settled) return;
+          const logout = new URL(logoutUrl);
+          logout.searchParams.set('id_token_hint', idToken);
+          awaitingLogout = true;
+          response.writeHead(302, { location: logout.toString(), 'cache-control': 'no-store' }).end();
+        }).catch((error) => { if (!settled) response.writeHead(500).end(); finish(error); });
+        return;
+      }
       if (url.searchParams.has('error')) {
         response.writeHead(400).end();
         finish(new Error(url.searchParams.get('error')));
@@ -339,12 +374,21 @@ function waitForCallback(buildUrl, openBrowser, signal) {
       Promise.resolve().then(() => {
         if (settled) return;
         return buildUrl(redirectUri);
-      }).then((result) => {
+      }).then(async (result) => {
         if (settled || !result) return;
-        const { authorizationUrl: nextAuthorizationUrl, logoutUrl } = result;
+        const { authorizationUrl: nextAuthorizationUrl, logoutUrl: nextLogoutUrl } = result;
         authorizationUrl = nextAuthorizationUrl;
-        awaitingLogout = Boolean(logoutUrl);
+        logoutUrl = nextLogoutUrl;
         logoutState = new URL(authorizationUrl).searchParams.get('state');
+        if (prepareLogout && logoutUrl) {
+          const check = await prepareLogout(redirectUri);
+          checkState = new URL(check.authorizationUrl).searchParams.get('state');
+          if (!checkState) throw new Error('operator_callback_invalid');
+          completeCheck = check.complete;
+          awaitingCheck = true;
+          return openBrowser(check.authorizationUrl);
+        }
+        awaitingLogout = Boolean(logoutUrl);
         return openBrowser(logoutUrl || authorizationUrl);
       }).catch(finish);
     });

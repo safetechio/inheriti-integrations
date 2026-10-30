@@ -18,6 +18,10 @@ import { businessApiTransport } from './business-api-transport.js';
  */
 const nodeAuthRuntime = sdkNode as unknown as OperatorAuthRuntime;
 
+export function createNodeProviderAuth(configuration: OperatorAuthOptions['configuration']): OperatorAuthFacade {
+  return composeOperatorAuth(nodeAuthRuntime, { configuration });
+}
+
 export type NodeIntegrationCoreOptions = OperatorAuthOptions & {
   apiUrl: string;
   environment: ElementsEnvironment;

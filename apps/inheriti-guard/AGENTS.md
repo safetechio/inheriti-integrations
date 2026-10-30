@@ -27,7 +27,7 @@ InheritiGuard is a Chrome MV3 extension for browser protection and Inheriti plan
 - Operator tokens and cached master keys stay in `chrome.storage.session` or worker memory. The side panel receives only non-secret view state. `chrome.storage.local` holds configuration, subject-scoped organization preferences, and device-level permissions, never credentials or protected values.
 - Bind every Core, key-vault entry, reveal batch, page mapping, and in-flight result to the active profile, organization, and generation. A switch closes old work, invalidates caches and tab context, then confirms the target's session and membership before protected content renders.
 - Validate runtime messages and sender context at the worker boundary. Content scripts and pages cannot choose a profile or organization, and panel/message responses cannot carry tokens or reveal plaintext. Authorized autofill writes plaintext only into the verified target field.
-- Add account clears known SafeID browser session cookies for the configured realm so the provider can show its login form. This affects browser SSO for other apps in that realm; keep the visible warning in the panel. Saved Guard credentials remain independent.
+- Add account clears known SafeID browser session cookies for the configured realm so the provider can show its login form. This affects browser SSO for other apps in that realm. Saved Guard credentials remain independent.
 - Keep reveal recovery and relay persistence metadata-only. Preserve cancellation on navigation, account switch, organization change, and Secure Logoff.
 
 ## Changes and checks

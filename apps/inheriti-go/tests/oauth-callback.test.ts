@@ -35,6 +35,21 @@ describe('OAuth browser callback', () => {
     expect(new URL(result).searchParams.get('code')).toBe('code');
   });
 
+  it('opens sign-in directly when SafeID has no browser session', async () => {
+    const authorizationUrl = 'https://issuer.test/authorize?state=sign-in-state';
+    const result = await waitForCallback(async () => authorizationUrl, async (checkUrl) => {
+      expect(new URL(checkUrl).searchParams.get('prompt')).toBe('none');
+      const redirectUri = new URL(checkUrl).searchParams.get('redirect_uri')!;
+      const response = await fetch(`${redirectUri}?error=login_required&state=check-state`, { redirect: 'manual' });
+      expect(response.headers.get('location')).toBe(authorizationUrl);
+      await fetch(`${redirectUri}?code=code&state=sign-in-state`);
+    }, new AbortController().signal,
+    () => { throw new Error('logout should not start'); },
+    async (redirectUri) => ({ authorizationUrl: `https://issuer.test/authorize?prompt=none&state=check-state&redirect_uri=${encodeURIComponent(redirectUri)}`,
+      complete: async () => { throw new Error('no token should be exchanged'); } }));
+    expect(new URL(result).searchParams.get('code')).toBe('code');
+  });
+
   it.each([
     { query: 'code=private-code&state=private-state', status: 200, heading: 'Continue in Inheriti® Go', rejection: null },
     { query: 'error=access_denied&error_description=private-description', status: 400, heading: 'Sign-in failed', rejection: 'access_denied' },

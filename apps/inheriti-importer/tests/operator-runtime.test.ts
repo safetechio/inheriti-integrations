@@ -38,6 +38,12 @@ const sdk = {
     async save(session: unknown) { this.session = session; }
     async clear() { this.session = undefined; }
   },
+  createNodeProviderAuth(options: any) {
+    return {
+      beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer/authorize?redirect_uri=${encodeURIComponent(options.redirectUri)}&state=check-state&prompt=none` }),
+      completeAuthorizationCode: async () => ({ idToken: 'provider-id-token' }),
+    };
+  },
   createNodeIntegrationCore(options: any) {
     return {
       auth: {
@@ -61,16 +67,23 @@ const create = async (environment = 'TEST') => {
 const nativeFetch = globalThis.fetch;
 const openedBrowserUrls: string[] = [];
 let rejectOneLogoutReturn = false;
+let browserSessionAvailable = true;
 const openBrowser = async (authorizationUrl: string) => {
   openedBrowserUrls.push(authorizationUrl);
   const url = new URL(authorizationUrl);
+  if (url.searchParams.get('prompt') === 'none') {
+    const redirect = url.searchParams.get('redirect_uri')!;
+    const response = await fetch(`${redirect}?${browserSessionAvailable ? 'code=check-code' : 'error=login_required'}&state=check-state`, { redirect: 'manual' });
+    await openBrowser(response.headers.get('location')!);
+    return;
+  }
   if (url.pathname === '/logout') {
     const redirect = url.searchParams.get('post_logout_redirect_uri')!;
     if (rejectOneLogoutReturn) {
       rejectOneLogoutReturn = false;
       const invalid = await fetch(`${redirect}?state=wrong`, { redirect: 'manual' });
       expect(invalid.status).toBe(400);
-      expect(openedBrowserUrls).toHaveLength(2);
+      expect(openedBrowserUrls).toHaveLength(3);
     }
     const response = await fetch(`${redirect}?state=${url.searchParams.get('state')}`, { redirect: 'manual' });
     await openBrowser(response.headers.get('location')!);
@@ -107,6 +120,7 @@ afterEach(() => {
   credentialSuffix = 'alice';
   openedBrowserUrls.length = 0;
   rejectOneLogoutReturn = false;
+  browserSessionAvailable = true;
   vi.unstubAllGlobals();
 });
 
@@ -186,12 +200,14 @@ it('adds a different account without switching and rejects duplicate add', async
   subject = 'bob';
   credentialSuffix = 'bob';
   await runtime.login(openBrowser, undefined, { activate: false });
-  const logoutUrl = new URL(openedBrowserUrls[1]);
+  expect(new URL(openedBrowserUrls[1]).searchParams.get('prompt')).toBe('none');
+  const logoutUrl = new URL(openedBrowserUrls[2]);
   expect(logoutUrl.pathname).toBe('/logout');
   expect(logoutUrl.searchParams.get('client_id')).toBe('business-client');
   expect(logoutUrl.searchParams.get('state')).toBe('state');
+  expect(logoutUrl.searchParams.get('id_token_hint')).toBe('provider-id-token');
   expect(new URL(logoutUrl.searchParams.get('post_logout_redirect_uri')!).pathname).toBe('/oauth/callback');
-  expect(new URL(openedBrowserUrls[2]).pathname).toBe('/authorize');
+  expect(new URL(openedBrowserUrls[3]).pathname).toBe('/authorize');
   expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }, { subject: 'bob' }], activeSubject: 'alice' });
   expect(await runtime.getAccessToken()).toBe('access-alice');
   expect(runtime.isCurrent(capture)).toBe(true);
@@ -200,6 +216,16 @@ it('adds a different account without switching and rejects duplicate add', async
   expect(runtime.list().activeSubject).toBe('alice');
   runtime.activate('bob');
   expect(await runtime.getAccessToken()).toBe('access-bob');
+});
+
+it('opens sign-in directly when SafeID has no browser session', async () => {
+  const runtime = await create();
+  await runtime.login(openBrowser);
+  browserSessionAvailable = false;
+  subject = 'bob';
+  await runtime.login(openBrowser, undefined, { activate: false });
+  expect(openedBrowserUrls.map((url) => new URL(url).pathname)).toEqual(['/authorize', '/authorize', '/authorize']);
+  expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }, { subject: 'bob' }], activeSubject: 'alice' });
 });
 
 it('keeps saved accounts when SafeID logout cannot start', async () => {

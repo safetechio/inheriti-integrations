@@ -1,4 +1,4 @@
-import { BUSINESS_INTERACTIVE_CLIENT_ID, INTEGRATION_AUTHORITY, MemoryOperatorSessionStore, createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_INTERACTIVE_CLIENT_ID, INTEGRATION_AUTHORITY, MemoryOperatorSessionStore, createNodeIntegrationCore, createNodeProviderAuth } from '@safetech/inheriti-elements-core/node';
 import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { ProtectedOperatorSessionStore } from './operator-session-store.js';
@@ -151,12 +151,29 @@ export class TrayAuthRuntime {
         const authorization = new URL(started.authorizationUrl);
         authorization.searchParams.set('prompt', 'login');
         return authorization.toString();
-      }, openBrowser, signal, additional && INTEGRATION_AUTHORITY === 'business' ? (redirectUri, authorizationUrl) => {
+      }, openBrowser, signal, additional && INTEGRATION_AUTHORITY === 'business' ? (redirectUri, authorizationUrl, idToken) => {
         const logout = new URL(`${this.configuration.issuer.replace(/\/$/, '')}/protocol/openid-connect/logout`);
         logout.searchParams.set('client_id', this.configuration.clientId);
         logout.searchParams.set('post_logout_redirect_uri', redirectUri);
         logout.searchParams.set('state', new URL(authorizationUrl).searchParams.get('state')!);
+        if (idToken) logout.searchParams.set('id_token_hint', idToken);
         return logout.toString();
+      } : undefined, additional && INTEGRATION_AUTHORITY === 'business' ? async (redirectUri) => {
+        const provider = createNodeProviderAuth({
+          issuer: this.configuration.issuer,
+          clientId: this.configuration.clientId,
+          audience: this.configuration.audience,
+          environment: this.configuration.environment,
+          redirectUri,
+          scopes: this.configuration.scopes,
+        });
+        const started = await provider.beginAuthorizationCode({ prompt: 'none' });
+        return { authorizationUrl: started.authorizationUrl, complete: async (callbackUrl: string) => {
+          const session = await provider.completeAuthorizationCode(callbackUrl);
+          if (!session || typeof session !== 'object' || !('idToken' in session) || typeof session.idToken !== 'string')
+            throw new Error('safeid_logout_hint_unavailable');
+          return session.idToken;
+        } };
       } : undefined);
       return core.auth.completeAuthorizationCode(callbackUrl) as Promise<OperatorSession>;
     };

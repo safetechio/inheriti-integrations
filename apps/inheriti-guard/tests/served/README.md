@@ -4,7 +4,7 @@ This protocol runs the built extension, its real service worker and side panel, 
 
 ## SafeID account choice
 
-The local SafeID realm does not honor `prompt=select_account` while a browser SSO session exists. Guard's Add account clears the configured realm's known SafeID session cookies (`KEYCLOAK_IDENTITY`, `KEYCLOAK_SESSION`, `AUTH_SESSION_ID`, `KC_AUTH_SESSION_HASH`, and `KC_RESTART`) before opening the provider sign-in form. It does not remove either saved Guard credential. This cookie reset is realm-wide browser state: another app using the same SafeID realm may need to sign in again, including when the Add account popup is canceled. The product choice is to show a warning beside Add account. Verify that warning and record the effect with a concurrently signed-in Business UI.
+The local SafeID realm does not honor `prompt=select_account` while a browser SSO session exists. Guard's Add account clears the configured realm's known SafeID session cookies (`KEYCLOAK_IDENTITY`, `KEYCLOAK_SESSION`, `AUTH_SESSION_ID`, `KC_AUTH_SESSION_HASH`, and `KC_RESTART`) before opening the provider sign-in form. It does not remove either saved Guard credential. This cookie reset is realm-wide browser state: another app using the same SafeID realm may need to sign in again, including when the Add account popup is canceled. Verify the direct Add account flow and record the effect with a concurrently signed-in Business UI.
 
 ## Start the stack
 
