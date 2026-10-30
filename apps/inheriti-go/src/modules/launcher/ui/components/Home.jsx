@@ -63,6 +63,7 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
             </div>;
           })}
           <button id="add-account" type="button" disabled={signOutDisabled} onClick={() => { closeAccountMenu(); onAddAccount(); }}><span aria-hidden="true">＋</span>Add another account</button>
+          <small className="tray-account-status">Adding an account may sign you out of SafeID in this browser and other apps.</small>
           <button className="tray-account-logoff" id={otherAccounts.length ? 'sign-out-all' : 'sign-out'} type="button" disabled={signOutDisabled}
             onClick={() => { closeAccountMenu(); (otherAccounts.length ? onSignOutAll : onSignOut)(); }}>{otherAccounts.length ? 'Log out of all accounts' : 'Log out'}</button>
         </div>

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { connect } from 'node:net';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 let directory = mkdtempSync(join(tmpdir(), 'operator-runtime-'));
 let storageAvailable = true;
@@ -41,7 +41,7 @@ const sdk = {
   createNodeIntegrationCore(options: any) {
     return {
       auth: {
-        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}`, expiresAt: 1 }),
+        beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state`, expiresAt: 1 }),
         completeAuthorizationCode: async () => options.sessions.save({ kind: 'business', principal: { issuer: 'https://issuer', subject,
           environment: options.configuration.environment, authorizedParty: 'business-client', audience: 'inheriti-integrations-api' },
           familyId: `family-${credentialSuffix}`, accessToken: `access-${credentialSuffix}`, refreshToken: `refresh-${credentialSuffix}`,
@@ -58,10 +58,35 @@ const create = async (environment = 'TEST') => {
   await runtime.initialize();
   return runtime;
 };
+const nativeFetch = globalThis.fetch;
+const openedBrowserUrls: string[] = [];
+let rejectOneLogoutReturn = false;
 const openBrowser = async (authorizationUrl: string) => {
+  openedBrowserUrls.push(authorizationUrl);
+  const url = new URL(authorizationUrl);
+  if (url.pathname === '/logout') {
+    const redirect = url.searchParams.get('post_logout_redirect_uri')!;
+    if (rejectOneLogoutReturn) {
+      rejectOneLogoutReturn = false;
+      const invalid = await fetch(`${redirect}?state=wrong`, { redirect: 'manual' });
+      expect(invalid.status).toBe(400);
+      expect(openedBrowserUrls).toHaveLength(2);
+    }
+    const response = await fetch(`${redirect}?state=${url.searchParams.get('state')}`, { redirect: 'manual' });
+    await openBrowser(response.headers.get('location')!);
+    return;
+  }
   const redirect = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
   await fetch(`${redirect}?code=code&state=state`);
 };
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', (input: string | URL, options?: RequestInit) => {
+    if (String(input) === 'https://issuer/.well-known/openid-configuration')
+      return Promise.resolve(new Response(JSON.stringify({ issuer: 'https://issuer', end_session_endpoint: 'https://issuer/logout' }), { status: 200 }));
+    return nativeFetch(input, options);
+  });
+});
 
 it('enrolls and reloads a LIVE session under its classified environment', async () => {
   const runtime = await create('LIVE');
@@ -80,6 +105,9 @@ afterEach(() => {
   storageAvailable = true;
   subject = 'alice';
   credentialSuffix = 'alice';
+  openedBrowserUrls.length = 0;
+  rejectOneLogoutReturn = false;
+  vi.unstubAllGlobals();
 });
 
 it('keeps the active core aligned when index persistence fails', async () => {
@@ -158,6 +186,12 @@ it('adds a different account without switching and rejects duplicate add', async
   subject = 'bob';
   credentialSuffix = 'bob';
   await runtime.login(openBrowser, undefined, { activate: false });
+  const logoutUrl = new URL(openedBrowserUrls[1]);
+  expect(logoutUrl.pathname).toBe('/logout');
+  expect(logoutUrl.searchParams.get('client_id')).toBe('business-client');
+  expect(logoutUrl.searchParams.get('state')).toBe('state');
+  expect(new URL(logoutUrl.searchParams.get('post_logout_redirect_uri')!).pathname).toBe('/oauth/callback');
+  expect(new URL(openedBrowserUrls[2]).pathname).toBe('/authorize');
   expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }, { subject: 'bob' }], activeSubject: 'alice' });
   expect(await runtime.getAccessToken()).toBe('access-alice');
   expect(runtime.isCurrent(capture)).toBe(true);
@@ -166,6 +200,49 @@ it('adds a different account without switching and rejects duplicate add', async
   expect(runtime.list().activeSubject).toBe('alice');
   runtime.activate('bob');
   expect(await runtime.getAccessToken()).toBe('access-bob');
+});
+
+it('keeps saved accounts when SafeID logout cannot start', async () => {
+  const runtime = await create();
+  await runtime.login(openBrowser);
+  vi.stubGlobal('fetch', (input: string | URL, options?: RequestInit) => {
+    if (String(input) === 'https://issuer/.well-known/openid-configuration')
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    return nativeFetch(input, options);
+  });
+  await expect(runtime.login(openBrowser, undefined, { activate: false })).rejects.toThrow('safeid_logout_unavailable');
+  expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }], activeSubject: 'alice' });
+  expect(await runtime.getAccessToken()).toBe('access-alice');
+  expect(openedBrowserUrls).toHaveLength(1);
+});
+
+it('does not start authorization for a mismatched logout return', async () => {
+  const runtime = await create();
+  await runtime.login(openBrowser);
+  rejectOneLogoutReturn = true;
+  subject = 'bob';
+  credentialSuffix = 'bob';
+  await runtime.login(openBrowser, undefined, { activate: false });
+  expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }, { subject: 'bob' }], activeSubject: 'alice' });
+});
+
+it('does not open SafeID after cancellation during logout discovery', async () => {
+  const runtime = await create();
+  await runtime.login(openBrowser);
+  let resolveDiscovery!: (response: Response) => void;
+  vi.stubGlobal('fetch', (input: string | URL, options?: RequestInit) => {
+    if (String(input) === 'https://issuer/.well-known/openid-configuration')
+      return new Promise<Response>((resolve) => { resolveDiscovery = resolve; });
+    return nativeFetch(input, options);
+  });
+  const controller = new AbortController();
+  const pending = runtime.login(openBrowser, controller.signal, { activate: false });
+  await vi.waitFor(() => expect(resolveDiscovery).toBeTypeOf('function'));
+  controller.abort();
+  resolveDiscovery(new Response(JSON.stringify({ issuer: 'https://issuer', end_session_endpoint: 'https://issuer/logout' }), { status: 200 }));
+  await expect(pending).rejects.toThrow('operator_authorization_canceled');
+  expect(openedBrowserUrls).toHaveLength(1);
+  expect(runtime.list()).toEqual({ accounts: [{ subject: 'alice' }], activeSubject: 'alice' });
 });
 
 it('keeps a signed-out chooser inactive when adding an account', async () => {

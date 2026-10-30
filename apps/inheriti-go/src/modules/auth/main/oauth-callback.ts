@@ -2,11 +2,15 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { trayMessages as messages } from '../../../messages.js';
 
-export function waitForCallback(buildAuthorizationUrl: (redirectUri: string) => Promise<string>, openBrowser: (url: string) => Promise<void>, signal: AbortSignal): Promise<string> {
+export function waitForCallback(buildAuthorizationUrl: (redirectUri: string) => Promise<string>, openBrowser: (url: string) => Promise<void>, signal: AbortSignal,
+  buildLogoutUrl?: (redirectUri: string, authorizationUrl: string) => string): Promise<string> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new Error(messages.signInCanceled)); return; }
     let settled = false;
     let redirectUri: string;
+    let authorizationUrl: string;
+    let awaitingLogout = false;
+    let logoutState: string | null = null;
     const server = createServer((request, response) => {
       let url: URL;
       try { url = new URL(request.url ?? '/', redirectUri); }
@@ -16,6 +20,11 @@ export function waitForCallback(buildAuthorizationUrl: (redirectUri: string) => 
       response.once('finish', () => server.closeAllConnections());
       const error = url.searchParams.get('error');
       if (error) { response.writeHead(400, callbackHeaders).end(callbackPage(false)); finish(new Error(error), undefined, true); return; }
+      if (awaitingLogout && !url.searchParams.has('code') && url.searchParams.get('state') === logoutState) {
+        awaitingLogout = false;
+        response.writeHead(302, { location: authorizationUrl, 'cache-control': 'no-store' }).end();
+        return;
+      }
       if (!url.searchParams.has('code') || !url.searchParams.has('state')) { response.writeHead(400, callbackHeaders).end(callbackPage(false)); finish(new Error(messages.invalidSignInCallback), undefined, true); return; }
       response.writeHead(200, callbackHeaders).end(callbackPage(true));
       finish(undefined, url.toString(), true);
@@ -41,9 +50,14 @@ export function waitForCallback(buildAuthorizationUrl: (redirectUri: string) => 
       redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
       void Promise.resolve().then(async () => {
         if (settled) return;
-        const authorizationUrl = await buildAuthorizationUrl(redirectUri);
+        authorizationUrl = await buildAuthorizationUrl(redirectUri);
         if (settled) return;
-        await openBrowser(authorizationUrl);
+        if (buildLogoutUrl) {
+          logoutState = new URL(authorizationUrl).searchParams.get('state');
+          if (!logoutState) throw new Error(messages.invalidSignInCallback);
+          awaitingLogout = true;
+        }
+        await openBrowser(buildLogoutUrl ? buildLogoutUrl(redirectUri, authorizationUrl) : authorizationUrl);
       }).catch((error: unknown) => finish(error));
     });
   });

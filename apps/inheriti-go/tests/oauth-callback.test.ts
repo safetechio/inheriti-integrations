@@ -6,6 +6,35 @@ import { describe, expect, it, vi } from 'vitest';
 import { waitForCallback } from '../src/modules/auth/main/oauth-callback.js';
 
 describe('OAuth browser callback', () => {
+  it('rejects a callback before the logout state is ready', async () => {
+    let request: Promise<Response> | undefined;
+    const opened = vi.fn();
+    const result = await waitForCallback(async (redirectUri) => {
+      request = fetch(redirectUri, { redirect: 'manual' });
+      await request;
+      return 'https://issuer.test/authorize?state=private-state';
+    }, opened, new AbortController().signal, () => 'https://issuer.test/logout')
+      .then(() => null, (error: Error) => error);
+    expect((await request)?.status).toBe(400);
+    expect(result?.message).toBe('Invalid sign-in callback');
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it('continues from SafeID logout to the authorization request in the same browser tab', async () => {
+    let opened = '';
+    const result = await waitForCallback(async (redirectUri) => `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&state=private-state`,
+      async (logoutUrl) => {
+        opened = logoutUrl;
+        const redirectUri = new URL(logoutUrl).searchParams.get('post_logout_redirect_uri')!;
+        const response = await fetch(`${redirectUri}?state=private-state`, { redirect: 'manual' });
+        expect(response.status).toBe(302);
+        expect(response.headers.get('location')).toBe(`https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&state=private-state`);
+        await fetch(`${redirectUri}?code=code&state=state`);
+      }, new AbortController().signal, (redirectUri) => `https://issuer.test/logout?post_logout_redirect_uri=${encodeURIComponent(redirectUri)}&state=private-state`);
+    expect(new URL(opened).pathname).toBe('/logout');
+    expect(new URL(result).searchParams.get('code')).toBe('code');
+  });
+
   it.each([
     { query: 'code=private-code&state=private-state', status: 200, heading: 'Continue in Inheriti® Go', rejection: null },
     { query: 'error=access_denied&error_description=private-description', status: 400, heading: 'Sign-in failed', rejection: 'access_denied' },

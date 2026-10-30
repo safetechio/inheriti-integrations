@@ -1,4 +1,4 @@
-import { BUSINESS_INTERACTIVE_CLIENT_ID, MemoryOperatorSessionStore, createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_INTERACTIVE_CLIENT_ID, INTEGRATION_AUTHORITY, MemoryOperatorSessionStore, createNodeIntegrationCore } from '@safetech/inheriti-elements-core/node';
 import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions, OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core/node';
 import { waitForCallback, untilCanceled } from '../../auth/main/oauth-callback.js';
 import { ProtectedOperatorSessionStore } from './operator-session-store.js';
@@ -75,11 +75,7 @@ export class TrayAuthRuntime {
   async authorizeAdditional(openBrowser: (url: string) => Promise<void>, signal: AbortSignal): Promise<{ session: OperatorSession; organizations: BusinessOrganization[] }> {
     const sessions = new MemoryOperatorSessionStore();
     const temporary = this.createCore(sessions);
-    const session = await this.authorize(async (url) => {
-      const authorization = new URL(url);
-      authorization.searchParams.set('prompt', 'login');
-      await openBrowser(authorization.toString());
-    }, signal, temporary);
+    const session = await this.authorize(openBrowser, signal, temporary, true);
     signal.throwIfAborted();
     const organizations = await temporary.listOrganizations();
     signal.throwIfAborted();
@@ -140,7 +136,7 @@ export class TrayAuthRuntime {
     this.renew();
   }
 
-  async authorize(openBrowser: (url: string) => Promise<void>, signal: AbortSignal, core = this.activeCore): Promise<OperatorSession> {
+  async authorize(openBrowser: (url: string) => Promise<void>, signal: AbortSignal, core = this.activeCore, additional = false): Promise<OperatorSession> {
     this.configuration.scopes = ['openid', 'profile'];
     const attempt = async () => {
       const callbackUrl = await waitForCallback(async (redirectUri) => {
@@ -151,8 +147,17 @@ export class TrayAuthRuntime {
         this.pendingAuthorization = pending;
         const started = await untilCanceled(pending, signal);
         signal.throwIfAborted();
-        return started.authorizationUrl;
-      }, openBrowser, signal);
+        if (!additional) return started.authorizationUrl;
+        const authorization = new URL(started.authorizationUrl);
+        authorization.searchParams.set('prompt', 'login');
+        return authorization.toString();
+      }, openBrowser, signal, additional && INTEGRATION_AUTHORITY === 'business' ? (redirectUri, authorizationUrl) => {
+        const logout = new URL(`${this.configuration.issuer.replace(/\/$/, '')}/protocol/openid-connect/logout`);
+        logout.searchParams.set('client_id', this.configuration.clientId);
+        logout.searchParams.set('post_logout_redirect_uri', redirectUri);
+        logout.searchParams.set('state', new URL(authorizationUrl).searchParams.get('state')!);
+        return logout.toString();
+      } : undefined);
       return core.auth.completeAuthorizationCode(callbackUrl) as Promise<OperatorSession>;
     };
     return attempt();

@@ -196,6 +196,8 @@ describe('AppShell account-menu organization switcher', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Open account menu/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Add account' }));
+    expect(screen.getByText(/SafeID may sign out its browser session/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(await screen.findByText('This account is already active.')).toBeTruthy();
     expect(activateAccount).not.toHaveBeenCalled();
@@ -270,6 +272,7 @@ describe('AppShell account-menu organization switcher', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Open account menu/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Add account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Add Account' }));
 
     await waitFor(() => expect(cancelLogin).toHaveBeenCalledOnce());

@@ -133,12 +133,28 @@ class OperatorRuntime {
     const sessions = new this.sdk.MemoryOperatorSessionStore();
     const configuration = this.configuration();
     const core = this.core(sessions, configuration);
+    const resetSafeId = options.activate === false && this.authority === 'business' && this.accounts.length > 0;
     const callback = await waitForCallback(async (redirectUri) => {
       configuration.redirectUri = redirectUri;
       const started = await core.auth.beginAuthorizationCode();
       const url = new URL(started.authorizationUrl);
       url.searchParams.set('prompt', 'login');
-      return url.toString();
+      if (!resetSafeId) return { authorizationUrl: url.toString() };
+      const discovery = await fetch(`${this.issuer.replace(/\/$/u, '')}/.well-known/openid-configuration`, {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000),
+      });
+      if (!discovery.ok) throw new Error('safeid_logout_unavailable');
+      const provider = await discovery.json();
+      if (provider.issuer !== this.issuer || !provider.end_session_endpoint ||
+        new URL(provider.end_session_endpoint).origin !== new URL(this.issuer).origin)
+        throw new Error('safeid_logout_unavailable');
+      const logout = new URL(provider.end_session_endpoint);
+      const logoutState = url.searchParams.get('state');
+      if (!logoutState) throw new Error('safeid_logout_unavailable');
+      logout.searchParams.set('client_id', this.clientId);
+      logout.searchParams.set('post_logout_redirect_uri', redirectUri);
+      logout.searchParams.set('state', logoutState);
+      return { authorizationUrl: url.toString(), logoutUrl: logout.toString() };
     }, openBrowser, signal);
     signal?.throwIfAborted();
     await core.auth.completeAuthorizationCode(callback);
@@ -262,6 +278,9 @@ function waitForCallback(buildUrl, openBrowser, signal) {
     let settled = false;
     let redirectUri;
     let canceledCloseTimer;
+    let authorizationUrl;
+    let awaitingLogout = false;
+    let logoutState;
     const server = createServer((request, response) => {
       if (settled) {
         if (canceledCloseTimer) clearTimeout(canceledCloseTimer);
@@ -274,6 +293,20 @@ function waitForCallback(buildUrl, openBrowser, signal) {
       try { url = new URL(request.url || '/', redirectUri); }
       catch { response.writeHead(400).end(); return; }
       if (url.pathname !== '/oauth/callback') { response.writeHead(404).end(); return; }
+      if (url.searchParams.has('error')) {
+        response.writeHead(400).end();
+        finish(new Error(url.searchParams.get('error')));
+        return;
+      }
+      if (awaitingLogout) {
+        if (url.searchParams.has('code') || url.searchParams.get('state') !== logoutState) {
+          response.writeHead(400).end();
+          return;
+        }
+        awaitingLogout = false;
+        response.writeHead(302, { location: authorizationUrl, 'cache-control': 'no-store' }).end();
+        return;
+      }
       if (!url.searchParams.has('code') || !url.searchParams.has('state')) {
         response.writeHead(400).end(); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
       }
@@ -303,7 +336,17 @@ function waitForCallback(buildUrl, openBrowser, signal) {
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();
       redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
-      Promise.resolve().then(() => buildUrl(redirectUri)).then(openBrowser).catch(finish);
+      Promise.resolve().then(() => {
+        if (settled) return;
+        return buildUrl(redirectUri);
+      }).then((result) => {
+        if (settled || !result) return;
+        const { authorizationUrl: nextAuthorizationUrl, logoutUrl } = result;
+        authorizationUrl = nextAuthorizationUrl;
+        awaitingLogout = Boolean(logoutUrl);
+        logoutState = new URL(authorizationUrl).searchParams.get('state');
+        return openBrowser(logoutUrl || authorizationUrl);
+      }).catch(finish);
     });
   });
 }

@@ -401,6 +401,7 @@ describe('TraySession', () => {
   it('adds B after A and activates either saved account without another login', async () => {
     const subjects = ['member-a', 'member-b'];
     const authorizationUrls: URL[] = [];
+    const logoutUrls: URL[] = [];
     mock.core.mockImplementation((options) => ({
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state-1&nonce=nonce-1&code_challenge=challenge-1` }),
@@ -428,8 +429,14 @@ describe('TraySession', () => {
     }));
     const session = new TraySession('dev');
     await session.restore();
-    const openBrowser = async (authorizationUrl: string) => {
-      const authorization = new URL(authorizationUrl);
+    const openBrowser = async (url: string) => {
+      let authorization = new URL(url);
+      if (authorization.pathname.endsWith('/protocol/openid-connect/logout')) {
+        logoutUrls.push(authorization);
+        const redirectUri = authorization.searchParams.get('post_logout_redirect_uri')!;
+        const response = await fetch(`${redirectUri}?state=${authorization.searchParams.get('state')}`, { redirect: 'manual' });
+        authorization = new URL(response.headers.get('location')!);
+      }
       authorizationUrls.push(authorization);
       const redirectUri = authorization.searchParams.get('redirect_uri')!;
       await fetch(`${redirectUri}?code=code&state=state`);
@@ -441,6 +448,8 @@ describe('TraySession', () => {
       presence?.(null);
     });
     await session.addAccount(() => {}, openBrowser);
+    expect(logoutUrls).toHaveLength(1);
+    expect(logoutUrls[0]!.searchParams.get('client_id')).toBe('interactive');
     expect(authorizationUrls.map((url) => url.searchParams.get('prompt'))).toEqual([null, 'login']);
     for (const url of authorizationUrls) {
       expect(url.searchParams.get('state')).toBe('state-1');
