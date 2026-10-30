@@ -1,8 +1,8 @@
-@font-face { font-family: AppFont; src: url('../side-panel/font-app.ttf?v=3add53e6') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: AppFont; src: url('../side-panel/font-app.ttf?v=e493fee2') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
 :root { color: #101828; background: #f8fbff; font: 14px/1.55 AppFont, ui-sans-serif, system-ui, sans-serif; --brand-primary: #2962ff; color-scheme: light; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { min-height: 100dvh; margin: 0; display: grid; place-items: center; padding: 24px; }
+body { min-height: 100dvh; margin: 0; display: grid; place-items: center; padding: 24px; font: inherit; }
 main { width: min(100%, 520px); display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid #eaecf0; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgba(10, 13, 18, .06); text-align: center; overflow: hidden; }
 main::before { content: ''; grid-column: 1; grid-row: 1 / 5; background: var(--brand-primary); }
 main > * { position: relative; grid-column: 1; min-width: 0; }

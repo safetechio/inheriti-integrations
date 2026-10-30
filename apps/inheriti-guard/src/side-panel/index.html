@@ -47,8 +47,9 @@
         <div class="signed-out-mark" aria-hidden="true"><svg viewBox="0 0 26 32"><path /></svg></div>
         <p class="eyebrow">Protection Plan Access</p>
         <h1 id="signed-out-title">Sign in to continue</h1>
-        <p>Connect your account before viewing plans, inspecting fields, or enabling site autofill.</p>
+        <p id="signed-out-description">Connect your account before viewing plans, inspecting fields, or enabling site autofill.</p>
         <p class="signed-out-error" id="signed-out-error" role="alert" hidden></p>
+        <ul id="saved-account-list" class="account-list saved-account-list" aria-label="Saved SafeID accounts" hidden></ul>
         <button class="button primary" id="sign-in" type="button">Sign in</button>
         <button class="button secondary" id="open-options" type="button" hidden>Configure Plan Access</button>
       </section>
@@ -56,7 +57,7 @@
         <span id="access-header-status" class="sr-only">Plan Access: signed out</span>
         <div class="organization-choice" id="organization-choice" hidden>
           <details id="organization-menu">
-            <summary id="organization-summary" aria-label="Choose organization">Choose an organization</summary>
+            <summary id="organization-summary" aria-label="Choose organisation"><span id="organization-summary-label">Choose an organisation</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
             <div class="organization-options" id="organization-options"></div>
           </details>
           <p id="organization-status" role="status"></p>
@@ -66,12 +67,15 @@
           <div class="account-popover">
             <ul id="account-list" class="account-list" aria-label="Saved SafeID accounts"></ul>
             <button class="header-sign-out account-add" id="add-account" type="button"><span aria-hidden="true">＋</span> Add another account</button>
-            <p id="account-status" class="account-status" role="status"></p>
             <button class="header-sign-out account-logoff" id="sign-out" type="button" hidden>Log out</button>
             <button class="header-sign-out account-logoff" id="sign-out-all" type="button">Log out of all accounts</button>
           </div>
         </details>
       </section>
+      <div class="account-feedback" id="account-feedback" role="alert" hidden>
+        <span id="account-status"></span>
+        <button id="dismiss-account-feedback" type="button" aria-label="Dismiss account message">×</button>
+      </div>
       <div class="panel-tabs plan-tabs" role="tablist" aria-label="Plan Access views">
         <button id="site-tab" role="tab" aria-selected="true" aria-controls="site-panel" tabindex="0" type="button">This site</button>
         <button id="plans-tab" role="tab" aria-selected="false" aria-controls="plans-panel" tabindex="-1" type="button">My plans</button>
@@ -216,6 +220,21 @@
         <section class="card"><div class="section-heading"><div><h2>Guard events</h2><p class="activity-help">Newest events appear first.</p></div><button id="clear-activity" class="compact-button danger" type="button">Clear</button></div><ul id="activity-list" class="activity-list" aria-live="polite"><li class="empty-activity">Loading activity…</li></ul></section>
       </section>
     </main>
+    <dialog class="asset-dialog account-confirm-dialog" id="account-confirm-dialog" aria-labelledby="account-confirm-title" aria-describedby="account-confirm-description">
+      <form class="modal-panel" method="dialog">
+        <h2 id="account-confirm-title"></h2>
+        <div class="account-confirm-person" id="account-confirm-person" hidden>
+          <span class="account-confirm-avatar" id="account-confirm-avatar" aria-hidden="true"></span>
+          <span><small>Account:</small><strong id="account-confirm-name"></strong><small id="account-confirm-email" hidden></small></span>
+        </div>
+        <p id="account-confirm-description"></p>
+        <div class="account-confirm-progress" id="account-confirm-progress" role="status" hidden><span class="account-confirm-track" aria-hidden="true"><span></span></span>Switching account…</div>
+        <div class="account-confirm-actions" id="account-confirm-actions">
+          <button class="button secondary" value="cancel" type="submit">Cancel</button>
+          <button class="button danger-button" id="account-confirm-submit" value="confirm" type="submit"></button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="main.js"></script>
   </body>
 </html>

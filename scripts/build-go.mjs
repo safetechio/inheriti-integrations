@@ -1,6 +1,7 @@
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { packageDirectory } from './package-directory.mjs';
 import { optionalToastPlugin } from './optional-toast-plugin.mjs';
@@ -8,6 +9,13 @@ import { buildDefines, writeBuildDeployment } from './build-deployment.mjs';
 
 const root = process.cwd();
 const output = resolve(root, 'dist');
+const integrationCore = await packageDirectory(root, '@safetech/inheriti-elements-core');
+const clientSdk = await packageDirectory(integrationCore, '@safetech/inheriti-client-sdk');
+const { HttpOperatorAuthTransport } = await import(pathToFileURL(resolve(clientSdk, 'dist/node-base.js')).href);
+if (typeof HttpOperatorAuthTransport.prototype.exchangeBusinessSession !== 'function' ||
+  typeof HttpOperatorAuthTransport.prototype.refreshBusinessSession !== 'function') {
+  throw new Error('Installed Client SDK lacks Business sessions. Build local Go with yarn hosts build go from b2b-b2c-e2-harness.');
+}
 const checked = spawnSync(process.execPath,
   [resolve(root, '../../node_modules/typescript/bin/tsc'), '-p', 'tsconfig.build.json', '--noEmit'],
   { cwd: root, stdio: 'inherit' });
@@ -53,8 +61,6 @@ for (const file of ['safekey-mobile.png', 'safekey-pro.png']) {
   await cp(resolve(root, '../inheriti-guard/src/side-panel/assets', file), resolve(output, file));
 }
 await cp(resolve(root, 'src/modules/quick-plan/ui/edit-screen.css'), resolve(output, 'edit-screen.css'));
-const integrationCore = await packageDirectory(root, '@safetech/inheriti-elements-core');
-const clientSdk = await packageDirectory(integrationCore, '@safetech/inheriti-client-sdk');
 const coreSdk = await packageDirectory(clientSdk, '@safetech/inheriti-core-sdk');
 await cp(resolve(coreSdk, 'dist/workers'), resolve(output, 'workers'), { recursive: true });
 await cp(resolve(coreSdk, 'dist/workers/inbox.node-worker.js'), resolve(output, 'inbox.node-worker.js'));

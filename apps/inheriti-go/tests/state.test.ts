@@ -17,6 +17,7 @@ vi.mock('../src/modules/launcher/main/protected-checkpoint.js', () => ({ Protect
 } }));
 
 vi.mock('@safetech/inheriti-elements-core/node', () => ({
+  INTEGRATION_AUTHORITY: 'business',
   BUSINESS_DEPLOYMENTS: {
     local: { apiUrl: 'http://business.localhost:3400/integrations/', issuer: 'https://default-issuer.test/', environment: 'TEST' },
     dev: { apiUrl: 'https://example.test/', issuer: 'https://issuer.test/', environment: 'TEST' },
@@ -55,6 +56,8 @@ import { TrayInboxIdentity } from '../src/modules/inbox/main/identity.js';
 import { TrayInbox } from '../src/modules/inbox/main/inbox.js';
 
 const asset = (text: string) => ({ type: 'PLAIN-TEXT' as const, meta: { name: 'Note' }, secret: { text } });
+const scopedPrincipal = (issuer: string, subject: string, environment = 'TEST') => ({ issuer, subject, audience: 'inheriti-integrations-api',
+  authorizedParty: 'interactive', environment });
 
 describe('TraySession', () => {
   beforeEach(() => {
@@ -158,7 +161,7 @@ describe('TraySession', () => {
     const options = mock.core.mock.calls[0]?.[0];
     expect(options.sessions).toEqual(expect.objectContaining({ load: expect.any(Function), save: expect.any(Function), clear: expect.any(Function) }));
     await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 1000,
-      principal: { issuer: 'https://local-issuer.test/', subject: 'member' } });
+      principal: scopedPrincipal('https://local-issuer.test/', 'member') });
     await expect(options.sessions.load()).resolves.toMatchObject({ accessToken: 'token' });
   });
 
@@ -205,7 +208,7 @@ describe('TraySession', () => {
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+      principal: scopedPrincipal(configuration.issuer, 'member-a') });
     let opened = 0;
     await session.signIn(() => {}, async (authorizationUrl) => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
@@ -237,7 +240,7 @@ describe('TraySession', () => {
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+      principal: scopedPrincipal(configuration.issuer, 'member-a') });
     mock.organizations.mockRejectedValue(Object.assign(new Error('elements_api_request_failed_403'), {
       status: 403, code: 'integration_tester_required',
     }));
@@ -255,7 +258,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-            principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
+            principal: scopedPrincipal(options.configuration.issuer, 'member-b') };
           await options.sessions.save(result);
           return result;
         },
@@ -271,7 +274,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const durable = mock.core.mock.calls[0]![0].sessions;
     await durable.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     await session.signIn(() => {}, async (authorizationUrl) => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
@@ -289,7 +292,7 @@ describe('TraySession', () => {
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+      principal: scopedPrincipal(configuration.issuer, 'member-a') });
     mock.organizations.mockResolvedValueOnce([{ id: 'org-a', name: 'A' }])
       .mockRejectedValueOnce(Object.assign(new Error('elements_api_request_failed_403'), {
         status: 403, code: 'integration_tester_required',
@@ -313,7 +316,7 @@ describe('TraySession', () => {
       return { authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(redirectUri)}` };
     });
     mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+      principal: scopedPrincipal(configuration.issuer, 'member-a', deployment === 'prod' ? 'LIVE' : 'TEST') });
     await session.signIn(() => {}, async (authorizationUrl) => {
       expect(new URL(authorizationUrl).searchParams.get('redirect_uri')).toBe(redirectUri);
       expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:[1-9]\d*\/oauth\/callback$/);
@@ -368,7 +371,7 @@ describe('TraySession', () => {
         completeAuthorizationCode: async () => {
           const subject = subjects.shift()!;
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
-            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
+            expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', subject) };
           await options.sessions.save(result);
           return result;
         },
@@ -389,8 +392,7 @@ describe('TraySession', () => {
     await session.signOut();
     await session.signIn(() => {}, openBrowser);
     expect(session.state().status).toBe('signed-in');
-    expect(mock.core).toHaveBeenCalledTimes(4);
-    const secondStore = mock.core.mock.calls[2]![0].sessions;
+    const secondStore = mock.core.mock.lastCall![0].sessions;
     expect(secondStore).not.toBe(firstStore);
     expect((await secondStore.load())?.principal.subject).toBe('member-b');
     await expect(firstStore.save({ accessToken: 'stale' })).rejects.toThrow('operator_session_retired');
@@ -405,7 +407,7 @@ describe('TraySession', () => {
         completeAuthorizationCode: async () => {
           const subject = subjects.shift()!;
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer',
-            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject } };
+            expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', subject) };
           await options.sessions.save(result);
           return result;
         },
@@ -453,8 +455,8 @@ describe('TraySession', () => {
     expect(session.state().selectedId).toBeUndefined();
     expect((await mock.core.mock.calls[0]![0].sessions.fork().load())?.refreshToken).toBe('rotated-b');
     expect(session.state()).toMatchObject({ activeSubject: 'member-b', accounts: [
-      { subject: 'member-a', name: 'member-a', status: 'ready', organizations: [{ id: 'org-member-a', name: 'member-a' }] },
-      { subject: 'member-b', name: 'member-b', status: 'ready', organizations: [
+      { subject: 'member-a', name: 'Saved account', status: 'ready', organizations: [{ id: 'org-member-a', name: 'member-a' }] },
+      { subject: 'member-b', name: 'Saved account', status: 'ready', organizations: [
         { id: 'org-member-b', name: 'member-b' }, { id: 'org-member-b-2', name: 'member-b-2' },
       ] },
     ] });
@@ -480,7 +482,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer',
-            expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-b' } };
+            expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', 'member-b') };
           await options.sessions.save(result);
           return result;
         },
@@ -495,7 +497,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const saved = mock.core.mock.calls[0]![0].sessions;
     await saved.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
-      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     expect(session.state().status).toBe('session-unavailable');
     offline = false;
@@ -513,7 +515,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const options = mock.core.mock.calls[0]![0];
     await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
-      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     mock.begin.mockResolvedValue({ authorizationUrl: 'https://issuer.test/authorize' });
     const pending = session.addAccount(() => {}, async () => {});
@@ -544,7 +546,7 @@ describe('TraySession', () => {
         completeAuthorizationCode: async () => {
           await new Promise<void>((resolve) => { finishExchange = resolve; });
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'late-access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-            principal: { issuer: options.configuration.issuer, subject: 'member-late' } };
+            principal: scopedPrincipal(options.configuration.issuer, 'member-late') };
           await options.sessions.save(result);
           return result;
         },
@@ -579,7 +581,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-            principal: { issuer: options.configuration.issuer, subject: 'member-a' } };
+            principal: scopedPrincipal(options.configuration.issuer, 'member-a') };
           await options.sessions.save(result);
           return result;
         },
@@ -615,7 +617,7 @@ describe('TraySession', () => {
     const configuration = mock.core.mock.calls[0]![0].configuration;
     mock.begin.mockImplementation(async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(configuration.redirectUri)}` }));
     mock.complete.mockResolvedValue({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: configuration.issuer, subject: 'member-a' } });
+      principal: scopedPrincipal(configuration.issuer, 'member-a') });
     const statuses: string[] = [];
     const signingIn = session.signIn(() => { statuses.push(session.state().status); }, async (authorizationUrl) => {
       const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
@@ -655,7 +657,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
     await session.restore();
@@ -672,7 +674,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
     await session.restore();
@@ -693,7 +695,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await session.restore();
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
@@ -712,7 +714,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await store.enroll({ ...first, accessToken: 'access-b', principal: { ...first.principal, subject: 'member-b' } });
     let release!: (organizations: { id: string; name: string }[]) => void;
@@ -795,7 +797,7 @@ describe('TraySession', () => {
       .mockResolvedValueOnce([{ id: 'org-b', name: 'B' }]);
     const session = new TraySession('dev');
     await mock.core.mock.calls[0]![0].sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer',
-      expiresAt: Date.now() + 60_000, principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      expiresAt: Date.now() + 60_000, principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     await session.select('org-a');
     expect(await session.refreshOrganizations()).toBe(true);
@@ -824,7 +826,7 @@ describe('TraySession', () => {
     const first = new TraySession('dev');
     const issuer = mock.core.mock.calls[0]![0].configuration.issuer;
     await mock.core.mock.calls[0]![0].sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer, subject: 'member' } });
+      principal: scopedPrincipal(issuer, 'member') });
     await first.restore();
     await first.select('org-b');
     const restarted = new TraySession('dev');
@@ -853,7 +855,7 @@ describe('TraySession', () => {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer.test/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}` }),
         completeAuthorizationCode: async () => {
           const result = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'new-access', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-            principal: { issuer: options.configuration.issuer, subject: 'member-b' } };
+            principal: scopedPrincipal(options.configuration.issuer, 'member-b') };
           await options.sessions.save(result);
           return result;
         },
@@ -882,7 +884,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const options = mock.core.mock.calls[0]![0];
     await options.sessions.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-token', refreshToken: 'refresh-test', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: options.configuration.issuer, subject: 'member' } });
+      principal: scopedPrincipal(options.configuration.issuer, 'member') });
     mock.token.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
 
@@ -1140,7 +1142,7 @@ describe('TraySession', () => {
     const store = mock.core.mock.calls[0]![0].sessions;
     await store.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000,
       accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     mock.clear.mockRejectedValueOnce(new Error('network_failed'));
 
     await session.signOut();
@@ -1149,16 +1151,40 @@ describe('TraySession', () => {
     expect(await store.load()).toBeUndefined();
   });
 
+  it('removes a secondary account without changing the active context, then offers selection after removing the active one', async () => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([]);
+    const tray = new TraySession('dev');
+    const store = mock.core.mock.calls[0]![0].sessions;
+    const principal = (subject: string) => ({ issuer: 'https://issuer.test/', audience: 'inheriti-integrations-api',
+      authorizedParty: 'interactive', environment: 'TEST', subject, sessionId: 'session', tokenId: 'token', scopes: [] });
+    const account = (subject: string) => ({ kind: 'business', familyId: subject, sessionExpiresAt: Date.now() + 120_000,
+      accessToken: `access-${subject}`, refreshToken: `refresh-${subject}`, tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
+      principal: principal(subject) });
+    await store.save(account('member-a'));
+    await store.enroll(account('member-b'));
+    await store.enroll(account('member-c'));
+    await tray.restore();
+    const selected = tray.state().selectedId;
+    await tray.removeAccount('member-b');
+    expect(tray.state()).toMatchObject({ status: 'signed-in', activeSubject: 'member-a' });
+    expect(tray.state().selectedId).toBe(selected);
+    expect(tray.state().accounts.map(({ subject }) => subject)).toEqual(['member-a', 'member-c']);
+    await tray.removeAccount('member-a');
+    expect(tray.state()).toMatchObject({ status: 'signed-out', accounts: [{ subject: 'member-c' }] });
+    expect(tray.state().activeSubject).toBeUndefined();
+  });
+
   it('signs out every saved account and clears the active context', async () => {
     mock.token.mockResolvedValue('access-token');
     mock.organizations.mockResolvedValue([{ id: 'org-a', name: 'A' }]);
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await store.enroll({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
+      principal: scopedPrincipal('https://issuer.test/', 'member-b') });
     await session.restore();
     await session.select('org-a');
     expect(session.state().accounts).toHaveLength(2);
@@ -1175,10 +1201,10 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     const first = { kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } };
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') };
     await store.save(first);
     await store.enroll({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-b', refreshToken: 'refresh-b', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-b' } });
+      principal: scopedPrincipal('https://issuer.test/', 'member-b') });
     await session.restore();
     store.retire();
 
@@ -1208,7 +1234,7 @@ describe('TraySession', () => {
     const session = new TraySession('dev');
     const store = mock.core.mock.calls[0]![0].sessions;
     await store.save({ kind: 'business', familyId: 'family', sessionExpiresAt: Date.now() + 120_000, accessToken: 'access-a', refreshToken: 'refresh-a', tokenType: 'Bearer', expiresAt: Date.now() + 60_000,
-      principal: { issuer: 'https://issuer.test/', subject: 'member-a' } });
+      principal: scopedPrincipal('https://issuer.test/', 'member-a') });
     await session.restore();
     await session.select('org-a');
     vi.spyOn(ProtectedCheckpoint.prototype, 'cleanMany').mockImplementationOnce(() => { throw new Error('checkpoint_failure'); });

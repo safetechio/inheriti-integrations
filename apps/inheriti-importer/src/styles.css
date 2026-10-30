@@ -212,14 +212,12 @@ button {
 
 .account-menu-current,
 .account-destination-group,
-.account-menu-action,
-.account-menu-remove {
+.account-menu-action {
   border-bottom: 1px solid var(--line);
 }
 
 .account-menu-action:hover,
-.account-menu-organization:hover,
-.account-menu-remove:hover {
+.account-menu-organization:hover {
   background: var(--primary-5);
 }
 
@@ -881,10 +879,16 @@ tbody tr:hover td {
 .account-menu-option:hover, .account-menu-add:hover { background: #f4f8ff; }
 .account-menu-destination { border-bottom: 1px solid #eaecf0; }
 .account-menu-destination .account-menu-option { border-bottom: 0; padding-right: 8px; }
-.account-menu-remove { min-height: 54px; padding: 8px 16px; }
+.account-menu-current, .account-menu-destination { position: relative; }
+.account-menu-remove { width: 28px; height: 28px; margin-right: 12px; border-radius: 6px; opacity: 0; pointer-events: none; }
+.account-menu-current:hover .account-menu-remove, .account-menu-destination:hover .account-menu-remove,
+.account-menu-remove:has(:focus-visible) { opacity: 1; pointer-events: auto; }
 .account-menu-remove:hover { background: #fff1f1; }
+.account-menu-remove:hover [dir="auto"], .account-menu-remove:has(:focus-visible) [dir="auto"] { color: var(--danger) !important; }
+@media (any-hover: none) { .account-menu-remove { opacity: 1; pointer-events: auto; } }
 .account-menu-add { min-height: 42px; padding: 8px 27px; }
 .account-menu-signout-all { min-height: 38px; background: #fff1f1; }
 .account-menu-signout-all:hover { background: #fee4e2; }
+.account-unlink-card { padding: 16px; border: 1px solid #eaecf0; border-radius: 12px; }
 
 .account-menu-notice { z-index: 1001; max-width: calc(100vw - 24px); box-shadow: 0 12px 28px #10182824; overflow-wrap: anywhere; }

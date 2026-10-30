@@ -129,7 +129,7 @@ it('removes stored SafeID credentials from a saved profile and asks for sign-in 
   const restarted = new ProtectedOperatorSessionStore('dev', issuer);
   expect(await restarted.load()).toBeUndefined();
   expect(await restarted.accountSummaries()).toEqual({ activeSubject: undefined, accounts: [
-    { subject: 'member', name: 'member', status: 'sign-in-again' },
+    { subject: 'member', name: 'Saved account', status: 'sign-in-again' },
   ] });
   expect(readFileSync(file, 'utf8')).not.toContain('safe-id-refresh');
   const sanitized = Buffer.from(readFileSync(file, 'utf8'), 'base64').toString().slice('encrypted:'.length);
@@ -167,6 +167,25 @@ it('keeps profiles and preferences separate across activation and duplicate enro
   expect(await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load()).toBeUndefined();
   await store.activate('member');
   expect(await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').load()).toEqual(member);
+});
+
+it('removes only the chosen profile and leaves the other available for selection', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const issuer = 'https://issuer.test';
+  const store = new ProtectedOperatorSessionStore('dev', issuer);
+  const first = session(issuer);
+  const second = { ...first, principal: { ...first.principal, subject: 'other' }, refreshToken: 'other-refresh' };
+  await store.save(first);
+  store.saveSelectedOrganization('org-a');
+  await store.enroll(second);
+  await store.remove('other');
+  expect(await store.listProfiles()).toEqual(['member']);
+  expect(await store.load()).toEqual(first);
+  await store.remove('member');
+  const restarted = new ProtectedOperatorSessionStore('dev', issuer);
+  expect(await restarted.accountSummaries()).toEqual({ accounts: [], activeSubject: undefined });
+  expect(await restarted.load()).toBeUndefined();
+  await expect(restarted.remove('missing')).rejects.toThrow('operator_account_not_found');
 });
 
 it('keeps multiple profiles in memory only when protected storage is unavailable', async () => {
@@ -373,10 +392,31 @@ it('exposes only non-secret saved-account summaries', async () => {
   await store.save(first);
   await store.enroll(expired);
   expect(await store.accountSummaries()).toEqual({ activeSubject: 'member', accounts: [
-    { subject: 'member', name: 'member', status: 'ready' },
-    { subject: 'other', name: 'other', status: 'sign-in-again' },
+    { subject: 'member', name: 'Saved account', status: 'ready' },
+    { subject: 'other', name: 'Saved account', status: 'sign-in-again' },
   ] });
   expect(JSON.stringify(await store.accountSummaries())).not.toContain('private-refresh-token');
+});
+
+it('persists a confirmed profile identity through restart and token expiry', async () => {
+  secure.directory = mkdtempSync(join(tmpdir(), 'go-session-'));
+  const store = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  const first = session('https://issuer.test');
+  await store.save(first);
+  const profile = store.profileForIdentity('member')!;
+  store.saveProfileIdentity('member', profile.generation, { name: 'Member Person', email: 'member@example.test' });
+  const restarted = new ProtectedOperatorSessionStore('dev', 'https://issuer.test');
+  expect((await restarted.accountSummaries()).accounts[0]?.email).toBe('member@example.test');
+  expect((await restarted.accountSummaries()).accounts[0]?.name).toBe('Member Person');
+  await restarted.enroll({ ...first, expiresAt: Date.now() - 1 });
+  expect((await restarted.accountSummaries()).accounts[0]?.email).toBe('member@example.test');
+  expect(restarted.profileForIdentity('member')?.email).toBe('member@example.test');
+  store.saveProfileIdentity('member', profile.generation, { name: 'Stale Person', email: 'stale@example.test' });
+  expect(restarted.profileForIdentity('member')?.name).toBe('Member Person');
+  expect(restarted.profileForIdentity('member')?.email).toBe('member@example.test');
+  await restarted.clearAll();
+  store.saveProfileIdentity('member', profile.generation, { name: 'Late Person', email: 'late@example.test' });
+  expect((await new ProtectedOperatorSessionStore('dev', 'https://issuer.test').accountSummaries()).accounts).toEqual([]);
 });
 
 it('clears every profile in one issuer and retires all old adapters', async () => {

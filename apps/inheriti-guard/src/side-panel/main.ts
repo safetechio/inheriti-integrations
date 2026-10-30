@@ -1,16 +1,17 @@
 import type { PageFirstFieldCandidate, PageFieldTarget } from '../shared/access-contract.js';
 import type { SidePanelRequest, SidePanelResponse } from '../shared/messages.js';
-import { messageFor, type PanelState } from '../shared/plan-view.js';
+import { messageFor, type AccountSummary, type PanelState } from '../shared/plan-view.js';
 import { inheritiGuardBrand, inheritiGuardShield } from '@safetech/inheriti-elements-brand';
 import { MASTER_KEY_CACHE_PREFIX } from '../shared/stored-configuration.js';
 import { confirmedPanelState, startAccountAddition } from './account-context.js';
 import { compactButton, el, errorText, required, titleCase } from './main/dom.js';
 import { initializeOverlayPanel } from './main/overlay.js';
 import { initializeGuardPanel } from './main/guard.js';
-import { renderAccounts } from './main/accounts.js';
+import { accountDisplayName, renderAccounts } from './main/accounts.js';
 import { initializeWorkspacePanel, type WorkspacePanelState } from './main/workspace.js';
 import { organizationDisplayName } from './main/organizations.js';
 import { createKeyStatusRefresh } from './main/key-status.js';
+import { watchLoginWindow } from './login-window.js';
 import { planRows } from './main/plans.js';
 
 const origin = required('origin');
@@ -29,6 +30,9 @@ const signIn = required<HTMLButtonElement>('sign-in');
 const signOut = required<HTMLButtonElement>('sign-out');
 const signOutAll = required<HTMLButtonElement>('sign-out-all');
 const signedOutError = required<HTMLParagraphElement>('signed-out-error');
+const signedOutTitle = required<HTMLElement>('signed-out-title');
+const signedOutDescription = required<HTMLElement>('signed-out-description');
+const savedAccountList = required<HTMLUListElement>('saved-account-list');
 const openOptions = required<HTMLButtonElement>('open-options');
 const forgetKey = required<HTMLButtonElement>('forget-master-key');
 const reloadPlans = required<HTMLButtonElement>('reload-plans');
@@ -40,7 +44,9 @@ const plans = required<HTMLUListElement>('plans');
 const accountArea = required<HTMLElement>('account-area');
 const addAccount = required<HTMLButtonElement>('add-account');
 const accountList = required<HTMLUListElement>('account-list');
-const accountStatus = required<HTMLParagraphElement>('account-status');
+const accountFeedback = required<HTMLElement>('account-feedback');
+const accountStatus = required<HTMLElement>('account-status');
+const dismissAccountFeedback = required<HTMLButtonElement>('dismiss-account-feedback');
 const accountMenu = accountList.closest<HTMLDetailsElement>('.account-menu');
 if (accountMenu === null) throw new Error('Missing account menu');
 const accountTrigger = accountArea.querySelector<HTMLElement>('.account-trigger');
@@ -48,6 +54,7 @@ if (accountTrigger === null) throw new Error('Missing account trigger');
 const organizationChoice = required<HTMLElement>('organization-choice');
 const organizationMenu = required<HTMLDetailsElement>('organization-menu');
 const organizationSummary = required<HTMLElement>('organization-summary');
+const organizationSummaryLabel = required<HTMLElement>('organization-summary-label');
 const organizationOptions = required<HTMLElement>('organization-options');
 const organizationStatus = required<HTMLElement>('organization-status');
 const accessDialog = required<HTMLDialogElement>('access-dialog');
@@ -60,6 +67,16 @@ const fieldResults = required<HTMLUListElement>('field-results');
 const confirmReveal = required<HTMLButtonElement>('confirm-reveal');
 const abortAccess = required<HTMLButtonElement>('abort-access');
 const assetsDialog = required<HTMLDialogElement>('assets-dialog');
+const accountConfirmDialog = required<HTMLDialogElement>('account-confirm-dialog');
+const accountConfirmTitle = required<HTMLElement>('account-confirm-title');
+const accountConfirmDescription = required<HTMLElement>('account-confirm-description');
+const accountConfirmProgress = required<HTMLElement>('account-confirm-progress');
+const accountConfirmActions = required<HTMLElement>('account-confirm-actions');
+const accountConfirmSubmit = required<HTMLButtonElement>('account-confirm-submit');
+const accountConfirmPerson = required<HTMLElement>('account-confirm-person');
+const accountConfirmAvatar = required<HTMLElement>('account-confirm-avatar');
+const accountConfirmName = required<HTMLElement>('account-confirm-name');
+const accountConfirmEmail = required<HTMLElement>('account-confirm-email');
 
 const workspaceState: WorkspacePanelState = {
   workspace: undefined, revealRunning: false, pickerOpen: false, pageFirstCandidates: [], resumablePlanId: undefined,
@@ -69,6 +86,7 @@ const CONFIGURATION_CODES = new Set(['configuration_missing', 'master_key_salt_r
 let panelGeneration: number | undefined;
 let contextRevision = 0;
 let reconfirming = false;
+let visibleAccounts: readonly AccountSummary[] = [];
 
 document.documentElement.style.setProperty('--primary', inheritiGuardBrand.colors.primary);
 document.documentElement.style.setProperty('--primary-dark', inheritiGuardBrand.colors.primaryDark);
@@ -220,8 +238,9 @@ async function selectPageFirstCandidate(candidate: PageFirstFieldCandidate): Pro
 
 /** API values are assigned through textContent and are never interpreted as markup. */
 function renderKeyStatus(keyOwner: 'Application' | 'Organization', loaded: boolean): void {
-  forgetKey.textContent = `Clear ${keyOwner.toLowerCase()} key`;
-  forgetKey.title = loaded ? `Clear the ${keyOwner.toLowerCase()} key from memory. You'll need to load it again before the next reveal.` : '';
+  const owner = keyOwner === 'Organization' ? 'organisation' : 'application';
+  forgetKey.textContent = `Clear ${owner} key`;
+  forgetKey.title = loaded ? `Clear the ${owner} key from memory. You'll need to load it again before the next reveal.` : '';
   forgetKey.disabled = !loaded;
   forgetKey.hidden = !loaded || planAccessPanel.dataset.authenticated !== 'true';
 }
@@ -231,16 +250,20 @@ const refreshKeyStatus = createKeyStatusRefresh(send,
 
 function renderPanel(state: PanelState): void {
   if (state.generation !== undefined) panelGeneration = state.generation;
+  accountFeedback.hidden = true;
   accountStatus.textContent = '';
   required('session-skeleton').hidden = true;
   planAccessPanel.setAttribute('aria-busy', 'false');
-  const accounts = state.accounts ?? [];
+  const accounts = (state.accounts ?? []).filter((account) => !account.needsSignIn);
+  visibleAccounts = accounts;
   planAccessPanel.dataset.hasAccounts = String(accounts.length > 0);
   renderAccounts(accountList, accounts, accountAction);
+  renderAccounts(savedAccountList, accounts, (request, confirmation) =>
+    accountAction(request, request.type === 'switch-account' ? undefined : confirmation));
   const activeAccount = accounts.find((account) => account.active);
   const activeOrganization = state.organizations?.find((organization) => organization.id === state.organizationId);
   accessAccount.textContent = activeAccount === undefined ? ''
-    : `${activeAccount.label}${activeOrganization === undefined ? '' : ` · ${organizationDisplayName(activeOrganization, state.organizations ?? [])}`}`;
+    : `${accountDisplayName(activeAccount)}${activeOrganization === undefined ? '' : ` · ${organizationDisplayName(activeOrganization, state.organizations ?? [])}`}`;
   const organizations = state.organizations;
   renderKeyStatus(organizations === undefined ? 'Application' : 'Organization', Boolean(state.keyInMemory));
   renderOrganizationChoice(state);
@@ -251,16 +274,24 @@ function renderPanel(state: PanelState): void {
   if (state.kind === 'EMPTY' || state.kind === 'PLANS') void refreshKeyStatus();
 }
 
+function showAccountError(message: string): void {
+  signedOutError.hidden = true;
+  accountStatus.textContent = message;
+  accountFeedback.hidden = false;
+}
+dismissAccountFeedback.addEventListener('click', () => { accountFeedback.hidden = true; });
+
 function renderOrganizationChoice(state: PanelState): void {
   const organizations = state.organizations;
-  const hasActiveAccount = state.accounts?.some((account) => account.active) === true;
+  const hasActiveAccount = state.accounts?.some((account) => account.active && !account.needsSignIn) === true;
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION' && hasActiveAccount;
   organizationChoice.hidden = organizations === undefined || !hasActiveAccount;
   planAccessPanel.dataset.organization = needsOrganization ? 'required' : 'selected';
   if (organizations === undefined) return;
   organizationMenu.open = false;
+  organizationMenu.hidden = organizations.length === 0;
   const selected = organizations.find(({ id }) => id === state.organizationId);
-  organizationSummary.textContent = selected === undefined ? 'Choose an organization' : organizationDisplayName(selected, organizations);
+  organizationSummaryLabel.textContent = selected === undefined ? 'Choose an organisation' : organizationDisplayName(selected, organizations);
   organizationOptions.replaceChildren(...organizations.map(({ id, name }) => {
     const option = el('button', 'organization-option', organizationDisplayName({ id, name }, organizations)) as HTMLButtonElement;
     option.type = 'button';
@@ -273,22 +304,27 @@ function renderOrganizationChoice(state: PanelState): void {
     return option;
   }));
   organizationStatus.textContent = needsOrganization
-    ? state.reason ?? (organizations.length === 0 ? 'No active organizations are available.' : 'Select one to view its plans.')
+    ? state.reason ?? (organizations.length === 0 ? 'No active organisations are available.' : 'Select one to view its plans.')
     : '';
 }
 
 function renderAuthenticationState(state: PanelState, accountCount: number): void {
-  const hasActiveAccount = state.accounts?.some((account) => account.active) === true;
+  const hasActiveAccount = state.accounts?.some((account) => account.active && !account.needsSignIn) === true;
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION' && hasActiveAccount;
   const signedIn = hasActiveAccount && (state.kind === 'LOADING' || state.kind === 'EMPTY' || state.kind === 'PLANS' || needsOrganization);
+  const chooseSavedAccount = !signedIn && accountCount > 0 && state.kind !== 'SIGNING_IN' && state.kind !== 'LOADING';
   appMain.dataset.authenticated = String(signedIn);
   planAccessPanel.dataset.authenticated = String(signedIn);
   authStatus.textContent = state.kind === 'SIGNING_IN' ? 'Signing in' : state.kind === 'ERROR' ? 'Needs attention' : signedIn ? 'Signed in' : 'Signed out';
   accessHeaderStatus.textContent = `Plan Access: ${state.kind === 'SIGNING_IN' ? 'signing in' : state.kind === 'ERROR' ? 'needs attention' : signedIn ? 'signed in' : 'signed out'}`;
   signIn.hidden = signedIn;
   signIn.disabled = state.kind === 'SIGNING_IN';
-  signIn.textContent = state.kind === 'SIGNING_IN' ? 'Signing in…' : 'Sign in';
-  accountArea.hidden = !signedIn && accountCount === 0;
+  signedOutTitle.textContent = chooseSavedAccount ? 'Choose an account' : 'Sign in to continue';
+  signedOutDescription.textContent = chooseSavedAccount ? 'Select a saved account to continue.'
+    : 'Connect your account before viewing plans, inspecting fields, or enabling site autofill.';
+  savedAccountList.hidden = !chooseSavedAccount;
+  signIn.textContent = state.kind === 'SIGNING_IN' ? 'Signing in…' : chooseSavedAccount ? 'Add another account' : 'Sign in';
+  accountArea.hidden = !signedIn;
   signOut.hidden = !signedIn || accountCount !== 1;
   signOutAll.hidden = !signedIn || accountCount <= 1;
   // The plans list carries an error only once signed in; before that this is the one place to say it.
@@ -305,27 +341,76 @@ function renderAuthenticationState(state: PanelState, accountCount: number): voi
 }
 
 async function accountAction(request: Extract<SidePanelRequest, { type: 'switch-account' | 'remove-account' | 'select-account-organization' | 'select-organization' | 'sign-out' }>, confirmation?: string): Promise<void> {
-  if (confirmation !== undefined && !window.confirm(confirmation)) return;
+  const showingProgress = request.type === 'switch-account' && confirmation !== undefined;
+  const removedAccount = request.type === 'remove-account' ? visibleAccounts.find((account) => account.id === request.accountId) : undefined;
+  if (confirmation !== undefined && !await confirmAccountAction(request.type === 'remove-account' ? 'Unlink account?' : confirmation,
+    request.type === 'remove-account' ? 'Unlink account' : request.type === 'sign-out' ? 'Sign out' : 'Switch account',
+    request.type === 'remove-account' ? 'This removes this saved login from this browser. Other saved accounts remain available.'
+      : request.type === 'sign-out' ? 'This account will be signed out on this browser.'
+        : 'Guard will load this account’s organisations and plans. You can switch back at any time.', showingProgress, removedAccount)) return;
+  if (showingProgress) {
+    accountConfirmTitle.textContent = 'Switching account';
+    accountConfirmDescription.textContent = 'Checking the saved session and organisation access…';
+    accountConfirmActions.hidden = true;
+    accountConfirmProgress.hidden = false;
+  }
   const startedRevision = contextRevision;
   renderPanel({ kind: 'LOADING' });
   planAccessPanel.setAttribute('aria-busy', 'true');
   if (accessDialog.open) accessDialog.close();
   if (assetsDialog.open) assetsDialog.close();
   try {
-    await workspacePanel.discardWorkspace();
-    const response = await send(request);
-    if (startedRevision !== contextRevision) return;
-    if (response.ok && 'state' in response) { renderPanel(response.state); return; }
-  } catch { /* Recheck the server-owned active account before rendering protected content. */ }
-  try {
-    const current = await send({ type: 'load-plans' });
-    if (startedRevision !== contextRevision) return;
-    if (current.ok && 'state' in current) { renderPanel(current.state); accountStatus.textContent = 'Could not change account. Try again.'; return; }
-  } catch { /* The worker may be unavailable; leave protected content hidden. */ }
-  renderPanel({ kind: 'ERROR', code: 'plan_request_failed' });
+    try {
+      await workspacePanel.discardWorkspace();
+      const response = await send(request);
+      if (startedRevision !== contextRevision) return;
+      if (response.ok && 'state' in response) { renderPanel(response.state); return; }
+    } catch { /* Recheck the server-owned active account before rendering protected content. */ }
+    try {
+      const current = await send({ type: 'load-plans' });
+      if (startedRevision !== contextRevision) return;
+      if (current.ok && 'state' in current) { renderPanel(current.state); showAccountError('Could not change account. Try again.'); return; }
+    } catch { /* The worker may be unavailable; leave protected content hidden. */ }
+    renderPanel({ kind: 'ERROR', code: 'plan_request_failed' });
+  } finally { if (showingProgress) accountConfirmDialog.close(); }
 }
 
-initializeGuardPanel(() => { void requestState('load-plans'); });
+function confirmAccountAction(title: string, action: string, description = '', keepOpen = false, account?: AccountSummary): Promise<boolean> {
+  accountMenu!.open = false;
+  accountConfirmTitle.textContent = title;
+  accountConfirmDescription.textContent = description;
+  accountConfirmPerson.hidden = account === undefined;
+  if (account !== undefined) {
+    const name = accountDisplayName(account);
+    accountConfirmName.textContent = name;
+    accountConfirmAvatar.textContent = name.split(/\s+/u).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase();
+    accountConfirmEmail.textContent = account.email ?? '';
+    accountConfirmEmail.hidden = !account.email;
+  }
+  accountConfirmSubmit.textContent = action;
+  accountConfirmSubmit.className = action === 'Switch account' ? 'button primary' : 'button danger-button';
+  accountConfirmActions.hidden = false;
+  accountConfirmProgress.hidden = true;
+  accountConfirmDialog.returnValue = '';
+  accountConfirmDialog.showModal();
+  if (keepOpen) return new Promise((resolve) => {
+    const onClose = () => { accountConfirmSubmit.removeEventListener('click', onConfirm); resolve(false); };
+    const onConfirm = (event: MouseEvent) => {
+      event.preventDefault();
+      accountConfirmDialog.removeEventListener('close', onClose);
+      resolve(true);
+    };
+    accountConfirmSubmit.addEventListener('click', onConfirm, { once: true });
+    accountConfirmDialog.addEventListener('close', onClose, { once: true });
+  });
+  return new Promise((resolve) => accountConfirmDialog.addEventListener('close',
+    () => resolve(accountConfirmDialog.returnValue === 'confirm'), { once: true }));
+}
+accountConfirmDialog.addEventListener('cancel', (event) => { if (!accountConfirmProgress.hidden) event.preventDefault(); });
+
+initializeGuardPanel(() => { void requestState('load-plans'); },
+  () => confirmAccountAction('Log out of all accounts?', 'Log out of all accounts',
+    'This ends Plan Access work, closes all Inheriti sessions, and clears session data from this browser.'));
 
 function applyFilter(): void {
   const query = planFilter.value.trim().toLocaleLowerCase();
@@ -338,22 +423,26 @@ async function requestState(type: 'sign-in' | 'sign-out' | 'load-plans' | 'forge
   const startedRevision = contextRevision;
   const hadActiveAccount = planAccessPanel.dataset.authenticated === 'true';
   const hadSavedAccounts = accountList.children.length > 0;
+  let cancelled = false;
+  let stopWatching: (() => void) | undefined;
   try {
+    if (type === 'sign-in') stopWatching = await watchLoginWindow();
     const response = await send({ type });
     if (startedRevision !== contextRevision) return;
+    cancelled = response.ok && 'state' in response && response.state.kind === 'ERROR' && response.state.code === 'login_cancelled';
     if (response.ok && 'state' in response && (type !== 'sign-in' || response.state.kind !== 'ERROR' || (!restoreAccountOnFailure && !hadActiveAccount && !hadSavedAccounts))) {
       renderPanel(response.state);
       return;
     }
   } catch {
     // Reconfirm the previous account after an interrupted Add Account attempt.
-  }
+  } finally { stopWatching?.(); }
   if (type === 'sign-in' && (restoreAccountOnFailure || hadActiveAccount || hadSavedAccounts)) {
     const current = await send({ type: 'load-plans' }).catch(() => undefined);
     if (startedRevision !== contextRevision) return;
     if (current?.ok && 'state' in current) {
       renderPanel(current.state);
-      accountStatus.textContent = 'Could not add account. Try again.';
+      if (!cancelled) showAccountError('Could not add account. Try again.');
       return;
     }
   }
@@ -364,15 +453,18 @@ planFilter.addEventListener('input', applyFilter);
 signIn.addEventListener('click', () => { renderPanel({ kind: 'SIGNING_IN' }); void requestState('sign-in'); });
 addAccount.addEventListener('click', () => { void addAnotherAccount(); });
 async function addAnotherAccount(): Promise<void> {
-  if (!window.confirm('Add another account? This clears your SafeID browser sign-in, even if canceled. Other apps may ask you to sign in again; saved Inheriti® Guard accounts stay available.')) return;
   const startedRevision = contextRevision;
   if (accessDialog.open) accessDialog.close();
   if (assetsDialog.open) assetsDialog.close();
-  renderPanel({ kind: 'SIGNING_IN' });
-  await startAccountAddition(() => workspacePanel.discardWorkspace(),
-    () => startedRevision === contextRevision,
-    () => requestState('sign-in', true),
-    async () => { await requestState('load-plans'); accountStatus.textContent = 'Could not close the current workspace. Try again.'; });
+  accountMenu!.open = false;
+  addAccount.disabled = true;
+  authStatus.textContent = 'Adding account';
+  try {
+    await startAccountAddition(() => workspacePanel.discardWorkspace(),
+      () => startedRevision === contextRevision,
+      () => requestState('sign-in', true),
+      async () => { await requestState('load-plans'); showAccountError('Could not close the current workspace. Try again.'); });
+  } finally { if (startedRevision === contextRevision) addAccount.disabled = false; }
 }
 openOptions.addEventListener('click', () => { void chrome.runtime.openOptionsPage(); });
 signOut.addEventListener('click', () => { void accountAction({ type: 'sign-out' }, 'Sign out this SafeID account?'); });
@@ -387,6 +479,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (accessDialog.open) accessDialog.close();
     if (assetsDialog.open) assetsDialog.close();
     renderPanel({ kind: 'LOADING' });
+    planAccessPanel.dataset.authenticated = 'pending';
+    required('session-skeleton').hidden = false;
+    authStatus.textContent = 'Updating account';
+    accessHeaderStatus.textContent = 'Plan Access: updating account';
     planAccessPanel.setAttribute('aria-busy', 'true');
     void reconfirmAccountContext();
   }

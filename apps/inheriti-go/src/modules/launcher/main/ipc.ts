@@ -5,7 +5,6 @@ import { trayMessages as messages } from '../../../messages.js';
 import { registerQuickPlanIpc } from '../../quick-plan/main/ipc.js';
 import { registerInboxIpc } from '../../inbox/main/ipc.js';
 import type { GoUpdateProgress } from './update.js';
-import { setSignOutConfirmationSize } from './launcher-window.js';
 
 export function registerTrayIpc(session: TraySession, currentWindow: () => BrowserWindow | undefined, publish: () => void, appUrl?: string, notify?: (body: string) => void, publishInbox?: () => void, refreshBadge?: () => void, updateProgress?: () => GoUpdateProgress): void {
   const trusted = (event: Electron.IpcMainInvokeEvent) => {
@@ -14,11 +13,6 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
   };
   ipcMain.handle('tray:state', (event) => { trusted(event); return session.state(); });
   ipcMain.handle('tray:version', (event) => { trusted(event); return app.getVersion(); });
-  ipcMain.handle('tray:sign-out-confirmation-size', (event, compact: unknown) => {
-    trusted(event);
-    if (typeof compact !== 'boolean') throw new Error('invalid_confirmation_size');
-    setSignOutConfirmationSize(compact);
-  });
   ipcMain.handle('tray:update-progress', (event) => { trusted(event); return updateProgress?.() ?? null; });
   ipcMain.handle('tray:select-custodian-device', (event, value: unknown) => {
     trusted(event);
@@ -70,6 +64,13 @@ export function registerTrayIpc(session: TraySession, currentWindow: () => Brows
     return session.state();
   });
   ipcMain.handle('tray:sign-out', async (event) => { trusted(event); await session.signOut(); publish(); publishInbox?.(); return session.state(); });
+  ipcMain.handle('tray:remove-account', async (event, subject: unknown) => {
+    trusted(event);
+    if (typeof subject !== 'string' || !subject || subject.length > 500) throw new Error('invalid_account');
+    try { await session.removeAccount(subject); }
+    finally { publish(); publishInbox?.(); }
+    return session.state();
+  });
   ipcMain.handle('tray:sign-out-all', async (event) => { trusted(event); await session.signOutAll(); publish(); publishInbox?.(); return session.state(); });
   registerInboxIpc(session, trusted, publishInbox, publish, refreshBadge);
   registerQuickPlanIpc(session, trusted, publish, notify);

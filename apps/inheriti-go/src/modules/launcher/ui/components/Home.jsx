@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AccountAvatar } from '../../../_shared/ui/components/AccountAvatar.jsx';
 import { ChevronDownIcon, ChevronRightIcon, EditIcon, ExternalLinkIcon, LockIcon, PlusIcon } from '../../../_shared/ui/components/Icons.jsx';
+import { accountDisplayName } from './account-display-name.js';
 
 export function organizationDisplayName(organization, organizations = []) {
   if (organizations.filter(({ name }) => name === organization.name).length < 2) return organization.name;
@@ -9,8 +10,9 @@ export function organizationDisplayName(organization, organizations = []) {
   return `${organization.name} · ${ambiguous ? organization.id : suffix}`;
 }
 
-export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, accountRole, pendingInboxControls }) {
+export function Home({ messages, organizations, selectedId, onOrganizationChange, accounts = [], activeSubject, onChooseAccount, onRemoveAccount, onAddAccount, showPlanActions, canCreate, canEdit, onCreate, onEdit, onOpenInbox, inboxHasNew, onOpenApp, onSignOut, onSignOutAll, signOutDisabled, status, notice, accountName, accountRole, pendingInboxControls }) {
   const accountMenuRef = useRef(null);
+  const closeAccountMenu = () => { if (accountMenuRef.current) accountMenuRef.current.open = false; };
   useEffect(() => {
     const closeOutside = (event) => {
       if (accountMenuRef.current?.open && !accountMenuRef.current.contains(event.target)) accountMenuRef.current.open = false;
@@ -25,7 +27,9 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
     document.addEventListener('keydown', closeOnEscape);
     return () => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeOnEscape); };
   }, []);
-  const firstName = accountName?.trim().split(/\s+/u)[0];
+  const activeEmail = accounts.find((account) => account.subject === activeSubject)?.email;
+  const activeName = accountDisplayName(accounts.find((account) => account.subject === activeSubject) ?? { name: accountName, subject: activeSubject });
+  const firstName = activeName === 'Saved account' ? '' : activeName.trim().split(/\s+/u)[0];
   const otherAccounts = accounts.filter((account) => account.subject !== activeSubject);
   return <main className="tray-screen tray-home">
     <p id="status" className="sr-only" role="status">{status}</p>
@@ -39,22 +43,28 @@ export function Home({ messages, organizations, selectedId, onOrganizationChange
         <ChevronDownIcon />
       </label>
       <details className="tray-account-menu" ref={accountMenuRef}>
-        <summary aria-label="Open account menu" title={accountName || 'Your account'} tabIndex={0}><AccountAvatar name={accountName} online /></summary>
+        <summary aria-label="Open account menu" title={activeName} tabIndex={0}><AccountAvatar name={activeName} online /></summary>
         <div className="tray-account-popover">
           <h2 className="sr-only">Saved accounts</h2>
           <div className="tray-account-group is-active">
-            <AccountAvatar name={accountName} />
-            <span className="tray-account-details"><strong title={accountName}>{accountName}</strong>{accountRole && <small>{accountRole}</small>}<small className="tray-account-status">{status}</small></span>
+            <AccountAvatar name={activeName} />
+            <span className="tray-account-details"><strong title={activeName}>{activeName}</strong>{activeEmail && <small>{activeEmail}</small>}{accountRole && <small>{accountRole}</small>}<small className="tray-account-status">{status}</small></span>
+            <button className="tray-account-remove" type="button" aria-label={`Unlink ${activeName} from this device`} title={`Unlink ${activeName} from this device`} disabled={signOutDisabled} onClick={() => { closeAccountMenu(); onRemoveAccount(accounts.find((account) => account.subject === activeSubject)); }}>×</button>
           </div>
-          {otherAccounts.map((account) => <button className="tray-account-option" type="button" key={account.subject}
-            disabled={signOutDisabled} onClick={() => account.status === 'ready' ? onChooseAccount(account) : onAddAccount()}>
-            <AccountAvatar name={account.name} />
-            <span><strong title={account.name}>{account.name}</strong>
-              {account.status === 'sign-in-again' && <small>Sign in again</small>}</span>
-          </button>)}
-          <button id="add-account" type="button" disabled={signOutDisabled} onClick={onAddAccount}><span aria-hidden="true">＋</span>Add another account</button>
-          <button id="sign-out" type="button" disabled={signOutDisabled} onClick={onSignOut}>Log out of this account</button>
-          <button id="sign-out-all" type="button" disabled={signOutDisabled} onClick={onSignOutAll}>{otherAccounts.length ? 'Log out of all accounts' : 'Log out'}</button>
+          {otherAccounts.map((account) => {
+            const name = accountDisplayName(account);
+            return <div className="tray-account-option-row" key={account.subject}>
+              <button className="tray-account-option" type="button" disabled={signOutDisabled} onClick={() => { closeAccountMenu(); account.status === 'ready' ? onChooseAccount(account) : onAddAccount(); }}>
+                <AccountAvatar name={name} />
+                <span><strong title={name}>{name}</strong>{account.email && <small>{account.email}</small>}
+                  {account.status === 'sign-in-again' && <small>Sign in again</small>}</span>
+              </button>
+              <button className="tray-account-remove" type="button" aria-label={`Unlink ${name} from this device`} title={`Unlink ${name} from this device`} disabled={signOutDisabled} onClick={() => { closeAccountMenu(); onRemoveAccount(account); }}>×</button>
+            </div>;
+          })}
+          <button id="add-account" type="button" disabled={signOutDisabled} onClick={() => { closeAccountMenu(); onAddAccount(); }}><span aria-hidden="true">＋</span>Add another account</button>
+          <button className="tray-account-logoff" id={otherAccounts.length ? 'sign-out-all' : 'sign-out'} type="button" disabled={signOutDisabled}
+            onClick={() => { closeAccountMenu(); (otherAccounts.length ? onSignOutAll : onSignOut)(); }}>{otherAccounts.length ? 'Log out of all accounts' : 'Log out'}</button>
         </div>
       </details>
     </header>

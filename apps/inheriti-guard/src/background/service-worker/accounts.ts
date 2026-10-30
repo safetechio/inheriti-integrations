@@ -108,7 +108,7 @@ export function createAccountRuntime(deps: {
       return { organizations, organizationId: organizations[0]!.id };
     }
     return { kind: 'SELECT_ORGANIZATION', organizations,
-      ...(saved ? { reason: 'The saved organization is no longer available.' } : {}) };
+      ...(saved ? { reason: 'The saved organisation is no longer available.' } : {}) };
   }
 
   async function panelState(action: 'sign-in' | 'sign-out' | 'load-plans' | 'forget-master-key'): Promise<PanelState> {
@@ -177,6 +177,9 @@ export function createAccountRuntime(deps: {
     const profiles = await configuredProfiles();
     const configuration = resolveConfiguration(await readStoredConfiguration(localStorage, chrome.storage.session));
     const organizationsByAccount = new Map<string, readonly { id: string; name: string }[]>();
+    const emailByAccount = new Map<string, string>();
+    const nameByAccount = new Map<string, string>();
+    const roleByAccount = new Map<string, string>();
     const reauthentication = new Set<string>();
     await Promise.all(profiles.map(async (profile) => {
       if (profile.needsSignIn || configuration.applicationId !== undefined) return;
@@ -185,7 +188,41 @@ export function createAccountRuntime(deps: {
         organizationsByAccount.set(profile.id, organizations.map(({ id, name }) => ({ id, name })));
       } catch (error) {
         const code = codeOf(error);
-        if (code === 'plan_access_denied' || code === 'operator_reauthentication_required') reauthentication.add(profile.id);
+        if (code === 'operator_reauthentication_required') reauthentication.add(profile.id);
+      }
+      if (reauthentication.has(profile.id)) return;
+      try {
+        await discoverForProfile(profile.id, async () => {
+          const session = await (await sessions.forProfile(profile.id)).load();
+          if (!session?.accessToken || session.expiresAt <= Date.now()) return;
+          const response = await fetch(new URL('v1/importer/profile', configuration.apiUrl), {
+            headers: { Authorization: `Bearer ${session.accessToken}`, 'x-elements-environment': configuration.environment },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!response.ok) return;
+          const details = (await response.json() as { result?: { firstName?: unknown; lastName?: unknown; email?: unknown } }).result;
+          const email = details?.email;
+          if (typeof email === 'string' && email.trim()) emailByAccount.set(profile.id, email);
+          const name = [details?.firstName, details?.lastName]
+            .filter((part): part is string => typeof part === 'string' && !!part.trim()).map((part) => part.trim()).join(' ');
+          if (name) nameByAccount.set(profile.id, name.slice(0, 80));
+        });
+      } catch { /* Email is optional; account discovery remains available. */ }
+      if (profile.active && state.organizationId) {
+        try {
+          await discoverForProfile(profile.id, async () => {
+            const session = await (await sessions.forProfile(profile.id)).load();
+            if (!session?.accessToken || session.expiresAt <= Date.now()) return;
+            const response = await fetch(new URL('v1/organizations', configuration.apiUrl), {
+              headers: { Authorization: `Bearer ${session.accessToken}`, 'x-elements-environment': configuration.environment },
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!response.ok) return;
+            const body = await response.json() as { result?: { items?: { id?: unknown; roleName?: unknown }[] } };
+            const role = body.result?.items?.find((item) => item.id === state.organizationId)?.roleName;
+            if (typeof role === 'string' && role.trim()) roleByAccount.set(profile.id, role.trim().slice(0, 80));
+          });
+        } catch { /* Role is optional; account discovery remains available. */ }
       }
     }));
     // Discovery is asynchronous; re-read profiles before returning labels to the panel.
@@ -193,11 +230,14 @@ export function createAccountRuntime(deps: {
     const generation = (await sessions.snapshot()).generation;
     if (current.length === 0) return { ...state, generation };
     const accounts = current.map((profile) => {
-      const account = { id: profile.id, label: profile.label, issuer: profile.issuer, environment: profile.environment,
+      const account = { id: profile.id, label: nameByAccount.get(profile.id) ?? profile.label, issuer: profile.issuer, environment: profile.environment,
         subject: profile.subject, expiresAt: profile.expiresAt, active: profile.active,
         needsSignIn: profile.needsSignIn || reauthentication.has(profile.id) };
+      const email = account.needsSignIn ? undefined : emailByAccount.get(profile.id);
       const organizations = organizationsByAccount.get(profile.id);
-      return account.needsSignIn || organizations === undefined ? account : { ...account, organizations };
+      const role = roleByAccount.get(profile.id);
+      return { ...account, ...(email === undefined ? {} : { email }), ...(role === undefined ? {} : { role }),
+        ...(account.needsSignIn || organizations === undefined ? {} : { organizations }) };
     });
     return { ...state, accounts, generation };
   }
@@ -258,7 +298,7 @@ export function createAccountRuntime(deps: {
       }
       await restorePreviousAccount(previous, accountId);
       return { ok: true, state: await withAccounts({ kind: 'ERROR',
-        code: state.kind === 'ERROR' ? state.code : 'plan_access_denied' }) };
+        code: state.kind === 'ERROR' ? state.code : 'operator_reauthentication_required' }) };
     } catch (error) {
       await restorePreviousAccount(previous, accountId);
       return { ok: true, state: await withAccounts({ kind: 'ERROR', code: codeOf(error) }) };

@@ -4,9 +4,11 @@ import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node';
 import { ProtectedCheckpoint } from './protected-checkpoint.js';
 
 type SessionScope = { apiUrl: string; audience: string; clientId: string; environment: string };
-type ProfileRecord = { generation: number; session?: OperatorSession; reauthSubject?: string; memoryOnly?: boolean };
+type LegacySession = OperatorSession & { kind: 'safeid-oidc-business' | 'business'; businessApiUrl?: string; audience?: string;
+  clientId?: string; issuer?: string; environment?: string; familyId?: string; sessionExpiresAt?: number };
+type ProfileRecord = { generation: number; session?: OperatorSession; reauthSubject?: string; memoryOnly?: boolean; name?: string; email?: string };
 type ProfileRegistry = { profiles: Map<string, ProfileRecord>; memoryActiveSubject: string | undefined };
-export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again' };
+export type SavedAccountSummary = { subject: string; name: string; status: 'ready' | 'sign-in-again'; email?: string };
 
 export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   private static readonly epochs = new Map<string, number>();
@@ -30,6 +32,20 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
 
   get isRetired(): boolean { return this.retired || this.epoch !== (ProtectedOperatorSessionStore.epochs.get(this.path) ?? 0); }
   fork(): ProtectedOperatorSessionStore { return new ProtectedOperatorSessionStore(this.deployment, this.issuer, this.scope, this.registry); }
+  profileForIdentity(subject: string): { accessToken: string; expiresAt: number; generation: number; name?: string; email?: string } | undefined {
+    if (this.isRetired) return undefined;
+    const record = this.currentProfile(subject);
+    if (!record?.session) return undefined;
+    return { accessToken: record.session.accessToken, expiresAt: record.session.expiresAt,
+      generation: record.generation, ...(record.name ? { name: record.name } : {}), ...(record.email ? { email: record.email } : {}) };
+  }
+  saveProfileIdentity(subject: string, generation: number, identity: { name?: string; email?: string }): void {
+    if (this.isRetired || (!identity.name?.trim() && !identity.email?.trim())) return;
+    const record = this.currentProfile(subject);
+    if (record?.session && record.generation === generation) this.writeProfile(subject, { ...record,
+      ...(identity.name?.trim() ? { name: identity.name.trim() } : {}),
+      ...(identity.email?.trim() ? { email: identity.email.trim() } : {}) });
+  }
   retire(): void { this.retired = true; }
 
   async load(): Promise<OperatorSession | undefined> {
@@ -48,12 +64,14 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     let record = this.readProfile(subject);
     const memory = this.registry.profiles.get(subject);
     if (!record && memory?.memoryOnly && memory.session) {
-      record = { generation: memory.generation, session: memory.session };
+      record = { generation: memory.generation, session: memory.session, ...(memory.name ? { name: memory.name } : {}), ...(memory.email ? { email: memory.email } : {}) };
       this.writeProfile(subject, record);
       if (!active && this.registry.memoryActiveSubject === subject) this.setActive(subject);
     }
     if (record && memory?.memoryOnly && memory.session && memory.generation === record.generation) {
-      record = { generation: record.generation, session: memory.session };
+      record = { generation: record.generation, session: memory.session,
+        ...(record.name || memory.name ? { name: record.name ?? memory.name } : {}),
+        ...(record.email || memory.email ? { email: record.email ?? memory.email } : {}) };
       this.writeProfile(subject, record);
     }
     if (!record?.session) {
@@ -82,7 +100,7 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       throw new Error('operator_session_retired');
     }
     const generation = this.boundGeneration ?? (current?.generation ?? 0) + 1;
-    this.writeProfile(subject, { generation, session });
+    this.writeProfile(subject, { generation, session, ...(current?.name ? { name: current.name } : {}), ...(current?.email ? { email: current.email } : {}) });
     if (!active && !this.boundSubject) this.setActive(subject);
     this.boundSubject = subject;
     this.boundGeneration = generation;
@@ -94,7 +112,8 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     if (this.checkpoint.isAvailable()) this.discardLegacySession();
     const subject = session.principal.subject;
     const generation = (this.currentProfile(subject)?.generation ?? 0) + 1;
-    this.writeProfile(subject, { generation, session });
+    const current = this.currentProfile(subject);
+    this.writeProfile(subject, { generation, session, ...(current?.name ? { name: current.name } : {}), ...(current?.email ? { email: current.email } : {}) });
   }
 
   async activate(subject: string): Promise<void> {
@@ -134,11 +153,11 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       : [...this.registry.profiles.values()].filter((record) => !!record.session || !!record.reauthSubject);
     const accounts = records.flatMap((record) => {
       const session = record.session;
-      if (!session) return record.reauthSubject ? [{ subject: record.reauthSubject, name: record.reauthSubject, status: 'sign-in-again' as const }] : [];
+      if (!session) return record.reauthSubject ? [{ subject: record.reauthSubject, name: 'Saved account', status: 'sign-in-again' as const }] : [];
       const usable = this.valid(session) && (session.kind === 'safeid-oidc-business'
         ? !!session.refreshToken && (session.refreshExpiresAt === undefined || session.refreshExpiresAt > Date.now())
-        : session.kind === 'business' && session.sessionExpiresAt > Date.now());
-      return [{ subject: session.principal.subject, name: session.principal.subject,
+        : session.kind === 'business' && typeof session.sessionExpiresAt === 'number' && session.sessionExpiresAt > Date.now());
+      return [{ subject: session.principal.subject, name: record.name ?? 'Saved account', ...(record.email ? { email: record.email } : {}),
         status: usable ? 'ready' as const : 'sign-in-again' as const }];
     });
     const active = this.checkpoint.isAvailable() ? this.checkpoint.getItem<unknown>(`${this.path}/active`) : this.registry.memoryActiveSubject;
@@ -166,6 +185,18 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
       }
     }
     this.retired = true;
+  }
+
+  async remove(subject: string): Promise<void> {
+    if (this.isRetired) throw new Error('operator_session_retired');
+    if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');
+    const current = this.currentProfile(subject);
+    if (!current?.session && !current?.reauthSubject) throw new Error('operator_account_not_found');
+    this.writeProfile(subject, { generation: current.generation + 1 });
+    if (this.checkpoint.isAvailable()) this.checkpoint.removeItem(this.selectionPath(subject));
+    const active = this.checkpoint.isAvailable() ? this.checkpoint.getItem<unknown>(`${this.path}/active`) : this.registry.memoryActiveSubject;
+    if (active === subject) this.clearActive();
+    if (this.boundSubject === subject) this.retired = true;
   }
 
   async clearAll(additionalScopes: string[] = []): Promise<void> {
@@ -222,7 +253,8 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
   private writeProfile(subject: string, record: ProfileRecord): void {
     if (this.checkpoint.isAvailable()) this.checkpoint.setItem(this.profilePath(subject), record);
     this.registry.profiles.set(subject, this.checkpoint.isAvailable() ? record : record.session
-      ? { generation: record.generation, session: record.session, memoryOnly: true }
+      ? { generation: record.generation, session: record.session, memoryOnly: true,
+        ...(record.name ? { name: record.name } : {}), ...(record.email ? { email: record.email } : {}) }
       : { generation: record.generation, memoryOnly: true });
   }
 
@@ -263,12 +295,14 @@ export class ProtectedOperatorSessionStore implements OperatorSessionStore {
     const record = value as Partial<ProfileRecord>;
     return typeof record.generation === 'number' && Number.isSafeInteger(record.generation) && record.generation > 0 &&
       (record.session === undefined || this.valid(record.session)) &&
-      (record.reauthSubject === undefined || typeof record.reauthSubject === 'string' && !!record.reauthSubject);
+      (record.reauthSubject === undefined || typeof record.reauthSubject === 'string' && !!record.reauthSubject) &&
+      (record.name === undefined || typeof record.name === 'string' && !!record.name.trim()) &&
+      (record.email === undefined || typeof record.email === 'string' && !!record.email.trim());
   }
 
-  private valid(value: unknown): value is OperatorSession {
+  private valid(value: unknown): value is LegacySession {
     if (!value || typeof value !== 'object') return false;
-    const session = value as Partial<OperatorSession>;
+    const session = value as Partial<LegacySession>;
     if (session.kind !== (INTEGRATION_AUTHORITY === 'safeid-oidc' ? 'safeid-oidc-business' : 'business')) return false;
     if (session.principal?.issuer !== this.issuer) return false;
     if (this.scope && (!(typeof session.principal.audience === 'string' ? session.principal.audience === this.scope.audience : Array.isArray(session.principal.audience) && session.principal.audience.includes(this.scope.audience)) || session.principal.authorizedParty !== this.scope.clientId ||

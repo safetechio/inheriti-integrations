@@ -14,7 +14,7 @@ it('selects Business auth only for Business composition', () => {
     OperatorAuthClient: class {
       constructor(options: Record<string, unknown>) { constructed.push(options); }
     },
-    HttpOperatorAuthTransport: class {},
+    HttpOperatorAuthTransport: class { exchangeBusinessSession() {} refreshBusinessSession() {} },
     SystemOAuthClock: class {},
     WebOAuthCrypto: class {},
   } as unknown as OperatorAuthRuntime;
@@ -33,4 +33,13 @@ it('selects Business auth only for Business composition', () => {
   expect(() => composeOperatorAuth(runtime, { configuration: { ...configuration, audience: 'inheriti-elements-api' },
     business: true, businessAuthority: 'safeid-oidc', apiUrl: 'https://business.test/integrations/' }))
     .toThrow('SafeID OIDC Business auth requires the inheriti-integrations-api audience');
+});
+
+it('rejects a Client SDK that sends provider tokens directly to Business', () => {
+  const runtime = {
+    OperatorAuthClient: class {}, HttpOperatorAuthTransport: class {},
+    SystemOAuthClock: class {}, WebOAuthCrypto: class {},
+  } as unknown as OperatorAuthRuntime;
+  expect(() => composeOperatorAuth(runtime, { configuration, business: true, apiUrl: 'https://business.test/integrations/' }))
+    .toThrow('Business session auth requires a compatible Inheriti Client SDK');
 });

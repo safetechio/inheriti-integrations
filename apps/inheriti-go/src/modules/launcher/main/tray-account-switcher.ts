@@ -14,6 +14,7 @@ export class TrayAccountSwitcher {
   private activeSubject: string | undefined;
   private readonly accountOrganizations = new Map<string, { id: string; name: string }[]>();
   private switching = false;
+  private refreshRevision = 0;
 
   constructor(private readonly auth: TrayAuthRuntime, private readonly organization: TrayOrganizationContext,
     private readonly inboxAccess: TrayInboxAccess, private readonly inbox: TrayInbox,
@@ -24,7 +25,7 @@ export class TrayAccountSwitcher {
   get isSwitching(): boolean { return this.switching; }
   get snapshot(): { accounts: Array<SavedAccountSummary & { organizations: { id: string; name: string }[] }>; activeSubject: string | undefined } {
     return {
-      accounts: this.accounts.map(({ subject, name, status }) => ({ subject, name, status,
+      accounts: this.accounts.map(({ subject, name, status, email }) => ({ subject, name, status, ...(email ? { email } : {}),
         organizations: this.accountOrganizations.get(subject)?.map(({ id, name: organizationName }) => ({ id, name: organizationName })) ?? [] })),
       activeSubject: this.activeSubject,
     };
@@ -74,8 +75,17 @@ export class TrayAccountSwitcher {
   }
 
   async refresh(signedIn: boolean): Promise<void> {
+    const revision = ++this.refreshRevision;
     const summary = await this.auth.accountSummaries();
-    this.accounts = summary.accounts;
+    const accounts = await Promise.all(summary.accounts.map(async (account) => {
+      if (account.status !== 'ready') return account;
+      try {
+        const identity = await this.auth.accountIdentity(account.subject);
+        return identity ? { ...account, ...identity } : account;
+      } catch { return account; }
+    }));
+    if (revision !== this.refreshRevision) return;
+    this.accounts = accounts;
     this.activeSubject = summary.activeSubject;
     const saved = new Set(summary.accounts.map(({ subject }) => subject));
     for (const subject of this.accountOrganizations.keys()) if (!saved.has(subject)) this.accountOrganizations.delete(subject);

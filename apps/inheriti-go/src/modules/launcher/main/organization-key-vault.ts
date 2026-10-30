@@ -104,6 +104,14 @@ export class OrganizationKeyVault {
     this.checkpoint.clean(scope);
   }
 
+  forgetSubject(subject: string): void {
+    if (!subject || !this.issuer) throw new Error('invalid_account');
+    const scope = `${this.allAccountScope}${encodeURIComponent(subject)}/`;
+    if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');
+    if (this.checkpoint.isAvailable()) this.checkpoint.clean(scope);
+    for (const [path, key] of this.memory) if (path.startsWith(scope)) { key.fill(0); this.memory.delete(path); }
+  }
+
   async forgetAll(): Promise<void> {
     const scope = this.allAccountScope;
     if (!this.checkpoint.isAvailable() && this.checkpoint.hasFile()) throw new Error('protected_storage_unavailable');

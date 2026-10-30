@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { accountDisplayName } from '../src/side-panel/main/accounts.js';
 
 const main = ['main.ts', 'main/accounts.ts', 'main/dom.ts', 'main/overlay.ts', 'main/plans.ts', 'main/workspace.ts']
   .map((file) => readFileSync(new URL(`../src/side-panel/${file}`, import.meta.url), 'utf8')).join('\n');
@@ -14,10 +15,11 @@ describe('side-panel access workspace', () => {
     expect(html).toContain('Only plans with username, email, or password fields available for autofill.');
   });
 
-  it('keeps key removal beside the organization with an explicit loaded state', () => {
-    expect(html.indexOf('id="forget-master-key"')).toBeLessThan(html.indexOf('id="plans-panel"'));
-    expect(main).toContain('loaded ? `${keyOwner} key loaded · Clear`');
-    expect(main).toContain('`${keyOwner} key not loaded`');
+  it('keeps key removal in plan controls with an explicit loaded state', () => {
+    expect(html.indexOf('id="forget-master-key"')).toBeGreaterThan(html.indexOf('id="plan-tools"'));
+    expect(main).toContain("keyOwner === 'Organization' ? 'organisation' : 'application'");
+    expect(main).toContain('`Clear ${owner} key`');
+    expect(main).toContain("forgetKey.hidden = !loaded || planAccessPanel.dataset.authenticated !== 'true'");
     expect(main).not.toContain('key not in memory');
     expect(main).toContain('forgetKey.disabled = !loaded');
   });
@@ -86,7 +88,10 @@ describe('side-panel access workspace', () => {
     expect(main).toContain('appMain.dataset.authenticated = String(signedIn)');
     expect(main).toContain('planAccessPanel.dataset.authenticated = String(signedIn)');
     expect(html).toContain('id="browser-protection-panel"');
-    expect(main).toContain("state.kind === 'SIGNING_IN' ? 'Signing in…' : 'Sign in'");
+    expect(main).toContain("chooseSavedAccount ? 'Add another account' : 'Sign in'");
+    expect(html).toContain('id="saved-account-list"');
+    expect(main).toContain("chooseSavedAccount ? 'Choose an account' : 'Sign in to continue'");
+    expect(main).toContain("request.type === 'switch-account' ? undefined : confirmation");
   });
 
   it('groups site controls and fields apart from plans', () => {
@@ -103,26 +108,57 @@ describe('side-panel access workspace', () => {
   it('keeps account destinations grouped, confirmed, and free of credential markup', () => {
     expect(html).toContain('id="account-list"');
     expect(html).toContain('id="add-account"');
-    expect(html).toContain('aria-describedby="account-add-note"');
-    expect(html).toContain('even if canceled. Other apps may ask you to sign in again');
+    expect(html).not.toContain('account-add-note');
+    expect(main).not.toContain('This clears your SafeID browser sign-in');
     expect(html).toContain('id="sign-out-all"');
     expect(html).toContain('id="access-account"');
+    expect(html).toContain('id="organization-summary-label"');
+    expect(html).toContain('aria-label="Choose organisation"');
+    expect(main).toContain("required<HTMLElement>('organization-summary')");
+    expect(main).toContain('organizationSummary.focus()');
+    expect(html).toContain('d="m6 9 6 6 6-6"');
     expect(main).toContain("type: 'switch-account'");
-    expect(main).toContain("type: 'select-account-organization'");
-    expect(main).toContain('window.confirm(confirmation)');
-    expect(main).toContain("el('strong', 'account-label', account.label)");
-    expect(main).toContain('`Switch to ${account.label} and ${name}?`');
+    expect(main).toContain("type: 'select-organization'");
+    expect(html).toMatch(/<dialog[^>]+id="account-confirm-dialog"/u);
+    expect(html).toContain('method="dialog"');
+    expect(main).toContain("await confirmAccountAction(request.type === 'remove-account' ? 'Unlink account?' : confirmation");
+    expect(html).toContain('id="account-confirm-person"');
+    expect(main).toContain("request.type === 'remove-account' ? 'Unlink account'");
+    expect(main).toContain("el('strong', 'account-label', name)");
+    expect(main).toContain("el('span', 'account-meta', account.role.trim())");
+    expect(main).toContain('`Switch to ${name}?`');
+    expect(main).toContain('`Unlink ${name}?`');
     expect(main).not.toContain('innerHTML');
+  });
+
+  it('shows individual account removal on hover or keyboard focus', () => {
+    const styles = readFileSync(new URL('../src/side-panel/styles.css', import.meta.url), 'utf8');
+    expect(html).not.toContain('id="manage-accounts"');
+    expect(styles).toContain('.account-row:hover .account-actions, .account-row:focus-within .account-actions { opacity: 1; }');
+    expect(styles).toContain('@media (hover: none) { .account-actions { opacity: 1; } }');
+    expect(main).toContain("compactButton('×')");
+    expect(main).toContain('remove.title = `Unlink ${name} from this browser`');
+    expect(html).toContain('id="sign-out-all"');
   });
 
   it('masks protected content during Add Account and avoids promising an expired account was selected', () => {
     expect(main).toContain("addAccount.addEventListener('click', () => {");
-    expect(main).toContain("renderPanel({ kind: 'SIGNING_IN' });\n  await startAccountAddition");
+    expect(main).toContain("accountMenu!.open = false;\n  addAccount.disabled = true;\n  authStatus.textContent = 'Adding account'");
+    expect(main).not.toContain("accountList.querySelectorAll<HTMLButtonElement>('.account-switch')");
+    expect(main).toContain("planAccessPanel.dataset.authenticated = 'pending';\n    required('session-skeleton').hidden = false");
     expect(main).toContain("() => requestState('sign-in', true)");
-    expect(main).toContain('Use Add account to sign in again as ${account.label}.');
-    expect(main).toContain('const needsSignIn = account.needsSignIn === true;');
+    expect(main).toContain('.filter((account) => !account.needsSignIn)');
+    expect(main).not.toContain("el('span', 'account-meta', 'Sign in again')");
     expect(main).not.toContain('account.expiresAt <= Date.now()');
     expect(main).not.toContain("if (needsSignIn) { void requestState('sign-in')");
+  });
+
+  it('never presents a saved subject or UUID as an account name', () => {
+    const subject = '74782d04-3480-47ea-a133-3ccc1421a36d';
+    expect(accountDisplayName({ id: subject, label: subject, subject, issuer: '', environment: '', expiresAt: 0, active: false })).toBe('Saved account');
+    expect(accountDisplayName({ id: subject, label: subject, subject, email: 'alice@example.test', issuer: '', environment: '', expiresAt: 0, active: false })).toBe('Saved account');
+    expect(accountDisplayName({ id: subject, label: subject, email: subject, subject, issuer: '', environment: '', expiresAt: 0, active: false })).toBe('Saved account');
+    expect(accountDisplayName({ id: subject, label: 'Alice', subject, issuer: '', environment: '', expiresAt: 0, active: true })).toBe('Alice');
   });
 
   it('masks and reconfirms when another panel changes the active profile', () => {
@@ -130,7 +166,7 @@ describe('side-panel access workspace', () => {
       expect(main).toContain(key);
     }
     expect(main).not.toContain("'inheriti.operatorProfiles'");
-    expect(main).toContain("renderPanel({ kind: 'LOADING' });\n    planAccessPanel.setAttribute('aria-busy', 'true');\n    void reconfirmAccountContext();");
+    expect(main).toContain("renderPanel({ kind: 'LOADING' });\n    planAccessPanel.dataset.authenticated = 'pending';\n    required('session-skeleton').hidden = false;\n    authStatus.textContent = 'Updating account';\n    accessHeaderStatus.textContent = 'Plan Access: updating account';\n    planAccessPanel.setAttribute('aria-busy', 'true');\n    void reconfirmAccountContext();");
     expect(main).toContain("confirmedPanelState(() => send({ type: 'load-plans' })");
     expect(main).toContain('expectedGeneration: panelGeneration');
     expect(main).toContain('startedRevision !== contextRevision');

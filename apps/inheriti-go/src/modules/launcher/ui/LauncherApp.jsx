@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignedOut } from './components/SignedOut.jsx';
+import { sessionErrorMessage } from '../../../messages.js';
+import { AccountActionDialog } from './components/AccountActionDialog.jsx';
+import { accountDisplayName } from './components/account-display-name.js';
 import { Home, organizationDisplayName } from './components/Home.jsx';
 import { AccountAvatar } from '../../_shared/ui/components/AccountAvatar.jsx';
-import { ScreenFooter } from '../../_shared/ui/components/ScreenFooter.jsx';
 import { useAppVersion } from './hooks/useAppVersion.js';
 import { QuickPlanForm } from '../../quick-plan/ui/QuickPlanForm.jsx';
 import { PlanEditPanel } from '../../quick-plan/ui/PlanEditPanel.jsx';
@@ -43,9 +45,10 @@ export function LauncherApp({ messages }) {
   const [pendingPlanAction, setPendingPlanAction] = useState(null);
   const [pendingAccountSwitch, setPendingAccountSwitch] = useState(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
+  const [pendingAccountRemoval, setPendingAccountRemoval] = useState(null);
+  const [removingAccount, setRemovingAccount] = useState(false);
   const [confirmSignOutAll, setConfirmSignOutAll] = useState(false);
   const [signingOutAll, setSigningOutAll] = useState(false);
-  useEffect(() => { void window.inheritiTray.setSignOutConfirmationSize(confirmSignOutAll); }, [confirmSignOutAll]);
   const switchingOrganization = useRef(false);
   const blockedInboxSwitch = useRef(false);
   const previousAccount = useRef(null);
@@ -61,7 +64,7 @@ export function LauncherApp({ messages }) {
   useEffect(() => { clearInboxPresence(); clearInboxConversationCache(); }, [state?.status, state?.activeSubject, state?.selectedId]);
   useEffect(() => window.inheritiTray.onAction((action) => {
     if (action === messages.openSecureInbox) setInboxRequested(queueAction(action));
-    if (state?.assetCatalog?.length && (action === messages.savePrivately || action === messages.shareWithTeam)) setPendingPlanAction(queueAction(action));
+    if (action === messages.savePrivately || action === messages.shareWithTeam) setPendingPlanAction(queueAction(action));
     if (action?.kind === 'OPEN_INBOX' && typeof action.organizationId === 'string' && action.organizationId.length > 0 && action.organizationId.length <= 200 &&
       (action.conversationId === undefined || (typeof action.conversationId === 'string' && action.conversationId.length > 0 && action.conversationId.length <= 200))) {
       if (action.accountSubject === undefined) setPendingInboxAction(queueAction(action));
@@ -109,7 +112,6 @@ export function LauncherApp({ messages }) {
   const confirmAccountSwitch = async () => {
     if (!pendingAccountSwitch) return;
     const { account, organization, targetAction } = pendingAccountSwitch;
-    setPendingAccountSwitch(null);
     setSwitchingAccount(true);
     closeInbox();
     flow.clearDraft();
@@ -126,12 +128,13 @@ export function LauncherApp({ messages }) {
       if ((targetAction && targetInboxRef.current === targetAction) || (!targetAction && targetInboxRef.current?.accountSubject === account.subject)) {
         setTargetInboxStatus('');
       }
-    } finally { setSwitchingAccount(false); }
+    } finally { setSwitchingAccount(false); setPendingAccountSwitch(null); }
   };
   useEffect(() => {
     if (!pendingPlanAction) return;
     if (!currentAction(pendingPlanAction)) { setPendingPlanAction(null); return; }
     if (state?.status !== 'signed-in' || !state.selectedId || flow.busy || flow.preparing || editFlow.busy) return;
+    if (!state.assetCatalog?.length) { setPendingPlanAction(null); return; }
     if ((flow.step === 'actions' || flow.step === 'capture') && !editFlow.editing) {
       closeInbox();
       flow.openCapture(pendingPlanAction.action === messages.savePrivately ? 'private' : 'team');
@@ -216,6 +219,28 @@ export function LauncherApp({ messages }) {
       setConfirmSignOutAll(false);
     } finally { setSigningOutAll(false); }
   };
+  const removeAccount = async () => {
+    if (!pendingAccountRemoval) return;
+    setRemovingAccount(true);
+    try {
+      if (!await session.removeAccount(pendingAccountRemoval.subject)) return;
+      if (pendingAccountRemoval.subject === state.activeSubject) {
+        closeInbox();
+        flow.clearDraft();
+        editFlow.close();
+        setInboxHasNew(false);
+        setInboxRequested(null);
+        setPendingInboxAction(null);
+        setPendingPlanAction(null);
+        targetInboxRef.current = null;
+        setTargetInboxAction(null);
+        setTargetInboxStatus('');
+        clearInboxPresence();
+        clearInboxConversationCache();
+      }
+      setPendingAccountRemoval(null);
+    } finally { setRemovingAccount(false); }
+  };
   const pendingInboxControls = <>
     {currentAction(pendingInboxAction) && inboxSwitchBlocked && <p role="status">Secure Chat notification pending. <button type="button" onClick={() => { blockedInboxSwitch.current = false; setInboxSwitchBlocked(false); }}>Retry</button> <button type="button" onClick={() => setPendingInboxAction(null)}>Dismiss</button></p>}
     {targetInboxAction && targetInboxStatus && <p role="status">{targetInboxStatus} <button type="button" onClick={() => void recoverTargetInbox()}>Add account</button> <button type="button" onClick={() => { targetInboxRef.current = null; setTargetInboxAction(null); setTargetInboxStatus(''); }}>Dismiss</button></p>}
@@ -247,21 +272,28 @@ export function LauncherApp({ messages }) {
   if (screen) return screen;
 
   const editState = state.edit ?? { plans: [], status: 'idle', available: false };
-  if (confirmSignOutAll) return <main className="tray-screen tray-account-confirmation tray-sign-out-confirmation">
-    <div className="tray-scroll tray-account-confirmation-content">
-      <h1>Sign out all accounts?</h1>
+  const pendingAccountName = pendingAccountSwitch && accountDisplayName(pendingAccountSwitch.account,
+    Math.max(0, state.accounts?.findIndex(({ subject }) => subject === pendingAccountSwitch.account.subject) ?? 0));
+  const withAccountDialog = (content) => <>{content}{pendingAccountRemoval
+    ? <AccountActionDialog title="Unlink account?" confirmLabel="Unlink account" danger busy={removingAccount} progressLabel="Unlinking account…"
+      onCancel={() => setPendingAccountRemoval(null)} onConfirm={() => void removeAccount()}>
+      <section className="tray-account-confirmation-card"><div className="tray-account-confirmation-person"><AccountAvatar name={accountDisplayName(pendingAccountRemoval)} />
+        <div><span>Account: </span><strong>{accountDisplayName(pendingAccountRemoval)}</strong></div></div></section>
+      <p>This removes this saved login and its organisation keys from this device.{pendingAccountRemoval.subject === state.activeSubject && state.accounts.length > 1 ? ' Choose another saved account or add one after unlinking.' : ''}</p>
+      {session.error && <p role="alert" className="error">{session.error}</p>}
+    </AccountActionDialog>
+    : confirmSignOutAll
+    ? <AccountActionDialog title="Sign out all accounts?" confirmLabel="Sign out all" danger busy={signingOutAll} progressLabel="Signing out…"
+      onCancel={() => setConfirmSignOutAll(false)} onConfirm={() => void signOutAll()}>
       <p>This removes every saved account and its organisation keys from this device. You will need to sign in again to use them.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
-    </div>
-    <div className="tray-footer"><button type="button" className="button-secondary" autoFocus disabled={signingOutAll} onClick={() => setConfirmSignOutAll(false)}>Cancel</button><button type="button" className="button-sign-out" disabled={signingOutAll} onClick={() => void signOutAll()}>Sign out all accounts</button></div>
-  </main>;
-  if (switchingAccount || state.status === 'restoring') return <main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>;
-  if (pendingAccountSwitch) return <main className="tray-screen tray-account-confirmation">
-    <header className="tray-screen-header"><div className="tray-screen-heading"><h1>Switch account</h1></div></header>
-    <div className="tray-scroll tray-account-confirmation-content">
+    </AccountActionDialog>
+    : pendingAccountSwitch && <AccountActionDialog title="Switch account" confirmLabel="Switch account" busy={switchingAccount}
+      onCancel={() => { if (pendingAccountSwitch.targetAction) setTargetInboxStatus('Secure Chat notification pending for this account.'); setPendingAccountSwitch(null); }}
+      onConfirm={() => void confirmAccountSwitch()}>
       <section className="tray-account-confirmation-card">
-        <div className="tray-account-confirmation-person"><AccountAvatar name={pendingAccountSwitch.account.name} />
-          <div><span>Account: </span><strong>{pendingAccountSwitch.account.name}</strong></div>
+        <div className="tray-account-confirmation-person"><AccountAvatar name={pendingAccountName} />
+          <div><span>Account: </span><strong>{pendingAccountName}</strong></div>
         </div>
         <div className="tray-account-confirmation-organization"><span>Organisation: </span><strong>{pendingAccountSwitch.organization
           ? organizationDisplayName(pendingAccountSwitch.organization, pendingAccountSwitch.account.organizations)
@@ -269,12 +301,12 @@ export function LauncherApp({ messages }) {
       </section>
       <p className="tray-account-confirmation-note">Your current account will stay saved. Active work must finish before switching.</p>
       {session.error && <p role="alert" className="error">{session.error}</p>}
-    </div>
-    <ScreenFooter><button type="button" className="button-secondary" autoFocus onClick={() => { if (pendingAccountSwitch.targetAction) setTargetInboxStatus('Secure Chat notification pending for this account.'); setPendingAccountSwitch(null); }}>Cancel</button><button type="button" onClick={() => void confirmAccountSwitch()}>Switch account</button></ScreenFooter>
-  </main>;
+    </AccountActionDialog>}</>;
+  if (switchingAccount || state.status === 'restoring') return withAccountDialog(<main className="tray-screen tray-restoring"><div className="tray-restoring-content" role="status"><img src="tray.png" alt="" className="tray-sign-in-logo" /><span>Checking session…</span><span className="tray-restoring-track" aria-hidden="true"><span /></span></div></main>);
   const signedIn = state.status === 'signed-in';
   const canCreate = signedIn && !!state.selectedId && !flow.busy && !flow.preparing;
-  const status = flow.error || session.error || state.message || ({
+  const status = flow.error || session.error || state.message || (state.status === 'signed-out' && !state.activeSubject && state.accounts.length
+    ? 'Choose another saved account or add one to continue.' : '') || ({
     'signed-out': messages.signedOut,
     'session-unavailable': messages.sessionUnavailable,
     authorizing: messages.authorizing,
@@ -282,20 +314,20 @@ export function LauncherApp({ messages }) {
     error: messages.signInError,
   })[state.status];
 
-  if (!signedIn) return <>{pendingInboxControls}<SignedOut messages={messages} status={status} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
-    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount}
+  if (!signedIn) return withAccountDialog(<>{pendingInboxControls}<SignedOut messages={messages} status={sessionErrorMessage(new Error(status), status)} authorizing={state.status === 'authorizing'} sessionUnavailable={state.status === 'session-unavailable'}
+    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount} onRemoveAccount={setPendingAccountRemoval}
     onRestore={() => void session.restore()} onSignIn={() => void session.signIn()} onCancelSignIn={() => void session.cancelAccountAuthorization()}
-    onSignOutAll={() => setConfirmSignOutAll(true)} onOpenApp={() => void session.openApp()} /></>;
+    onSignOutAll={() => setConfirmSignOutAll(true)} onOpenApp={() => void session.openApp()} /></>);
 
-  if (state.custodianPrompt) return <CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />;
+  if (state.custodianPrompt) return withAccountDialog(<CustodianPrompt prompt={state.custodianPrompt} onCancel={() => void window.inheritiTray.cancelPlanEdit().catch(() => {})} />);
 
-  if (inboxOpen) return <InboxPanel key={`${state.activeSubject || 'no-account'}:${state.selectedId || 'no-organization'}`} onClose={closeInbox}
+  if (inboxOpen) return withAccountDialog(<InboxPanel key={`${state.activeSubject || 'no-account'}:${state.selectedId || 'no-organization'}`} onClose={closeInbox}
     identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
-    onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />;
+    onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />);
 
-  if (flow.step === 'actions' && !editFlow.editing) return <Home
+  if (flow.step === 'actions' && !editFlow.editing) return withAccountDialog(<Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}
-    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount} onAddAccount={() => void session.addAccount()}
+    accounts={state.accounts} activeSubject={state.activeSubject} onChooseAccount={chooseAccount} onRemoveAccount={setPendingAccountRemoval} onAddAccount={() => void session.addAccount()}
     pendingInboxControls={pendingInboxControls}
     showPlanActions={state.assetCatalog?.length > 0}
     onOrganizationChange={(id) => { closeInbox(); setInboxHasNew(false); editFlow.close(); void flow.selectOrganization(id); }}
@@ -308,9 +340,9 @@ export function LauncherApp({ messages }) {
     onSignOutAll={() => setConfirmSignOutAll(true)}
     signOutDisabled={flow.busy || flow.preparing || editFlow.busy || editState.status === 'saving'} status={messages.signedIn}
     notice={status !== messages.signedIn ? status : ''} accountName={state.accountName} accountRole={state.accountRole}
-  />;
+  />);
 
-  return <main className="tray-screen">
+  return withAccountDialog(<main className="tray-screen">
     {pendingInboxControls}
     <p id="status" className="sr-only" role="status">{status}</p>
     {signedIn && state.selectedId && editFlow.editing && flow.step === 'actions' && <PlanEditPanel messages={messages} state={state} flow={editFlow} onOpenApp={() => void session.openApp(state.edit?.planId)} onSignIn={() => void session.signIn()} />}
@@ -332,5 +364,5 @@ export function LauncherApp({ messages }) {
       onNew={() => { flow.clearDraft(); flow.openCapture(); }}
       onHome={() => flow.clearDraft(true)}
     />}
-  </main>;
+  </main>);
 }

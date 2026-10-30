@@ -256,6 +256,24 @@ describe('createElectronAuthProvider account transitions', () => {
     expect(auth.add).not.toHaveBeenCalled();
     expect(auth.cancel).toHaveBeenCalledOnce();
   });
+  it('hides the Electron authorization error when an active Add Account flow is cancelled', async () => {
+    let rejectAdd: (error: Error) => void = () => {};
+    const auth = {
+      add: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectAdd = reject; })),
+      cancel: vi.fn(async () => rejectAdd(new Error("Error invoking remote method 'auth:add': Error: operator_authorization_canceled"))),
+    };
+    // @ts-expect-error test-only bridge stub
+    globalThis.window.inheriti = { auth };
+    const provider = createElectronAuthProvider();
+    provider.dispatch = vi.fn();
+
+    const pending = provider.addAccount().catch((error) => error);
+    await vi.waitFor(() => expect(auth.add).toHaveBeenCalledOnce());
+    await provider.cancelLogin();
+
+    expect((await pending).message).toBe('AUTH_CANCELLED');
+    expect(provider.dispatch).not.toHaveBeenCalledWith({ type: 'ACCOUNTS_CHANGED' });
+  });
   it('does not open SafeID when login is cancelled during account lookup', async () => {
     let finishAccounts: (
       accounts: Array<{ key: string; subject: string; active: boolean }>,

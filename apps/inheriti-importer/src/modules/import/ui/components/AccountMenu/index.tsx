@@ -5,6 +5,7 @@ import { useGetCurrentMember } from '@modules/organization/infrastructure/organi
 import { BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { AccountDestinations } from '../AccountDestinations';
+import { AccountUnlinkAction } from '../AccountUnlinkAction';
 import { useAccountMenu } from './hooks/use-account-menu';
 
 export function AccountMenu({
@@ -48,6 +49,11 @@ export function AccountMenu({
   const pendingDestination = destinations.find((destination) => destination.accountKey === pendingAccount?.key);
   const pendingName = pendingDestination?.displayName && pendingDestination.displayName !== pendingDestination.email
     ? pendingDestination.displayName : 'this saved account';
+  const activeAccount = accounts.find((account) => account.active);
+  const pendingRemovalDestination = destinations.find((destination) => destination.accountKey === pendingRemoval?.key);
+  const pendingRemovalName = pendingRemoval?.active ? displayName
+    : pendingRemovalDestination?.displayName && pendingRemovalDestination.displayName !== pendingRemovalDestination.email
+      ? pendingRemovalDestination.displayName : 'this saved account';
 
   return (
     <>
@@ -106,8 +112,12 @@ export function AccountMenu({
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="bodySmall" color="primary200" numberOfLines={1} style={{ fontWeight: 700 }}>{displayName}</Text>
+                {identity?.email ? <Text variant="bodySmall" color="gray50" numberOfLines={1}>{identity.email}</Text> : null}
                 {member?.role?.name ? <Text variant="bodySmall" color="gray" numberOfLines={1}>{member.role.name.replace(/Tenant/g, 'Organisation')}</Text> : null}
               </Box>
+              {activeAccount ? (
+                <AccountUnlinkAction name={displayName} onPress={() => { closeMenu(); setPendingRemoval(activeAccount); }} />
+              ) : null}
             </Box>
             {destinationsLoading ? (
               <Text variant="bodySmall" color="gray">
@@ -126,9 +136,9 @@ export function AccountMenu({
             <Pressable accessibilityRole="menuitem" accessibilityLabel="Add account" onPress={menu.addAccount}>
               <Box className="account-menu-add" flexDirection="row" alignItems="center" gap="m">
                 <Box width={34} height={34} alignItems="center" justifyContent="center">
-                  <Text color="primary" style={{ fontSize: 20, lineHeight: 20 }}>＋</Text>
+                  <Text color="gray" style={{ fontSize: 20, lineHeight: 20 }}>＋</Text>
                 </Box>
-                <Text variant="bodySmall" color="gray120">Add another account</Text>
+                <Text variant="bodySmall" color="gray">Add another account</Text>
               </Box>
             </Pressable>
             <Pressable accessibilityRole="menuitem" accessibilityLabel={accounts.length > 1 ? 'Log out of all accounts' : 'Log out'} onPress={accounts.length > 1 ? menu.requestSignOutAll : menu.signOut}>
@@ -157,21 +167,35 @@ export function AccountMenu({
         </BaseModal>
         <BaseModal
           visible={Boolean(pendingRemoval)}
-          title="Remove saved account?"
+          title="Unlink account?"
           onDismiss={() => setPendingRemoval(null)}
           footer={
             <>
-              <Button title="Cancel" variant="plain" onPress={() => setPendingRemoval(null)} />
-              <Button title="Remove account" color="danger" onPress={() => {
+              <Button title="Cancel" variant="outlined" onPress={() => setPendingRemoval(null)} />
+              <Button title="Unlink account" color="danger" onPress={() => {
                 if (pendingRemoval) menu.removeAccount(pendingRemoval);
                 setPendingRemoval(null);
               }} />
             </>
           }
         >
-          <Text variant="bodySmall" color="gray">
-            This saved login will be removed from this device.
-          </Text>
+          <>
+            <Box className="account-unlink-card" flexDirection="row" alignItems="center" gap="m">
+              <Box className="account-menu-avatar" width={48} height={48} borderRadius="pill" alignItems="center" justifyContent="center">
+                <Text color="white">{pendingRemovalName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}</Text>
+              </Box>
+              <Box style={{ minWidth: 0 }}>
+                <Text variant="bodySmall" color="gray">Account:</Text>
+                <Text variant="bodySmall" color="primary200" style={{ fontWeight: 600 }}>{pendingRemovalName}</Text>
+                {(pendingRemoval?.active ? identity?.email : pendingRemovalDestination?.email) ? (
+                  <Text variant="bodySmall" color="gray50">{pendingRemoval?.active ? identity?.email : pendingRemovalDestination?.email}</Text>
+                ) : null}
+              </Box>
+            </Box>
+            <Text variant="bodySmall" color="gray">
+              This removes this saved login from this device. Other saved accounts remain available.
+            </Text>
+          </>
         </BaseModal>
         <BaseModal
           visible={confirmSignOutAll}

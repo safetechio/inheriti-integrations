@@ -4,7 +4,7 @@ import { el, required } from './dom.js';
 
 function sendGuard(request: GuardRequest): Promise<GuardResponse> { return chrome.runtime.sendMessage(request) as Promise<GuardResponse>; }
 
-export function initializeGuardPanel(onSecureLogoff: () => void): void {
+export function initializeGuardPanel(onSecureLogoff: () => void, confirmLogoff: () => Promise<boolean>): void {
   const guardEnabled = required<HTMLInputElement>('guard-enabled');
   const guardSensitiveApi = required<HTMLInputElement>('guard-sensitive-api');
   const guardClipboard = required<HTMLInputElement>('guard-clipboard');
@@ -47,9 +47,14 @@ export function initializeGuardPanel(onSecureLogoff: () => void): void {
   });
   guardDownloadTrap.addEventListener('change', () => { void mutateGuard({ type: 'guard:set-download-trap', enabled: guardDownloadTrap.checked }); });
 
-  function secureLogoff(): void {
-    if (!window.confirm('Secure Logoff will end Plan Access work, close Inheriti sessions, and clear scoped session data. Continue?')) return;
-    void sendGuard({ type: 'guard:secure-logoff' }).then(() => { guardLiveStatus.textContent = 'Secure Logoff complete.'; onSecureLogoff(); });
+  async function secureLogoff(): Promise<void> {
+    if (!await confirmLogoff()) return;
+    try {
+      const response = await sendGuard({ type: 'guard:secure-logoff' });
+      if (!response.ok) throw new Error('guard-operation-failed');
+      guardLiveStatus.textContent = 'Secure Logoff complete.';
+      onSecureLogoff();
+    } catch { guardLiveStatus.textContent = 'Could not log out. Try again.'; }
   }
   required<HTMLButtonElement>('secure-logoff').addEventListener('click', secureLogoff);
   required<HTMLButtonElement>('sign-out-all').addEventListener('click', secureLogoff);

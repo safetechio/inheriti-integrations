@@ -1,5 +1,6 @@
 import { Box, Pressable, Text } from '@modules/_shared/ui/components';
 import type { AccountDestinations as Destinations, SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
+import { AccountUnlinkAction } from '../AccountUnlinkAction';
 
 export function AccountDestinations({
   accounts,
@@ -36,19 +37,12 @@ export function AccountDestinations({
                 <Text variant="bodySmall" color="primary200" numberOfLines={1} style={{ fontWeight: 600 }}>
                   {name}
                 </Text>
+                {destination?.email ? <Text variant="bodySmall" color="gray50" numberOfLines={1}>{destination.email}</Text> : null}
                 {destination?.status === 'sign_in_required' ? <Text variant="bodySmall" color="gray">Sign in again</Text> : null}
               </Box>
               </Box>
             </Pressable>
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityLabel={`Remove saved account ${account.subject}`}
-              onPress={() => onRemove(account)}
-            >
-              <Box className="account-menu-remove" justifyContent="center">
-                <Text variant="bodySmall" color="danger">Remove</Text>
-              </Box>
-            </Pressable>
+            <AccountUnlinkAction name={name} onPress={() => onRemove(account)} />
           </Box>
         );
       })}

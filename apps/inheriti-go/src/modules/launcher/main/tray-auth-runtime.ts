@@ -43,6 +43,27 @@ export class TrayAuthRuntime {
     return typeof organization?.roleName === 'string' ? organization.roleName.slice(0, 80) : undefined;
   }
   accountSummaries(): Promise<{ accounts: SavedAccountSummary[]; activeSubject: string | undefined }> { return this.store.accountSummaries(); }
+  async accountIdentity(subject: string): Promise<{ name?: string; email?: string } | undefined> {
+    const summary = await this.store.accountSummaries();
+    if (!summary.accounts.some((account) => account.subject === subject && account.status === 'ready')) return undefined;
+    const profile = this.store.profileForIdentity(subject);
+    if (!profile) return undefined;
+    if (profile.name && profile.email) return { name: profile.name, email: profile.email };
+    if (profile.expiresAt <= Date.now()) return { ...(profile.name ? { name: profile.name } : {}), ...(profile.email ? { email: profile.email } : {}) };
+    const response = await fetch(new URL('v1/importer/profile', this.apiUrl), {
+      headers: { authorization: `Bearer ${profile.accessToken}`, 'x-elements-environment': this.environment },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return { ...(profile.name ? { name: profile.name } : {}), ...(profile.email ? { email: profile.email } : {}) };
+    const body: unknown = await response.json();
+    const result = body && typeof body === 'object' && 'result' in body ? body.result : undefined;
+    const fields = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+    const name = [fields.firstName, fields.lastName].filter((part): part is string => typeof part === 'string' && !!part.trim()).map((part) => part.trim()).join(' ').slice(0, 160) || profile.name;
+    const email = typeof fields.email === 'string' && fields.email.trim() ? fields.email.trim().slice(0, 320) : profile.email;
+    const identity = { ...(name ? { name } : {}), ...(email ? { email } : {}) };
+    this.store.saveProfileIdentity(subject, profile.generation, identity);
+    return identity;
+  }
 
   renewIfRetired(): void { if (this.store.isRetired) this.renew(); }
 
@@ -99,6 +120,17 @@ export class TrayAuthRuntime {
       await this.store.clearAll(additionalScopes);
       this.renew();
     }
+  }
+
+  async remove(subject: string): Promise<void> {
+    this.renewIfRetired();
+    const session = (await this.store.allSessions()).find((item) => item.principal.subject === subject);
+    if (session) {
+      const sessions = new MemoryOperatorSessionStore();
+      await sessions.save(session);
+      try { await this.createCore(sessions).auth.clear(); } catch { /* Local removal still completes when revocation is unavailable. */ }
+    }
+    await this.store.remove(subject);
   }
 
   async activate(subject: string): Promise<void> {

@@ -182,11 +182,16 @@ export function composeOperatorAuth(runtime: OperatorAuthRuntime, options: Opera
     throw new Error('SafeID OIDC Business auth requires the inheriti-integrations-api audience');
   }
   const authFetch = options.authFetchImpl ?? options.fetchImpl;
+  const transport = new runtime.HttpOperatorAuthTransport(authFetch);
+  if (businessAuthority === 'business' &&
+    (typeof transport.exchangeBusinessSession !== 'function' || typeof transport.refreshBusinessSession !== 'function')) {
+    throw new Error('Business session auth requires a compatible Inheriti Client SDK');
+  }
   return new runtime.OperatorAuthClient({
     configuration: options.configuration,
     businessApiUrl: options.business ? options.apiUrl : undefined,
     businessAuthority,
-    transport: new runtime.HttpOperatorAuthTransport(authFetch),
+    transport,
     tokenValidator: options.tokenValidator
       ?? new JwksOperatorTokenValidator(options.configuration.issuer, authFetch,
         options.configuration.audience === 'inheriti-integrations-api' ? options.configuration.environment : undefined),

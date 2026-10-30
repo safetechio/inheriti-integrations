@@ -144,7 +144,7 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
       for (const profile of profiles) {
         const session = profile.session;
         const compatibleLegacyBusiness = this.contextKey() !== undefined && profile.context === undefined && INTEGRATION_AUTHORITY === 'business'
-          && 'kind' in (session ?? {}) && session?.kind === 'business';
+          && session !== undefined && 'kind' in session && session.kind === 'business';
         if (session && ((!compatibleLegacyBusiness && profile.context !== this.contextKey()) || !this.matches(session))) {
           delete profile.session;
           discardedLegacyBusiness = true;

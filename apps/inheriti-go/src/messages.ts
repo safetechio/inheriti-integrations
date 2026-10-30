@@ -190,6 +190,7 @@ export const trayMessages = Object.freeze({
   chooseOrganization: 'Choose an organisation',
   signedOut: 'Sign in to choose an organisation.',
   sessionUnavailable: 'Could not check your saved session. Try again.',
+  signInAgain: 'Your saved sign-in can no longer be used. Sign in again to continue.',
   retrySession: 'Retry session',
   authorizing: 'Waiting for sign-in…',
   signedIn: 'Signed in.',
@@ -228,3 +229,9 @@ export const trayMessages = Object.freeze({
   appUrlError: 'Set INHERITI_APP_URL to open Inheriti® Business.',
   comingLater: (action: string) => `${action} is coming in the next release.`,
 });
+
+export function sessionErrorMessage(error: unknown, fallback: string): string {
+  const detail = error instanceof Error ? error.message : '';
+  if (/OperatorReauthenticationRequired|operator_reauthentication_required|reauthentication_required|\bUnauthorized\b|elements_api_request_failed_401/iu.test(detail)) return trayMessages.signInAgain;
+  return detail.startsWith('Error invoking remote method') ? fallback : detail || fallback;
+}

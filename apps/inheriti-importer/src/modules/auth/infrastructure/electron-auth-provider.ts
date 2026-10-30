@@ -57,7 +57,12 @@ export function createElectronAuthProvider(
       const requestedAt = enrollmentCancellation;
       return serialize(async () => {
         if (requestedAt !== enrollmentCancellation) throw new Error('AUTH_CANCELLED');
-        return operation(...args);
+        try {
+          return await operation(...args);
+        } catch (error) {
+          if (requestedAt !== enrollmentCancellation) throw new Error('AUTH_CANCELLED');
+          throw error;
+        }
       })();
     };
   }

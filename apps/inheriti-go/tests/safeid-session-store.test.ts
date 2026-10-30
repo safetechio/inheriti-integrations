@@ -40,8 +40,8 @@ it('keeps expired-access accounts selectable while their refresh credentials are
   await store.save(first);
   await store.enroll(session('second'));
   expect((await store.accountSummaries()).accounts).toEqual([
-    { subject: 'first', name: 'first', status: 'ready' },
-    { subject: 'second', name: 'second', status: 'ready' },
+    { subject: 'first', name: 'Saved account', status: 'ready' },
+    { subject: 'second', name: 'Saved account', status: 'ready' },
   ]);
   await store.activate('second');
   expect(await store.fork().load()).toMatchObject({ kind: 'safeid-oidc-business', principal: { subject: 'second' } });

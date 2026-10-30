@@ -44,6 +44,18 @@ describe('OrganizationKeyVault', () => {
     expect(storage.items.size).toBe(0);
   });
 
+  it('forgets only the selected account keys', async () => {
+    let current = principal('account-a');
+    const vault = new OrganizationKeyVault('dev', async () => current, 'test-issuer');
+    await vault.store(ref('org-a'), key(1));
+    current = principal('account-b');
+    await vault.store(ref('org-b'), key(2));
+    vault.forgetSubject('account-a');
+    expect(await vault.load(ref('org-b'))).toEqual(key(2));
+    current = principal('account-a');
+    expect(await vault.load(ref('org-a'))).toBeUndefined();
+  });
+
   it('uses memory only when safe storage is unavailable and validates key length', async () => {
     storage.available = false;
     const vault = new OrganizationKeyVault('dev', async () => principal('account-a'));

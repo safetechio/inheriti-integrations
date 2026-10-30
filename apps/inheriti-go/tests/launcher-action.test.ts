@@ -16,7 +16,7 @@ it.skipIf(!chrome)('disables Secure Chat until an organisation is selected', () 
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',organizations:[],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],organizations:[],teams:[],assetCatalog:[]};
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>base,
         onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},onAction:()=>()=>{},
         signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{},version:async()=>''};
@@ -37,8 +37,8 @@ it.skipIf(!chrome)('opens Secure Chat from a tray action after sign-in and organ
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
-      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),
+      const base={status:'signed-in',accounts:[],organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-out',accounts:[],organizations:[],teams:[],assetCatalog:[]}),
         onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},
         onAction:(callback)=>{(window.actions??=[]).push(callback);return()=>{}},signIn:async()=>{},signOut:async()=>{},
         select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},
@@ -62,8 +62,8 @@ it.skipIf(!chrome)('keeps a Secure Chat notification pending through sign-in and
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
-      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),
+      const base={status:'signed-in',accounts:[],organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-out',accounts:[],organizations:[],teams:[],assetCatalog:[]}),
         onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},
         onAction:(callback)=>{(window.actions??=[]).push(callback);return()=>{}},signIn:async()=>{},signOut:async()=>{},
         select:async(id)=>{document.getElementById('root').dataset.selected=id;return {...base,selectedId:id}},abandonCreation:async()=>{},createQuickPlan:async()=>{},
@@ -87,12 +87,12 @@ it.skipIf(!chrome)('keeps a cancelled organisation switch for retry or dismissal
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-a',organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-a',organizations:[{id:'org-a',name:'A'},{id:'org-b',name:'B'}],teams:[],assetCatalog:[]};
       let calls=0, sent=false;
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>base,
         onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:(callback)=>{if(!sent){sent=true;setTimeout(()=>callback({kind:'OPEN_INBOX',organizationId:'org-b',conversationId:'chat-1'}),0)}return()=>{}},
         select:async(id)=>{calls++;if(calls===1)throw Error('cancelled');return {...base,selectedId:id}},
-        signOut:async()=>({...base,status:'signed-out'}),openApp:async()=>{},version:async()=>''};
+        signOut:async()=>({...base,status:'signed-out',accounts:[]}),openApp:async()=>{},version:async()=>''};
       setTimeout(()=>{const root=document.getElementById('root');root.dataset.firstCalls=String(calls);root.dataset.firstInbox=String(!!document.querySelector('.inbox-panel'));root.dataset.retry=String(!!Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Retry'));},300);
       setTimeout(()=>Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Retry')?.click(),400);
       setTimeout(()=>{const root=document.getElementById('root');root.dataset.secondCalls=String(calls);root.dataset.secondInbox=String(!!document.querySelector('.inbox-panel'));},650);
@@ -113,7 +113,7 @@ it.skipIf(!chrome)('opens private and team capture for their tray actions', () =
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     for (const [action, expected, signedOut, early] of [['Share with a team', 'team', false, false], ['Create a plan', 'team', false, false], ['Save privately', 'private', false, false], ['Save privately', 'private', false, true], ['Save privately', '', true, false]] as const) {
-      writeFileSync(join(directory, 'preload.js'), `window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>{${early ? 'await new Promise((resolve)=>setTimeout(resolve,250));' : ''}return {status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[{id:'team-1',name:'Team'}],assetCatalog:[]}},onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},onAction:(callback)=>{(window.actions??=[]).push(callback);return()=>{}},signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{}};setTimeout(()=>window.actions.forEach((callback)=>callback(${JSON.stringify(action)})),${early ? 50 : 200});${signedOut ? "setTimeout(()=>window.stateChanged({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),300);" : ''}setTimeout(()=>{document.getElementById('root').dataset.audience=document.getElementById('audience')?.value||'';document.getElementById('root').dataset.team=document.getElementById('team')?.value||'';document.getElementById('root').dataset.capture=String(!!document.getElementById('capture'))},500);`);
+      writeFileSync(join(directory, 'preload.js'), `window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>{${early ? 'await new Promise((resolve)=>setTimeout(resolve,250));' : ''}return {status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[{id:'team-1',name:'Team'}],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]}},onStateChanged:(callback)=>{window.stateChanged=callback;return()=>{}},onHidden:()=>()=>{},onAction:(callback)=>{(window.actions??=[]).push(callback);${early ? `setTimeout(()=>callback(${JSON.stringify(action)}),0);` : ''}return()=>{}},signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{}};${early ? '' : `setTimeout(()=>window.actions.forEach((callback)=>callback(${JSON.stringify(action)})),200);`}${signedOut ? "setTimeout(()=>window.stateChanged({status:'signed-out',accounts:[],organizations:[],teams:[],assetCatalog:[]}),300);" : ''}setTimeout(()=>{document.getElementById('root').dataset.audience=document.getElementById('audience')?.value||'';document.getElementById('root').dataset.team=document.getElementById('team')?.value||'';document.getElementById('root').dataset.capture=String(!!document.getElementById('capture'))},500);`);
       const html = execFileSync(chrome!, ['--headless', '--no-sandbox', '--disable-gpu', '--virtual-time-budget=700', '--dump-dom', `file://${join(directory, 'index.html')}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       expect(html).toContain(`data-audience="${expected}"`);
       if (expected === 'team') expect(html).toContain('data-team="team-1"');
@@ -129,7 +129,7 @@ it.skipIf(!chrome)('does not show the previous Ready state during a delayed fail
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}],creation:{status:'ready',planId:'old-plan'}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:()=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('second failed')),500)),openApp:async()=>{}};
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}],creation:{status:'ready',planId:'old-plan'}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},signIn:async()=>{},signOut:async()=>{},select:async()=>{},abandonCreation:async()=>{},createQuickPlan:()=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('second failed')),500)),openApp:async()=>{}};
       function fill(id,value){const input=document.getElementById(id);const prototype=input instanceof HTMLSelectElement?HTMLSelectElement.prototype:input instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(input,value);input.dispatchEvent(new Event(input instanceof HTMLSelectElement?'change':'input',{bubbles:true}));}
       setTimeout(()=>document.getElementById('save-plan').click(),150);
       setTimeout(()=>{fill('title','Second');fill('asset-type','PLAIN-TEXT');fill('asset-name','Note');fill('asset-text','secret');},250);
@@ -155,8 +155,8 @@ it.skipIf(!chrome)('locks capture details while a file is being prepared', () =>
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
       const organizations=[{id:'org-1',name:'First'},{id:'org-2',name:'Second'}];
-      const base={status:'signed-in',organizations,teams:[],assetCatalog:[{id:'DOCUMENT',category:'MEDIA-FILES',fields:['data','mimeType']}]};
-      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,selectedId:'org-1'}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},signIn:async()=>{},signOut:async()=>({status:'signed-out',organizations:[],teams:[],assetCatalog:[]}),select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{}};
+      const base={status:'signed-in',accounts:[],organizations,teams:[],assetCatalog:[{id:'DOCUMENT',category:'MEDIA-FILES',fields:['data','mimeType']}]};
+      window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,selectedId:'org-1'}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},signIn:async()=>{},signOut:async()=>({status:'signed-out',accounts:[],organizations:[],teams:[],assetCatalog:[]}),select:async(id)=>({...base,selectedId:id}),abandonCreation:async()=>{},createQuickPlan:async()=>{},openApp:async()=>{}};
       window.FileReader=class{readAsDataURL(){setTimeout(()=>{this.result='data:application/pdf;base64,YWJj';this.onload();},500)}};
       function fill(id,value){const input=document.getElementById(id);const prototype=input instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(input,value);input.dispatchEvent(new Event(input instanceof HTMLSelectElement?'change':'input',{bubbles:true}));}
       setTimeout(()=>document.getElementById('save-plan').click(),150);
@@ -180,7 +180,7 @@ it.skipIf(!chrome)('returns home immediately when an idle edit cleanup is pendin
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]};
       const plans=[{id:'plan-1',name:'Plan'}];
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
         editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),
@@ -203,7 +203,7 @@ it.skipIf(!chrome)('reenables home actions after canceling an active edit', () =
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]};
       const plans=[{id:'plan-1',name:'Plan'}];
       let publish;
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:(callback)=>{publish=callback;return()=>{}},onHidden:()=>()=>{},onAction:()=>()=>{},
@@ -229,7 +229,7 @@ it.skipIf(!chrome)('keeps revealed assets and selection when switching edit tabs
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]};
       const plans=[{id:'plan-1',name:'Plan'}];
       const assets=[{id:'asset-1',name:'First',type:'PLAIN-TEXT'},{id:'asset-2',name:'Second',type:'PLAIN-TEXT'}];
       window.assetLoads=0;
@@ -262,7 +262,7 @@ it.skipIf(!chrome)('keeps a selected image file inside the edit panel', () => {
     writeFileSync(join(directory, 'edit-screen.css'), readFileSync(resolve('src/modules/quick-plan/ui/edit-screen.css')));
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html style="width:380px;height:608px"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'; style-src \'self\'; img-src \'self\' data:"><link rel="stylesheet" href="launcher.css"><link rel="stylesheet" href="plan-screens.css"><link rel="stylesheet" href="edit-screen.css"></head><body style="width:380px;height:608px"><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'IMAGE',category:'MEDIA-FILES',fields:['data','mimeType']}]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'IMAGE',category:'MEDIA-FILES',fields:['data','mimeType']}]};
       const plans=[{id:'plan-1',name:'Plan'}];
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
         editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),
@@ -293,7 +293,7 @@ it.skipIf(!chrome)('keeps plan selection local until Continue and clears it acro
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]};
       const plans=Array.from({length:12},(_,index)=>({id:'plan-'+(index+1),name:'Plan '+(index+1)}));
       window.loads=0;
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
@@ -321,7 +321,7 @@ it.skipIf(!chrome)('keeps asset management open when Back cannot cancel access',
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: join(directory, 'launcher.js') });
     writeFileSync(join(directory, 'index.html'), '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'self\'"></head><body><div id="root"></div><script src="preload.js"></script><script src="launcher.js"></script></body></html>');
     writeFileSync(join(directory, 'preload.js'), `
-      const base={status:'signed-in',selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[]};
+      const base={status:'signed-in',accounts:[],selectedId:'org-1',organizations:[{id:'org-1',name:'Organization'}],teams:[],assetCatalog:[{id:'PLAIN-TEXT',fields:['text']}]};
       const plans=[{id:'plan-1',name:'Plan'}];
       window.inheritiTray={inboxState:async()=>({status:'error'}),onInboxStateChanged:()=>()=>{},state:async()=>({...base,edit:{status:'idle',available:true,plans:[],assets:[]}}),onStateChanged:()=>()=>{},onHidden:()=>()=>{},onAction:()=>()=>{},
         editablePlans:async()=>({...base,edit:{status:'idle',available:true,plans,assets:[]}}),

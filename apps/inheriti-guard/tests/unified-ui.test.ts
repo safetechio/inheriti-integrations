@@ -26,7 +26,8 @@ describe('unified Inheriti® Guard UI', () => {
   });
 
   it('confirms Secure Logoff and renders activity without HTML interpretation', () => {
-    expect(panelMain).toContain("window.confirm('Secure Logoff");
+    expect(panelMain).toContain('if (!await confirmLogoff()) return');
+    expect(panel).toContain('id="account-confirm-dialog"');
     expect(panelMain).toContain("type: 'guard:secure-logoff'");
     expect(panelMain).toContain("type: 'activity:list'");
     expect(panelMain).toContain('safeActivityLocation(entry.origin, entry.pathname)');
@@ -45,6 +46,19 @@ describe('unified Inheriti® Guard UI', () => {
     expect(blockedMain).toContain("blocked.origin}${blocked.pathname}");
     expect(panel).not.toContain('M14.2718');
     expect(panelMain).toContain("path.setAttribute('d', inheritiGuardShield.path)");
+  });
+
+  it('uses the shared app font for panel, controls, blocked page, and overlay', () => {
+    const panelCss = readFileSync(new URL('../src/side-panel/styles.css', import.meta.url), 'utf8');
+    const blockedCss = readFileSync(new URL('../src/blocked/styles.css', import.meta.url), 'utf8');
+    const overlay = readFileSync(new URL('../src/content/overlay.ts', import.meta.url), 'utf8');
+    expect(readFileSync(new URL('../src/side-panel/font-app.ttf', import.meta.url)))
+      .toEqual(readFileSync(new URL('../../../packages/core/assets/font-app.ttf', import.meta.url)));
+    expect(panelCss).toContain('button, input, select, textarea { font: inherit; }');
+    expect(panelCss).toMatch(/body \{[^}]*font: inherit;/u);
+    expect(blockedCss).toContain('font: inherit;');
+    expect(overlay).toContain('font:14px/1.5 AppFont');
+    expect(overlay).not.toContain('Lexend');
   });
 
   it('has no editable runtime or standalone configuration page', () => {

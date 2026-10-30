@@ -261,7 +261,15 @@ function waitForCallback(buildUrl, openBrowser, signal) {
     if (signal?.aborted) { reject(new Error('operator_authorization_canceled')); return; }
     let settled = false;
     let redirectUri;
+    let canceledCloseTimer;
     const server = createServer((request, response) => {
+      if (settled) {
+        if (canceledCloseTimer) clearTimeout(canceledCloseTimer);
+        response.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' })
+          .end('Sign-in was cancelled. Return to Inheriti Importer.');
+        server.close();
+        return;
+      }
       let url;
       try { url = new URL(request.url || '/', redirectUri); }
       catch { response.writeHead(400).end(); return; }
@@ -280,7 +288,15 @@ function waitForCallback(buildUrl, openBrowser, signal) {
       server.close();
       if (error) reject(error); else resolve(url);
     };
-    const cancel = () => finish(new Error('operator_authorization_canceled'));
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', cancel);
+      canceledCloseTimer = setTimeout(() => server.close(), 300_000);
+      canceledCloseTimer.unref();
+      reject(new Error('operator_authorization_canceled'));
+    };
     const timeout = setTimeout(() => finish(new Error('operator_authorization_timeout')), 300_000);
     signal?.addEventListener('abort', cancel, { once: true });
     server.once('error', finish);

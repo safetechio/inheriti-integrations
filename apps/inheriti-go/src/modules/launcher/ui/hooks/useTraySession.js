@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { sessionErrorMessage } from '../../../../messages.js';
 
 export function useTraySession(messages) {
   const [state, setState] = useState(null);
@@ -8,15 +9,16 @@ export function useTraySession(messages) {
     const stop = window.inheritiTray.onStateChanged(setState);
     void window.inheritiTray.state()
       .then(setState)
-      .catch((cause) => setError(cause instanceof Error ? cause.message : messages.retryError));
+      .catch((cause) => setError(sessionErrorMessage(cause, messages.sessionUnavailable)));
     return stop;
   }, [messages]);
 
   async function signIn() {
     try {
+      setError('');
       setState(await window.inheritiTray.signIn());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : messages.signInFailed);
+      setError(sessionErrorMessage(cause, messages.signInFailed));
     }
   }
 
@@ -27,7 +29,7 @@ export function useTraySession(messages) {
       setState(next);
       return next;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : messages.signInFailed);
+      setError(sessionErrorMessage(cause, messages.signInFailed));
       return null;
     }
   }
@@ -36,7 +38,7 @@ export function useTraySession(messages) {
     try {
       setState(await window.inheritiTray.cancelAccountAuthorization());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : messages.retryError);
+      setError(sessionErrorMessage(cause, messages.sessionUnavailable));
     }
   }
 
@@ -52,7 +54,7 @@ export function useTraySession(messages) {
           setState(next);
           return next.activeSubject === subject && next.selectedId === organizationId;
         } catch (cause) {
-          setError(cause instanceof Error ? cause.message : messages.retryError);
+          setError(sessionErrorMessage(cause, messages.sessionUnavailable));
           return false;
         }
       } else if (organizationId) {
@@ -61,7 +63,7 @@ export function useTraySession(messages) {
       }
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : messages.retryError);
+      setError(sessionErrorMessage(cause, messages.sessionUnavailable));
       return false;
     }
   }
@@ -81,7 +83,18 @@ export function useTraySession(messages) {
       setState(await window.inheritiTray.signOutAll());
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : messages.retryError);
+      setError(sessionErrorMessage(cause, messages.sessionUnavailable));
+      return false;
+    }
+  }
+
+  async function removeAccount(subject) {
+    try {
+      setError('');
+      setState(await window.inheritiTray.removeAccount(subject));
+      return true;
+    } catch (cause) {
+      setError(sessionErrorMessage(cause, messages.sessionUnavailable));
       return false;
     }
   }
@@ -94,5 +107,5 @@ export function useTraySession(messages) {
     }
   }
 
-  return { state, setState, error, setError, signIn, addAccount, cancelAccountAuthorization, activateAccount, restore, signOutAll, openApp };
+  return { state, setState, error, setError, signIn, addAccount, cancelAccountAuthorization, activateAccount, restore, signOutAll, removeAccount, openApp };
 }

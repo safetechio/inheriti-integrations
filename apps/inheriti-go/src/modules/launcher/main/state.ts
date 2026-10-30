@@ -11,7 +11,7 @@ import type { InboxIdentityState } from '../../inbox/main/identity.js';
 import type { PlanEditState } from '../../quick-plan/main/plan-edit.js';
 import type { CreationState } from '../../quick-plan/main/quick-plans.js';
 import type { OperatorSession } from '@safetech/inheriti-elements-core/node';
-import { trayMessages as messages } from '../../../messages.js';
+import { sessionErrorMessage, trayMessages as messages } from '../../../messages.js';
 import { OrganizationKeyVault } from './organization-key-vault.js';
 import { TrayAccountSwitcher } from './tray-account-switcher.js';
 import { TrayAuthRuntime } from './tray-auth-runtime.js';
@@ -176,7 +176,7 @@ export class TraySession {
     } catch (error) {
       if (!transitioning) {
         this.status = previousStatus;
-        if (!authorization.signal.aborted) this.message = error instanceof Error ? error.message : messages.signInFailed;
+        if (!authorization.signal.aborted) this.message = sessionErrorMessage(error, messages.signInFailed);
       }
     } finally {
       if (this.authorization === authorization) this.authorization = undefined;
@@ -201,7 +201,7 @@ export class TraySession {
       this.organization.reset();
       this.accountName = undefined;
       this.status = 'session-unavailable';
-      this.message = error instanceof Error ? error.message : messages.signInFailed;
+      this.message = sessionErrorMessage(error, messages.signInFailed);
       await this.refreshAccountSummaries();
       throw error;
     }
@@ -247,7 +247,7 @@ export class TraySession {
         return;
       }
       this.status = 'error';
-      this.message = error instanceof Error ? error.message : messages.signInFailed;
+      this.message = sessionErrorMessage(error, messages.signInFailed);
     } finally {
       if (authorization.signal.aborted && !this.signingOut) {
         this.status = previousStatus;
@@ -424,6 +424,18 @@ export class TraySession {
   signOut(): Promise<void> { return this.clearSession(false); }
   signOutAll(): Promise<void> { return this.clearSession(true); }
 
+  async removeAccount(subject: string): Promise<void> {
+    if (this.restoreInFlight || this.pendingSignIn || this.signingOut || this.accountSwitcher.isSwitching) throw new Error('account_transition_in_progress');
+    if (!this.accountSwitcher.snapshot.accounts.some((account) => account.subject === subject)) throw new Error('operator_account_not_found');
+    if (this.accountSwitcher.snapshot.activeSubject === subject) return this.clearSession(false);
+    this.signingOut = true;
+    try {
+      this.organizationKeyVault.forgetSubject(subject);
+      await this.auth.remove(subject);
+      await this.refreshAccountSummaries();
+    } finally { this.signingOut = false; }
+  }
+
   private async clearSession(allAccounts: boolean): Promise<void> {
     if (this.signingOut || this.accountSwitcher.isSwitching) throw new Error('account_transition_in_progress');
     if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
@@ -448,9 +460,16 @@ export class TraySession {
         await this.auth.clearAll([this.organizationKeyVault.allAccountScope]);
         await this.organizationKeys.clear();
       } else {
-        await this.organizationKeys.forget();
-        try { await this.auth.core.auth.clear(); } catch {}
-        await this.auth.sessions.clear();
+        const subject = this.accountSwitcher.snapshot.activeSubject;
+        if (subject) {
+          this.organizationKeyVault.forgetSubject(subject);
+          await this.organizationKeys.clear();
+          await this.auth.remove(subject);
+        } else {
+          await this.organizationKeys.forget();
+          try { await this.auth.core.auth.clear(); } catch {}
+          await this.auth.sessions.clear();
+        }
         this.auth.renew();
       }
       this.quickPlans.clear();

@@ -151,10 +151,20 @@ body { padding: 0; background: #fff; }
 .tray-account-group strong, .tray-account-option strong, .tray-recovery-accounts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tray-account-group strong { color: #0f1048; font-size: 14px; }
 .tray-account-details { min-width: 0; display: grid; gap: 3px; }
+.tray-account-group .tray-account-details { flex: 1; }
 .tray-account-details small { color: #98a2b3; font-size: 13px; }
 .tray-account-details .tray-account-status { color: #12b76a; font-size: 12px; }
 .tray-account-option { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 8px 14px; border: 0; border-radius: 0; color: #0f1048; background: #fff; text-align: left; }
 .tray-account-option:hover:not(:disabled) { background: #f4f8ff; }
+.tray-account-option-row { display: flex; align-items: center; border-bottom: 1px solid #eaecf0; }
+.tray-account-option-row .tray-account-option { flex: 1; min-width: 0; width: auto; }
+.tray-account-remove { flex: none; width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 6px; color: #98a2b3; background: transparent; font-size: 19px; line-height: 1; opacity: 0; pointer-events: none; }
+.tray-account-group:hover > .tray-account-remove, .tray-account-group:focus-within > .tray-account-remove,
+.tray-account-option-row:hover > .tray-account-remove, .tray-account-option-row:focus-within > .tray-account-remove,
+.tray-recovery-account:hover > .tray-account-remove, .tray-recovery-account:focus-within > .tray-account-remove { opacity: 1; pointer-events: auto; }
+.tray-account-remove:hover:not(:disabled) { color: #b42318; background: #fff1f1; }
+.tray-account-remove:focus-visible { outline: 2px solid #2962ff; outline-offset: 2px; }
+.tray-account-option-row .tray-account-remove { margin-right: 12px; }
 .tray-account-option .tray-account-avatar { width: 34px; height: 34px; }
 .tray-account-option > span:last-child { min-width: 0; display: grid; }
 .tray-account-option small { color: #98a2b3; font-size: 12px; }
@@ -162,17 +172,36 @@ body { padding: 0; background: #fff; }
 .tray-account-popover > .tray-account-option { border-bottom: 1px solid #eaecf0; }
 .tray-account-popover > .tray-account-option:hover:not(:disabled) { border-bottom-color: #eaecf0; color: #0f1048; }
 .tray-account-popover > button:hover:not(:disabled) { color: #0066ff; background: #f4f8ff; }
+.tray-account-popover > #add-account { gap: 12px; padding-inline: 14px; }
 .tray-account-popover > #add-account span { width: 34px; height: 34px; flex: none; display: grid; place-items: center; color: #0066ff; font-size: 19px; line-height: 1; }
-.tray-account-popover > #sign-out-all { justify-content: center; min-height: 38px; color: #f04438; background: #fff1f1; font-size: 12px; }
-.tray-account-popover > #sign-out-all:hover:not(:disabled) { color: #b42318; background: #fee4e2; }
+.tray-account-popover > .tray-account-logoff { justify-content: center; min-height: 38px; color: #f04438; background: #fff1f1; font-size: 12px; }
+.tray-account-popover > .tray-account-logoff:hover:not(:disabled) { color: #b42318; background: #fee4e2; }
 .tray-home-content { display: flex; flex-direction: column; gap: 14px; padding: 14px 18px; background: #f6f7fb; }
 .tray-home-notice { padding: 8px 12px; border-radius: 8px; background: #fef3f2; font-size: 13px; }
-.tray-recovery-accounts { width: 100%; display: grid; gap: 6px; text-align: left; }
-.tray-recovery-accounts > div { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #eaecf0; }
-.tray-recovery-accounts > div span { flex: 1; }
-.tray-recovery-accounts > div button { width: auto; min-height: 32px; }
-.tray-recovery-accounts small { color: #667085; }
-.tray-account-confirmation-content { display: grid; align-content: start; gap: 16px; padding: 20px 18px; background: #f6f7fb; }
+.tray-recovery-accounts { width: 100%; display: grid; text-align: left; }
+.tray-recovery-accounts > strong { margin-bottom: 6px; font-size: 13px; }
+.tray-recovery-account { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 62px; padding: 8px 0; border-top: 1px solid #eaecf0; }
+.tray-recovery-account .tray-account-avatar { flex: none; width: 34px; height: 34px; }
+.tray-recovery-account .tray-account-details { flex: 1; }
+.tray-recovery-account .tray-account-details strong { color: #0f1048; font-size: 13px; }
+.tray-recovery-account button { width: auto; min-height: 30px; padding: 4px 10px; font-size: 12px; }
+.tray-recovery-account .button-secondary { border-color: transparent; color: #475467; background: transparent; }
+.tray-recovery-account .button-secondary:hover { border-color: transparent; color: #2962ff; background: #f4f8ff; }
+.tray-recovery-account .tray-account-remove { width: 28px; min-height: 28px; padding: 0; font-size: 19px; }
+@media (hover: none) { .tray-account-remove { opacity: 1; pointer-events: auto; } }
+.tray-recovery-logoff { justify-self: end; width: auto; min-height: 32px; margin-top: 8px; padding: 6px 12px; border: 0; color: #f04438; background: #fff1f1; font-size: 12px; }
+.tray-recovery-logoff:hover:not(:disabled) { border: 0; color: #b42318; background: #fee4e2; }
+.tray-account-dialog { width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; border: 1px solid #eaecf0; border-radius: 16px; color: #101828; background: #fff; box-shadow: 0 20px 48px rgba(16, 24, 40, .24); animation: tray-dialog-enter .18s ease-out; }
+.tray-account-dialog::backdrop { background: rgba(16, 24, 40, .48); animation: tray-dialog-backdrop .18s ease-out; }
+.tray-account-dialog-content { display: grid; gap: 16px; padding: 20px; }
+.tray-account-dialog-content h1 { font-size: 18px; line-height: 1.4; }
+.tray-account-dialog-content > p { color: #667085; font-size: 13px; line-height: 1.5; }
+.tray-account-dialog-actions { display: flex; gap: 8px; }
+.tray-account-dialog-actions button { flex: 1; padding-inline: 8px; white-space: nowrap; }
+.tray-account-dialog-cancel, .tray-account-dialog-cancel:hover:not(:disabled) { border-color: #d0d5dd; color: #667085; background: transparent; }
+.tray-account-dialog-progress { display: grid; justify-items: center; gap: 10px; padding: 4px 0; color: #475467; font-size: 13px; animation: tray-dialog-enter .18s ease-out; }
+@keyframes tray-dialog-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes tray-dialog-backdrop { from { background: transparent; } to { background: rgba(16, 24, 40, .48); } }
 .tray-account-confirmation-card { display: grid; gap: 0; padding: 0; border: 1px solid #eaecf0; border-radius: 12px; background: #fff; }
 .tray-account-confirmation-person { display: flex; align-items: center; gap: 16px; min-width: 0; padding: 20px 16px; }
 .tray-account-confirmation-person .tray-account-avatar { width: 48px; height: 48px; font-size: 17px; }
@@ -181,11 +210,8 @@ body { padding: 0; background: #fff; }
 .tray-account-confirmation-person strong, .tray-account-confirmation-organization strong { min-width: 0; overflow-wrap: anywhere; color: #0f1048; font-size: 14px; }
 .tray-account-confirmation-organization { display: grid; gap: 3px; padding: 14px 16px; border-top: 1px solid #eaecf0; }
 .tray-account-confirmation-note { padding: 0 2px; color: #667085; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
-.tray-sign-out-confirmation .tray-account-confirmation-content { background: #f6f7fb; }
-.tray-sign-out-confirmation .tray-account-confirmation-content h1 { color: #0f1048; font-size: 23px; line-height: 1.3; }
-.tray-sign-out-confirmation .tray-account-confirmation-content p { font-size: 14px; line-height: 1.5; }
-.tray-sign-out-confirmation .button-sign-out { border-color: #e33445; background: #e33445; }
-.tray-sign-out-confirmation .button-sign-out:hover:not(:disabled) { border-color: #c21e2e; background: #c21e2e; }
+.tray-account-dialog .button-sign-out { border-color: #e33445; background: #e33445; }
+.tray-account-dialog .button-sign-out:hover:not(:disabled) { border-color: #c21e2e; background: #c21e2e; }
 .tray-home-content section { padding: 20px; }
 .tray-hero { position: relative; flex: none; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 0; border: 0; border-radius: 12px; color: #fff; background: #2962ff; }
 .tray-hero::before { content: ''; position: absolute; right: -8px; bottom: -8px; width: 150px; height: 70px; background: radial-gradient(#ffffff38 1.2px, transparent 1.2px) 0 0 / 8px 8px; }
@@ -441,7 +467,7 @@ body { padding: 0; background: #fff; }
 .inbox-new-button { display: inline-flex; align-items: center; gap: 4px; }
 .inbox-new-button svg { width: 14px; height: 14px; }
 @keyframes inbox-progress { to { transform: translateX(190%); } }
-@media (prefers-reduced-motion: reduce) { .inbox-progress-track > span { transition: none; }.inbox-progress-track.is-indeterminate > span { animation: none; width: 100%; }.inbox-revealed { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .inbox-progress-track > span { transition: none; }.inbox-progress-track.is-indeterminate > span { animation: none; width: 100%; }.inbox-revealed, .tray-account-dialog, .tray-account-dialog::backdrop, .tray-account-dialog-progress { animation: none; } }
 @media (prefers-reduced-transparency: reduce), (forced-colors: active) { .inbox-pending-footer { background: #2448d7; backdrop-filter: none; }.inbox-send-status { background: #f5f8ff; backdrop-filter: none; } }
 .inbox-ack-pending { margin: 0; padding: 6px 8px; border-radius: 6px; color: #8c5100; background: #fff4d6; font-size: 12px; }
 .inbox-reveal-confirm { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe4ff; border-radius: 8px; background: #fff; }

@@ -22,6 +22,8 @@ describe('panel state', () => {
 
   it('gives a placeholder row no plan id, so it cannot be opened as a plan', () => {
     expect(rowsFor({ kind: 'SIGNED_OUT' })[0]?.planId).toBeUndefined();
+    expect(rowsFor({ kind: 'SELECT_ORGANIZATION', organizations: [] })[0]?.label).toBe('No organisations available');
+    expect(rowsFor({ kind: 'SELECT_ORGANIZATION', organizations: [{ id: 'org-1', name: 'Demo' }] })[0]?.label).toBe('Choose an organisation');
   });
 
   it('renders one row per plan, carrying its id', () => {
@@ -38,9 +40,12 @@ describe('panel state', () => {
   it('never shows a runtime error code to an operator', () => {
     expect(codeOf(Object.assign(new Error('x'), { code: 'ERR_INVALID_URL' }))).toBe('plan_request_failed');
     expect(codeOf(new Error('OAuth failed'), 'sign_in_failed')).toBe('sign_in_failed');
-    expect(codeOf({ status: 401, code: 'Unauthorized' })).toBe('plan_access_denied');
+    expect(codeOf({ status: 401, code: 'Unauthorized' })).toBe('operator_reauthentication_required');
+    expect(codeOf({ status: 401, code: 'plan_access_denied' })).toBe('operator_reauthentication_required');
+    expect(codeOf({ status: 403, code: 'Forbidden' })).toBe('plan_access_denied');
     expect(codeOf({ status: 503 })).toBe('elements_api_unavailable');
-    expect(messageFor('plan_access_denied')).toBe('Could not verify plan access — sign in again');
+    expect(messageFor('plan_access_denied')).toBe('You do not have access to these plans');
+    expect(messageFor('operator_reauthentication_required')).toBe('Sign in again to this account');
     expect(codeOf(Object.assign(new Error('x'), { code: 'plan_not_found' }))).toBe('plan_not_found');
     expect(messageFor('sign_in_failed')).toBe('Could not sign in');
     expect(messageFor('ERR_INVALID_URL')).toBe('Something went wrong');

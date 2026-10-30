@@ -13,14 +13,17 @@ it('keeps account switching and removal as separate actions for inactive account
   render(
     <AccountDestinations
       accounts={[active, inactive]}
-      destinations={[{ accountKey: 'inactive', subject: 'manager', status: 'ready', displayName: 'Manager', organizations: [] }]}
+      destinations={[{ accountKey: 'inactive', subject: 'manager', status: 'ready', displayName: 'Manager', email: 'manager@example.com', organizations: [] }]}
       onSwitch={onSwitch}
       onRemove={onRemove}
     />,
   );
 
-  expect(screen.queryByRole('menuitem', { name: 'Remove saved account owner' })).toBeNull();
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Remove saved account manager' }));
+  expect(screen.queryByRole('menuitem', { name: 'Unlink Saved account from this device' })).toBeNull();
+  expect(screen.getByText('manager@example.com')).toBeTruthy();
+  expect(screen.getByRole('menuitem', { name: 'Unlink Manager from this device' }).parentElement?.getAttribute('title'))
+    .toBe('Unlink Manager from this device');
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Unlink Manager from this device' }));
   expect(onRemove).toHaveBeenCalledWith(inactive);
   expect(onSwitch).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to account Manager' }));

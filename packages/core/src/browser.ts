@@ -7,6 +7,7 @@ import { SdkPlanFacade } from './plans.js';
 import { createOperatorAuth } from './auth.js';
 import type { OperatorAuthOptions } from './operator-auth.js';
 import { composeRevealWorkflows } from './workflows.js';
+import { businessApiTransport } from './business-api-transport.js';
 export { fieldMaxLength, fieldMaxLengths, assetName, fieldName } from './asset-metadata.js';
 
 export type BrowserIntegrationCoreOptions = OperatorAuthOptions & {
@@ -50,7 +51,9 @@ export function createBrowserIntegrationCore(options: BrowserIntegrationCoreOpti
   const auth: OperatorAuthFacade = createOperatorAuth(options);
   const bearer = async () => (await auth.getAccessToken()) ?? null;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const bearerTransport: typeof fetch = (input, init) => fetchImpl(input, { ...init, credentials: 'omit' });
+  const browserTransport: typeof fetch = (input, init) => fetchImpl(input, { ...init, credentials: 'omit' });
+  const bearerTransport = options.business && options.businessAuthority !== 'safeid-oidc'
+    ? businessApiTransport(options.apiUrl, auth, browserTransport) : browserTransport;
   const elements = createBrowserElementsClient({
     apiUrl: options.apiUrl,
     environment: options.environment,

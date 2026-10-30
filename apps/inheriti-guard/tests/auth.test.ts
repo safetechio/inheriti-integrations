@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { chooseAnotherSafeIdAccount, LoginCancelled, signIn } from '../src/background/auth.js';
 
 describe('Chrome OAuth cancellation', () => {
+  it('treats closing Chrome’s SafeID window as cancellation', async () => {
+    vi.stubGlobal('chrome', {
+      windows: { getAll: vi.fn(async () => []) },
+      tabs: { onUpdated: { addListener: vi.fn(), removeListener: vi.fn() } },
+      identity: { launchWebAuthFlow: vi.fn(async () => { throw new Error('The user did not approve access.'); }) },
+    });
+    const auth = { beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://safeid.example/authorize' })),
+      completeAuthorizationCode: vi.fn(async () => undefined) };
+
+    await expect(signIn(auth as never)).rejects.toBeInstanceOf(LoginCancelled);
+    expect(auth.completeAuthorizationCode).not.toHaveBeenCalled();
+  });
+
   it('does not exchange an OAuth callback that completes after Secure Logoff invalidates sign-in', async () => {
     let finishOAuth!: (callback: string) => void;
     const completeAuthorizationCode = vi.fn(async () => undefined);
@@ -9,7 +22,9 @@ describe('Chrome OAuth cancellation', () => {
       beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://issuer.example/authorize' })),
       completeAuthorizationCode,
     };
-    vi.stubGlobal('chrome', { identity: {
+    vi.stubGlobal('chrome', { windows: { getAll: vi.fn(async () => []) }, tabs: { onUpdated: {
+      addListener: vi.fn(), removeListener: vi.fn(),
+    } }, identity: {
       launchWebAuthFlow: vi.fn(() => new Promise<string>((resolve) => { finishOAuth = resolve; })),
     } });
     const cancellation = new AbortController();
@@ -21,6 +36,54 @@ describe('Chrome OAuth cancellation', () => {
 
     await expect(signingIn).rejects.toBeInstanceOf(LoginCancelled);
     expect(completeAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it('enlarges only the new SafeID login popup', async () => {
+    let finishOAuth!: (callback: string) => void;
+    const update = vi.fn(async () => undefined);
+    const getAll = vi.fn()
+      .mockResolvedValueOnce([{ id: 1, type: 'normal' }, { id: 2, type: 'popup' }])
+      .mockResolvedValue([{ id: 1, type: 'normal' }, { id: 2, type: 'popup', tabs: [{ url: 'https://safeid.example/' }] },
+        { id: 3, type: 'popup', tabs: [{ url: 'https://other.example/' }] },
+        { id: 4, type: 'popup', tabs: [{ url: 'https://safeid.example/realms/test/login' }] }]);
+    vi.stubGlobal('chrome', {
+      windows: { getAll, get: vi.fn(async () => ({ type: 'popup', width: 664, height: 306 })), update },
+      tabs: { onUpdated: { addListener: vi.fn(), removeListener: vi.fn() } },
+      identity: { launchWebAuthFlow: vi.fn(() => new Promise<string>((resolve) => { finishOAuth = resolve; })) },
+    });
+    const auth = {
+      beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://safeid.example/realms/test/authorize' })),
+      completeAuthorizationCode: vi.fn(async () => undefined),
+    };
+
+    const signingIn = signIn(auth as never);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(4, { width: 960, height: 760 }));
+    expect(update).toHaveBeenCalledTimes(1);
+    finishOAuth('https://extension.example/oauth?code=fresh');
+    await signingIn;
+    expect(auth.completeAuthorizationCode).toHaveBeenCalledOnce();
+  });
+
+  it('enlarges the login after SafeID navigation if the popup appeared before its URL', async () => {
+    let finishOAuth!: (callback: string) => void;
+    let onUpdated!: Parameters<typeof chrome.tabs.onUpdated.addListener>[0];
+    const update = vi.fn(async () => undefined);
+    const removeListener = vi.fn();
+    vi.stubGlobal('chrome', {
+      windows: { getAll: vi.fn(async () => []), get: vi.fn(async () => ({ type: 'popup', width: 664, height: 306 })), update },
+      tabs: { onUpdated: { addListener: vi.fn((listener) => { onUpdated = listener; }), removeListener } },
+      identity: { launchWebAuthFlow: vi.fn(() => new Promise<string>((resolve) => { finishOAuth = resolve; })) },
+    });
+    const auth = { beginAuthorizationCode: vi.fn(async () => ({ authorizationUrl: 'https://safeid.example/authorize' })),
+      completeAuthorizationCode: vi.fn(async () => undefined) };
+
+    const signingIn = signIn(auth as never);
+    await vi.waitFor(() => expect(chrome.identity.launchWebAuthFlow).toHaveBeenCalledOnce());
+    onUpdated(7, { url: 'https://safeid.example/realms/test/login' }, { windowId: 4 } as chrome.tabs.Tab);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(4, { width: 960, height: 760 }));
+    finishOAuth('https://extension.example/oauth?code=fresh');
+    await signingIn;
+    expect(removeListener).toHaveBeenCalledWith(onUpdated);
   });
 });
 

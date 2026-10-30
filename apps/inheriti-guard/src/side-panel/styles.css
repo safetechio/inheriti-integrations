@@ -1,6 +1,6 @@
 @font-face {
   font-family: AppFont;
-  src: url('./font-app.ttf?v=3add53e6') format('truetype');
+  src: url('./font-app.ttf?v=e493fee2') format('truetype');
   font-display: swap;
   font-weight: 100 900;
   font-style: normal;
@@ -42,9 +42,11 @@ body {
   min-width: 0;
   margin: 0;
   background: var(--surface);
+  font: inherit;
   -webkit-font-smoothing: antialiased;
 }
 
+button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
 .app-header {
@@ -159,11 +161,11 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .skeleton-heading { display: grid; gap: 12px; padding: 24px 0; }
 .skeleton-heading .skeleton-line:first-child { width: 45%; height: 24px; }
 .skeleton-card { min-height: 160px; align-content: start; }
-.plan-access[data-authenticated="false"] > :not(.signed-out-view):not(dialog) { display: none; }
-.plan-access[data-authenticated="false"][data-has-accounts="true"] > .account-area { display: flex; }
+.plan-access[data-authenticated="false"] > :not(.signed-out-view):not(.account-feedback):not(dialog) { display: none; }
+.plan-access[data-authenticated="false"] > .account-area { display: none; }
 .plan-access[data-authenticated="true"] > .signed-out-view { display: none; }
 .plan-access[aria-busy="true"] > :not(.session-skeleton):not(dialog) { display: none; }
-.plan-access[data-organization="required"] > :not(.account-area):not(dialog) { display: none; }
+.plan-access[data-organization="required"] > :not(.account-area):not(.account-feedback):not(dialog) { display: none; }
 .account-area { position: relative; min-width: 0; display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px; }
 .account-menu { position: relative; flex: 0 0 auto; }
 .account-trigger { display: grid; width: 36px; height: 36px; place-items: center; cursor: pointer; list-style: none; }
@@ -171,7 +173,7 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .account-trigger-avatar, .account-avatar { display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: var(--primary); font-weight: 400; }
 .account-trigger-avatar { width: 32px; height: 32px; font-size: 12px; }
 .account-trigger:focus-visible, .account-popover button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.account-popover { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: min(340px, calc(100vw - 40px)); overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(16, 24, 40, .14); }
+.account-popover { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: min(340px, calc(100vw - 40px)); overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 12px 28px rgba(16, 24, 40, .14); }
 .account-list { max-height: min(420px, 55dvh); overflow: auto; width: 100%; margin: 0; padding: 0; list-style: none; }
 .account-list > li { min-width: 0; border-bottom: 1px solid var(--border); }
 .account-row { position: relative; min-width: 0; display: flex; align-items: center; min-height: 54px; padding: 8px 14px; }
@@ -185,25 +187,27 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .account-identity-text { display: grid; gap: 3px; min-width: 0; }
 .account-label { overflow: hidden; color: #0f1048; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .account-meta { color: #98a9bd; font-size: 12px; }
-.account-status-signed { color: #12b76a; }
 .account-actions { position: absolute; right: 10px; opacity: 0; }
 .account-row:hover .account-actions, .account-row:focus-within .account-actions { opacity: 1; }
-.account-actions button { padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; color: #667085; cursor: pointer; font: inherit; font-size: 11px; }
+.account-actions button { width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #98a2b3; cursor: pointer; font: inherit; font-size: 19px; line-height: 1; }
 .account-actions .compact-button:hover:not(:disabled) { color: #b42318; background: #fff1f1; }
 @media (hover: none) { .account-actions { opacity: 1; } }
-.account-status { margin: 0; padding: 8px 12px; color: var(--muted); font-size: 12px; }
-.account-status:empty { display: none; }
-.account-add { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 50px; padding: 8px 24px; border-radius: 0; text-align: left; font-weight: 400; }
+.account-feedback { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid #f3c6c6; border-radius: 8px; color: #912018; background: #fff4f3; font-size: 13px; line-height: 1.5; }
+.account-feedback span { flex: 1; }
+.account-feedback button { flex: none; border: 0; color: inherit; background: transparent; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.account-feedback button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.account-add { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 42px; padding: 8px 24px; border-radius: 0; text-align: left; font-weight: 400; }
 .account-add span { display: grid; flex: 0 0 24px; place-items: center; color: var(--primary); font-size: 20px; line-height: 1; }
-.account-logoff { display: block; width: 100%; padding: 10px 12px; border-radius: 0; color: #eb303b; background: #fff0f1; text-align: center; font-weight: 400; }
-.account-logoff:hover { color: #b4232e; background: #ffe3e5; }
+.account-logoff { display: block; width: 100%; min-height: 38px; padding: 8px 12px; border-radius: 0; color: #f04438; background: #fff1f1; text-align: center; font-weight: 400; }
+.account-logoff:hover { color: #b42318; background: #fee4e2; }
 .access-account { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
 .account-area #sign-out[hidden], .account-area #sign-out-all[hidden] { display: none; }
 .organization-choice { min-width: 0; max-width: calc(100% - 44px); }
 .organization-choice details { position: relative; min-width: 0; }
-.organization-choice summary { overflow: hidden; padding: 6px 24px 6px 10px; border: 1px solid #0f1048; border-radius: 6px; color: #0f1048; font-size: 13px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; list-style: none; }
+.organization-choice summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 9px 6px 10px; border: 1px solid #d0d5dd; border-radius: 6px; color: var(--ink); font-size: 13px; font-weight: 400; cursor: pointer; list-style: none; }
 .organization-choice summary::-webkit-details-marker { display: none; }
-.organization-choice summary::after { position: absolute; right: 9px; content: '⌄'; color: #0f1048; }
+.organization-choice summary span { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.organization-choice summary svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--primary); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .organization-choice summary:focus-visible, .organization-option:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .organization-options { position: absolute; z-index: 11; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-card); }
 .organization-option { width: 100%; padding: 7px 8px; border: 0; border-radius: 6px; color: var(--ink); background: transparent; font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
@@ -214,6 +218,11 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .signed-out-view p:not(.eyebrow) { margin: 0 auto 24px; max-width: 280px; color: var(--muted); line-height: 1.55; }
 .signed-out-view .button { width: 100%; }
 .signed-out-view .button + .button { margin-top: 8px; }
+.saved-account-list { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; text-align: left; }
+.signed-out-view .saved-account-list[hidden] { display: none; }
+.saved-account-list .account-row { min-height: 66px; }
+.saved-account-list .account-switch { padding-right: 14px; }
+.saved-account-list .account-actions { display: none; }
 .signed-out-error { margin: 0 auto 16px !important; max-width: 280px; padding: 10px 12px; border: 1px solid #f3c6c6; border-radius: 10px; color: #912018 !important; background: #fff4f3; font-size: 14px; }
 .signed-out-mark { display: grid; width: 52px; height: 52px; margin: 0 auto 20px; place-items: center; border-radius: 12px; background: var(--primary-soft); color: var(--primary); }
 .signed-out-mark svg { width: 24px; height: 30px; fill: currentColor; }
@@ -265,6 +274,29 @@ h2 { margin: 0; font-size: 16px; line-height: 21px; font-weight: 500; letter-spa
 .asset-dialog { width: calc(100% - 32px); max-width: 380px; max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 0; border-radius: 12px; color: var(--ink); background: transparent; box-shadow: 0 20px 48px rgba(16, 24, 40, .24); }
 .access-dialog { overflow: hidden; }
 .asset-dialog::backdrop { background: rgba(16, 24, 40, .48); backdrop-filter: blur(2px); }
+.account-confirm-dialog { background: var(--surface); font: inherit; }
+.account-confirm-dialog .modal-panel { padding: 20px; }
+.account-confirm-dialog h2 { margin: 0; font-weight: 600; }
+.account-confirm-person { display: flex; align-items: center; gap: 14px; margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.account-confirm-person > span:last-child { display: grid; min-width: 0; }
+.account-confirm-person small { color: #98a2b3; font-size: 12px; }
+.account-confirm-person strong { overflow-wrap: anywhere; color: #0f1048; font-size: 14px; }
+.account-confirm-avatar { display: grid; flex: 0 0 48px; width: 48px; height: 48px; place-items: center; border-radius: 50%; color: #fff; background: var(--primary); font-size: 16px; }
+.account-confirm-dialog p { margin: 10px 0 20px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.account-confirm-person + p { margin-top: 16px; }
+.account-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.account-confirm-actions .button { flex: 1; width: auto; min-width: 0; min-height: 44px; margin: 0; font-size: 14px; }
+.account-confirm-actions .button.secondary { border-color: #d0d5dd; color: #344054; }
+.account-confirm-actions .button.secondary:hover:not(:disabled) { border-color: #98a2b3; color: var(--ink); background: var(--surface-muted); }
+.account-confirm-actions .button.danger-button { color: #fff; background: var(--danger); }
+.account-confirm-actions .button.danger-button:hover:not(:disabled) { background: #b42318; }
+.account-confirm-actions[hidden], .account-confirm-progress[hidden] { display: none; }
+.account-confirm-progress { display: grid; justify-items: center; gap: 10px; color: var(--muted); font-size: 13px; animation: account-confirm-enter .18s ease-out; }
+.account-confirm-track { width: 140px; height: 3px; overflow: hidden; border-radius: 99px; background: #e0e7ff; }
+.account-confirm-track > span { display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--primary); animation: account-confirm-loading 1.3s ease-in-out infinite alternate; }
+.account-confirm-dialog[open] { animation: account-confirm-enter .18s ease-out; }
+@keyframes account-confirm-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes account-confirm-loading { from { transform: translateX(0); } to { transform: translateX(150%); } }
 .safekey-dialog { z-index: 100; }
 .safekey-dialog [hidden] { display: none; }
 .safekey-business-logo { display: block; width: 142px; height: auto; margin: 0 0 16px; }
@@ -380,6 +412,7 @@ dd { min-width: 28px; margin: 0; padding: 2px 8px; border-radius: 999px; color: 
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .account-confirm-dialog[open], .account-confirm-progress, .account-confirm-track > span { animation: none; }
   .button { transition: none; }
 }
 

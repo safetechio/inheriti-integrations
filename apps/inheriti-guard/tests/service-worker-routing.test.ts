@@ -14,6 +14,7 @@ const reconcileReveal = vi.fn(async (_planId: string) => ({ kind: 'WARNING', mes
   detail: '', code: 'active_access_open', planId: _planId, revealId: '22222222-2222-4222-8222-222222222222' }));
 let revealState: Record<string, unknown> = { kind: 'IDLE' };
 let businessMode = false;
+let profileApiUrl: string | undefined;
 const hasMasterKey = vi.fn(async (_ref: unknown) => false);
 const loadCachedKey = vi.fn(async (_ref: unknown): Promise<Uint8Array | undefined> => undefined);
 const loadPlansMock = vi.fn(async () => ({ kind: 'EMPTY' }));
@@ -76,6 +77,7 @@ vi.mock('../src/background/reveal.js', () => ({
 }));
 vi.mock('../src/background/session-store.js', () => ({
   SessionStorageOperatorSessionStore: class {
+    bind() {}
     clear = clearSession;
     clearAll = clearAllSessions;
     async load() { return { principal: { issuer: 'https://safeid.test', subject: 'user-a', environment: 'TEST',
@@ -87,7 +89,8 @@ vi.mock('../src/background/session-store.js', () => ({
       return { session: await this.load(), generation: mockGeneration };
     }
     async profiles() { return mockProfiles; }
-    async forProfile(id: string) { await pauseForProfile?.(id); return { profileId: id }; }
+    async forProfile(id: string) { await pauseForProfile?.(id); return { profileId: id,
+      load: async () => ({ accessToken: 'operator-token', expiresAt: Date.now() + 60_000 }) }; }
     async beginEnrollment() { return this; }
     async activate(id: string) { if (mockProfiles.find((profile) => profile.active)?.id !== id) mockGeneration += 1;
       mockProfiles = mockProfiles.map((profile) => ({
@@ -143,7 +146,7 @@ vi.mock('../src/shared/stored-configuration.js', () => ({
   },
 }));
 vi.mock('../src/shared/configuration.js', () => ({ resolveConfiguration: () => ({
-  issuer: 'https://safeid.test', environment: 'TEST', clientId: 'chrome-test',
+  apiUrl: profileApiUrl, issuer: 'https://safeid.test', environment: 'TEST', clientId: 'chrome-test',
   ...(businessMode ? {} : { applicationId: 'standalone-test' }),
 }) }));
 vi.mock('../src/background/auth.js', () => ({ signIn: signInMock, chooseAnotherSafeIdAccount: vi.fn(async () => undefined) }));
@@ -213,6 +216,7 @@ beforeEach(() => {
   revokedProfiles.clear(); coreProfiles.length = 0;
   revealState = { kind: 'IDLE' };
   businessMode = false; workspaceFields = discovered; overlayFields = discovered; planFieldNames = ['username']; planListInputs.length = 0;
+  profileApiUrl = undefined;
 });
 
 function request(message: unknown): Promise<any> {
@@ -258,6 +262,42 @@ describe('service worker access routing', () => {
     release();
     expect((await discovering).ok).toBe(true);
     expect(coreProfiles.filter((id) => id === 'account-a')).toHaveLength(1);
+    delete selectedOrganizations[JSON.stringify(['https://safeid.test', 'TEST', 'user-a'])];
+  });
+
+  it('shows profile name and email only for authenticated Business accounts', async () => {
+    businessMode = true;
+    profileApiUrl = 'https://business.test/integrations/';
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: 0, active: false, needsSignIn: true });
+    const fetchProfile = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true,
+      json: async () => ({ result: { firstName: 'Alice', lastName: 'Smith', email: 'a@business.test' } }) } as Response);
+    const result = await request({ type: 'load-plans' });
+    expect(result.ok).toBe(true);
+    expect(result.state.accounts).toMatchObject([
+      { id: 'account-a', label: 'Alice Smith', email: 'a@business.test' },
+      { id: 'account-b', needsSignIn: true },
+    ]);
+    expect(result.state.accounts[1].email).toBeUndefined();
+    expect(fetchProfile).toHaveBeenCalledWith(new URL('https://business.test/integrations/v1/importer/profile'),
+      { headers: { Authorization: 'Bearer operator-token', 'x-elements-environment': 'TEST' }, signal: expect.any(AbortSignal) });
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+    fetchProfile.mockRestore();
+  });
+
+  it('shows the selected Business organisation role when available', async () => {
+    businessMode = true;
+    profileApiUrl = 'https://business.test/integrations/';
+    selectedOrganizations[JSON.stringify(['https://safeid.test', 'TEST', 'user-a'])] = 'org-a';
+    const fetchProfile = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => ({ ok: true,
+      json: async () => String(input).endsWith('/v1/organizations')
+        ? { result: { items: [{ id: 'org-a', roleName: 'Owner' }] } }
+        : { result: { firstName: 'Alice', lastName: 'Smith', email: 'a@business.test' } },
+    }) as Response);
+    const result = await request({ type: 'load-plans' });
+    expect(result.state.accounts?.[0]).toMatchObject({ label: 'Alice Smith', email: 'a@business.test', role: 'Owner' });
+    expect(fetchProfile).toHaveBeenCalledTimes(2);
+    fetchProfile.mockRestore();
     delete selectedOrganizations[JSON.stringify(['https://safeid.test', 'TEST', 'user-a'])];
   });
 
@@ -478,6 +518,16 @@ describe('service worker access routing', () => {
     expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
   });
 
+  it('asks for sign-in when a selected saved account has no usable session', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    loadPlansMock.mockResolvedValueOnce({ kind: 'SIGNED_OUT' });
+    const result = await request({ type: 'switch-account', accountId: 'account-b' });
+    expect(result.state).toMatchObject({ kind: 'ERROR', code: 'operator_reauthentication_required' });
+    expect(mockProfiles.find((profile) => profile.active)?.id).toBe('account-a');
+  });
+
   it('retains a credential-cleared B row without querying it or losing A', async () => {
     businessMode = true;
     mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
@@ -501,6 +551,18 @@ describe('service worker access routing', () => {
     await request({ type: 'guard:secure-logoff' });
     expect(mockProfiles).toEqual([]);
     expect(clearAuth).toHaveBeenCalledWith('account-a');
+  });
+
+  it('keeps another saved account available after removing the active account', async () => {
+    businessMode = true;
+    mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+      authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: false });
+    const removed = await request({ type: 'remove-account', accountId: 'account-a' });
+    expect(removed).toMatchObject({ ok: true, state: { accounts: [{ id: 'account-b', active: false }] } });
+    expect(clearAuth).toHaveBeenCalledWith('account-a');
+    expect(clearAllSessions).not.toHaveBeenCalled();
+    expect(await request({ type: 'switch-account', accountId: 'account-b' }))
+      .toMatchObject({ ok: true, state: { accounts: [{ id: 'account-b', active: true }] } });
   });
 
   it('reads cached key status without reloading plans and reflects acquisition and clearing', async () => {
@@ -552,7 +614,7 @@ describe('service worker access routing', () => {
 
     businessOrganizations = [{ id: 'org-b', name: 'Beta' }];
     expect((await request({ type: 'load-plans' })).state).toMatchObject({
-      kind: 'SELECT_ORGANIZATION', reason: 'The saved organization is no longer available.',
+      kind: 'SELECT_ORGANIZATION', reason: 'The saved organisation is no longer available.',
     });
     expect((await request({ type: 'load-plans' })).state).toMatchObject({ kind: 'EMPTY', organizationId: 'org-b' });
     businessOrganizations = [];

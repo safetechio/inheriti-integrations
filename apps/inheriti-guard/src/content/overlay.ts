@@ -10,7 +10,7 @@ interface FieldResult { selector: string; targetId: string; code: string }
 interface Batch { identity: { planId: string }; mappings: readonly Mapping[] }
 
 const STYLES = `
-@font-face{font-family:Lexend;font-weight:100 900;src:url(${chrome.runtime.getURL('side-panel/font-app.ttf')}?v=3add53e6) format('truetype');font-display:swap}
+@font-face{font-family:AppFont;font-weight:100 900;src:url(${chrome.runtime.getURL('side-panel/font-app.ttf')}?v=e493fee2) format('truetype');font-display:swap}
 :host{all:initial}
 *,*::before,*::after{box-sizing:border-box}
 strong{font-weight:500}
@@ -21,7 +21,7 @@ strong{font-weight:500}
 .button svg{width:14px;height:17px;fill:currentColor}
 .button:focus-visible{outline:3px solid #75a9ff}
 @media(prefers-reduced-motion:reduce){.button{animation:none}}
-.popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:10px;width:300px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #eaecf0;border-radius:10px;background:#fff;color:#101828;font:14px/1.5 Lexend,system-ui,sans-serif;box-shadow:0 12px 32px #10182829;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
+.popover{position:fixed;inset:auto;margin:0;opacity:0;transform:translateY(-4px);transition:opacity .13s ease-out,transform .13s ease-out;display:flex;flex-direction:column;gap:10px;width:300px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #eaecf0;border-radius:10px;background:#fff;color:#101828;font:14px/1.5 AppFont,system-ui,sans-serif;box-shadow:0 12px 32px #10182829;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
 .popover.shown{opacity:1;transform:none}
 .popover.device-choice{box-sizing:border-box;width:300px;gap:0;padding:14px;overflow-y:auto}
 .device-logo{display:block;width:120px;max-width:100%;height:auto;margin:0 0 10px}
@@ -70,7 +70,7 @@ strong{font-weight:500}
 .action.ghost:hover{border-color:#d0d5dd;background:#f9fafb}
 .action:disabled{opacity:.6;cursor:wait}
 .action:focus-visible{outline:2px solid #75a9ff;outline-offset:1px}
-.tip{position:absolute;right:0;bottom:36px;width:max-content;max-width:calc(100vw - 24px);padding:5px 10px;border-radius:6px;background:#101828;color:#fff;font:12px/1.35 Lexend,system-ui,sans-serif;white-space:nowrap;opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
+.tip{position:absolute;right:0;bottom:36px;width:max-content;max-width:calc(100vw - 24px);padding:5px 10px;border-radius:6px;background:#101828;color:#fff;font:12px/1.35 AppFont,system-ui,sans-serif;white-space:nowrap;opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease;pointer-events:none}
 .button:hover+.tip,.button:focus-visible+.tip{opacity:1;transform:translateY(0)}
 @media(prefers-reduced-motion:reduce){.tip{transition:none}}
 .reveal-head{flex:none;display:flex;align-items:center;gap:10px;color:#2962ff;font-size:15px}

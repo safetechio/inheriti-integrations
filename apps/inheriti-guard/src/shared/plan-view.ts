@@ -1,6 +1,8 @@
 export interface AccountSummary {
   readonly id: string;
   readonly label: string;
+  readonly email?: string;
+  readonly role?: string;
   readonly subject: string;
   readonly issuer: string;
   readonly environment: string;
@@ -21,11 +23,11 @@ export type PanelState = (
 ) & { readonly organizations?: readonly { id: string; name: string }[]; readonly organizationId?: string; readonly keyInMemory?: boolean; readonly accounts?: readonly AccountSummary[]; readonly generation?: number };
 
 const MESSAGES: Readonly<Record<string, string>> = {
-  operator_reauthentication_required: 'Session expired — sign in again',
+  operator_reauthentication_required: 'Sign in again to this account',
   plan_request_rate_limited: 'Too many requests — try again shortly',
   elements_api_unavailable: 'The plan service is unavailable — try again shortly',
   plan_request_failed: 'Could not reach the plan service',
-  plan_access_denied: 'Could not verify plan access — sign in again',
+  plan_access_denied: 'You do not have access to these plans',
   configuration_missing: 'Configure Inheriti before signing in',
   master_key_salt_required: 'This Application\'s key salt is missing — check the configuration',
   master_key_salt_unexpected: 'The stored custody and key salt come from different Applications',
@@ -38,10 +40,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
 const STABLE_CODE = /^[a-z][a-z0-9_]{2,63}$/u;
 
 export function codeOf(error: unknown, fallback = 'plan_request_failed'): string {
+  const status = (error as { status?: unknown })?.status;
+  if (status === 401) return 'operator_reauthentication_required';
+  if (status === 403) return 'plan_access_denied';
   const code = (error as { code?: unknown })?.code;
   if (typeof code === 'string' && STABLE_CODE.test(code)) return code;
-  const status = (error as { status?: unknown })?.status;
-  if (status === 401 || status === 403) return 'plan_access_denied';
   if (typeof status === 'number' && status >= 500) return 'elements_api_unavailable';
   return fallback;
 }
@@ -68,6 +71,6 @@ export function rowsFor(state: PanelState): readonly PanelRow[] {
     detail: '',
   }];
   if (state.kind === 'ERROR') return [{ label: messageFor(state.code, Boolean(state.organizationId)), detail: state.code }];
-  if (state.kind === 'SELECT_ORGANIZATION') return [{ label: state.organizations.length ? 'Choose an organization' : 'No organizations available', detail: state.reason ?? '' }];
+  if (state.kind === 'SELECT_ORGANIZATION') return [{ label: state.organizations.length ? 'Choose an organisation' : 'No organisations available', detail: state.reason ?? '' }];
   return state.plans.map((plan) => ({ label: plan.name, detail: plan.status, avatarId: plan.id, ...(plan.status.toUpperCase() === 'DRAFT' ? {} : { planId: plan.id }), draft: plan.status.toUpperCase() === 'DRAFT' }));
 }

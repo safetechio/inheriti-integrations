@@ -59,6 +59,14 @@ describe('OAuth browser callback', () => {
         if (String(input).endsWith('/.well-known/openid-configuration')) {
           return Response.json({ issuer: configuration.issuer, authorization_endpoint: 'https://issuer.test/authorize', token_endpoint: 'https://issuer.test/token' });
         }
+        if (String(input) === 'https://business.test/integrations/operator-sessions/exchange') {
+          expect(JSON.parse(String(init?.body))).toEqual({ providerAccessToken: 'access' });
+          return Response.json({ ok: true, result: {
+            accessToken: 'business-access', refreshToken: 'business-refresh', accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+            sessionExpiresAt: new Date(Date.now() + 120_000).toISOString(), familyId: 'family', environment: 'TEST',
+            clientId: configuration.clientId, providerIssuer: configuration.issuer, providerSubject: principal.subject,
+          } });
+        }
         expect(String(input)).toBe('https://issuer.test/token');
         exchanged = new URLSearchParams(String(init?.body));
         return Response.json({ access_token: 'access', id_token: 'id', token_type: 'Bearer', expires_in: 3600 });

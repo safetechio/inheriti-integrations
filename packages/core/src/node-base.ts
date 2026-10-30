@@ -9,6 +9,7 @@ import { SdkPlanFacade } from './plans.js';
 import { composeOperatorAuth } from './operator-auth.js';
 import type { OperatorAuthOptions, OperatorAuthRuntime } from './operator-auth.js';
 import { composeRevealWorkflows } from './workflows.js';
+import { businessApiTransport } from './business-api-transport.js';
 
 /**
  * The SDK's Node entry exports the operator-auth runtime, but its `node.d.ts` re-exports the module
@@ -43,6 +44,8 @@ export type NodeIntegrationCore = ElementsIntegrationCore<ListPlansInput, PlanPa
 export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): NodeIntegrationCore {
   const auth = options.auth ?? composeOperatorAuth(nodeAuthRuntime, options);
   const bearer = async () => (await auth.getAccessToken()) ?? null;
+  const transport = options.business && options.businessAuthority !== 'safeid-oidc'
+    ? businessApiTransport(options.apiUrl, auth, options.fetchImpl ?? globalThis.fetch.bind(globalThis)) : options.fetchImpl;
   const elements = createNodeElementsClient({
     apiUrl: options.apiUrl,
     environment: options.environment,
@@ -52,10 +55,10 @@ export function createNodeIntegrationCore(options: NodeIntegrationCoreOptions): 
     ...(options.masterKeys ? { masterKeys: options.masterKeys } : {}),
     ...(options.keyVault ? { keyVault: options.keyVault } : {}),
     ...(options.masterKey ? { masterKey: options.masterKey } : {}),
-    ...(options.fetchImpl ? { transport: options.fetchImpl } : {}),
+    ...(transport ? { transport } : {}),
   });
   const fileAccessApi = options.business ? new HttpElementsApiPort(options.apiUrl,
-    options.environment, bearer, options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+    options.environment, bearer, transport ?? globalThis.fetch.bind(globalThis),
     options.organizationId !== undefined ? { organizationId: options.organizationId } : {}) : undefined;
   return new ElementsIntegrationCore<ListPlansInput, PlanPage, PlanDetail>({
     environment: options.environment,

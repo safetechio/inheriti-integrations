@@ -7,15 +7,15 @@ type AccountAction = Extract<SidePanelRequest, { type: 'switch-account' | 'remov
 export function renderAccounts(accountList: HTMLUListElement, accounts: readonly AccountSummary[],
   accountAction: (request: AccountAction, confirmation?: string) => Promise<void>): void {
   const active = accounts.find((account) => account.active);
-  const names = new Map(accounts.map((account, index) => [account.id, displayName(account, index)]));
+  const names = new Map(accounts.map((account) => [account.id, accountDisplayName(account)]));
   const triggerAvatar = accountList.closest('.account-menu')?.querySelector('.account-trigger-avatar');
   if (triggerAvatar !== null && triggerAvatar !== undefined) triggerAvatar.textContent = initials(names.get((active ?? accounts[0])?.id ?? ''));
   accountList.replaceChildren(...[...accounts].sort((a, b) => Number(b.active) - Number(a.active)).map((account) => {
     const item = el('li');
     item.dataset.active = String(account.active);
-    const needsSignIn = account.needsSignIn === true;
+    if (account.active) item.setAttribute('aria-current', 'true');
     const name = names.get(account.id) ?? 'Account';
-    const identity = account.active || needsSignIn ? el('div', 'account-identity') : compactButton('');
+    const identity = account.active ? el('div', 'account-identity') : compactButton('');
     if (identity instanceof HTMLButtonElement) {
       identity.className = 'account-identity account-switch';
       identity.setAttribute('aria-label', `Switch to ${name}`);
@@ -26,16 +26,17 @@ export function renderAccounts(accountList: HTMLUListElement, accounts: readonly
     identity.append(el('span', 'account-avatar', initials(name)));
     const identityText = el('span', 'account-identity-text');
     identityText.append(el('strong', 'account-label', name));
-    if (needsSignIn) identityText.append(el('span', 'account-meta', 'Sign in again'));
-    else if (account.active) identityText.append(el('span', 'account-meta account-status-signed', 'Signed in.'));
+    if (account.email?.includes('@') && account.email !== name) identityText.append(el('span', 'account-meta', account.email));
+    if (account.role?.trim()) identityText.append(el('span', 'account-meta', account.role.trim()));
     identity.append(identityText);
     const row = el('div', 'account-row');
     row.append(identity);
     const actions = el('div', 'account-actions');
-    const remove = compactButton('Remove');
-    remove.setAttribute('aria-label', `Remove ${name} from this browser session`);
+    const remove = compactButton('×');
+    remove.setAttribute('aria-label', `Unlink ${name} from this browser`);
+    remove.title = `Unlink ${name} from this browser`;
     remove.addEventListener('click', () => {
-      void accountAction({ type: 'remove-account', accountId: account.id }, `Remove ${name} from this browser session?`);
+      void accountAction({ type: 'remove-account', accountId: account.id }, `Unlink ${name}?`);
     });
     actions.append(remove);
     row.append(actions);
@@ -44,10 +45,11 @@ export function renderAccounts(accountList: HTMLUListElement, accounts: readonly
   }));
 }
 
-function displayName(account: AccountSummary, index: number): string {
+export function accountDisplayName(account: AccountSummary): string {
   const label = account.label.trim();
-  return !label || label.includes('@') || label === account.subject || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu.test(label)
-    || label.startsWith('[') ? `Account ${index + 1}` : label;
+  if (label && !label.includes('@') && label !== account.subject && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu.test(label)
+    && !label.startsWith('[')) return label;
+  return 'Saved account';
 }
 
 function initials(label: string | undefined): string {
