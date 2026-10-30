@@ -49,7 +49,7 @@ const sdk = {
       auth: {
         beginAuthorizationCode: async () => ({ authorizationUrl: `https://issuer/authorize?redirect_uri=${encodeURIComponent(options.configuration.redirectUri)}&state=state`, expiresAt: 1 }),
         completeAuthorizationCode: async () => options.sessions.save({ kind: 'business', principal: { issuer: 'https://issuer', subject,
-          environment: options.configuration.environment, authorizedParty: 'business-client', audience: 'inheriti-integrations-api' },
+          environment: options.configuration.environment, authorizedParty: 'business-client', audience: ['account', 'inheriti-integrations-api'] },
           familyId: `family-${credentialSuffix}`, accessToken: `access-${credentialSuffix}`, refreshToken: `refresh-${credentialSuffix}`,
           tokenType: 'Bearer', expiresAt: 1000, sessionExpiresAt: 2000 }),
         getAccessToken: async () => (await options.sessions.load())?.accessToken,
@@ -107,6 +107,21 @@ it('enrolls and reloads a LIVE session under its classified environment', async 
   expect(await runtime.store('alice').load()).toMatchObject({ principal: { environment: 'LIVE' } });
   const restarted = await create('LIVE');
   expect(await restarted.sessionDescriptor()).toMatchObject({ subject: 'alice' });
+});
+
+it('shows the Go-style completion page without exposing the authorization code', async () => {
+  const runtime = await create();
+  await runtime.login(async (authorizationUrl: string) => {
+    const redirect = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+    const response = await fetch(`${redirect}?code=private-code&state=state`);
+    const html = await response.text();
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(html).toContain('Continue in Inheriti® Importer');
+    expect(html).toContain('Browser step complete');
+    expect(html).toContain('data:image/png;base64,');
+    expect(html).not.toContain('private-code');
+  });
 });
 
 afterEach(() => {

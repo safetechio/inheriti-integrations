@@ -175,7 +175,8 @@ class OperatorRuntime {
     const session = await sessions.load();
     if (!session || session.kind !== this.sessionKind || session.principal?.issuer !== this.issuer || !session.principal.subject ||
       session.principal.environment !== this.sessionEnvironment || session.principal.authorizedParty !== this.clientId ||
-      session.principal.audience !== this.audience)
+      !(typeof session.principal.audience === 'string' ? session.principal.audience === this.audience
+        : Array.isArray(session.principal.audience) && session.principal.audience.includes(this.audience)))
       throw new Error('operator_account_invalid');
     if (revision !== this.revision) throw new Error('operator_context_changed');
     return this.mutate(async () => {
@@ -310,14 +311,14 @@ function waitForCallback(buildUrl, openBrowser, signal, prepareLogout) {
       if (url.pathname !== '/oauth/callback') { response.writeHead(404).end(); return; }
       if (awaitingCheck) {
         if (url.searchParams.get('state') !== checkState) {
-          response.writeHead(400).end(); finish(new Error('operator_callback_invalid')); return;
+          response.writeHead(400, callbackHeaders).end(callbackPage(false)); finish(new Error('operator_callback_invalid')); return;
         }
         awaitingCheck = false;
         if (url.searchParams.get('error') === 'login_required') {
           response.writeHead(302, { location: authorizationUrl, 'cache-control': 'no-store' }).end(); return;
         }
         if (url.searchParams.has('error') || !url.searchParams.has('code')) {
-          response.writeHead(400).end(); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
+          response.writeHead(400, callbackHeaders).end(callbackPage(false)); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
         }
         Promise.resolve(completeCheck(url.toString())).then((idToken) => {
           if (settled) return;
@@ -325,17 +326,17 @@ function waitForCallback(buildUrl, openBrowser, signal, prepareLogout) {
           logout.searchParams.set('id_token_hint', idToken);
           awaitingLogout = true;
           response.writeHead(302, { location: logout.toString(), 'cache-control': 'no-store' }).end();
-        }).catch((error) => { if (!settled) response.writeHead(500).end(); finish(error); });
+        }).catch((error) => { if (!settled) response.writeHead(500, callbackHeaders).end(callbackPage(false)); finish(error); });
         return;
       }
       if (url.searchParams.has('error')) {
-        response.writeHead(400).end();
+        response.writeHead(400, callbackHeaders).end(callbackPage(false));
         finish(new Error(url.searchParams.get('error')));
         return;
       }
       if (awaitingLogout) {
         if (url.searchParams.has('code') || url.searchParams.get('state') !== logoutState) {
-          response.writeHead(400).end();
+          response.writeHead(400, callbackHeaders).end(callbackPage(false));
           return;
         }
         awaitingLogout = false;
@@ -343,9 +344,9 @@ function waitForCallback(buildUrl, openBrowser, signal, prepareLogout) {
         return;
       }
       if (!url.searchParams.has('code') || !url.searchParams.has('state')) {
-        response.writeHead(400).end(); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
+        response.writeHead(400, callbackHeaders).end(callbackPage(false)); finish(new Error(url.searchParams.get('error') || 'operator_callback_invalid')); return;
       }
-      response.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }).end('Browser step complete. Return to Inheriti Importer.');
+      response.writeHead(200, callbackHeaders).end(callbackPage(true));
       finish(undefined, url.toString());
     });
     const finish = (error, url) => {
@@ -393,6 +394,27 @@ function waitForCallback(buildUrl, openBrowser, signal, prepareLogout) {
       }).catch(finish);
     });
   });
+}
+
+const callbackHeaders = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'no-store',
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; frame-ancestors 'none'",
+};
+
+function callbackPage(success) {
+  const assets = path.join(__dirname, '../assets');
+  return fs.readFileSync(path.join(assets, 'login-callback.html'), 'utf8')
+    .replace('{{font}}', fs.readFileSync(path.join(assets, 'font-app.ttf')).toString('base64'))
+    .replace('{{logo}}', fs.readFileSync(path.join(assets, 'logo.png')).toString('base64'))
+    .replaceAll('{{heading}}', success ? 'Continue in Inheriti® Importer' : 'Sign-in failed')
+    .replace('{{statusLabel}}', success ? 'Browser step complete' : 'Sign-in error')
+    .replace('{{statusClass}}', success ? '' : 'failed')
+    .replace('{{message}}', success
+      ? 'You can close this tab and return to Inheriti® Importer to finish signing in.'
+      : 'Return to Inheriti® Importer and try signing in again.');
 }
 
 module.exports = { OperatorRuntime };
