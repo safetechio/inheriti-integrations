@@ -32,11 +32,22 @@ export function readEnvironment(environment, root) {
 }
 
 export function runYarn(args, options = {}) {
-  const command = process.platform === 'win32' ? 'yarn.cmd' : 'yarn';
+  const windows = process.platform === 'win32';
+  const yarnScript =
+    windows && /[\\/](?:yarn|pnpm)[^\\/]*\.[cm]?js$/i.test(process.env.npm_execpath || '')
+      ? process.env.npm_execpath
+      : null;
+  const command = yarnScript ? process.execPath : windows ? 'yarn.cmd' : 'yarn';
+  const commandArgs = yarnScript
+    ? [yarnScript, ...args]
+    : windows
+      ? args.map((arg) => `"${arg.replaceAll('"', '""')}"`)
+      : args;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(command, commandArgs, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env, COREPACK_ENABLE_PROJECT_SPEC: '0' },
+      shell: windows && !yarnScript,
       stdio: 'inherit',
     });
     child.once('error', reject);
