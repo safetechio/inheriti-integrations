@@ -523,7 +523,7 @@ const workspacePanel = initializeWorkspacePanel(workspaceState, send,
 void requestState('load-plans');
 void workspacePanel.refreshResumable();
 function send(request: SidePanelRequest): Promise<SidePanelResponse> {
-  if (request.type !== 'load-plans' && reconfirming) return Promise.reject(new Error('account_context_changed'));
+  if (request.type !== 'load-plans' && reconfirming) return Promise.resolve({ ok: false, error: 'operation-busy' });
   const message = request.type !== 'load-plans' && panelGeneration !== undefined
     ? Object.assign({}, request, { expectedGeneration: panelGeneration }) : request;
   return chrome.runtime.sendMessage(message) as Promise<SidePanelResponse>;
