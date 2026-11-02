@@ -12,7 +12,7 @@ describe('unified Inheriti® Guard UI', () => {
     expect(panel).toContain('aria-label="Inheriti® Guard sections"');
     expect(panel).not.toContain('class="app-header"');
     expect(panel).toMatch(/<main[^>]*>\s*<span class="sr-only" id="auth-status" aria-live="polite">/u);
-    expect(panel).toMatch(/id="browser-protection-tab"[^>]*>Browser Protection <span id="guard-header-status"[^>]*role="status" aria-live="polite" aria-label="Protection: checking">Checking<\/span>/u);
+    expect(panel).toMatch(/id="browser-protection-tab"[^>]*><span class="product-tab-title">Browser Protection<\/span><span id="guard-header-status"[^>]*role="status" aria-live="polite" aria-label="Protection: checking">Checking<\/span>/u);
     expect(panelMain).toContain("guardHeaderStatus.textContent = settings.isEnabled ? 'On' : 'Off'");
     expect(panelMain).toContain("guardHeaderStatus.setAttribute('aria-label', `Protection: ${settings.isEnabled ? 'on' : 'off'}`)");
     expect(panel.match(/class="product-tabs"[\s\S]*?<\/div>/u)?.[0].match(/role="tab"/gu)).toHaveLength(2);
