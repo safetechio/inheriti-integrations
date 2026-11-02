@@ -13,7 +13,7 @@ const useService = vi.fn();
 
 vi.mock('@shared/infrastructure/importer-api', () => ({
   useAuthProvider: (...args: unknown[]) => useAuthProvider(...args),
-  useAuthState: (selector: (state: unknown) => unknown) => selector({ notice: null }),
+  useAuthState: (selector: (state: unknown) => unknown) => selector({ notice: null, isLoggedIn: true, isSwitching: false, accountsRevision: 0 }),
   useAuthenticatedCookieSession: (...args: unknown[]) => useAuthenticatedCookieSession(...args),
   useService: (...args: unknown[]) => useService(...args),
 }));
@@ -295,6 +295,7 @@ describe('AppShell account-menu organization switcher', () => {
     useGetJoinedOrganizations.mockReturnValue({ data: [], loading: false });
     useAuthenticatedCookieSession.mockReturnValue({ session: null });
     useService.mockReturnValue({ clearOrganization: vi.fn() });
+    setActiveOrganizationAccount('account-a');
 
     const view = render(
       <AppShell dirtyCount={0} accountActionsDisabled>

@@ -42,6 +42,15 @@ it('shows current account email between name and role', () => {
   expect(screen.getByText('ada@example.com')).toBeTruthy();
 });
 
+it('does not request accounts when the menu opens or closes', () => {
+  const props = { menuRef: { current: null }, setOpen: vi.fn(), closeMenu: vi.fn(), closeOrganizationMenu: vi.fn() };
+  const view = render(<AccountMenu {...props} open={false} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open account menu for Ada Lovelace' }));
+  view.rerender(<AccountMenu {...props} open />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open account menu for Ada Lovelace' }));
+  expect(mockLoadAccounts).not.toHaveBeenCalled();
+});
+
 it('offers a hover unlink action for the active account and confirms it', () => {
   mockAccounts = [{ key: 'active', subject: 'owner', active: true }];
   render(<AccountMenu menuRef={{ current: null }} open setOpen={vi.fn()} closeMenu={vi.fn()} closeOrganizationMenu={vi.fn()} />);

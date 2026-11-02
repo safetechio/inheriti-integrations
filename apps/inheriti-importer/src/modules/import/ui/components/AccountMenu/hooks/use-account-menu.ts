@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthProvider, useAuthState } from '@shared/infrastructure/importer-api';
 import type {
   AccountDestinations,
@@ -17,6 +17,8 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
   const authProvider = useAuthProvider() as ElectronAuthProvider | null;
   const authNotice = useAuthState((state) => (state as { notice?: string | null }).notice ?? null);
   const accountsRevision = useAuthState((state) => (state as { accountsRevision?: number }).accountsRevision ?? 0);
+  const isLoggedIn = useAuthState((state) => (state as { isLoggedIn?: boolean }).isLoggedIn ?? false);
+  const isSwitching = useAuthState((state) => (state as { isSwitching?: boolean }).isSwitching ?? false);
   const { selectOrganization } = useSelectCurrentOrganization();
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [destinations, setDestinations] = useState<AccountDestinations[]>([]);
@@ -34,6 +36,22 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
   const currentAccountsRevision = useRef(accountsRevision);
   currentAccountsRevision.current = accountsRevision;
   const currentKey = getActiveOrganizationAccount();
+
+  useEffect(() => {
+    if (isLoggedIn && !isSwitching && currentKey && authProvider) {
+      void loadAccounts();
+    } else {
+      ++loadRevision.current;
+      inFlight.current = null;
+      setDestinationsLoading(false);
+      if (!isLoggedIn) {
+        setAccounts([]);
+        setDestinations([]);
+        setLoadedKey(null);
+        setHasLoaded(false);
+      }
+    }
+  }, [authProvider, isLoggedIn, isSwitching, currentKey, accountsRevision]);
 
   function loadAccounts(force = false): Promise<void> {
     const activeKey = getActiveOrganizationAccount();

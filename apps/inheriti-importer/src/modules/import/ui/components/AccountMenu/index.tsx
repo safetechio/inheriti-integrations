@@ -74,7 +74,6 @@ export function AccountMenu({
           disabled={disabled || accountBusy}
           onPress={() => {
             setOpen((value) => !value);
-            if (!open) void menu.loadAccounts();
             closeOrganizationMenu(false);
           }}
         >
