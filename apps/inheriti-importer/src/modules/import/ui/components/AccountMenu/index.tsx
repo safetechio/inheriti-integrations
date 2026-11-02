@@ -2,7 +2,7 @@ import { useState, type Dispatch, type RefObject, type SetStateAction } from 're
 import type { SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
 import { useGetIdentity } from '@modules/organization/infrastructure/importer-api';
 import { useGetCurrentMember } from '@modules/organization/infrastructure/organization-resources-api';
-import { BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
+import { ActivityIndicator, BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { AccountDestinations } from '../AccountDestinations';
 import { AccountUnlinkAction } from '../AccountUnlinkAction';
@@ -31,6 +31,7 @@ export function AccountMenu({
     accounts,
     destinations,
     destinationsLoading,
+    hasLoaded,
     pendingAccount,
     setPendingAccount,
     confirmSignOutAll,
@@ -119,10 +120,17 @@ export function AccountMenu({
                 <AccountUnlinkAction name={displayName} onPress={() => { closeMenu(); setPendingRemoval(activeAccount); }} />
               ) : null}
             </Box>
-            {destinationsLoading ? (
-              <Text variant="bodySmall" color="gray">
-                Loading accounts…
-              </Text>
+            {destinationsLoading && !hasLoaded ? (
+              <Box className="account-menu-status" accessibilityRole="status" {...{ 'aria-live': 'polite' }} alignItems="center" justifyContent="center" gap="s">
+                <ActivityIndicator size="small" />
+                <Text variant="bodySmall" color="gray">Loading accounts…</Text>
+              </Box>
+            ) : null}
+            {accountError ? (
+              <Box className="account-menu-status" accessibilityRole="alert" alignItems="center" justifyContent="center" gap="s">
+                <Text variant="bodySmall" color="danger">{accountError}</Text>
+                <Button title="Retry loading accounts" variant="plain" size="sm" onPress={() => void menu.loadAccounts(true)} />
+              </Box>
             ) : null}
             <AccountDestinations
               accounts={accounts}
@@ -215,7 +223,7 @@ export function AccountMenu({
             Every saved login on this device will be removed.
           </Text>
         </BaseModal>
-        {notice ? (
+        {notice && (!open || !accountError) ? (
           <Box className="account-menu-notice" accessibilityRole="alert" position="absolute" right={0} top="100%" width={340} padding="s" backgroundColor="white" borderRadius="s" borderWidth={1} borderColor="gray10">
             <Text variant="bodySmall" color="danger">{notice}</Text>
           </Box>

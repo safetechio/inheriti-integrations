@@ -63,6 +63,7 @@ function makeAuthProvider(overrides: Partial<AuthProviderMock> = {}): AuthProvid
 function stubAuthState(state: {
   authInitialized: boolean;
   isLoggedIn: boolean;
+  isSwitching?: boolean;
   accountsRevision?: number;
   notice?: string | null;
 }) {
@@ -129,6 +130,26 @@ describe('AuthGate — restore / sign-in / cancel', () => {
     render(<AuthGate>content</AuthGate>);
 
     expect(screen.getByText('Sign in with SafeID')).toBeTruthy();
+  });
+
+  it('shows only switch progress while the previous session is signed out', async () => {
+    const accounts = vi.fn().mockResolvedValue([{ key: 'account-b', subject: 'B', active: false }]);
+    useAuthProvider.mockReturnValue(makeAuthProvider({ accounts }));
+    stubAuthState({ authInitialized: true, isLoggedIn: true });
+    stubReadyOrganization();
+    const view = render(<AuthGate>content</AuthGate>);
+
+    stubAuthState({ authInitialized: true, isLoggedIn: false, isSwitching: true });
+    view.rerender(<AuthGate>content</AuthGate>);
+    expect(await screen.findByText('Switching account…')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Switching account…');
+    expect(screen.queryByText('Sign in with SafeID')).toBeNull();
+    expect(screen.queryByText(/Continue with saved account/u)).toBeNull();
+    expect(accounts).not.toHaveBeenCalled();
+
+    stubAuthState({ authInitialized: true, isLoggedIn: true, isSwitching: false });
+    view.rerender(<AuthGate>content</AuthGate>);
+    await waitFor(() => expect(screen.queryByText('Switching account…')).toBeNull());
   });
 
   it('offers saved accounts after sign-out and activates the selected profile', async () => {

@@ -138,6 +138,8 @@ export function createElectronAuthProvider(
       const auth = window.inheriti?.auth;
       if (!auth) throw new Error('ELECTRON_BRIDGE_UNAVAILABLE');
       const previous = (await provider.accounts()).find((account) => account.active);
+      provider.dispatch?.({ type: 'SWITCH_START' });
+      try {
       provider.dispatch?.({ type: 'SIGN_OUT' });
       setActiveOrganizationAccount(null);
       try {
@@ -196,6 +198,9 @@ export function createElectronAuthProvider(
                 : 'Could not switch accounts.',
         });
         throw error;
+      }
+      } finally {
+        provider.dispatch?.({ type: 'SWITCH_END' });
       }
     },
     async removeAccount(key: string) {

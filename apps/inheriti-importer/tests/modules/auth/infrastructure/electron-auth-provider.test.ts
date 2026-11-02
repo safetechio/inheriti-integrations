@@ -99,7 +99,7 @@ describe('createElectronAuthProvider account transitions', () => {
 
     expect(api.request).toHaveBeenCalledWith({ method: 'GET', path: '/integrations/v1/importer/organizations' });
     expect(values.get('selectedOrganizationId:account-b')).toBe('org-b');
-    expect(provider.dispatch).toHaveBeenLastCalledWith({
+    expect(provider.dispatch).toHaveBeenCalledWith({
       type: 'SIGN_IN',
       userData: { userId: 'B' },
     });
@@ -131,7 +131,7 @@ describe('createElectronAuthProvider account transitions', () => {
       'AUTH_ORGANIZATION_UNAVAILABLE',
     );
     expect(values.get('selectedOrganizationId:account-b')).toBeUndefined();
-    expect(provider.dispatch).toHaveBeenLastCalledWith({
+    expect(provider.dispatch).toHaveBeenCalledWith({
       type: 'NOTICE',
       userData: 'That organisation is no longer available for this account.',
     });
@@ -220,7 +220,7 @@ describe('createElectronAuthProvider account transitions', () => {
       'account-c',
     ]);
     expect(active).toBe('account-c');
-    expect(provider.dispatch).toHaveBeenLastCalledWith({
+    expect(provider.dispatch).toHaveBeenCalledWith({
       type: 'SIGN_IN',
       userData: { userId: 'account-c' },
     });
@@ -450,7 +450,7 @@ describe('createElectronAuthProvider account transitions', () => {
 
     await provider.activateAccount('account-b');
 
-    expect(order).toEqual(['SIGN_OUT', 'cleanup', 'activate', 'SIGN_IN']);
+    expect(order).toEqual(['SWITCH_START', 'SIGN_OUT', 'cleanup', 'activate', 'SIGN_IN', 'SWITCH_END']);
     expect(auth.activate).toHaveBeenCalledWith('account-b');
   });
 
@@ -482,15 +482,17 @@ describe('createElectronAuthProvider account transitions', () => {
     provider.dispatch = vi.fn();
 
     await expect(provider.activateAccount('account-b')).rejects.toThrow('TARGET_EXPIRED');
-    expect(provider.dispatch).toHaveBeenNthCalledWith(1, { type: 'SIGN_OUT' });
-    expect(provider.dispatch).toHaveBeenNthCalledWith(2, {
+    expect(provider.dispatch).toHaveBeenNthCalledWith(1, { type: 'SWITCH_START' });
+    expect(provider.dispatch).toHaveBeenNthCalledWith(2, { type: 'SIGN_OUT' });
+    expect(provider.dispatch).toHaveBeenNthCalledWith(3, {
       type: 'SIGN_IN',
       userData: { userId: 'A' },
     });
-    expect(provider.dispatch).toHaveBeenLastCalledWith({
+    expect(provider.dispatch).toHaveBeenCalledWith({
       type: 'NOTICE',
       userData: 'TARGET_EXPIRED',
     });
+    expect(provider.dispatch).toHaveBeenLastCalledWith({ type: 'SWITCH_END' });
   });
 
   it('does not reuse another account organization preference after a fresh login', async () => {

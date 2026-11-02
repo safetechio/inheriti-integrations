@@ -5,7 +5,7 @@ import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import type { SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
 
 export interface SignInGateProps {
-  status: 'checking' | 'signed-out' | 'signed-in' | 'error';
+  status: 'checking' | 'switching' | 'signed-out' | 'signed-in' | 'error';
   message: string | null;
   loginInProgress: boolean;
   accounts: SavedAccount[];
@@ -49,7 +49,14 @@ export function SignInGate({
           boxShadow: '0 8px 28px rgba(16, 24, 40, 0.08)',
         }}
       >
-        <BrandLogo business className="auth-logo" />
+        {status === 'switching' ? (
+          <Box alignItems="center" gap="s" role="status" aria-live="polite" aria-busy={true}>
+            <ActivityIndicator size="small" color={uiTheme.colors.gray30} />
+            <Text variant="heading3" align="center">Switching account…</Text>
+          </Box>
+        ) : null}
+        {status !== 'switching' ? <BrandLogo business className="auth-logo" /> : null}
+        {status !== 'switching' ? (
         <Box gap="s" className="auth-copy">
           <Text variant="heading3" align="center">
             Sign in to your workspace
@@ -58,6 +65,7 @@ export function SignInGate({
             Import your secrets, review them, and create secure plans for your organisation.
           </Text>
         </Box>
+        ) : null}
         {status === 'checking' ? (
           <Box alignItems="center" gap="s">
             <ActivityIndicator size="small" color={uiTheme.colors.gray30} />
@@ -73,8 +81,8 @@ export function SignInGate({
             ) : null}
           </Box>
         ) : null}
-        {message ? <Alert>{message}</Alert> : null}
-        {status !== 'checking' && accounts.map((account, index) => (
+        {status !== 'switching' && message ? <Alert>{message}</Alert> : null}
+        {status !== 'checking' && status !== 'switching' && accounts.map((account, index) => (
           <Button
             key={account.key}
             title={`Continue with saved account${accounts.length > 1 ? ` ${index + 1}` : ''}`}
@@ -83,7 +91,7 @@ export function SignInGate({
             onPress={() => { void onActivateAccount(account.key); }}
           />
         ))}
-        {status !== 'checking' ? (
+        {status !== 'checking' && status !== 'switching' ? (
           <Button
             title="Sign in with SafeID"
             block

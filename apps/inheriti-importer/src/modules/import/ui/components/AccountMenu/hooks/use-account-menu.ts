@@ -16,6 +16,7 @@ type PendingAccount = {
 export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
   const authProvider = useAuthProvider() as ElectronAuthProvider | null;
   const authNotice = useAuthState((state) => (state as { notice?: string | null }).notice ?? null);
+  const accountsRevision = useAuthState((state) => (state as { accountsRevision?: number }).accountsRevision ?? 0);
   const { selectOrganization } = useSelectCurrentOrganization();
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [destinations, setDestinations] = useState<AccountDestinations[]>([]);
@@ -26,27 +27,52 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
   const [accountBusy, setAccountBusy] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
   const loadRevision = useRef(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadedAccountsRevision, setLoadedAccountsRevision] = useState<number | null>(null);
+  const inFlight = useRef<{ key: string | null; accountsRevision: number; promise: Promise<void> } | null>(null);
+  const currentAccountsRevision = useRef(accountsRevision);
+  currentAccountsRevision.current = accountsRevision;
+  const currentKey = getActiveOrganizationAccount();
 
-  async function loadAccounts() {
-    const revision = ++loadRevision.current;
+  function loadAccounts(force = false): Promise<void> {
     const activeKey = getActiveOrganizationAccount();
-    setDestinationsLoading(true);
-    setAccounts([]);
-    setDestinations([]);
-    try {
-      const [saved, groups] = await Promise.all([
-        authProvider?.accounts?.(),
-        authProvider?.destinations?.(),
-      ]);
-      if (revision !== loadRevision.current || activeKey !== getActiveOrganizationAccount()) return;
-      setAccounts(saved ?? []);
-      setDestinations(groups ?? []);
-    } catch (error) {
-      if (revision === loadRevision.current)
-        setAccountError(error instanceof Error ? error.message : 'Could not load accounts.');
-    } finally {
-      if (revision === loadRevision.current) setDestinationsLoading(false);
+    const requestedAccountsRevision = currentAccountsRevision.current;
+    if (!force && inFlight.current?.key === activeKey && inFlight.current.accountsRevision === requestedAccountsRevision)
+      return inFlight.current.promise;
+    if (!force && activeKey === loadedKey && hasLoaded && loadedAccountsRevision === requestedAccountsRevision && !accountError)
+      return Promise.resolve();
+    const revision = ++loadRevision.current;
+    if (activeKey !== loadedKey) {
+      setAccounts([]);
+      setDestinations([]);
+      setHasLoaded(false);
+      setLoadedKey(activeKey);
     }
+    setDestinationsLoading(true);
+    setAccountError(null);
+    const promise = (async () => {
+      try {
+        const [saved, groups] = await Promise.all([
+          authProvider?.accounts?.(),
+          authProvider?.destinations?.(),
+        ]);
+        if (revision !== loadRevision.current || activeKey !== getActiveOrganizationAccount() || requestedAccountsRevision !== currentAccountsRevision.current) return;
+        setAccounts(saved ?? []);
+        setDestinations(groups ?? []);
+        setHasLoaded(true);
+        setLoadedAccountsRevision(requestedAccountsRevision);
+        setAccountError(null);
+      } catch (error) {
+        if (revision === loadRevision.current && activeKey === getActiveOrganizationAccount() && requestedAccountsRevision === currentAccountsRevision.current)
+          setAccountError(error instanceof Error ? error.message : 'Could not load accounts.');
+      } finally {
+        if (revision === loadRevision.current) setDestinationsLoading(false);
+        if (revision === loadRevision.current) inFlight.current = null;
+      }
+    })();
+    inFlight.current = { key: activeKey, accountsRevision: requestedAccountsRevision, promise };
+    return promise;
   }
 
   function cancelAddAccount() {
@@ -66,7 +92,7 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
     void authProvider
       ?.removeAccount(account.key)
       .then(async (result) => {
-        await loadAccounts();
+        await loadAccounts(true);
         if (result.remoteRevocationFailed)
           setAccountError('The saved login was removed here, but server sign-out could not be confirmed.');
       })
@@ -89,7 +115,7 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
     void authProvider
       ?.addAccount?.()
       .then(async () => {
-        await loadAccounts();
+        await loadAccounts(true);
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.message === 'AUTH_ACCOUNT_ALREADY_ACTIVE') {
@@ -135,14 +161,15 @@ export function useAccountMenu(closeMenu: (returnFocus?: boolean) => void) {
   }
 
   return {
-    accounts,
-    destinations,
-    destinationsLoading,
+    accounts: currentKey === loadedKey ? accounts : [],
+    destinations: currentKey === loadedKey ? destinations : [],
+    destinationsLoading: currentKey === loadedKey ? destinationsLoading : false,
+    hasLoaded: currentKey === loadedKey && hasLoaded,
     pendingAccount,
     setPendingAccount,
     confirmSignOutAll,
     setConfirmSignOutAll,
-    accountError,
+    accountError: currentKey === loadedKey ? accountError : null,
     authNotice,
     accountBusy,
     addingAccount,

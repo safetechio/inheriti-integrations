@@ -16,11 +16,71 @@ function withModules<T>(mocks: Record<string, unknown>, load: () => T): T {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   process.env.INHERITI_API_ORIGIN = originalOrigin;
   for (const file of Object.keys(require.cache)) {
     if (file.endsWith('/electron/lib/api-transport.cjs') || file.endsWith('/electron/lib/business-socket.cjs'))
       delete require.cache[file];
   }
+});
+
+it('settles stalled and interrupted HTTP requests once and clears their timers', async () => {
+  process.env.INHERITI_API_ORIGIN = 'https://api.example';
+  vi.useFakeTimers();
+  let request: any;
+  const net = { request: vi.fn(() => {
+    request = Object.assign(new EventEmitter(), { setHeader: vi.fn(), write: vi.fn(), end: vi.fn(),
+      abort: vi.fn(() => request.emit('abort')) });
+    return request;
+  }) };
+  const { bearerApiFetch } = withModules({ electron: { net } }, () => require('../../electron/lib/api-transport.cjs'));
+  const fetch = () => bearerApiFetch({ method: 'GET', path: '/integrations/v1/organizations', token: 'token', environment: 'TEST' });
+
+  const stalled = fetch();
+  const timedOut = expect(stalled).rejects.toThrow('Business API request timed out');
+  await vi.advanceTimersByTimeAsync(30_000);
+  await timedOut;
+  expect(request.abort).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+
+  const failed = fetch();
+  request.emit('error', new Error('network failed'));
+  await expect(failed).rejects.toThrow('network failed');
+  expect(vi.getTimerCount()).toBe(0);
+
+  for (const event of ['error', 'aborted', 'close']) {
+    const interrupted = fetch();
+    const response = Object.assign(new EventEmitter(), { statusCode: 200, headers: {} });
+    request.emit('response', response);
+    if (event === 'error') response.emit(event, new Error('response failed'));
+    else response.emit(event);
+    await expect(interrupted).rejects.toThrow();
+    response.emit('end');
+    expect(vi.getTimerCount()).toBe(0);
+  }
+
+  const completed = fetch();
+  const response = Object.assign(new EventEmitter(), { statusCode: 201, headers: { ok: 'yes' } });
+  request.emit('response', response);
+  response.emit('data', Buffer.from('{"ok":true}'));
+  response.emit('end');
+  response.emit('close');
+  await expect(completed).resolves.toEqual({ status: 201, body: { ok: true }, headers: { ok: 'yes' } });
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('clears the timer and aborts when writing the body fails synchronously', async () => {
+  process.env.INHERITI_API_ORIGIN = 'https://api.example';
+  vi.useFakeTimers();
+  const request = Object.assign(new EventEmitter(), { setHeader: vi.fn(),
+    write: vi.fn(() => { throw new Error('write failed'); }), end: vi.fn(), abort: vi.fn() });
+  const net = { request: vi.fn(() => request) };
+  const { bearerApiFetch } = withModules({ electron: { net } }, () => require('../../electron/lib/api-transport.cjs'));
+  await expect(bearerApiFetch({ method: 'POST', path: '/integrations/v1/organizations',
+    body: { value: 1 }, token: 'token', environment: 'TEST' })).rejects.toThrow('write failed');
+  expect(request.abort).toHaveBeenCalledOnce();
+  expect(request.end).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it('sends only the operator bearer token and selected organization to integration routes', async () => {

@@ -8,15 +8,32 @@ vi.mock('@modules/organization/infrastructure/organization-resources-api', () =>
   useGetCurrentMember: () => ({ member: { role: { name: 'Tenant Admin' } } }),
 }));
 let mockAccounts: Array<{ key: string; subject: string; active: boolean }> = [];
+let mockLoading = false;
+let mockError: string | null = null;
+const mockLoadAccounts = vi.fn();
 vi.mock('@modules/import/ui/components/AccountMenu/hooks/use-account-menu', () => ({
-  useAccountMenu: () => ({ accounts: mockAccounts, destinations: [], destinationsLoading: false, pendingAccount: null,
-    setPendingAccount: vi.fn(), confirmSignOutAll: false, setConfirmSignOutAll: vi.fn(), accountError: null,
-    authNotice: null, accountBusy: false, addingAccount: false }),
+  useAccountMenu: () => ({ accounts: mockAccounts, destinations: [], destinationsLoading: mockLoading, hasLoaded: false, pendingAccount: null,
+    setPendingAccount: vi.fn(), confirmSignOutAll: false, setConfirmSignOutAll: vi.fn(), accountError: mockError,
+    authNotice: null, accountBusy: false, addingAccount: false, loadAccounts: mockLoadAccounts }),
 }));
 
 import { AccountMenu } from '@modules/import/ui/components/AccountMenu';
 
-afterEach(() => { cleanup(); mockAccounts = []; });
+afterEach(() => { cleanup(); mockAccounts = []; mockLoading = false; mockError = null; mockLoadAccounts.mockClear(); });
+
+it('centers initial progress and offers an inline retry after failure', () => {
+  mockLoading = true;
+  const props = { menuRef: { current: null }, open: true, setOpen: vi.fn(), closeMenu: vi.fn(), closeOrganizationMenu: vi.fn() };
+  const view = render(<AccountMenu {...props} />);
+  expect(screen.getByRole('status').className).toContain('account-menu-status');
+  expect(screen.getByText('Loading accounts…')).toBeTruthy();
+  mockLoading = false;
+  mockError = 'Offline';
+  view.rerender(<AccountMenu {...props} />);
+  expect(screen.getAllByText('Offline')).toHaveLength(1);
+  fireEvent.click(screen.getByText('Retry loading accounts'));
+  expect(mockLoadAccounts).toHaveBeenCalledTimes(1);
+});
 
 it('shows current account email between name and role', () => {
   const { container } = render(<AccountMenu menuRef={{ current: null }} open setOpen={vi.fn()} closeMenu={vi.fn()} closeOrganizationMenu={vi.fn()} />);

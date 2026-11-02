@@ -20,7 +20,7 @@ import {
 } from './contracts';
 
 const RuntimeContext = createContext<RuntimeValue | null>(null);
-const AuthContext = createContext({ authInitialized: false, isLoggedIn: false, notice: null as string | null, accountsRevision: 0 });
+const AuthContext = createContext({ authInitialized: false, isLoggedIn: false, isSwitching: false, notice: null as string | null, accountsRevision: 0 });
 type SessionValue = {
   status: AuthSessionStatus;
   session: AuthSessionDescriptor | null;
@@ -81,14 +81,16 @@ export function ImporterApiProvider({
   onSessionChange?: (status: AuthSessionStatus, session: AuthSessionDescriptor | null) => void;
 }) {
   const [auth, dispatch] = useReducer(
-    (state: { authInitialized: boolean; isLoggedIn: boolean; notice: string | null; accountsRevision: number }, action: AuthAction) => {
-      if (action.type === 'SIGN_IN') return { authInitialized: true, isLoggedIn: true, notice: null, accountsRevision: state.accountsRevision };
-      if (action.type === 'SIGN_OUT') return { authInitialized: true, isLoggedIn: false, notice: null, accountsRevision: state.accountsRevision };
-      if (action.type === 'NOTICE') return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: String(action.userData ?? ''), accountsRevision: state.accountsRevision };
-      if (action.type === 'ACCOUNTS_CHANGED') return { authInitialized: state.authInitialized, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision + 1 };
-      return { authInitialized: true, isLoggedIn: state.isLoggedIn, notice: state.notice, accountsRevision: state.accountsRevision };
+    (state: { authInitialized: boolean; isLoggedIn: boolean; isSwitching: boolean; notice: string | null; accountsRevision: number }, action: AuthAction) => {
+      if (action.type === 'SWITCH_START') return { ...state, isSwitching: true };
+      if (action.type === 'SWITCH_END') return { ...state, isSwitching: false };
+      if (action.type === 'SIGN_IN') return { ...state, authInitialized: true, isLoggedIn: true, notice: null };
+      if (action.type === 'SIGN_OUT') return { ...state, authInitialized: true, isLoggedIn: false, notice: null };
+      if (action.type === 'NOTICE') return { ...state, authInitialized: true, notice: String(action.userData ?? '') };
+      if (action.type === 'ACCOUNTS_CHANGED') return { ...state, accountsRevision: state.accountsRevision + 1 };
+      return { ...state, authInitialized: true };
     },
-    { authInitialized: false, isLoggedIn: false, notice: null, accountsRevision: 0 },
+    { authInitialized: false, isLoggedIn: false, isSwitching: false, notice: null, accountsRevision: 0 },
   );
   const [sessionState, setSessionState] = useState<{
     status: AuthSessionStatus;

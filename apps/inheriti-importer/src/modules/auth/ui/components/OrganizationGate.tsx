@@ -29,7 +29,6 @@ export default function OrganizationGate({
     accessLoading,
     accessOrganizationId,
     selectOrganization,
-    reset,
   } = useSwitchOrganizationFlow();
   const accessBlockedReason = phase === 'ready' ? blockedReason : null;
   const selectedId = pendingOrganizationId ?? selectedOrganizationId;
@@ -177,9 +176,6 @@ export default function OrganizationGate({
               />
             );
           })}
-          {phase === 'blocked' ? (
-            <Button title="Choose another organisation" variant="plain" onPress={reset} />
-          ) : null}
         </Box>
         <Box
           padding="l"

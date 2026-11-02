@@ -1,6 +1,7 @@
 const { net } = require('electron');
 
 const API_ORIGIN = process.env.INHERITI_API_ORIGIN || '';
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function bearerApiFetch({ method, path, query, body, token, environment, organizationId, relay = false }) {
   return new Promise((resolve, reject) => {
@@ -23,18 +24,39 @@ function bearerApiFetch({ method, path, query, body, token, environment, organiz
     if (!relay && organizationId) request.setHeader('x-organization-id', organizationId);
     if (body !== undefined) request.setHeader('Content-Type', 'application/json');
     let raw = '';
+    let settled = false;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      finish(new Error('Business API request timed out'));
+      request.abort();
+    }, REQUEST_TIMEOUT_MS);
     request.on('response', (response) => {
       response.on('data', (chunk) => { raw += chunk; });
       response.on('end', () => {
         let parsed = null;
         try { parsed = raw ? JSON.parse(raw) : null; }
         catch { parsed = raw; }
-        resolve({ status: response.statusCode, body: parsed, headers: response.headers });
+        finish(null, { status: response.statusCode, body: parsed, headers: response.headers });
       });
+      response.on('error', (error) => finish(error));
+      response.on('aborted', () => finish(new Error('Business API response aborted')));
+      response.on('close', () => finish(new Error('Business API response closed before completion')));
     });
-    request.on('error', reject);
-    if (body !== undefined) request.write(JSON.stringify(body));
-    request.end();
+    request.on('error', (error) => finish(error));
+    request.on('abort', () => finish(new Error('Business API request aborted')));
+    try {
+      if (body !== undefined) request.write(JSON.stringify(body));
+      request.end();
+    } catch (error) {
+      finish(error);
+      request.abort();
+    }
   });
 }
 

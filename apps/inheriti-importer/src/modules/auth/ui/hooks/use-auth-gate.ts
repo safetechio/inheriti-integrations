@@ -9,11 +9,11 @@ function signInError(error: unknown, fallback: string): string {
     ? message : fallback;
 }
 
-export type GateStatus = 'checking' | 'signed-out' | 'signed-in' | 'error';
+export type GateStatus = 'checking' | 'switching' | 'signed-out' | 'signed-in' | 'error';
 
 export default function useAuthGate() {
   const authState = useAuthState(
-    (state) => state as { authInitialized?: boolean; isLoggedIn?: boolean; notice?: string | null; accountsRevision?: number } | undefined,
+    (state) => state as { authInitialized?: boolean; isLoggedIn?: boolean; isSwitching?: boolean; notice?: string | null; accountsRevision?: number } | undefined,
   );
   const authProvider = useAuthProvider() as ElectronAuthProvider | null;
   const [status, setStatus] = useState<GateStatus>('checking');
@@ -30,17 +30,17 @@ export default function useAuthGate() {
 
   useEffect(() => {
     if (!authState?.authInitialized) return;
-    setStatus(authState.isLoggedIn ? 'signed-in' : 'signed-out');
-  }, [authState?.authInitialized, authState?.isLoggedIn]);
+    setStatus(authState.isSwitching ? 'switching' : authState.isLoggedIn ? 'signed-in' : 'signed-out');
+  }, [authState?.authInitialized, authState?.isLoggedIn, authState?.isSwitching]);
 
   useEffect(() => {
-    if (!authState?.authInitialized || authState.isLoggedIn) return;
+    if (!authState?.authInitialized || authState.isLoggedIn || authState.isSwitching) return;
     let current = true;
     void authProvider?.accounts?.().then((saved) => {
       if (current) setAccounts(saved.filter((account) => !account.active));
     }).catch(() => { if (current) setAccounts([]); });
     return () => { current = false; };
-  }, [authProvider, authState?.authInitialized, authState?.isLoggedIn, authState?.accountsRevision]);
+  }, [authProvider, authState?.authInitialized, authState?.isLoggedIn, authState?.isSwitching, authState?.accountsRevision]);
 
   useEffect(() => {
     if (authState?.notice && !/(?:^|\W)AUTH_CANCELLED(?:$|\W)/u.test(authState.notice))
@@ -84,7 +84,7 @@ export default function useAuthGate() {
   }
 
   return {
-    status,
+    status: authState?.isSwitching ? 'switching' as GateStatus : status,
     message,
     loginInProgress,
     accounts,

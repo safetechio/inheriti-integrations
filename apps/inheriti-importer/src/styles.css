@@ -204,6 +204,7 @@ button {
 .organization-menu,
 .account-menu {
   z-index: 1000;
+  max-width: calc(100vw - 24px);
 }
 
 [role='button']:focus-visible .account-summary {
@@ -875,6 +876,7 @@ tbody tr:hover td {
 
 .account-menu-avatar { position: relative; flex: none; background: #2962ff; }
 .account-menu-current { min-height: 88px; padding: 12px 16px; }
+.account-menu-status { min-height: 88px; padding: 16px; text-align: center; }
 .account-menu-option { min-height: 54px; padding: 8px 27px; border-bottom: 1px solid #eaecf0; }
 .account-menu-option:hover, .account-menu-add:hover { background: #f4f8ff; }
 .account-menu-destination { border-bottom: 1px solid #eaecf0; }
