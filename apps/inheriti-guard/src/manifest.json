@@ -29,9 +29,6 @@
   "host_permissions": [
     "<all_urls>"
   ],
-  "optional_host_permissions": [
-    "https://*/*"
-  ],
   "action": {
     "default_title": "Open Inheriti® Guard",
     "default_icon": {

@@ -62,7 +62,7 @@ describe('Chrome MV3 manifest', () => {
     expect(manifest.permissions).toEqual(['activeTab', 'alarms', 'scripting', 'sidePanel', 'identity', 'storage',
       'declarativeNetRequestWithHostAccess', 'downloads', 'idle', 'notifications', 'browsingData', 'cookies', 'webNavigation']);
     expect(manifest.host_permissions).toEqual(['<all_urls>']);
-    expect(manifest.optional_host_permissions).toEqual(['https://*/*']);
+    expect(manifest.optional_host_permissions).toBeUndefined();
     expect(manifest.content_scripts).toEqual([
       { matches: ['<all_urls>'], js: ['content/guard-bridge.js'], run_at: 'document_start', all_frames: true, world: 'ISOLATED' },
       { matches: ['<all_urls>'], js: ['content/guard-page.js'], run_at: 'document_start', all_frames: true, world: 'MAIN' },
