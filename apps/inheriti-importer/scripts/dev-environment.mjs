@@ -8,7 +8,6 @@ assertEnvironment(environment);
 
 await runYarn(
   [
-    'exec',
     'concurrently',
     '-k',
     `vite --mode ${environment}`,

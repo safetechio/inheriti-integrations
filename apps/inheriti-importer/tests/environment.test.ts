@@ -17,7 +17,6 @@ describe('runYarn', () => {
     const child = new EventEmitter();
     vi.mocked(spawn).mockReturnValueOnce(child as never);
     const args = [
-      'exec',
       'concurrently',
       '-k',
       'vite --mode dev',

@@ -113,12 +113,11 @@ node tests/served/staging.mjs
 
 Run them sequentially: both own and tear down the same disposable `business-e2e` stack. The account lane checks real Electron sign-in, account and organization switching, restart or reauthentication when protected storage is unavailable, revocation, and sign-out. Its fixture activates disposable organizations directly to isolate session behavior. The staging lane uses a real organization-key claim and a development SafeKey release simulator, then verifies encrypted staging creates a `NOT_CREATED` draft and no normal Plan. Each writes a redacted manifest under `bussiness/feature-e2e/evidence/` with source revisions and an Importer tree fingerprint.
 
-On Linux, smoke-test a fresh unpacked release with:
+On Linux, smoke-test a fresh AppImage release with:
 
 ```bash
-yarn build:dev
-INHERITI_RELEASE_ENV=dev ./node_modules/.bin/electron-builder --config electron-builder.config.cjs --linux dir --publish never
-node tests/served/packaged-smoke.mjs release/dev/linux-unpacked/inheriti-import
+yarn release:dev
+node tests/served/packaged-smoke.mjs "$(ls -t release/dev/*.AppImage | head -1)"
 ```
 
-The smoke check verifies that the executable is packaged, opens its sign-in window, and contains the intended runtime environment. Run the served account lane against the packaged executable before release.
+The smoke check verifies that the AppImage opens its sign-in window and contains the intended runtime environment. Testing the unpacked executable inside this checkout can hide missing dependencies by resolving them from the workspace. Run the served account lane against the packaged executable before release.

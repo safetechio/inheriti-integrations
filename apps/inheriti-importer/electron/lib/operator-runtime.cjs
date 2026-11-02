@@ -5,7 +5,8 @@ const path = require('node:path');
 const { ProtectedOperatorSessionStore } = require('./operator-session-store.cjs');
 
 class OperatorRuntime {
-  constructor({ environment, apiOrigin, issuer, loadCore = () => import('@safetech/inheriti-elements-core/node') }) {
+  constructor({ environment, apiOrigin, issuer, loadCore = () => app.isPackaged
+    ? import('../../dist/operator-core.mjs') : import('@safetech/inheriti-elements-core/node') }) {
     this.environment = environment;
     this.apiOrigin = apiOrigin;
     this.issuer = issuer;
