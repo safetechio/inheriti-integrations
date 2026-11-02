@@ -1,4 +1,4 @@
-import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
+import { BUSINESS_DEPLOYMENTS, PROTECTED_FILE_FLAGS, createOrganizationKeys, latestIntegrationBuild, quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node';
 import type { InternalBuild, NodeIntegrationCore, QuickPlanInput } from '@safetech/inheriti-elements-core/node';
 import { TrayQuickPlans } from '../../quick-plan/main/quick-plans.js';
 import { TrayPlanEdit } from '../../quick-plan/main/plan-edit.js';
@@ -37,7 +37,6 @@ export type TrayState = {
 };
 
 export class TraySession {
-  private get planCreationEnabled(): boolean { return this.deployment === 'local' || HOST_FEATURE_FLAGS[this.deployment].planCreation; }
   private readonly auth: TrayAuthRuntime;
   private readonly organization: TrayOrganizationContext;
   private readonly inboxAccess: TrayInboxAccess;
@@ -118,7 +117,7 @@ export class TraySession {
       ...(message ? { message } : {}),
       organizations: this.organization.organizations.map(({ id, name }) => ({ id, name })),
       teams: this.organization.pendingSelections ? [] : quickPlans.teams,
-      assetCatalog: this.planCreationEnabled ? quickPlanAssetCatalog : [],
+      assetCatalog: quickPlanAssetCatalog,
       ...(this.organization.selectedId && !this.organization.pendingSelections ? { selectedId: this.organization.selectedId } : {}),
       ...(this.status === 'signed-in' && this.accountName ? { accountName: this.accountName } : {}),
       ...(this.status === 'signed-in' && this.organization.selectedRole ? { accountRole: this.organization.selectedRole } : {}),
@@ -310,7 +309,6 @@ export class TraySession {
 
   createQuickPlan(input: { title: string; asset: QuickPlanInput['asset']; teamId?: string }, onChange: () => void): Promise<void> {
     if (this.signingOut) throw new Error('sign_out_in_progress');
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections) throw new Error('organization_selection_in_progress');
     if (this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.quickPlans.create(input, onChange);
@@ -325,31 +323,26 @@ export class TraySession {
   }
 
   loadEditablePlans(onChange: () => void): Promise<void> {
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.load(onChange);
   }
 
   addPlanAsset(planId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.add(planId, asset, onChange);
   }
 
   listPlanAssets(planId: string, onChange: () => void): Promise<void> {
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.listAssets(planId, onChange);
   }
 
   getPlanAsset(planId: string, assetId: string) {
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.getAsset(planId, assetId);
   }
 
   replacePlanAsset(planId: string, assetId: string, asset: QuickPlanInput['asset'], onChange: () => void): Promise<void> {
-    if (!this.planCreationEnabled) throw new Error('plan_creation_unavailable');
     if (this.organization.pendingSelections || this.status !== 'signed-in' || !this.organization.selectedId) throw new Error('organization_required');
     return this.planEdit.replace(planId, assetId, asset, onChange);
   }

@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "node ../../scripts/build-go.mjs",
-    "test": "vitest run --root . --config ../../vitest.config.ts",
+    "test": "vitest run --root . --config ../../vitest.config.ts --no-file-parallelism",
     "lint": "tsc -p tsconfig.json --noEmit && node ../../scripts/verify-boundaries.mjs .",
     "start": "electron .",
     "package": "corepack pnpm run build && node ../../scripts/package-go.mjs",

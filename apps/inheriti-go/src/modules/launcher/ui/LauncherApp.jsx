@@ -323,7 +323,8 @@ export function LauncherApp({ messages }) {
 
   if (inboxOpen) return withAccountDialog(<InboxPanel key={`${state.activeSubject || 'no-account'}:${state.selectedId || 'no-organization'}`} onClose={closeInbox}
     identity={inboxIdentity} organizationId={state.selectedId} targetConversation={inboxTarget}
-    onCreatePlanFromSecret={undefined} onCreatePlanFromFile={undefined} />);
+    onCreatePlanFromSecret={state.assetCatalog?.length ? createPlanFromSecret : undefined}
+    onCreatePlanFromFile={state.assetCatalog?.length ? createPlanFromFile : undefined} />);
 
   if (flow.step === 'actions' && !editFlow.editing) return withAccountDialog(<Home
     messages={messages} organizations={state.organizations} selectedId={state.selectedId}

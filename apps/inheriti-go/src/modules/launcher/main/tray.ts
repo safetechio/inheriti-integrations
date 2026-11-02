@@ -2,7 +2,6 @@ import { app, Menu, Tray, nativeImage, shell } from 'electron';
 import { join } from 'node:path';
 import { showLauncher } from './launcher-window.js';
 import { trayMessages as messages } from '../../../messages.js';
-import { HOST_FEATURE_FLAGS, businessDeployment } from '@safetech/inheriti-elements-core/node';
 
 let tray: Tray | undefined;
 let normalIcon: Electron.NativeImage | undefined;
@@ -27,15 +26,13 @@ export function registerTrayEvents(appUrl?: string, deployment = 'prod', onCheck
   tray.on('click', () => showLauncher());
   tray.on('double-click', () => showLauncher());
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: `${messages.appName} ${deployment.toUpperCase()} · v${app.getVersion()}`, enabled: false },
+    { label: `${messages.appName}${deployment === 'prod' ? '' : ` ${deployment.toUpperCase()}`} · v${app.getVersion()}`, enabled: false },
     { type: 'separator' },
     { label: messages.openLauncher, click: () => showLauncher() },
     { type: 'separator' },
-    ...(deployment === 'local' || (businessDeployment(deployment) && HOST_FEATURE_FLAGS[businessDeployment(deployment)!].planCreation) ? [
-      { label: messages.createPrivatePlanMenu, click: () => showLauncher(messages.savePrivately) },
-      { label: messages.createTeamPlanMenu, click: () => showLauncher(messages.shareWithTeam) },
-      { label: messages.editPlanAssetMenu, click: () => showLauncher(messages.addOrEditAsset) },
-    ] : []),
+    { label: messages.createPrivatePlanMenu, click: () => showLauncher(messages.savePrivately) },
+    { label: messages.createTeamPlanMenu, click: () => showLauncher(messages.shareWithTeam) },
+    { label: messages.editPlanAssetMenu, click: () => showLauncher(messages.addOrEditAsset) },
     { label: messages.openSecureInbox, click: () => showLauncher(messages.openSecureInbox) },
     { type: 'separator' },
     { label: messages.openApp, enabled: Boolean(appUrl), click: () => { if (appUrl) void shell.openExternal(appUrl); } },

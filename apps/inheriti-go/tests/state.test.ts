@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const nativeFetch = globalThis.fetch;
 
 const mock = vi.hoisted(() => ({ begin: vi.fn(), clear: vi.fn(), keyClear: vi.fn(), complete: vi.fn(), providerComplete: vi.fn(), token: vi.fn(), organizations: vi.fn(), context: vi.fn(), create: vi.fn(), teams: vi.fn(), abandon: vi.fn(), acquireKey: vi.fn(), operations: vi.fn(), core: vi.fn(), editOperations: vi.fn(), openInbox: vi.fn(), ackInbox: vi.fn(), changeParticipants: vi.fn(), listenInbox: vi.fn(), stopInbox: vi.fn(), checkpoint: new Map<string, unknown>() }));
 
@@ -25,7 +27,7 @@ vi.mock('@safetech/inheriti-elements-core/node', () => ({
     prod: { apiUrl: 'https://prod.example.test/', issuer: 'https://prod.issuer.test/', environment: 'LIVE' },
   },
   PROTECTED_FILE_FLAGS: { local: false, dev: false, stg: false, prod: false },
-  HOST_FEATURE_FLAGS: { local: { planCreation: true, automation: false }, dev: { planCreation: true, automation: false }, stg: { planCreation: true, automation: false }, prod: { planCreation: true, automation: false } },
+  HOST_FEATURE_FLAGS: { local: { planCreation: false, automation: false }, dev: { planCreation: false, automation: false }, stg: { planCreation: false, automation: false }, prod: { planCreation: false, automation: false } },
   BUSINESS_INTERACTIVE_CLIENT_ID: 'interactive',
   MemoryOperatorSessionStore: class {
     private session: unknown;
@@ -66,6 +68,13 @@ const scopedPrincipal = (issuer: string, subject: string, environment = 'TEST') 
 describe('TraySession', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      if ((url.hostname.endsWith('example.test') || url.hostname === 'business.localhost') &&
+        (url.pathname.endsWith('/v1/organizations') || url.pathname.endsWith('/v1/importer/profile')))
+        return Promise.resolve(new Response(JSON.stringify({ result: { items: [] } }), { status: 200 }));
+      return nativeFetch(input, init);
+    });
     mock.checkpoint.clear();
     mock.core.mockImplementation(() => ({ auth: { beginAuthorizationCode: mock.begin, clear: mock.clear, completeAuthorizationCode: mock.complete, getAccessToken: mock.token }, listOrganizations: mock.organizations }));
     mock.providerComplete.mockResolvedValue({ idToken: 'provider-id-token' });
@@ -74,6 +83,19 @@ describe('TraySession', () => {
     mock.acquireKey.mockResolvedValue('a'.repeat(64));
     mock.operations.mockReturnValue({ createContext: mock.context, create: mock.create, teams: mock.teams, abandon: mock.abandon, acquireKey: mock.acquireKey });
     mock.editOperations.mockReturnValue({ list: vi.fn().mockResolvedValue({ items: [], nextCursor: null }) });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['dev', 'stg', 'prod'] as const)('offers and creates plans in %s with the shared flag disabled', async (deployment) => {
+    mock.token.mockResolvedValue('access-token');
+    mock.organizations.mockResolvedValue([{ id: 'org-1', name: 'One' }]);
+    mock.context.mockResolvedValue({ planId: 'plan-1' });
+    mock.create.mockResolvedValue({ status: 'READY', planId: 'plan-1' });
+    const session = new TraySession(deployment);
+    await session.restore();
+    expect(session.state().assetCatalog).toEqual([{ id: 'PLAIN-TEXT', category: 'GENERAL-DATA', fields: ['text'] }]);
+    await session.createQuickPlan({ title: 'Secret', asset: asset('secret') }, () => {});
+    expect(mock.create).toHaveBeenCalledTimes(1);
   });
 
   it('disables protected Inbox file output for every deployment', () => {
