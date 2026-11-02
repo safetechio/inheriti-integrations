@@ -8,21 +8,8 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="app-header">
-      <div class="brand" aria-label="Inheriti® Guard">
-        <svg class="brand-mark" viewBox="0 0 26 32" aria-hidden="true">
-          <path />
-        </svg>
-        <span class="brand-name"><strong>Inheriti® Guard</strong><span class="brand-subtitle">Unified protection</span><span id="guard-version"></span></span>
-      </div>
-      <div class="header-actions">
-        <div class="product-statuses" aria-label="Product status">
-          <span id="guard-header-status" class="header-status">Protection: checking</span>
-        </div>
-        <span class="sr-only" id="auth-status" aria-live="polite">Checking session</span>
-      </div>
-    </header>
     <main id="app-main" data-authenticated="pending">
+      <span class="sr-only" id="auth-status" aria-live="polite">Checking session</span>
       <aside class="migration-notice" id="migration-notice" role="status" hidden>
         <strong>Inheriti® Guard now includes Plan Access.</strong>
         <span>Your Browser Protection settings were preserved.</span>
@@ -30,8 +17,7 @@
       </aside>
       <div class="product-tabs" role="tablist" aria-label="Inheriti® Guard sections">
         <button id="plan-access-tab" role="tab" aria-selected="true" aria-controls="plan-access-panel" tabindex="0" type="button">Plan Access</button>
-        <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button">Browser Protection</button>
-        <button id="activity-tab" role="tab" aria-selected="false" aria-controls="activity-panel" tabindex="-1" type="button">Activity</button>
+        <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button">Browser Protection <span id="guard-header-status" class="tab-status" role="status" aria-live="polite" aria-label="Protection: checking">Checking</span></button>
       </div>
       <section id="plan-access-panel" class="product-panel plan-access" role="tabpanel" aria-labelledby="plan-access-tab" data-authenticated="pending" aria-busy="true">
       <div class="session-skeleton" id="session-skeleton" role="status">
@@ -199,6 +185,11 @@
       </section>
 
       <section id="browser-protection-panel" class="product-panel" role="tabpanel" aria-labelledby="browser-protection-tab" hidden>
+        <div class="panel-tabs protection-tabs" role="tablist" aria-label="Browser Protection views">
+          <button id="protection-settings-tab" role="tab" aria-selected="true" aria-controls="protection-settings-panel" tabindex="0" type="button">Settings</button>
+          <button id="activity-tab" role="tab" aria-selected="false" aria-controls="activity-panel" tabindex="-1" type="button">Activity</button>
+        </div>
+        <section id="protection-settings-panel" class="product-panel" role="tabpanel" aria-labelledby="protection-settings-tab">
         <div class="page-heading"><p class="eyebrow">Browser Protection</p><h1>Protection controls</h1><p class="origin">Block unsafe sites, guard sensitive browser actions, and lock idle sessions.</p></div>
         <section class="card protection-overview">
           <div class="section-heading"><div class="section-title"><span class="shield-dot" aria-hidden="true"></span><div><h2>Browser Protection</h2><p>Block unsafe navigation while preserving trusted access.</p></div></div><label class="switch"><input id="guard-enabled" type="checkbox" /><span></span><span class="sr-only">Enable Browser Protection</span></label></div>
@@ -213,11 +204,12 @@
         </section>
         <section class="card secure-logoff-card"><h2>Secure Logoff</h2><p>End Plan Access work, close ecosystem sessions, and clear scoped session data.</p><button class="button danger-button" id="secure-logoff" type="button">Secure Logoff</button></section>
         <p id="guard-live-status" class="sr-only" role="status" aria-live="polite"></p>
-      </section>
+        </section>
 
-      <section id="activity-panel" class="product-panel" role="tabpanel" aria-labelledby="activity-tab" hidden>
+        <section id="activity-panel" class="product-panel" role="tabpanel" aria-labelledby="activity-tab" hidden>
         <div class="page-heading"><p class="eyebrow">Activity</p><h1>Recent protection activity</h1><p class="origin">Sensitive values and URL parameters are never displayed.</p></div>
         <section class="card"><div class="section-heading"><div><h2>Guard events</h2><p class="activity-help">Newest events appear first.</p></div><button id="clear-activity" class="compact-button danger" type="button">Clear</button></div><ul id="activity-list" class="activity-list" aria-live="polite"><li class="empty-activity">Loading activity…</li></ul></section>
+        </section>
       </section>
     </main>
     <dialog class="asset-dialog account-confirm-dialog" id="account-confirm-dialog" aria-labelledby="account-confirm-title" aria-describedby="account-confirm-description">

@@ -24,7 +24,8 @@ export function initializeGuardPanel(onSecureLogoff: () => void, confirmLogoff: 
     guardIdleMinutes.value = String(settings.idleLockMinutes);
     guardIdleMinutes.disabled = !settings.idleLockEnabled;
     guardDownloadTrap.checked = settings.downloadTrapEnabled;
-    guardHeaderStatus.textContent = `Protection: ${settings.isEnabled ? 'active' : 'off'}`;
+    guardHeaderStatus.textContent = settings.isEnabled ? 'On' : 'Off';
+    guardHeaderStatus.setAttribute('aria-label', `Protection: ${settings.isEnabled ? 'on' : 'off'}`);
     guardHeaderStatus.dataset.active = String(settings.isEnabled);
   }
 
@@ -87,7 +88,11 @@ export function initializeGuardPanel(onSecureLogoff: () => void, confirmLogoff: 
     if (response.ok && 'activity' in response) renderActivity(response.activity);
     else renderActivity([]);
   }
-  required<HTMLButtonElement>('activity-tab').addEventListener('click', () => { void refreshActivity(); });
+  const activityTab = required<HTMLButtonElement>('activity-tab');
+  activityTab.addEventListener('tab-activated', () => { void refreshActivity(); });
+  required<HTMLButtonElement>('browser-protection-tab').addEventListener('tab-activated', () => {
+    if (activityTab.getAttribute('aria-selected') === 'true') void refreshActivity();
+  });
   required<HTMLButtonElement>('clear-activity').addEventListener('click', () => { void sendGuard({ type: 'activity:clear' }).then(() => renderActivity([])); });
 
   const MIGRATION_NOTICE_KEY = 'inheritiguardUnifiedNoticeDismissed';

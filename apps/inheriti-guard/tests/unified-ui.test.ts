@@ -8,14 +8,28 @@ const blockedMain = readFileSync(new URL('../src/blocked/main.ts', import.meta.u
 const manifest = JSON.parse(readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 
 describe('unified Inheriti® Guard UI', () => {
-  it('presents one product with three accessible top-level areas', () => {
-    expect(panel).toContain('aria-label="Inheriti® Guard"');
-    for (const [tab, view] of [['plan-access-tab', 'plan-access-panel'], ['browser-protection-tab', 'browser-protection-panel'], ['activity-tab', 'activity-panel']]) {
+  it('presents two main areas with Activity inside Browser Protection', () => {
+    expect(panel).toContain('aria-label="Inheriti® Guard sections"');
+    expect(panel).not.toContain('class="app-header"');
+    expect(panel).toMatch(/<main[^>]*>\s*<span class="sr-only" id="auth-status" aria-live="polite">/u);
+    expect(panel).toMatch(/id="browser-protection-tab"[^>]*>Browser Protection <span id="guard-header-status"[^>]*role="status" aria-live="polite" aria-label="Protection: checking">Checking<\/span>/u);
+    expect(panelMain).toContain("guardHeaderStatus.textContent = settings.isEnabled ? 'On' : 'Off'");
+    expect(panelMain).toContain("guardHeaderStatus.setAttribute('aria-label', `Protection: ${settings.isEnabled ? 'on' : 'off'}`)");
+    expect(panel.match(/class="product-tabs"[\s\S]*?<\/div>/u)?.[0].match(/role="tab"/gu)).toHaveLength(2);
+    expect(panel).toContain('class="panel-tabs protection-tabs" role="tablist"');
+    expect(panel).toMatch(/id="browser-protection-panel"[\s\S]*id="activity-panel"[\s\S]*<\/section>\s*<\/main>/u);
+    for (const [tab, view] of [['plan-access-tab', 'plan-access-panel'], ['browser-protection-tab', 'browser-protection-panel'], ['protection-settings-tab', 'protection-settings-panel'], ['activity-tab', 'activity-panel']]) {
       expect(panel).toContain(`id="${tab}" role="tab"`);
       expect(panel).toContain(`aria-controls="${view}"`);
       expect(panel).toContain(`id="${view}" class="product-panel`);
     }
     expect(panelMain).toContain('moveTabFocus(productTabs');
+    expect(panelMain).toContain('moveTabFocus(protectionTabs');
+    expect(panelMain).toContain('activateTabs(tabs, tabs[next]!); tabs[next]!.focus()');
+    expect(panelMain).toContain("active.dispatchEvent(new Event('tab-activated'))");
+    expect(panelMain).toContain("activityTab.addEventListener('tab-activated', () => { void refreshActivity(); })");
+    expect(panelMain).toContain("required<HTMLButtonElement>('browser-protection-tab').addEventListener('tab-activated', () => {");
+    expect(panelMain).toContain("if (activityTab.getAttribute('aria-selected') === 'true') void refreshActivity()");
   });
 
   it('keeps Browser Protection usable outside Plan Access authentication', () => {

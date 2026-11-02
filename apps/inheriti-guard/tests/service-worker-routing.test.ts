@@ -30,6 +30,7 @@ type MockProfile = { id: string; issuer: string; environment: string; authorized
 let mockProfiles: MockProfile[] = [{ id: 'account-a', issuer: 'https://safeid.test', environment: 'TEST',
   authorizedParty: 'chrome-test', subject: 'user-a', expiresAt: Date.now() + 60_000, active: true }];
 let mockGeneration = 0;
+let principalSubject = 'user-a';
 let pauseSnapshot: (() => Promise<void>) | undefined;
 let pauseForProfile: ((id: string) => Promise<void>) | undefined;
 const revokedProfiles = new Set<string>();
@@ -80,7 +81,7 @@ vi.mock('../src/background/session-store.js', () => ({
     bind() {}
     clear = clearSession;
     clearAll = clearAllSessions;
-    async load() { return { principal: { issuer: 'https://safeid.test', subject: 'user-a', environment: 'TEST',
+    async load() { return { principal: { issuer: 'https://safeid.test', subject: principalSubject, environment: 'TEST',
       authorizedParty: 'chrome-test', sessionId: 'session-a' } }; }
     async snapshot() {
       const pause = pauseSnapshot;
@@ -211,6 +212,7 @@ beforeEach(() => {
   mockProfiles = [{ id: 'account-a', issuer: 'https://safeid.test', environment: 'TEST',
     authorizedParty: 'chrome-test', subject: 'user-a', expiresAt: Date.now() + 60_000, active: true }];
   mockGeneration = 0;
+  principalSubject = 'user-a';
   pauseSnapshot = undefined;
   pauseForProfile = undefined;
   revokedProfiles.clear(); coreProfiles.length = 0;
@@ -620,6 +622,40 @@ describe('service worker access routing', () => {
     businessOrganizations = [];
     expect((await request({ type: 'load-plans' })).state.kind).toBe('SELECT_ORGANIZATION');
     businessMode = false;
+  });
+
+  it('selects the first organization for a new account without copying another account preference', async () => {
+    businessMode = true;
+    businessOrganizations = [{ id: 'org-a', name: 'Alpha' }, { id: 'org-b', name: 'Beta' }];
+    const firstKey = JSON.stringify(['https://safeid.test', 'TEST', 'user-a']);
+    const newKey = JSON.stringify(['https://safeid.test', 'TEST', 'user-b']);
+    selectedOrganizations[firstKey] = 'org-b';
+    signInMock.mockImplementationOnce(async () => {
+      principalSubject = 'user-b';
+      mockProfiles = mockProfiles.map((profile) => ({ ...profile, active: false }));
+      mockProfiles.push({ id: 'account-b', issuer: 'https://safeid.test', environment: 'TEST',
+        authorizedParty: 'chrome-test', subject: 'user-b', expiresAt: Date.now() + 60_000, active: true });
+    });
+
+    expect((await request({ type: 'sign-in' })).state).toMatchObject({ kind: 'EMPTY', organizationId: 'org-a' });
+    expect(selectedOrganizations[newKey]).toBe('org-a');
+    expect(selectedOrganizations[firstKey]).toBe('org-b');
+    expect(coreOrganizations).toContain('org-a');
+    delete selectedOrganizations[firstKey];
+    delete selectedOrganizations[newKey];
+  });
+
+  it('retains a valid saved organization on sign-in and presents an empty organization list', async () => {
+    businessMode = true;
+    const key = JSON.stringify(['https://safeid.test', 'TEST', 'user-a']);
+    selectedOrganizations[key] = 'org-b';
+    expect((await request({ type: 'sign-in' })).state).toMatchObject({ kind: 'EMPTY', organizationId: 'org-b' });
+    expect(selectedOrganizations[key]).toBe('org-b');
+    delete selectedOrganizations[key];
+
+    businessOrganizations = [];
+    expect((await request({ type: 'sign-in' })).state).toMatchObject({ kind: 'SELECT_ORGANIZATION', organizations: [] });
+    expect(selectedOrganizations[key]).toBeUndefined();
   });
 
   it('invalidates an in-flight sign-in before Secure Logoff releases the lifecycle lock', async () => {

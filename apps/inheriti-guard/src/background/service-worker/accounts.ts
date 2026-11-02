@@ -94,7 +94,7 @@ export function createAccountRuntime(deps: {
     if (key !== undefined) await writeBusinessOrganization(localStorage, key, organizationId);
   }
 
-  async function businessSelection(): Promise<{ organizations: BusinessOrganization[]; organizationId: string } | PanelState | undefined> {
+  async function businessSelection(selectFirstOnSignIn = false): Promise<{ organizations: BusinessOrganization[]; organizationId: string } | PanelState | undefined> {
     const configuration = resolveConfiguration(await readStoredConfiguration(localStorage, chrome.storage.session));
     if (await organizationPreference(configuration) === undefined) return undefined;
     const activeId = (await configuredProfiles()).find((profile) => profile.active)?.id;
@@ -103,7 +103,7 @@ export function createAccountRuntime(deps: {
     const saved = await selectedOrganization(configuration);
     if (saved && organizations.some(({ id }) => id === saved)) return { organizations, organizationId: saved };
     if (saved) await saveOrganization(configuration);
-    if (!saved && organizations.length === 1) {
+    if (!saved && organizations.length > 0 && (selectFirstOnSignIn || organizations.length === 1)) {
       await saveOrganization(configuration, organizations[0]!.id);
       return { organizations, organizationId: organizations[0]!.id };
     }
@@ -153,15 +153,15 @@ export function createAccountRuntime(deps: {
       if (pending.signal.aborted) return { kind: 'SIGNED_OUT' };
       heldCore = undefined;
       await overlayPermissions.restore();
-      return await selectedPlans(await core());
+      return await selectedPlans(await core(), true);
     } finally {
       pendingSignIns.delete(pending);
     }
   }
 
-  async function selectedPlans(client: BrowserIntegrationCore): Promise<PanelState> {
+  async function selectedPlans(client: BrowserIntegrationCore, selectFirstOnSignIn = false): Promise<PanelState> {
     if (!(await client.getAccessToken())) return { kind: 'SIGNED_OUT' };
-    const selection = await businessSelection();
+    const selection = await businessSelection(selectFirstOnSignIn);
     if (selection && 'kind' in selection) return selection;
     if (selection && 'organizationId' in selection) {
       const selectedCore = await core(selection.organizationId);

@@ -18,6 +18,7 @@ const origin = required('origin');
 const appMain = required<HTMLElement>('app-main');
 const planAccessPanel = required<HTMLElement>('plan-access-panel');
 const panelTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.plan-tabs [role="tab"]'));
+const protectionTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.protection-tabs [role="tab"]'));
 const productTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.product-tabs [role="tab"]'));
 const inspect = required<HTMLButtonElement>('inspect');
 const pickPageFieldButton = required<HTMLButtonElement>('pick-page-field');
@@ -91,7 +92,7 @@ let visibleAccounts: readonly AccountSummary[] = [];
 document.documentElement.style.setProperty('--primary', inheritiGuardBrand.colors.primary);
 document.documentElement.style.setProperty('--primary-dark', inheritiGuardBrand.colors.primaryDark);
 document.documentElement.style.setProperty('--primary-soft', inheritiGuardBrand.colors.primarySoft);
-document.querySelectorAll<SVGPathElement>('.brand-mark path, .signed-out-mark path').forEach((path) => path.setAttribute('d', inheritiGuardShield.path));
+document.querySelectorAll<SVGPathElement>('.signed-out-mark path').forEach((path) => path.setAttribute('d', inheritiGuardShield.path));
 
 for (const tab of productTabs) {
   tab.addEventListener('click', () => activateTabs(productTabs, tab));
@@ -101,6 +102,10 @@ for (const tab of productTabs) {
 for (const tab of panelTabs) {
   tab.addEventListener('click', () => activateTabs(panelTabs, tab));
   tab.addEventListener('keydown', (event: KeyboardEvent) => moveTabFocus(panelTabs, tab, event));
+}
+for (const tab of protectionTabs) {
+  tab.addEventListener('click', () => activateTabs(protectionTabs, tab));
+  tab.addEventListener('keydown', (event: KeyboardEvent) => moveTabFocus(protectionTabs, tab, event));
 }
 
 function moveTabFocus(tabs: HTMLButtonElement[], tab: HTMLButtonElement, event: KeyboardEvent): void {
@@ -118,6 +123,7 @@ function activateTabs(tabs: HTMLButtonElement[], active: HTMLButtonElement): voi
     tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
     required<HTMLElement>(tab.getAttribute('aria-controls')!).hidden = !selected;
   }
+  active.dispatchEvent(new Event('tab-activated'));
 }
 
 initializeOverlayPanel(send);
