@@ -68,12 +68,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .environment > span { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 
-main { padding: 20px 20px 32px; }
+main { padding: 20px 20px 88px; }
 .product-tabs { position: sticky; top: 0; z-index: 9; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 0 0 16px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); }
-.product-tabs button { display: grid; grid-template-rows: 2.5em 16px; align-items: center; justify-items: center; min-width: 0; padding: 8px 4px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; cursor: pointer; }
-.product-tab-title { grid-row: 1; }
-.tab-status { grid-row: 2; display: block; width: fit-content; margin: 0; padding: 0 5px; border-radius: 999px; color: var(--muted); background: var(--border); font-size: 11px; line-height: 1.4; white-space: nowrap; }
-.tab-status[data-active="true"] { color: #15803d; background: var(--success-soft); }
+.product-tabs button { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 40px; padding: 8px 4px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; cursor: pointer; }
+.protection-status-bar { position: fixed; inset: auto 0 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 8px 20px; border-top: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 12px; }
+.protection-status { display: inline-block; width: 72px; text-align: center; padding: 2px 8px; border-radius: 999px; color: var(--muted); background: var(--border); font-size: 11px; line-height: 1.4; white-space: nowrap; }
+.protection-status[data-active="true"] { color: #15803d; background: var(--success-soft); }
 .product-tabs button[aria-selected="true"] { color: var(--primary); border-color: var(--border); background: #fff; box-shadow: var(--shadow-card); }
 .product-tabs button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(0, 102, 255, .2); }
 .product-panel { display: grid; gap: 16px; }

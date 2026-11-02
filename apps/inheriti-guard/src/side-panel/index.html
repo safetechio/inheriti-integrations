@@ -17,7 +17,7 @@
       </aside>
       <div class="product-tabs" role="tablist" aria-label="Inheriti® Guard sections">
         <button id="plan-access-tab" role="tab" aria-selected="true" aria-controls="plan-access-panel" tabindex="0" type="button"><span class="product-tab-title">Plan Access</span></button>
-        <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button"><span class="product-tab-title">Browser Protection</span><span id="guard-header-status" class="tab-status" role="status" aria-live="polite" aria-label="Protection: checking">Checking</span></button>
+        <button id="browser-protection-tab" role="tab" aria-selected="false" aria-controls="browser-protection-panel" tabindex="-1" type="button"><span class="product-tab-title">Browser Protection</span></button>
       </div>
       <section id="plan-access-panel" class="product-panel plan-access" role="tabpanel" aria-labelledby="plan-access-tab" data-authenticated="pending" aria-busy="true">
       <div class="session-skeleton" id="session-skeleton" role="status">
@@ -227,6 +227,7 @@
         </div>
       </form>
     </dialog>
+    <footer class="protection-status-bar"><span>Browser protection</span><span id="guard-header-status" class="protection-status" role="status" aria-live="polite" aria-label="Protection: checking">Checking</span></footer>
     <script type="module" src="main.js"></script>
   </body>
 </html>
