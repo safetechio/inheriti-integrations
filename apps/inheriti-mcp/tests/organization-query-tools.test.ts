@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { MetadataTools } from '../src/server.js';
 import { registerTools } from '../src/tools/index.js';
+import { quickPlanAssetCatalog } from '@safetech/inheriti-elements-core/node-base';
 
 it('keeps the new read tools scoped to the selected organisation after switching', async () => {
   const tools = new MetadataTools() as any;
@@ -37,6 +38,10 @@ it('keeps the new read tools scoped to the selected organisation after switching
 });
 
 it('rejects caller supplied tenant scope and invalid dates before invoking tools', () => {
+  expect(quickPlanAssetCatalog.map(({ id }) => id).sort()).toEqual([
+    'PLAIN-TEXT', 'USER-PSWD', 'RECOVERY-CODE', 'PIN-CODE', 'API-KEY', 'PRIVATE-KEY',
+    'SEED-PHRASE', 'PAYMENT-DEBIT-CARD', 'PAYMENT-CREDIT-CARD', 'DOCUMENT', 'IMAGE', 'VIDEO',
+  ].sort());
   const schemas = new Map<string, { safeParse: (input: unknown) => { success: boolean } }>();
   const server = { registerTool: (name: string, options: { inputSchema: { safeParse: (input: unknown) => { success: boolean } } }) => {
     schemas.set(name, options.inputSchema);
@@ -58,4 +63,5 @@ it('rejects caller supplied tenant scope and invalid dates before invoking tools
   expect(members.safeParse({ limit: 101 }).success).toBe(false);
   expect(responsibilities.safeParse({ planId: 'not-a-uuid' }).success).toBe(false);
   expect(plans.safeParse({ status: ['PROTECTED'], namePrefix: 'Payroll', assetType: 'DOCUMENT' }).success).toBe(true);
+  expect(plans.safeParse({ assetType: 'NOT-A-CANONICAL-TYPE' }).success).toBe(false);
 });

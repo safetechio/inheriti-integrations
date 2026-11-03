@@ -28,6 +28,7 @@ module.exports = {
   },
   files: ['dist/**/*', 'electron/**/*', 'package.json'],
   linux: {
+    executableName: `inheriti-importer${environment === 'prod' ? '' : `-${environment}`}`,
     icon: resolve(__dirname, `public/favicon${iconSuffix}.png`),
     category: 'Utility',
     syncDesktopName: true,

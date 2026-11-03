@@ -61,6 +61,10 @@ for (const environment of ['local', 'dev', 'stg', 'prod']) {
       for (const platform of ['mac', 'win', 'linux']) {
         assert.equal(new AppInfo({ config, metadata }, undefined, config[platform]).productName, name);
       }
+      assert.equal(
+        new AppInfo({ config, metadata }, undefined, config.linux).productFilename,
+        `inheriti-importer${environment === 'prod' ? '' : `-${environment}`}`,
+      );
       assert.equal(config.icon, svg);
       assert.equal(config.linux.icon, png);
       assert.equal(config.appId, `io.safetech.inheriti.importer${environment === 'prod' ? '' : `.${environment}`}`);

@@ -159,7 +159,6 @@ export type { QuickPlanEditPhase, QuickPlanEditApprovalProgress } from '@safetec
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';
 export type { ListPlansInput, ListOrganizationMembersInput, ListOrganizationAuditTrailInput, OrganizationInsightsInput } from './index.js';
-export { CANONICAL_PLAN_ASSET_TYPES } from '@safetech/inheriti-client-sdk';
 export { revealModeOf } from './plans.js';
 export { custodianShareCopy } from './custodian-copy.js';
 export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
