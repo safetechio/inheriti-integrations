@@ -65,21 +65,26 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
       ...(hints ? { hints } : {}),
       teams,
       open: url => window.open(url),
-      create: async (input) => {
+      create: async (input, onProgress) => {
         let stage: 'key' | 'context' | 'save' = 'key';
         try {
           const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
           if (inputFingerprint && inputFingerprint !== fingerprint) throw new Error('plan_creation_input_changed');
           inputFingerprint = fingerprint;
           if (!masterKeySource) {
-            const key = await operations.acquireKey(sessionSignal, () => terminal.write('Open SafeKey Mobile → Pending actions, then tap the green Release button for this Organisation. Waiting for the Organisation key…'));
+            onProgress?.('preparing-key');
+            const key = await operations.acquireKey(sessionSignal, () => {
+              onProgress?.('awaiting-key');
+              terminal.write('Open SafeKey Mobile → Pending actions, then tap the green Release button for this Organisation. Waiting for the Organisation key…');
+            });
             if (!key) throw new Error('master_key_not_claimed');
             masterKeySource = { resolve: async () => key };
           }
+          onProgress?.('securing');
           stage = 'context';
           planContext ??= await operations.createContext();
           stage = 'save';
-          return await operations.createMany({ context: planContext, ...input, masterKeySource });
+          return await operations.createMany({ context: planContext, ...input, masterKeySource }, onProgress);
         } catch (error) {
           if (!sessionSignal.aborted) {
             const message = planCreationFailureMessage(stage, error);

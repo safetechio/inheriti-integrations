@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { request } from 'node:http';
-import { runLocalPlanBrowser } from '../src/local-plan-browser.js';
+import { runLocalPlanBrowser, type LocalPlanCreationPhase } from '../src/local-plan-browser.js';
+import { renderLocalPlanCreationFailedPage } from '../src/local-plan-page.js';
 import { localPlanQuestions } from '../src/local-plan-draft.js';
 import { quickPlanAssetCatalog } from '../src/quick-plan.js';
 import { assetIconCodePoints } from '../src/asset-metadata.js';
@@ -26,7 +27,7 @@ const model = { infer: async ({ sources, candidates }: { sources: readonly { id:
   return { title: 'Safe plan', asset: { type: asset.id, name: 'Account', fields: { [field]: { sourceId: source.id, start: source.text!.indexOf('secret'), end: source.text!.indexOf('secret') + 6 } } }, questions: [], unassignedSources: [] };
 } };
 
-const start = async (create: (input: { title: string; asset: { secret: Record<string, string> } }) => Promise<{ id?: string; planId?: string; status?: string }> = async () => ({ id: 'created' })) => {
+const start = async (create: (input: { title: string; asset: { secret: Record<string, string> } }, onProgress?: (phase: LocalPlanCreationPhase) => void) => Promise<{ id?: string; planId?: string; status?: string }> = async () => ({ id: 'created' })) => {
   let url = '';
   const signal = new AbortController();
   const result = runLocalPlanBrowser({ model, create, open: (value) => { url = value; }, signal: signal.signal });
@@ -40,6 +41,19 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
   it('has a bundled icon for every Core SDK asset type', () => {
     expect(quickPlanAssetCatalog).toHaveLength(12);
     for (const definition of quickPlanAssetCatalog) expect(assetIconCodePoints[definition.iconName]).toBeTypeOf('number');
+  });
+  it('returns 404 for missing font assets without closing the browser session', async () => {
+    let url = '';
+    const signal = new AbortController();
+    const result = runLocalPlanBrowser({ model, create: async () => ({ id: 'created' }), open: (value) => { url = value; },
+      signal: signal.signal, fontFile: new URL('./missing-font.ttf', import.meta.url) });
+    void result.catch(() => {});
+    while (!url) await new Promise((resolve) => setTimeout(resolve, 1));
+    try {
+      expect((await fetch(`${url}/font-app.ttf`)).status).toBe(404);
+      expect((await fetch(`${url}/font-icons.ttf`)).status).toBe(404);
+      expect((await fetch(url)).status).toBe(200);
+    } finally { signal.abort(); await expect(result).rejects.toThrow('local_plan_canceled'); }
   });
   it('shows hints in review and saves the reviewed description', async () => {
     let url = '';
@@ -322,7 +336,7 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       expect(calls).toBe(1);
     } finally { session.signal.abort(); }
   });
-  it('shows the real creation status and escapes the plan ID without returning secret values', async () => {
+  it('shows the real creation status without displaying the plan ID or secret values', async () => {
     for (const status of ['READY', 'PENDING'] as const) {
       const session = await start(async () => ({ planId: '<plan&one>', status }));
       const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -331,7 +345,12 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       const response = await fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') });
       const html = await response.text();
       expect(html).toContain(status === 'READY' ? 'Plan ready' : 'Plan pending');
-      expect(html).toContain('Plan ID: &lt;plan&amp;one&gt;');
+      expect(html).toContain('class="panel result-card"');
+      expect(html).toContain(`data-visual-result="${status}"`);
+      expect(html).toContain('data-plan-visual');
+      expect(html).toContain(`role="img" aria-label="${status === 'READY' ? 'Plan ready' : 'Plan pending'}"`);
+      expect(html).not.toContain('role="progressbar"');
+      expect(html).not.toContain('plan&amp;one');
       expect(html).not.toContain('secret');
       expect(html).not.toContain('<plan&one>');
       await expect(session.result).resolves.toEqual({ planId: '<plan&one>', status });
@@ -348,6 +367,41 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
     expect(html).not.toContain('UNKNOWN');
     expect(html).not.toContain('Plan ID:');
     await expect(session.result).resolves.toEqual({ id: 'created', status: 'UNKNOWN' });
+  });
+  it('reports creation phases without exposing input or result identifiers', async () => {
+    let complete!: (value: { planId: string; status: string }) => void;
+    let progress!: (phase: LocalPlanCreationPhase) => void;
+    const session = await start(async (_input, onProgress) => {
+      progress = onProgress!;
+      progress('awaiting-key');
+      return new Promise((resolve) => { complete = resolve; });
+    });
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    expect((await fetch(`${session.url}/progress`)).status).toBe(404);
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    const creating = fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') });
+    while (!progress) await new Promise((resolve) => setTimeout(resolve, 1));
+    const waiting = await (await fetch(`${session.url}/progress`)).text();
+    expect(waiting).toContain('Open SafeKey Mobile → Pending actions and tap Release.');
+    expect(waiting).toContain('role="progressbar"');
+    expect(waiting).toContain('data-plan-visual');
+    expect(waiting).toContain('data-visual-phase="awaiting-key"');
+    expect(waiting).not.toContain('&quot;phase&quot;:&quot;securing');
+    expect(waiting).not.toContain('secret');
+    progress('encrypting');
+    const encrypting = await (await fetch(`${session.url}/progress`)).text();
+    expect(encrypting).toContain('Encrypt plan data');
+    expect(encrypting).toContain('awaiting-key');
+    expect(encrypting).toContain('encrypting');
+    complete({ planId: 'private-plan-id', status: 'READY' });
+    const response = await creating;
+    expect(response.status).toBe(200);
+    const completed = await response.text();
+    expect(completed).toContain('data-visual-result="READY"');
+    expect(completed).toContain('awaiting-key');
+    expect(completed).not.toContain('private-plan-id');
+    await expect(session.result).resolves.toEqual({ planId: 'private-plan-id', status: 'READY' });
   });
   it('can replace a masked field value during explicit confirmation', async () => {
     let received = '';
@@ -620,9 +674,22 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
     let calls = 0;
     const session = await start(async () => { calls++; return { id: 'created' }; });
     const html = await (await fetch(session.url)).text();
-    await fetch(session.url, { method: 'POST', headers: { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: form(html, 'cancel') });
+    const canceled = await (await fetch(session.url, { method: 'POST', headers: { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: form(html, 'cancel') })).text();
+    expect(canceled).toContain('class="panel result-card"');
+    expect(canceled).toContain('Session canceled');
     await expect(session.result).rejects.toThrow('local_plan_canceled');
     expect(calls).toBe(0);
+  });
+  it('uses the shared card for terminal creation failure without exposing details', () => {
+    const html = renderLocalPlanCreationFailedPage();
+    expect(html).toContain('class="panel result-card"');
+    expect(html).toContain('data-terminal-status');
+    expect(html).toContain('result-icon error');
+    expect(html).toContain('Plan creation failed');
+    const failedAfterCreate = renderLocalPlanCreationFailedPage(undefined, 'encrypting');
+    expect(failedAfterCreate).toContain('role="img" aria-label="Plan creation failed"');
+    expect(failedAfterCreate).toContain('data-visual-result="FAILED"');
+    expect(failedAfterCreate).not.toContain('role="progressbar"');
   });
   it('rejects concurrent inference but permits cancellation during it', async () => {
     let url = '';

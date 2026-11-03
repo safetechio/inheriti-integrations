@@ -15,6 +15,7 @@ export function registerListMemberLogs(server: McpServer, tools: MetadataTools) 
         source: z.enum(['MEMBER', 'AUTOMATION']).optional(),
         from: z.string().date().optional(),
         to: z.string().date().optional(),
+        q: z.string().min(1).max(200).optional(),
         limit: z.number().int().min(1).max(100).optional(),
         offset: z.number().int().nonnegative().safe().optional(),
       }),
@@ -25,6 +26,7 @@ export function registerListMemberLogs(server: McpServer, tools: MetadataTools) 
         source,
         from,
         to,
+        q,
         limit,
         offset,
       }: {
@@ -32,6 +34,7 @@ export function registerListMemberLogs(server: McpServer, tools: MetadataTools) 
         source?: 'MEMBER' | 'AUTOMATION' | undefined;
         from?: string | undefined;
         to?: string | undefined;
+        q?: string | undefined;
         limit?: number | undefined;
         offset?: number | undefined;
       }) =>
@@ -39,6 +42,7 @@ export function registerListMemberLogs(server: McpServer, tools: MetadataTools) 
           ...(source === undefined ? {} : { source }),
           ...(from === undefined ? {} : { from }),
           ...(to === undefined ? {} : { to }),
+          ...(q === undefined ? {} : { q }),
           ...(limit === undefined ? {} : { limit }),
           ...(offset === undefined ? {} : { offset }),
         }),

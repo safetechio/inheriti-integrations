@@ -4,7 +4,7 @@ import { createServer, type ServerResponse, type IncomingMessage } from 'node:ht
 import { once } from 'node:events';
 import type { Socket } from 'node:net';
 import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node-base';
-import { renderLocalPlanCanceledPage, renderLocalPlanPage, renderLocalPlanResultPage } from './local-plan-page.js';
+import { renderLocalPlanCanceledPage, renderLocalPlanCreationFailedPage, renderLocalPlanCreationProgressPage, renderLocalPlanPage, renderLocalPlanResultPage } from './local-plan-page.js';
 import { LocalPlanAssistant, localPlanSuggestionTimeoutMs } from './local-plan-assistant.js';
 import { LocalPlanDraftValue } from './local-plan-draft.js';
 import { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local-plan-source.js';
@@ -13,10 +13,11 @@ import { localPlanAssetLimit } from './asset-metadata.js';
 import type { LocalPlanClarification, LocalPlanDraft, LocalPlanHints, LocalPlanModel, LocalSource } from './local-plan-assistant.js';
 
 const limit = 100_000;
+export type LocalPlanCreationPhase = 'preparing-key' | 'awaiting-key' | 'securing' | 'creating_plan' | 'encrypting' | 'generating_shares' | 'preflighting' | 'distributing' | 'configuring' | 'verifying';
 
 type BrowserOptions<T> = {
   model: LocalPlanModel;
-  create: (input: { title: string; description?: string; asset: QuickPlanInput['asset']; assets: [QuickPlanInput['asset'], ...QuickPlanInput['asset'][]]; teamId?: string }) => Promise<T>;
+  create: (input: { title: string; description?: string; asset: QuickPlanInput['asset']; assets: [QuickPlanInput['asset'], ...QuickPlanInput['asset'][]]; teamId?: string }, onProgress?: (phase: LocalPlanCreationPhase) => void) => Promise<T>;
   open: (url: string) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -41,6 +42,8 @@ type BrowserState<T> = {
   hints: { title: string; description: string; assetTypes: string[] };
   busy: boolean;
   creating: boolean;
+  creationPhase: LocalPlanCreationPhase;
+  creationPhases: LocalPlanCreationPhase[];
   interruptedDuringCreate: boolean;
   done: boolean;
   inference: AbortController;
@@ -59,7 +62,7 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
     sources: [], draft: null, reviewAsset: null, clarification: null,
     selectedTeamId: options.teams?.find((team) => team.name.trim().toLowerCase() === 'all members')?.id ?? '', selectedAssetType: '',
     hints,
-    busy: false, creating: false, interruptedDuringCreate: false, done: false,
+    busy: false, creating: false, creationPhase: 'securing', creationPhases: [], interruptedDuringCreate: false, done: false,
     inference: new AbortController(), finish: () => {},
   };
   const sockets = new Set<Socket>();
@@ -154,13 +157,17 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
   response.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${state.scriptNonce}'; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
   if (request.headers.host !== `127.0.0.1:${state.port}`) { response.writeHead(403).end(); return; }
   if (options.fontFile && request.url === `${state.path}/font-app.ttf` && request.method === 'GET') {
-    try { response.writeHead(200, { 'Content-Type': 'font/ttf' }).end(await readFile(options.fontFile)); }
+    try { const font = await readFile(options.fontFile); response.writeHead(200, { 'Content-Type': 'font/ttf' }).end(font); }
     catch { response.writeHead(404).end(); }
     return;
   }
   if (options.fontFile && request.url === `${state.path}/font-icons.ttf` && request.method === 'GET') {
-    try { response.writeHead(200, { 'Content-Type': 'font/ttf' }).end(await readFile(new URL('./font-icons.ttf', options.fontFile))); }
+    try { const font = await readFile(new URL('./font-icons.ttf', options.fontFile)); response.writeHead(200, { 'Content-Type': 'font/ttf' }).end(font); }
     catch { response.writeHead(404).end(); }
+    return;
+  }
+  if (request.url === `${state.path}/progress` && request.method === 'GET' && state.creating && !state.done) {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationProgressPage(state.creationPhase, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhases));
     return;
   }
   if (request.url !== state.path) { response.writeHead(404).end(); return; }
@@ -188,7 +195,7 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
     const action = data.get('action');
     if (action === 'cancel' && !state.creating) {
       response.once('finish', () => state.finish(undefined, new Error('local_plan_canceled')));
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCanceledPage());
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCanceledPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined));
       return;
     }
     if (state.busy || state.creating) { response.writeHead(409).end(); return; }
@@ -352,9 +359,14 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
       state.reviewAsset = null;
       state.selectedTeamId = teamId;
       state.creating = true;
-      const created = await options.create({ ...input, ...(description ? { description } : {}), ...(teamId ? { teamId } : {}) });
+      state.creationPhase = 'securing';
+      state.creationPhases = [];
+      const created = await options.create({ ...input, ...(description ? { description } : {}), ...(teamId ? { teamId } : {}) }, (phase) => {
+        state.creationPhase = phase;
+        if (state.creationPhases.at(-1) !== phase && state.creationPhases.length < 20) state.creationPhases.push(phase);
+      });
       response.once('finish', () => state.finish(created));
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
       return;
     }
     response.writeHead(400).end();
@@ -364,7 +376,7 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
     if (ownsLock && state.creating) {
       state.creating = false;
       if (state.interruptedDuringCreate) {
-        response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end('<p>Plan creation failed. You can close this window.</p>');
+        response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationFailedPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
         state.finish(undefined, error instanceof Error ? error : new Error('local_plan_creation_failed'));
       } else {
         response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderPage(state, options, 'Plan creation failed. Review and retry.', true));

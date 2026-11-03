@@ -9,5 +9,5 @@ it('omits automation, plan creation, and Workspace tools when disabled', () => {
   expect(names).not.toContain('pair_aws_automation_service');
   expect(names).not.toContain('create_plan_with_assistant');
   expect(names).not.toContain('open_inheriti_file');
-  expect(names).toContain('download_plan_asset');
+  expect(names).not.toContain('download_plan_asset');
 });

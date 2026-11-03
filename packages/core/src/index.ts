@@ -57,6 +57,10 @@ export interface OperatorSessionFacade {
 export interface PlanFacade<TListInput, TPage, TDetail> {
   listPlans(input?: TListInput): Promise<TPage>;
   getPlan(planId: string): Promise<TDetail>;
+  listOrganizationMembers(input?: import('@safetech/inheriti-client-sdk').ListOrganizationMembersInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationMemberPage>;
+  listOrganizationAuditTrail(input: import('@safetech/inheriti-client-sdk').ListOrganizationAuditTrailInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationAuditPage>;
+  getOrganizationInsights(input?: import('@safetech/inheriti-client-sdk').OrganizationInsightsInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationInsights>;
+  getPlanResponsibilities(planId: string): Promise<import('@safetech/inheriti-client-sdk').PlanResponsibilities>;
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage>;
   listMemberLogs(memberId: string, input?: import('@safetech/inheriti-client-sdk').ListMemberLogsInput): Promise<import('@safetech/inheriti-client-sdk').MemberLogPage>;
   getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
@@ -243,6 +247,10 @@ export class ElementsIntegrationCore<TListInput, TPage, TDetail> {
   }
   listPlans(input?: TListInput): Promise<TPage> { return this.elements.listPlans(input); }
   getPlan(planId: string): Promise<TDetail> { return this.elements.getPlan(planId); }
+  listOrganizationMembers(input?: import('@safetech/inheriti-client-sdk').ListOrganizationMembersInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationMemberPage> { return this.elements.listOrganizationMembers(input); }
+  listOrganizationAuditTrail(input: import('@safetech/inheriti-client-sdk').ListOrganizationAuditTrailInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationAuditPage> { return this.elements.listOrganizationAuditTrail(input); }
+  getOrganizationInsights(input?: import('@safetech/inheriti-client-sdk').OrganizationInsightsInput): Promise<import('@safetech/inheriti-client-sdk').OrganizationInsights> { return this.elements.getOrganizationInsights(input); }
+  getPlanResponsibilities(planId: string): Promise<import('@safetech/inheriti-client-sdk').PlanResponsibilities> { return this.elements.getPlanResponsibilities(planId); }
   listPlanLogs(planId: string, input?: import('@safetech/inheriti-client-sdk').ListPlanLogsInput): Promise<import('@safetech/inheriti-client-sdk').PlanLogPage> { return this.elements.listPlanLogs(planId, input); }
   listMemberLogs(memberId: string, input?: import('@safetech/inheriti-client-sdk').ListMemberLogsInput): Promise<import('@safetech/inheriti-client-sdk').MemberLogPage> { return this.elements.listMemberLogs(memberId, input); }
   getActivePlanReveal(planId: string): Promise<{ id: string } | null> { return this.elements.getActivePlanReveal(planId); }
@@ -321,4 +329,5 @@ export type {
   RevealPhase, RevealProgress,
   DeclaredMasterKeySource, KeyVault, MasterKeyRef, MasterKeyResolver, MasterKeySource, OperatorSessionStore, OperatorSessionSummary, OperatorTokenValidator,
   BusinessOrganization, ListPlanLogsInput, PlanDetail, PlanLog, PlanLogPage, PlanPage, PlanSummary, RevealActionOutcome, RevealActionType, ValidatedOperatorToken,
+  ListOrganizationMembersInput, ListOrganizationAuditTrailInput, OrganizationInsightsInput,
 } from '@safetech/inheriti-client-sdk';

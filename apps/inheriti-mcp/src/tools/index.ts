@@ -1,4 +1,5 @@
 import { lockedDeployment } from '../runtime/configuration.js';
+import { MCP_FEATURE_FLAGS } from '../feature-flags.js';
 import { PROTECTED_FILE_FLAGS, HOST_FEATURE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MetadataTools } from '../server.js';
@@ -13,6 +14,10 @@ import { registerListBackupPlans } from './list_backup_plans.js';
 import { registerGetBackupPlan } from './get_backup_plan.js';
 import { registerListBackupPlanLogs } from './list_backup_plan_logs.js';
 import { registerListMemberLogs } from './list_member_logs.js';
+import { registerListOrganizationMembers } from './list_organization_members.js';
+import { registerListOrganizationAuditTrail } from './list_organization_audit_trail.js';
+import { registerGetOrganizationInsights } from './get_organization_insights.js';
+import { registerGetPlanResponsibilities } from './get_plan_responsibilities.js';
 import { registerLogout } from './logout.js';
 import { registerAbortPlanAccess } from './abort_plan_access.js';
 import { registerCreatePlanWithAssistant } from './create_plan_with_assistant.js';
@@ -50,16 +55,22 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
   registerGetBackupPlan(server, tools);
   registerListBackupPlanLogs(server, tools);
   registerListMemberLogs(server, tools);
+  registerListOrganizationMembers(server, tools);
+  registerListOrganizationAuditTrail(server, tools);
+  registerGetOrganizationInsights(server, tools);
+  registerGetPlanResponsibilities(server, tools);
   registerLogout(server, tools);
   registerAbortPlanAccess(server, tools);
-  registerRevealPlanSecret(server, tools);
-  registerDownloadPlanAsset(server, tools);
-  registerCheckRevealStatus(server, tools);
-  if (lockedDeployment && HOST_FEATURE_FLAGS[lockedDeployment].planCreation) {
+  if (lockedDeployment && MCP_FEATURE_FLAGS[lockedDeployment].planReveal) {
+    registerRevealPlanSecret(server, tools);
+    registerDownloadPlanAsset(server, tools);
+    registerCheckRevealStatus(server, tools);
+  }
+  if (lockedDeployment && MCP_FEATURE_FLAGS[lockedDeployment].planCreation && HOST_FEATURE_FLAGS[lockedDeployment].planCreation) {
     registerCreatePlanWithAssistant(server, tools);
     registerCheckPlanCreationStatus(server, tools);
   }
-  if (lockedDeployment && HOST_FEATURE_FLAGS[lockedDeployment].automation) {
+  if (lockedDeployment && MCP_FEATURE_FLAGS[lockedDeployment].automation && HOST_FEATURE_FLAGS[lockedDeployment].automation) {
     registerStartAutomationSetup(server, tools);
     registerStartAutomationPairing(server, tools);
     registerPairAwsAutomationService(server, tools);
@@ -82,10 +93,12 @@ export function registerTools(server: McpServer, tools: MetadataTools) {
     registerPrepareAutomationRuntime(server, tools);
     registerApplyAutomationRuntime(server, tools);
     registerInspectAutomationCloudIdentity(server, tools);
-    registerPublishPlanFieldsToAws(server, tools);
-    registerPublishPlanFieldsToGoogleCloud(server, tools);
+    if (MCP_FEATURE_FLAGS[lockedDeployment].planReveal) {
+      registerPublishPlanFieldsToAws(server, tools);
+      registerPublishPlanFieldsToGoogleCloud(server, tools);
+    }
   }
-  if (lockedDeployment && PROTECTED_FILE_FLAGS[lockedDeployment]) {
+  if (lockedDeployment && MCP_FEATURE_FLAGS[lockedDeployment].planReveal && PROTECTED_FILE_FLAGS[lockedDeployment]) {
     registerOpenInheritiFile(server);
   }
 }

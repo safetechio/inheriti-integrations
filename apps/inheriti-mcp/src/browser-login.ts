@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import type { OperatorAuthFacade } from '@safetech/inheriti-elements-core/node-base';
 
 const callbackHeaders = {
@@ -7,8 +8,23 @@ const callbackHeaders = {
   'cache-control': 'no-store',
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; frame-ancestors 'none'",
 };
+
+function callbackPage(status: 'success' | 'continue' | 'failed'): string {
+  const resources = new URL('./', import.meta.url);
+  const font = readFileSync(new URL('assets/font-app.ttf', resources)).toString('base64');
+  const logo = readFileSync(new URL('assets/inheriti-mark.png', resources)).toString('base64');
+  const heading = status === 'success' ? 'Signed in' : status === 'continue' ? 'Continue sign-in' : 'Sign-in failed';
+  const message = status === 'failed' ? 'Return to your MCP client and try again.' : 'Return to your MCP client.';
+  return readFileSync(new URL('templates/login-callback.html', resources), 'utf8')
+    .replace('{{font}}', font)
+    .replace('{{logo}}', logo)
+    .replaceAll('{{heading}}', heading)
+    .replace('{{statusLabel}}', status === 'failed' ? 'Sign-in error' : status === 'continue' ? 'Sign-in required' : 'Browser step complete')
+    .replace('{{statusClass}}', status === 'failed' ? 'failed' : '')
+    .replace('{{message}}', message);
+}
 
 export async function beginBrowserLogin(
   auth: Pick<OperatorAuthFacade, 'beginAuthorizationCode' | 'completeAuthorizationCode'>,
@@ -40,15 +56,15 @@ export async function beginBrowserLogin(
     void (async () => {
       try {
         await auth.completeAuthorizationCode(callback.toString());
-        response.writeHead(200, callbackHeaders).end('<h1>Signed in</h1><p>Return to your MCP client.</p>');
+        response.writeHead(200, callbackHeaders).end(callbackPage('success'));
         finish(undefined, true);
       } catch (error) {
         if (options.prompt === 'none' && ['login_required', 'interaction_required'].includes((error as { code?: unknown } | null)?.code as string)) {
-          response.writeHead(200, callbackHeaders).end('<h1>Continue sign-in</h1><p>Return to your MCP client.</p>');
+          response.writeHead(200, callbackHeaders).end(callbackPage('continue'));
           finish(error, true);
           return;
         }
-        response.writeHead(400, callbackHeaders).end('<h1>Sign-in failed</h1><p>Return to your MCP client and try again.</p>');
+        response.writeHead(400, callbackHeaders).end(callbackPage('failed'));
         finish(error, true);
       }
     })();

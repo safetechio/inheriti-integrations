@@ -1,4 +1,8 @@
 import { expect, it, vi } from 'vitest';
+
+vi.mock('../src/feature-flags.js', () => ({ MCP_FEATURE_FLAGS: Object.fromEntries(
+  ['local', 'dev', 'stg', 'prod'].map(deployment => [deployment, { planCreation: true, planReveal: true }]),
+) }));
 import { MetadataTools } from '../src/server.js';
 
 const publisher = vi.hoisted(() => ({ inspectSecret: vi.fn(), inspectParameter: vi.fn(), publishSecret: vi.fn(), publishParameter: vi.fn() }));
@@ -12,13 +16,13 @@ const base = { planId: 'plan', region: 'us-east-1', expectedAccountId: '12345678
   mappings: [{ selector: 'asset.password', key: 'PASSWORD' }] };
 const plan = { governance: { mode: 'DIRECT' }, participants: [], assets: [{ id: 'asset', fieldNames: ['password'] }] };
 function selected(core: Record<string, unknown>) {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org', core: { getPlan: async () => plan, ...core } });
   return tools as MetadataTools;
 }
 
 it('rejects ambiguous or duplicate AWS field mappings before opening a reveal', async () => {
-  const tools = new MetadataTools();
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } });
   const base = { planId: 'plan', region: 'us-east-1', expectedAccountId: '123456789012', apply: true };
   await expect(tools.publishPlanFieldsToAws({ ...base, secretName: 'target', parameterPrefix: '/target',
     mappings: [{ selector: 'asset.password', key: 'PASSWORD' }] })).rejects.toThrow('automation_aws_publisher_input_invalid');

@@ -60,7 +60,7 @@ export async function createPlanWithAssistant(this: MetadataTools, hints?: Local
           import.meta.url,
         ),
         open: (url) => window.open(url),
-        create: async (input) => {
+        create: async (input, onProgress) => {
           if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
           const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
           if (state.inputFingerprint && state.inputFingerprint !== fingerprint)
@@ -68,14 +68,17 @@ export async function createPlanWithAssistant(this: MetadataTools, hints?: Local
           state.inputFingerprint = fingerprint;
           if (!state.masterKeySource) {
             job.phase = 'ACQUIRING_KEY';
+            onProgress?.('preparing-key');
             const key = await operations.acquireKey(controller.signal, () => {
               job.phase = 'AWAITING_KEY';
+              onProgress?.('awaiting-key');
             });
             if (!key) throw coded('master_key_required');
             state.masterKeySource = { resolve: async () => key };
           }
           if (controller.signal.aborted || version !== this.selectionVersion) throw coded('local_plan_canceled');
           job.phase = 'CREATING';
+          onProgress?.('securing');
           state.planContext ??= await operations.createContext();
           if (controller.signal.aborted || version !== this.selectionVersion) {
             await operations.abandon(state.planContext.planId);
@@ -86,7 +89,7 @@ export async function createPlanWithAssistant(this: MetadataTools, hints?: Local
             context: state.planContext,
             ...input,
             masterKeySource: state.masterKeySource!,
-          });
+          }, onProgress);
           const created = await state.creationFlight;
           job.status = created.status === 'READY' ? 'CREATED' : 'PENDING';
           return created;

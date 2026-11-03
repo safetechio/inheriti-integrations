@@ -5,6 +5,8 @@ import { localPlanFieldMaxLength } from './local-plan-draft.js';
 import { localPlanInputLimits } from './local-plan-source.js';
 import { quickPlanAssetCatalog } from './quick-plan.js';
 import { assetName, fieldLabels, fieldName, assetIconCodePoints, localPlanAssetLimit } from './asset-metadata.js';
+import type { LocalPlanCreationPhase } from './local-plan-browser.js';
+import { renderPlanCreationVisual, planCreationVisualStyles, planCreationVisualScript } from './plan-creation-visual/index.js';
 
 export type LocalPlanPageOptions = {
   path: string;
@@ -103,6 +105,13 @@ const style = `
   .steps .current .step-number, .steps .complete .step-number { border-color: var(--primary); color: #fff; background: var(--primary); }
   .steps .complete { color: var(--primary); }
   .panel { display: grid; gap: var(--space-m); padding: var(--space-l); border: 1px solid #eaecf0; border-radius: var(--radius-m); background: #fff; }
+  .result-main { min-height: calc(100dvh - 48px); place-content: center; }
+  .result-card { justify-items: center; gap: 16px; padding: 48px 24px; text-align: center; }
+  .result-icon { display: grid; place-items: center; width: 72px; height: 72px; border: 1px solid currentColor; border-radius: 50%; font-size: 36px; font-weight: 600; line-height: 1; }
+  .result-icon.success { color: var(--success); }
+  .result-icon.pending, .result-icon.neutral { color: var(--primary); }
+  .result-icon.error { color: var(--danger); }
+  .result-card p { color: var(--gray-text); }
   .fa-icon { display: inline-block; width: 1.2em; font-family: FontAwesome6, sans-serif; font-style: normal; font-weight: 900; text-align: center; }
   html.native-linux-fonts { font-weight: 300; font-synthesis: none; }
   html.native-linux-fonts :is(input, select, textarea) { font-weight: 300; }
@@ -377,7 +386,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Create plan · Inheriti® Business</title>
-  <style>${options.fontUrl ? `@font-face { font-family: AppFont; src: url('${options.fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${options.iconFontUrl ? `@font-face { font-family: FontAwesome6; src: url('${options.iconFontUrl}') format('truetype'); font-weight: 900; font-display: block; }` : ''}${style}</style>
+  <style>${options.fontUrl ? `@font-face { font-family: AppFont; src: url('${options.fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${options.iconFontUrl ? `@font-face { font-family: FontAwesome6; src: url('${options.iconFontUrl}') format('truetype'); font-weight: 900; font-display: block; }` : ''}${style}${planCreationVisualStyles}</style>
 </head>
 <body>
 <main>
@@ -399,6 +408,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
   </form>
 </main>
 <script nonce="${options.scriptNonce}">
+  ${planCreationVisualScript}
   let pending;
   const assetCatalog = ${JSON.stringify(quickPlanAssetCatalog.map(({ id, fields, iconName }) => ({ id, fields, name: assetName(id), icon: assetIconCodePoints[iconName] ?? icons.file })))};
   const fieldLabels = ${JSON.stringify(fieldLabels)};
@@ -567,8 +577,28 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       button.setAttribute('aria-busy', 'true');
     }
     if (action !== 'cancel') busy(true);
+    const originalMain = action === 'create' ? document.querySelector('main')?.cloneNode(true) : undefined;
+    let polling = true;
+    let pollInFlight = false;
+    const progressTimer = action === 'create' ? setInterval(async () => {
+      if (pollInFlight || !polling) return;
+      pollInFlight = true;
+      try {
+        const progress = await fetch('${path}/progress', { credentials: 'same-origin' });
+        if (!progress.ok || pending !== controller || !polling) return;
+        const next = new DOMParser().parseFromString(await progress.text(), 'text/html').querySelector('main');
+        const current = document.querySelector('main');
+        if (next && current && polling && !window.updatePlanCreationVisual(current, next)) {
+          const inserted = document.importNode(next, true);
+          current.replaceWith(inserted);
+          window.initializePlanCreationVisual(inserted);
+        }
+      } catch { /* The creation request reports its own result. */ }
+      finally { pollInFlight = false; }
+    }, 500) : undefined;
     try {
       const response = await fetch(form.getAttribute('action'), { method: 'POST', body: action === 'infer' || action === 'review' || action === 'revise' ? body : new URLSearchParams(body), credentials: 'same-origin', signal: controller.signal });
+      polling = false;
       const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('main');
       if (!next) throw new Error('Invalid response');
       if (action !== 'cancel' && pending !== controller) return;
@@ -581,10 +611,17 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
         return;
       }
       if (action === 'create' && !response.ok) {
+        if (next.hasAttribute('data-terminal-status')) {
+          document.querySelector('main')?.replaceWith(document.importNode(next, true));
+          return;
+        }
+        if (originalMain) { window.resetPlanCreationVisual(); document.querySelector('main')?.replaceWith(originalMain); }
         const notice = document.createElement('p'); notice.className = 'status'; notice.setAttribute('role', 'alert');
         notice.textContent = next.querySelector('[role="alert"]')?.textContent || 'Plan creation failed. Review and retry.';
         document.querySelector('main')?.prepend(notice); return;
       }
+      if (action === 'create' && response.ok) await window.finishPlanCreationVisual(document.querySelector('main'), next);
+      if (action !== 'cancel' && pending !== controller) return;
       document.querySelector('main').replaceWith(document.importNode(next, true));
       validate();
       updateMessageCount();
@@ -593,6 +630,8 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
         document.getElementById('message')?.focus();
       } else if (document.getElementById('compose-heading')) document.getElementById('message')?.focus();
     } catch (error) {
+      polling = false;
+      if (originalMain) { window.resetPlanCreationVisual(); document.querySelector('main')?.replaceWith(originalMain); }
       if (error.name !== 'AbortError' || controller.signal.reason === 'suggestion_timeout') {
         document.querySelector('main > .status')?.remove();
         const notice = document.createElement('p');
@@ -605,6 +644,8 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
         else document.querySelector('main')?.prepend(notice);
       }
     } finally {
+      polling = false;
+      if (progressTimer) clearInterval(progressTimer);
       if (suggestionTimer) clearTimeout(suggestionTimer);
       if (pending === controller) pending = undefined;
       if (button?.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); }
@@ -626,31 +667,49 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
 </html>`;
 }
 
-export function renderLocalPlanResultPage(created: unknown, fontUrl?: string): string {
+export function renderLocalPlanCreationProgressPage(phase: LocalPlanCreationPhase = 'securing', fontUrl?: string, observedPhases?: readonly LocalPlanCreationPhase[]): string {
+  const messages: Record<LocalPlanCreationPhase, string> = {
+    'preparing-key': 'Accessing your Organisation Key', 'awaiting-key': 'Open SafeKey Mobile → Pending actions and tap Release.',
+    securing: 'Securing your plan', creating_plan: 'Save plan', encrypting: 'Encrypt plan data',
+    generating_shares: 'Generate shares', preflighting: 'Check share destinations',
+    distributing: 'Distribute validator shares', configuring: 'Distribute encrypted data shares', verifying: 'Verify protection',
+  };
+  return renderLocalPlanStatusPage('Creating your plan', messages[phase], 'pending', fontUrl, phase, undefined, observedPhases);
+}
+
+export function renderLocalPlanResultPage(created: unknown, fontUrl?: string, phase: LocalPlanCreationPhase = 'verifying', observedPhases?: readonly LocalPlanCreationPhase[]): string {
   const value = created && typeof created === 'object' ? created as Record<string, unknown> : {};
   const status = value.status === 'READY' || value.status === 'PENDING' ? value.status : null;
-  const planId = typeof value.planId === 'string' && value.planId.length <= 200 ? value.planId : null;
   const heading = status === 'READY' ? 'Plan ready' : status === 'PENDING' ? 'Plan pending' : 'Plan creation completed';
   const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti® Business.' : 'You can close this window and return to your workflow.';
+  return renderLocalPlanStatusPage(heading, description, status === 'PENDING' ? 'pending' : status === 'READY' ? 'success' : 'neutral', fontUrl, phase, status ?? undefined, observedPhases);
+}
+
+function renderLocalPlanStatusPage(heading: string, description: string, kind: 'success' | 'pending' | 'neutral' | 'error', fontUrl?: string, phase?: LocalPlanCreationPhase, result?: 'READY' | 'PENDING' | 'FAILED' | 'CANCELED', observedPhases?: readonly LocalPlanCreationPhase[]): string {
+  const symbols = { success: '&#10003;', pending: '&#9719;', neutral: '&#10003;', error: '!' };
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${heading} · Inheriti® Business</title>
-  <style>${fontUrl ? `@font-face { font-family: AppFont; src: url('${fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${style}</style>
+  <style>${fontUrl ? `@font-face { font-family: AppFont; src: url('${fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${style}${planCreationVisualStyles}
+  </style>
 </head>
 <body>
-  <main><section class="panel" role="status">
+  <main class="result-main"${kind === 'error' ? ' data-terminal-status' : ''}><section class="panel result-card" role="status">
+    ${phase ? `<div role="${heading === 'Creating your plan' ? 'progressbar' : 'img'}" aria-label="${heading === 'Creating your plan' ? 'Creating plan' : heading}">${renderPlanCreationVisual(phase, result, observedPhases)}</div>` : `<span class="result-icon ${kind}" aria-hidden="true">${symbols[kind]}</span>`}
     <h1>${heading}</h1>
     <p>${description}</p>
-    ${planId ? `<small class="helper">Plan ID: ${escape(planId)}</small>` : ''}
   </section></main>
 </body>
 </html>`;
 }
 
-export function renderLocalPlanCanceledPage(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session canceled · Inheriti® Business</title><style>${style}</style></head>
-  <body><main><section class="panel" role="status"><h1>Session canceled</h1><p>You can close this window and return to your workflow.</p></section></main></body></html>`;
+export function renderLocalPlanCanceledPage(fontUrl?: string): string {
+  return renderLocalPlanStatusPage('Session canceled', 'You can close this window and return to your workflow.', 'neutral', fontUrl);
+}
+
+export function renderLocalPlanCreationFailedPage(fontUrl?: string, phase?: LocalPlanCreationPhase, observedPhases?: readonly LocalPlanCreationPhase[]): string {
+  return renderLocalPlanStatusPage('Plan creation failed', 'You can close this window and return to your workflow.', 'error', fontUrl, phase, 'FAILED', observedPhases);
 }

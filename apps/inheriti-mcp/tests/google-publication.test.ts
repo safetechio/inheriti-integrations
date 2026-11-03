@@ -1,4 +1,8 @@
 import { expect, it, vi } from 'vitest';
+
+vi.mock('../src/feature-flags.js', () => ({ MCP_FEATURE_FLAGS: Object.fromEntries(
+  ['local', 'dev', 'stg', 'prod'].map(deployment => [deployment, { planCreation: true, planReveal: true }]),
+) }));
 import { MetadataTools } from '../src/server.js';
 
 const publisher = vi.hoisted(() => ({ inspectSecret: vi.fn(), publishSecret: vi.fn() }));
@@ -11,7 +15,7 @@ const plan = { governance: { mode: 'DIRECT' }, participants: [], assets: [{ id: 
 const input = { planId: 'plan', projectId: 'test-project', secretPrefix: 'app_',
   mappings: [{ selector: 'asset.password', key: 'PASSWORD' }] };
 function selected(core: Record<string, unknown>) {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org', core: { getPlan: async () => plan, ...core } });
   return tools as MetadataTools;
 }

@@ -1,10 +1,14 @@
-import type { ListMemberLogsInput, ListPlanLogsInput, ListPlansInput, MemberLogPage, PlanDetail, PlanLogPage, PlanPage } from '@safetech/inheriti-client-sdk';
+import type { ListMemberLogsInput, ListPlanLogsInput, ListPlansInput, MemberLogPage, PlanDetail, PlanLogPage, PlanPage, ListOrganizationMembersInput, OrganizationMemberPage, ListOrganizationAuditTrailInput, OrganizationAuditPage, OrganizationInsightsInput, OrganizationInsights, PlanResponsibilities } from '@safetech/inheriti-client-sdk';
 import type { PlanFacade } from './index.js';
 
 /** The read surface of the SDK client, which is all a host needs to list and open plans. */
 export interface SdkPlanReader {
   listPlans(input?: ListPlansInput): Promise<PlanPage>;
   getPlan(planId: string): Promise<PlanDetail>;
+  listOrganizationMembers(input?: ListOrganizationMembersInput): Promise<OrganizationMemberPage>;
+  listOrganizationAuditTrail(input: ListOrganizationAuditTrailInput): Promise<OrganizationAuditPage>;
+  getOrganizationInsights(input?: OrganizationInsightsInput): Promise<OrganizationInsights>;
+  getPlanResponsibilities(planId: string): Promise<PlanResponsibilities>;
   listPlanLogs(planId: string, input?: ListPlanLogsInput): Promise<PlanLogPage>;
   listMemberLogs(memberId: string, input?: ListMemberLogsInput): Promise<MemberLogPage>;
   getActivePlanReveal(planId: string): Promise<{ id: string } | null>;
@@ -56,6 +60,23 @@ export class SdkPlanFacade implements ElementsPlanFacade {
     return this.guard(() => this.reader.getPlan(planId));
   }
 
+  listOrganizationMembers(input?: ListOrganizationMembersInput): Promise<OrganizationMemberPage> {
+    return this.guardOrganization(() => this.reader.listOrganizationMembers(input));
+  }
+
+  listOrganizationAuditTrail(input: ListOrganizationAuditTrailInput): Promise<OrganizationAuditPage> {
+    return this.guardOrganization(() => this.reader.listOrganizationAuditTrail(input));
+  }
+
+  getOrganizationInsights(input?: OrganizationInsightsInput): Promise<OrganizationInsights> {
+    return this.guardOrganization(() => this.reader.getOrganizationInsights(input));
+  }
+
+  getPlanResponsibilities(planId: string): Promise<PlanResponsibilities> {
+    if (!planId) throw new PlanRequestFailed('plan_id_required');
+    return this.guard(() => this.reader.getPlanResponsibilities(planId));
+  }
+
   listPlanLogs(planId: string, input?: ListPlanLogsInput): Promise<PlanLogPage> {
     if (!planId) throw new PlanRequestFailed('plan_id_required');
     return this.guard(() => this.reader.listPlanLogs(planId, input));
@@ -84,6 +105,17 @@ export class SdkPlanFacade implements ElementsPlanFacade {
       return await call();
     } catch (error) {
       throw asPlanRequestFailed(error);
+    }
+  }
+
+  private async guardOrganization<TResult>(call: () => Promise<TResult>): Promise<TResult> {
+    try {
+      return await call();
+    } catch (error) {
+      const failure = asPlanRequestFailed(error);
+      if (failure.status === 403) throw new PlanRequestFailed('organization_permission_required', 403, failure.requestId);
+      if (failure.status === 404) throw new PlanRequestFailed('organization_query_unavailable', 404, failure.requestId);
+      throw failure;
     }
   }
 }
