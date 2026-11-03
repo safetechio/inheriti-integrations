@@ -66,7 +66,9 @@ function applySecurityPolicies(win) {
 // than derived from this file's location, so `dist/`, `.env.*`, and asset
 // paths stay correct regardless of where this module lives.
 function createWindow(electronDir) {
-  const windowTitle = `Inheriti® Importer · v${app.getVersion()}`;
+  const environment = process.env.INHERITI_ENV || 'local';
+  const suffix = environment === 'prod' ? '' : ` ${environment.toUpperCase()}`;
+  const windowTitle = `Inheriti® Importer${suffix} · v${app.getVersion()}`;
   const win = new BrowserWindow({
     width: 1320,
     height: 880,
@@ -76,7 +78,8 @@ function createWindow(electronDir) {
     title: windowTitle,
     icon: path.join(
       electronDir,
-      app.isPackaged ? '../dist/favicon.png' : '../src/assets/brand/inheriti-favicon.png',
+      app.isPackaged ? '../dist' : '../public',
+      environment === 'prod' ? 'favicon.png' : `favicon-${environment}.png`,
     ),
     webPreferences: {
       preload: path.join(electronDir, 'preload.cjs'),
