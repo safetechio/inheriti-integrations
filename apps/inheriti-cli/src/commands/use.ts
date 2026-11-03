@@ -9,6 +9,7 @@ import type { Writable } from 'node:stream';
 import type { SecretRevealContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { consumePlanFields, loadRevealPlan, renderRequestedValue } from './reveal.js';
+import type { OperationContext } from './operation-context.js';
 
 export interface UsePlanOptions {
   stdin?: string;
@@ -22,6 +23,7 @@ export interface UsePlanOptions {
   output?: 'suppress' | 'inherit';
   signal?: AbortSignal;
   workload?: boolean;
+  operationContext?: OperationContext;
 }
 
 export class UsePlanInvalid extends Error {
@@ -36,6 +38,7 @@ export async function usePlan(
   options: UsePlanOptions,
 ): Promise<number> {
   validateUseOptions(options);
+  if (options.operationContext && !options.workload) throw new UsePlanInvalid('Operation context requires secrets exec --automation.');
   const deadline = deadlineSignal(options.signal, options.ttlMs);
   let lifecycle: ProcessLifecycle | undefined;
   try {
@@ -59,7 +62,7 @@ export async function usePlan(
       const values = new Map(consumed.map(({ selector, value }) => [selector, renderRequestedValue(value)]));
       try { lifecycle = await executeWithSecrets(options, values, deadline.signal); }
       finally { values.clear(); }
-    }, { onSession: deadline.session });
+    }, { onSession: deadline.session, ...(options.operationContext ? { operationContext: options.operationContext } : {}) });
     if (lifecycle) await lifecycle.wait();
     assertActive(deadline.signal);
   } catch (error) {

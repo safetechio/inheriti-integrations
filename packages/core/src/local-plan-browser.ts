@@ -21,6 +21,7 @@ type BrowserOptions<T> = {
   open: (url: string) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
+  waitForContinue?: boolean;
   context?: string;
   teams?: readonly { id: string; name: string }[];
   fontFile?: URL;
@@ -46,6 +47,7 @@ type BrowserState<T> = {
   creationPhases: LocalPlanCreationPhase[];
   interruptedDuringCreate: boolean;
   done: boolean;
+  completed?: { value: T };
   inference: AbortController;
   finish: (value?: T, error?: Error) => void;
 };
@@ -79,7 +81,7 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
   });
   const server = createServer((request, response) => { void handleRequest(request, response, state, options); });
   server.on('connection', (socket) => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
-  const abort = () => { if (state.creating) state.interruptedDuringCreate = true; else state.finish(undefined, new Error('local_plan_canceled')); };
+  const abort = () => { if (state.completed) state.finish(state.completed.value); else if (state.creating) state.interruptedDuringCreate = true; else state.finish(undefined, new Error('local_plan_canceled')); };
   options.signal?.addEventListener('abort', abort, { once: true });
   try {
     server.listen(0, '127.0.0.1');
@@ -87,7 +89,7 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
     state.port = (server.address() as { port: number }).port;
     if (options.signal?.aborted) abort();
     else options.open(`http://127.0.0.1:${state.port}${state.path}`);
-    const timer = setTimeout(() => { if (state.creating) state.interruptedDuringCreate = true; else state.finish(undefined, new Error('local_plan_expired')); }, options.timeoutMs ?? 300_000);
+    const timer = setTimeout(() => { if (state.completed) return; if (state.creating) state.interruptedDuringCreate = true; else state.finish(undefined, new Error('local_plan_expired')); }, options.timeoutMs ?? 300_000);
     try { return await result; } finally { clearTimeout(timer); }
   } finally {
     options.signal?.removeEventListener('abort', abort);
@@ -172,7 +174,9 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
   }
   if (request.url !== state.path) { response.writeHead(404).end(); return; }
   if (state.done) { response.writeHead(410).end(); return; }
-  if (request.method === 'GET') { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderPage(state, options)); return; }
+  if (request.method === 'GET') { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(state.completed
+    ? renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, { path: state.path, csrf: state.csrf })
+    : renderPage(state, options)); return; }
   if (request.method !== 'POST') { response.writeHead(405).end(); return; }
   if (request.headers.origin !== `http://127.0.0.1:${state.port}`) { response.writeHead(403).end(); return; }
   let ownsLock = false;
@@ -193,6 +197,12 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
     if (data.get('csrf') !== state.csrf) { response.writeHead(403).end(); return; }
     if (state.done) { response.writeHead(410).end(); return; }
     const action = data.get('action');
+    if (state.completed) {
+      if (action !== 'continue') { response.writeHead(409).end(); return; }
+      response.once('finish', () => state.finish(state.completed!.value));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
+      return;
+    }
     if (action === 'cancel' && !state.creating) {
       response.once('finish', () => state.finish(undefined, new Error('local_plan_canceled')));
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCanceledPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined));
@@ -365,8 +375,23 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
         state.creationPhase = phase;
         if (state.creationPhases.at(-1) !== phase && state.creationPhases.length < 20) state.creationPhases.push(phase);
       });
-      response.once('finish', () => state.finish(created));
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
+      response.once('close', () => { if (!response.writableFinished) state.finish(created); });
+      if (response.destroyed) {
+        state.finish(created);
+        return;
+      }
+      const awaitAcknowledgment = options.waitForContinue && !options.signal?.aborted;
+      if (awaitAcknowledgment) {
+        state.completed = { value: created };
+        state.inference.abort();
+        state.sources = [];
+        state.draft = null;
+        state.reviewAsset = null;
+        state.clarification = null;
+        state.hints = { title: '', description: '', assetTypes: [] };
+        state.creating = false;
+      } else response.once('finish', () => state.finish(created));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, awaitAcknowledgment ? { path: state.path, csrf: state.csrf } : undefined));
       return;
     }
     response.writeHead(400).end();

@@ -677,15 +677,17 @@ export function renderLocalPlanCreationProgressPage(phase: LocalPlanCreationPhas
   return renderLocalPlanStatusPage('Creating your plan', messages[phase], 'pending', fontUrl, phase, undefined, observedPhases);
 }
 
-export function renderLocalPlanResultPage(created: unknown, fontUrl?: string, phase: LocalPlanCreationPhase = 'verifying', observedPhases?: readonly LocalPlanCreationPhase[]): string {
+export function renderLocalPlanResultPage(created: unknown, fontUrl?: string, phase: LocalPlanCreationPhase = 'verifying', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }): string {
   const value = created && typeof created === 'object' ? created as Record<string, unknown> : {};
   const status = value.status === 'READY' || value.status === 'PENDING' ? value.status : null;
-  const heading = status === 'READY' ? 'Plan ready' : status === 'PENDING' ? 'Plan pending' : 'Plan creation completed';
-  const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti® Business.' : 'You can close this window and return to your workflow.';
-  return renderLocalPlanStatusPage(heading, description, status === 'PENDING' ? 'pending' : status === 'READY' ? 'success' : 'neutral', fontUrl, phase, status ?? undefined, observedPhases);
+  const heading = status === 'READY' ? 'Plan created' : status === 'PENDING' ? 'Plan pending' : 'Plan creation completed';
+  const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti® Business.'
+    : status === 'READY' && completion ? 'Select Continue or close this window to return to your terminal.'
+      : 'You can close this window and return to your workflow.';
+  return renderLocalPlanStatusPage(heading, description, status === 'PENDING' ? 'pending' : status === 'READY' ? 'success' : 'neutral', fontUrl, phase, status ?? undefined, observedPhases, completion);
 }
 
-function renderLocalPlanStatusPage(heading: string, description: string, kind: 'success' | 'pending' | 'neutral' | 'error', fontUrl?: string, phase?: LocalPlanCreationPhase, result?: 'READY' | 'PENDING' | 'FAILED' | 'CANCELED', observedPhases?: readonly LocalPlanCreationPhase[]): string {
+function renderLocalPlanStatusPage(heading: string, description: string, kind: 'success' | 'pending' | 'neutral' | 'error', fontUrl?: string, phase?: LocalPlanCreationPhase, result?: 'READY' | 'PENDING' | 'FAILED' | 'CANCELED', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }): string {
   const symbols = { success: '&#10003;', pending: '&#9719;', neutral: '&#10003;', error: '!' };
   return `<!doctype html>
 <html lang="en">
@@ -701,6 +703,7 @@ function renderLocalPlanStatusPage(heading: string, description: string, kind: '
     ${phase ? `<div role="${heading === 'Creating your plan' ? 'progressbar' : 'img'}" aria-label="${heading === 'Creating your plan' ? 'Creating plan' : heading}">${renderPlanCreationVisual(phase, result, observedPhases)}</div>` : `<span class="result-icon ${kind}" aria-hidden="true">${symbols[kind]}</span>`}
     <h1>${heading}</h1>
     <p>${description}</p>
+    ${completion ? `<form method="post" action="${completion.path}"><input type="hidden" name="csrf" value="${completion.csrf}"><input type="hidden" name="action" value="continue"><button type="submit" autofocus>Continue</button></form>` : ''}
   </section></main>
 </body>
 </html>`;

@@ -4,6 +4,7 @@ import { usePlan } from './use.js';
 import { parseResolveOptions, parseUseOptions } from './arguments.js';
 import type { SecretRevealContext } from '../session.js';
 import type { Terminal } from '../output.js';
+import { automationEnvironmentContext } from './operation-context.js';
 
 export async function secrets(
   context: SecretRevealContext,
@@ -11,6 +12,7 @@ export async function secrets(
   argv: readonly string[],
   resolveId: (planId: string | undefined) => Promise<string>,
   workload = false,
+  environment: Readonly<Record<string, string | undefined>> = {},
 ): Promise<number> {
   const [subcommand, ...rest] = argv;
   const hasPlanId = rest[0] !== undefined && rest[0] !== '--' && !rest[0].startsWith('--');
@@ -18,11 +20,14 @@ export async function secrets(
   if (subcommand === 'exec') {
     const parsed = parseUseOptions(hasPlanId ? rest.slice(1) : rest, 'secrets exec');
     if ('error' in parsed) { terminal.writeError(parsed.error); return 1; }
+    if (parsed.operationContext && !workload) { terminal.writeError('Operation context requires secrets exec --automation.'); return 1; }
+    const contextValues = workload ? { ...automationEnvironmentContext(environment, parsed.operationContext), ...parsed.operationContext } : undefined;
+    const operationContext = contextValues && Object.keys(contextValues).length ? contextValues : undefined;
     const resolved = await resolveId(planId);
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
     try {
-      return await usePlan(context, terminal, resolved, { ...parsed, signal: controller.signal, workload });
+      return await usePlan(context, terminal, resolved, { ...parsed, ...(operationContext ? { operationContext } : {}), signal: controller.signal, workload });
     } finally {
       unregister();
     }

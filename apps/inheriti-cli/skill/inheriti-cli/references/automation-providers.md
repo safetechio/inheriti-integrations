@@ -4,9 +4,62 @@ Read only the section for the workload that will actually execute the protected 
 
 ## GitHub Actions
 
-Identify the intended repository, environment, workflow file, and ref before binding `automations create --provider GITHUB` to the exact `--repository OWNER/REPO`, job `--environment NAME`, and `--workflow OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH`. The job needs `id-token: write` and the audience returned by the CLI. The CLI does not create a repository or initial pairing job. After proof verification and an active grant, `automations usage --plan PLAN_ID --connection CONNECTION_ID --field ASSET.FIELD` emits YAML pinned to a Business-verified Action and CLI release; it refuses to emit a workflow when that release is unavailable. Put it in the exact repository/file/ref it names, then verify the run through safe plan logs.
+Identify the intended repository, GitHub job environment, workflow file, and ref before binding `automations create --provider GITHUB` to the exact `--repository OWNER/REPO`, `--environment NAME`, and `--workflow OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH`. Keep the Business deployment (`local`/`dev`), connection deployment-environment, and GitHub environment distinct; do not infer one from another. The CLI does not create a repository or initial pairing job.
 
-For an unknown workflow in a selected repository, `gh workflow list --repo OWNER/REPO` can show candidates; confirm the intended environment and ref separately.
+### Resolve missing context
+
+Inspect safe repository/workflow metadata first. If the user points to a local project, first identify its git root, remote names and safe repository identity, branch and status; inspect the selected app's manifests, lockfiles, scripts, Dockerfile, source/schema references to required environment variable **names**, and existing `.github/workflows` files. For a monorepo, identify the app that consumes the protected values and its actual command. Read files as data; do not run package scripts during discovery, read `.env` or secrets, or print credential-bearing remote URLs or workflow values. The current directory or sole checkout is not necessarily the intended project. `gh workflow list --repo OWNER/REPO` can show candidates in the selected repository; confirm the intended environment and ref separately. Follow the [GitHub project inspection and pairing workflow guide](github-workflow.md) for the concrete inspection and initial job.
+
+Ask only questions not already answered by Business, the user, or verified metadata:
+
+- “Which repository and workflow/job needs access to this plan?” Present discovered candidates when available.
+- “Which GitHub environment and branch should be allowed?” Explain that these identify the trusted workload, rather than choosing `production` or `main` by default.
+- “Which plan fields does that job need, and which variable names does the application expect?” Resolve field selectors from safe plan metadata; never ask for their values.
+- “Should this run manually, on a schedule, or as part of the existing deployment?” Ask only when a trigger or execution step must be added; preserve an existing trigger unless a change is requested.
+- Ask for the responsible member only when absent or rejected by Business. Do not ask again for a supplied plan or connection.
+
+### First connection and pairing
+
+1. Inspect existing connections and plan grants as described in [automations](automations.md). For a new connection, preview the exact repository/environment/workflow/ref and create it only within the requested scope. Retain the returned connection ID and expected audience as non-secret setup metadata.
+2. Prepare a pairing job in that exact workflow file/ref, with the configured job `environment`, `id-token: write`, and an installed CLI targeting the same Business deployment. Use the [initial pairing workflow template](github-workflow.md#initial-pairing-workflow) and a verified published CLI version; do not guess a package version or fall back to another deployment when unavailable. In an existing workflow, gate pairing behind an explicit manual input that defaults off; normal push or deployment runs must not redeem again. A request to prepare the workflow authorizes a reversible local draft and its review, so make it without asking again. Keep unresolved placeholders in a clearly marked proposal outside active `.github/workflows` and resolve them before saving an executable workflow. Commit, push, dispatch, and deployment each require authorization covering that action.
+3. The job's run step redeems identity directly from GitHub Actions. Set these non-secret job variables from the selected connection and use the existing CLI command:
+
+   ```sh
+   # Inside the configured GitHub Actions job, after installing the matching CLI.
+   export INHERITI_AUTOMATION_CONNECTION_ID="<connection-id>"
+   export INHERITI_AUTOMATION_AUDIENCE="<expected-audience-returned-by-cli>"
+   inheriti automations pair redeem
+   ```
+
+   Never retrieve an OIDC token for the agent or paste one into `automations verify`. Running `pair redeem` in the operator's local terminal does not prove the GitHub workload identity.
+4. Once the job is ready to execute, inspect the full effect of its manual dispatch on all jobs, then run `inheriti automations pair start --connection CONNECTION_ID` on the operator side and execute the approved pairing job within the returned ten-minute window. `pair start` returns after opening the window; its “Waiting” message is not confirmation of verification. If a push or dispatch is still awaiting authorization, report that prerequisite rather than repeatedly opening windows.
+5. Inspect the connection for `VERIFIED`. Only then create and activate the chosen plan grant with the selected responsible member, subject to Business permissions and CLI approvals. Do not claim that successful pairing also activated a plan grant.
+
+### Generate and integrate the actual workload
+
+After verification and an active grant:
+
+```sh
+inheriti automations usage --plan PLAN_ID --connection CONNECTION_ID --field ASSET.FIELD
+```
+
+This emits YAML pinned to a Business-verified Action and CLI release; it refuses when that release is unavailable. Follow its printed repository/path/branch. It is a starting example with a manual trigger and a non-empty-value check, not the user's deployment command. Preview how the selected field maps to the application's variable and how the real consuming command runs through the Action's protected execution; do not introduce an `echo`, output, artifact, or chat-visible secret check. This command accepts one `--field`; do not invent repeatable flags for additional mappings. Inspect the generated Action contract before adapting it.
+
+If the workflow already exists, merge the required job or steps without replacing existing jobs, triggers, permissions, environment protections, or deployment logic. Check effective job permissions: an existing job-level permissions block must still allow the required OIDC permission. Changing the job environment, file/ref, or repository can invalidate trust; inspect the connection before proposing a trust change, and reverify when required. Remove only pairing scaffolding introduced for this setup when it is no longer needed and its removal is in scope.
+
+Execute only the authorized run and inspect its safe status plus plan/member logs. Report connection verification, grant activation, workflow preparation, and actual execution separately. Generated YAML, a successful pairing run, or a passing example value check does not prove the user's application deployment succeeded.
+
+### Reuse example
+
+User: “Use the Enterprise Safe plan in the existing deploy job in acme/payments. Business supplied connection C and member M.” Inspect C's GitHub trust and the plan grant. If its repository, environment, and workflow/ref match and C is verified, retain C, skip connection creation and pairing, and reuse an active matching grant. If the grant is missing, preview creating/activating it for M; do not silently replace a grant's responsible member. Inspect the deploy job, resolve only missing field mappings, generate usage with C explicitly, and preview the smallest workflow diff. If the actual job differs from C's trust, explain the mismatch and ask which target is intended instead of silently rebinding C.
+
+### Pairing and run recovery
+
+- Expired pairing window: inspect connection status and the specific run first. If still unverified and the same workload is intended, open one fresh window when the job can run and obtain fresh proof through `pair redeem`; never reuse a token or create a replacement connection merely for expiry.
+- Identity/audience mismatch: compare the configured repository, job environment, workflow/ref, and expected audience with safe metadata from that run. Correct the selected setup or ask about conflicting intent; do not broaden trust or remove environment protections to pass verification.
+- Missing `id-token: write`, CLI installation, GitHub access, or environment approval: identify that prerequisite and who must act. An environment waiting for approval is pending, not a pairing failure. Retry only after the prerequisite is resolved; refresh an expired window then.
+- Run timeout or missing completion: inspect the returned run ID before dispatching another run. Report pending or unconfirmed when appropriate. Do not rerun a deployment just to check whether it succeeded.
+- Inactive/rejected grant or unavailable verified release: stop at that gate and report the safe reason. Do not switch account, member, deployment, or package version silently.
 
 ## Google Cloud Run service or job
 

@@ -210,10 +210,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     secrets: `Usage: inheriti secrets <exec|resolve|publish>\n\nDirect Inheriti runtime delivery uses exec and the same ` +
       `reveal and use flows as plans commands. Publish is an optional one-time cloud-store copy. Inheriti® Business commands accept --organization ID to select an ` +
       `eligible organisation for that command.`,
-    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- ` +
+    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--automation] [--reason TEXT] [--commit SHA] [--workflow REF] [--pipeline URL] [--target TEXT] [--image TEXT] [--version TEXT] [--output inherit] -- ` +
       `EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. ` +
       `The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; ` +
-      `--output inherit keeps the child's logs visible and may expose credentials.`,
+      `--output inherit keeps the child's logs visible and may expose credentials. Context flags require --automation and must precede --. GitHub automation can supply commit, workflow, and pipeline context from its allowlisted environment.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD ` +
       `--allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its ` +
       `value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its ` +

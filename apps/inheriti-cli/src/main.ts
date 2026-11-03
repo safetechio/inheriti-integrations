@@ -112,7 +112,7 @@ export async function run(
       if ((separator < 0 ? rest : rest.slice(0, separator)).includes('--organization'))
         throw new Error('automation_organization_option_forbidden');
       return await withAutomationSecrets(configuration.apiUrl, environmentVariables,
-        (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true));
+        (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true, environmentVariables));
     }
     const context = createCliContext(configuration, defaultSessionPath(environmentVariables));
     if (command === 'update') {

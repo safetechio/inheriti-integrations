@@ -53,13 +53,13 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
   let masterKeySource: { resolve: () => Promise<string> } | undefined;
   let planContext: Awaited<ReturnType<typeof operations.createContext>> | undefined;
   let inputFingerprint: string | undefined;
-  let completed = false;
   let reportedFailure: string | undefined;
   try {
     terminal.write('Opening local plan assistant in a secure window…');
     const result = await runLocalPlanBrowser({
       model,
       signal: sessionSignal,
+      waitForContinue: true,
       ...(fontFile ? { fontFile } : {}),
       context: context.organization.name,
       ...(hints ? { hints } : {}),
@@ -84,7 +84,11 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
           stage = 'context';
           planContext ??= await operations.createContext();
           stage = 'save';
-          return await operations.createMany({ context: planContext, ...input, masterKeySource }, onProgress);
+          const created = await operations.createMany({ context: planContext, ...input, masterKeySource }, onProgress);
+          masterKeySource = undefined;
+          planContext = undefined;
+          model.stop();
+          return created;
         } catch (error) {
           if (!sessionSignal.aborted) {
             const message = planCreationFailureMessage(stage, error);
@@ -95,14 +99,13 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
         }
       },
     });
-    completed = true;
     terminal.write(`Plan ${result.planId}: ${result.status}`);
     return result.status === 'READY' ? 0 : 1;
   } catch (error) {
     if (windowUnavailable && !inputFingerprint) throw new Error('local_window_unavailable');
     throw error;
   } finally {
-    if (completed) window.complete(); else window.close();
+    window.close();
     model.stop();
   }
 }

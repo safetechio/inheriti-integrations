@@ -19,6 +19,32 @@ const environment = {
   ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'github-request-token',
 };
 
+describe('automation context SDK compatibility', () => {
+  it.each([false, true])('requires SDK context support before opening a contextual reveal: %s', async supported => {
+    const close = vi.fn();
+    const openReveal = vi.fn().mockResolvedValue({ close });
+    clientFactory.mockReturnValue({ getPlan: vi.fn(), openReveal, ...(supported ? { supportsOperationContext: true } : {}) });
+    const transport = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === 'token.actions.githubusercontent.com') return Response.json({ value: 'proof' });
+      if (url.pathname.endsWith('/end')) return Response.json({ ok: true });
+      return Response.json({ ok: true, result: { sessionToken: 'token', expiresAt: new Date(Date.now() + 120_000).toISOString() } });
+    });
+    const operationContext = { reason: 'Deploy version 2' };
+    const pending = withAutomationSecrets('https://business.example/api', environment,
+      context => context.core.withReveal('plan-1', { mode: 'DIRECT', ...{ operationContext } }, async () => undefined), transport);
+    if (supported) {
+      await pending;
+      expect(openReveal).toHaveBeenCalledWith('plan-1', { mode: 'DIRECT', operationContext });
+      expect(close).toHaveBeenCalledWith('COMPLETED');
+    } else {
+      await expect(pending).rejects.toThrow('automation_context_sdk_update_required');
+      expect(openReveal).not.toHaveBeenCalled();
+    }
+    expect(String(transport.mock.calls.at(-1)?.[0])).toContain('/automation/jobs/end');
+  });
+});
+
 describe('workload identity pairing', () => {
   it('sends native proof directly to Business without a ticket or operator session', async () => {
     const calls: { path: string; body?: unknown }[] = [];

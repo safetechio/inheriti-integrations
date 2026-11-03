@@ -27,10 +27,10 @@ const model = { infer: async ({ sources, candidates }: { sources: readonly { id:
   return { title: 'Safe plan', asset: { type: asset.id, name: 'Account', fields: { [field]: { sourceId: source.id, start: source.text!.indexOf('secret'), end: source.text!.indexOf('secret') + 6 } } }, questions: [], unassignedSources: [] };
 } };
 
-const start = async (create: (input: { title: string; asset: { secret: Record<string, string> } }, onProgress?: (phase: LocalPlanCreationPhase) => void) => Promise<{ id?: string; planId?: string; status?: string }> = async () => ({ id: 'created' })) => {
+const start = async (create: (input: { title: string; asset: { secret: Record<string, string> } }, onProgress?: (phase: LocalPlanCreationPhase) => void) => Promise<{ id?: string; planId?: string; status?: string }> = async () => ({ id: 'created' }), waitForContinue = false, timeoutMs?: number) => {
   let url = '';
   const signal = new AbortController();
-  const result = runLocalPlanBrowser({ model, create, open: (value) => { url = value; }, signal: signal.signal });
+  const result = runLocalPlanBrowser({ model, create, open: (value) => { url = value; }, signal: signal.signal, waitForContinue, ...(timeoutMs ? { timeoutMs } : {}) });
   void result.catch(() => {});
   while (!url) await new Promise((resolve) => setTimeout(resolve, 1));
   return { url, result, signal };
@@ -344,17 +344,66 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
       const response = await fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') });
       const html = await response.text();
-      expect(html).toContain(status === 'READY' ? 'Plan ready' : 'Plan pending');
+      expect(html).toContain(status === 'READY' ? 'Plan created' : 'Plan pending');
       expect(html).toContain('class="panel result-card"');
       expect(html).toContain(`data-visual-result="${status}"`);
       expect(html).toContain('data-plan-visual');
-      expect(html).toContain(`role="img" aria-label="${status === 'READY' ? 'Plan ready' : 'Plan pending'}"`);
+      expect(html).toContain(`role="img" aria-label="${status === 'READY' ? 'Plan created' : 'Plan pending'}"`);
       expect(html).not.toContain('role="progressbar"');
       expect(html).not.toContain('plan&amp;one');
       expect(html).not.toContain('secret');
       expect(html).not.toContain('<plan&one>');
       await expect(session.result).resolves.toEqual({ planId: '<plan&one>', status });
     }
+  });
+  it('keeps the created result visible until Continue and rejects replay or forged requests', async () => {
+    let calls = 0;
+    const session = await start(async () => { calls++; return { planId: '<hidden-plan>', status: 'READY' }; }, true, 500);
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    const html = await (await fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') })).text();
+    let settled = false;
+    void session.result.finally(() => { settled = true; });
+    expect(html).toContain('Plan created');
+    expect(html).toContain('>Continue</button>');
+    expect(html).not.toContain('hidden-plan');
+    expect(html).not.toContain('secret');
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    expect(settled).toBe(false);
+    await expect((await fetch(session.url)).text()).resolves.toContain('Plan created');
+    expect((await fetch(session.url, { method: 'POST', headers, body: form(html, 'create') })).status).toBe(409);
+    expect((await fetch(session.url, { method: 'POST', headers: { ...headers, Origin: 'http://evil.test' }, body: form(html, 'continue') })).status).toBe(403);
+    expect((await fetch(session.url, { method: 'POST', headers, body: 'csrf=wrong&action=continue' })).status).toBe(403);
+    expect(calls).toBe(1);
+    expect((await fetch(session.url, { method: 'POST', headers, body: form(html, 'continue') })).status).toBe(200);
+    await expect(session.result).resolves.toEqual({ planId: '<hidden-plan>', status: 'READY' });
+  });
+  it('returns a committed result when the native window closes after creation', async () => {
+    const session = await start(async () => ({ planId: 'created', status: 'READY' }), true);
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    expect((await fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') })).status).toBe(200);
+    session.signal.abort();
+    await expect(session.result).resolves.toEqual({ planId: 'created', status: 'READY' });
+  });
+  it('returns a successful committed result if the native window closes during creation', async () => {
+    let finishCreate!: (value: { planId: string; status: string }) => void;
+    let started!: () => void;
+    const creating = new Promise<void>((resolve) => { started = resolve; });
+    const session = await start(async () => { started(); return new Promise((resolve) => { finishCreate = resolve; }); }, true);
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    const requestAbort = new AbortController();
+    const response = fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account'), signal: requestAbort.signal });
+    await creating;
+    session.signal.abort();
+    requestAbort.abort();
+    finishCreate({ planId: 'created', status: 'READY' });
+    await expect(response).rejects.toThrow();
+    await expect(session.result).resolves.toEqual({ planId: 'created', status: 'READY' });
   });
   it('shows a generic completion when the creator has no recognized status', async () => {
     const session = await start(async () => ({ id: 'created', status: 'UNKNOWN' }));
