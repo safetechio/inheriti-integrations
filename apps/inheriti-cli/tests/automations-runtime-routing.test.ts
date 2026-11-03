@@ -1,4 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+const cliVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const { image } = vi.hoisted(() => ({ image: vi.fn(async () => 0) }));
 vi.mock('../src/commands/automation-runtime-image.js', () => ({ automationRuntimeImage: image }));
@@ -29,7 +32,7 @@ it('routes runtime installation instructions without signing in twice', async ()
   const terminal = { interactive: false, stdoutIsTTY: false, columns: 80, write: vi.fn(), writeError: vi.fn() };
   expect(await run(['automations', 'runtime', 'install-instructions'], {}, terminal)).toBe(0);
   expect(login).not.toHaveBeenCalled();
-  expect(runtime).toHaveBeenCalledWith(terminal, '0.0.20', []);
+  expect(runtime).toHaveBeenCalledWith(terminal, cliVersion, []);
   expect(manage).not.toHaveBeenCalled();
 }, 15_000);
 
@@ -48,7 +51,7 @@ it('routes container instructions without a Business session', async () => {
   const terminal = { interactive: true, stdoutIsTTY: true, columns: 80, write: vi.fn(), writeError: vi.fn() };
   expect(await run(['automations', 'runtime', 'install-instructions', '--container'], {}, terminal)).toBe(0);
   expect(login).not.toHaveBeenCalled();
-  expect(runtime).toHaveBeenCalledWith(terminal, '0.0.20', ['--container']);
+  expect(runtime).toHaveBeenCalledWith(terminal, cliVersion, ['--container']);
 });
 
 it('routes EC2 CLI installation without signing in to Business', async () => {
@@ -57,7 +60,7 @@ it('routes EC2 CLI installation without signing in to Business', async () => {
   expect(await run(['automations', 'runtime', 'install', 'ec2', '--region', 'us-east-1',
     '--instance', 'i-09ce8440ae7294ab9'], {}, terminal)).toBe(0);
   expect(login).not.toHaveBeenCalled();
-  expect(installEc2).toHaveBeenCalledWith(terminal, '0.0.20', ['--region', 'us-east-1',
+  expect(installEc2).toHaveBeenCalledWith(terminal, cliVersion, ['--region', 'us-east-1',
     '--instance', 'i-09ce8440ae7294ab9'], expect.objectContaining({ apiUrl: 'http://business.localhost:3400/integrations/' }),
     expect.any(AbortSignal));
 });
@@ -69,7 +72,7 @@ it('routes local artifact installation without a Business session', async () => 
   expect(await run(['automations', 'runtime', 'install', 'ec2', '--region', 'us-east-1',
     '--instance', 'i-09ce8440ae7294ab9', '--cli-tarball', '/tmp/cli.tgz', '--artifact-api-url', 'http://127.0.0.1:3400',
     '--artifact-download-origin', 'https://local-api-tunnel.example'], {}, terminal)).toBe(0);
-  expect(installEc2).toHaveBeenCalledWith(terminal, '0.0.20', expect.arrayContaining(['--cli-tarball', '/tmp/cli.tgz']),
+  expect(installEc2).toHaveBeenCalledWith(terminal, cliVersion, expect.arrayContaining(['--cli-tarball', '/tmp/cli.tgz']),
     expect.anything(), expect.any(AbortSignal));
   expect(login).not.toHaveBeenCalled();
 });
@@ -80,7 +83,7 @@ it('routes image preview without Business sign-in', async () => {
   const terminal = { interactive: false, stdoutIsTTY: false, columns: 80, write: vi.fn(), writeError: vi.fn() };
   expect(await run(['automations', 'runtime', 'image', '--image', '123456789012.dkr.ecr.us-east-1.amazonaws.com/app:test'], {}, terminal)).toBe(0);
   expect(login).not.toHaveBeenCalled();
-  expect(image).toHaveBeenCalledWith(terminal, '0.0.20', ['--image', '123456789012.dkr.ecr.us-east-1.amazonaws.com/app:test'], expect.any(AbortSignal));
+  expect(image).toHaveBeenCalledWith(terminal, cliVersion, ['--image', '123456789012.dkr.ecr.us-east-1.amazonaws.com/app:test'], expect.any(AbortSignal));
 });
 
 it('rejects an unknown runtime action without selecting an organisation', async () => {

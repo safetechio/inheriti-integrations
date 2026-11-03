@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 const manifest = JSON.parse(await readFile(new URL('../packages/core/package.json', import.meta.url)));
 for (const [name, version] of [
-  ['@safetech/inheriti-client-sdk', '1.17.28'],
+  ['@safetech/inheriti-client-sdk', '1.17.29'],
   ['@safetech/inheriti-core-sdk', '4.0.39'],
 ]) {
   if (manifest.dependencies?.[name] !== version) {
