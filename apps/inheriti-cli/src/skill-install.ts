@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, cp, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 interface SkillManifest { schema: 1; cliVersion: string; deployment: string; sha256: string }
-export interface SkillInstallResult { status: 'current' | 'installed' | 'updated' | 'skipped' | 'busy'; backup?: string; reason?: string }
+export interface SkillInstallResult { status: 'current' | 'installed' | 'updated' | 'skipped' | 'busy'; backup?: string; reason?: string; target?: string }
+export interface SkillInstallOptions { agent?: 'codex' | 'claude' | 'custom'; skillsDirectory?: string; createHome?: boolean }
 
 function code(error: unknown): string | undefined { return (error as NodeJS.ErrnoException)?.code; }
 
@@ -38,12 +39,13 @@ async function restrictTree(path: string): Promise<void> {
   if (info.isDirectory()) for (const entry of await readdir(path)) await restrictTree(join(path, entry));
 }
 
-/** Install only into a known user Codex home. Source and destination are checked before either is renamed. */
+/** Source and destination are checked before either is renamed. */
 export async function reconcileCliSkill(
   packageRoot: string,
   env: Readonly<Record<string, string | undefined>> = process.env,
   userHome = homedir(),
   effectiveUid = process.getuid?.(),
+  options: SkillInstallOptions = {},
 ): Promise<SkillInstallResult> {
   const manifestPath = join(packageRoot, 'skill', 'manifest.json');
   const manifestInfo = await pathStat(manifestPath);
@@ -57,21 +59,46 @@ export async function reconcileCliSkill(
   const source = join(packageRoot, 'skill', 'inheriti-cli');
   if ((await digestTree(source)) !== manifest.sha256) throw new Error('Bundled skill checksum mismatch.');
 
-  const home = env.CODEX_HOME || join(userHome, '.codex');
-  if (!isAbsolute(home)) return { status: 'skipped', reason: 'Codex home is not absolute' };
-  const homeInfo = await pathStat(home);
-  if (!homeInfo) return { status: 'skipped', reason: 'Codex is not installed' };
-  if (!homeInfo.isDirectory() || homeInfo.isSymbolicLink()) return { status: 'skipped', reason: 'Unsafe Codex home' };
+  const agent = options.agent ?? 'codex';
+  const label = agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude' : 'Custom';
+  const skills = agent === 'custom' ? options.skillsDirectory : undefined;
+  if (agent === 'custom' && (!skills || !isAbsolute(skills)))
+    return { status: 'skipped', reason: 'Custom skill directory is not absolute' };
+  const home = agent === 'custom' ? dirname(skills!) : agent === 'claude'
+    ? env.CLAUDE_CONFIG_DIR || join(userHome, '.claude') : env.CODEX_HOME || join(userHome, '.codex');
+  if (!isAbsolute(home)) return { status: 'skipped', reason: `${label} home is not absolute` };
   if (effectiveUid === 0 && env.SUDO_USER) return { status: 'skipped', reason: 'Unsafe sudo user context' };
+  let homeInfo = await pathStat(home);
+  if (!homeInfo && options.createHome && agent !== 'custom') {
+    const parent = await pathStat(dirname(home));
+    if (!parent?.isDirectory() || parent.isSymbolicLink() ||
+      (effectiveUid !== undefined && parent.uid !== effectiveUid))
+      return { status: 'skipped', reason: `Unsafe ${label} home parent` };
+    try { await mkdir(home, { mode: 0o700 }); }
+    catch (error) { if (code(error) !== 'EEXIST') throw error; }
+    homeInfo = await pathStat(home);
+  }
+  if (!homeInfo) return { status: 'skipped', reason: `${label} is not installed` };
+  if (!homeInfo.isDirectory() || homeInfo.isSymbolicLink()) return { status: 'skipped', reason: `Unsafe ${label} home` };
   if (effectiveUid !== undefined && homeInfo.uid !== effectiveUid)
-    return { status: 'skipped', reason: 'Unsafe Codex home ownership' };
-  const skills = join(home, 'skills');
-  const skillsInfo = await pathStat(skills);
+    return { status: 'skipped', reason: `Unsafe ${label} home ownership` };
+  const skillsRoot = skills ?? join(home, 'skills');
+  const skillsInfo = await pathStat(skillsRoot);
+  // shortcut: custom folders need an owned parent on the same filesystem; revisit staging when supporting separate mounts.
+  if (agent === 'custom' && skillsInfo && skillsInfo.dev !== homeInfo.dev)
+    return { status: 'skipped', reason: 'Custom skill directory must share its parent filesystem' };
   if (skillsInfo && (!skillsInfo.isDirectory() || skillsInfo.isSymbolicLink())) return { status: 'skipped', reason: 'Unsafe skill directory' };
-  if (!skillsInfo) await mkdir(skills, { recursive: true, mode: 0o700 });
-  const readySkills = await lstat(skills);
+  if (skillsInfo && effectiveUid !== undefined && skillsInfo.uid !== effectiveUid)
+    return { status: 'skipped', reason: 'Unsafe skill directory ownership' };
+  if (!skillsInfo) {
+    try { await mkdir(skillsRoot, { mode: 0o700 }); }
+    catch (error) { if (code(error) !== 'EEXIST') throw error; }
+  }
+  const readySkills = await lstat(skillsRoot);
   if (!readySkills.isDirectory() || readySkills.isSymbolicLink()) return { status: 'skipped', reason: 'Unsafe skill directory' };
-  const target = join(skills, 'inheriti-cli');
+  if (effectiveUid !== undefined && readySkills.uid !== effectiveUid)
+    return { status: 'skipped', reason: 'Unsafe skill directory ownership' };
+  const target = join(skillsRoot, 'inheriti-cli');
   const lock = join(home, '.inheriti-cli-skill.lock');
   const recovery = join(home, '.inheriti-cli-skill-recovery.lock');
   const ownerFile = join(lock, 'owner');
@@ -144,7 +171,7 @@ export async function reconcileCliSkill(
       let installedHash: string;
       try { installedHash = await digestTree(target); }
       catch { return { status: 'skipped', reason: 'Unsafe installed skill contents' }; }
-      if (installedHash === manifest.sha256) return { status: 'current' };
+      if (installedHash === manifest.sha256) return { status: 'current', target };
     }
     stage = join(home, `.inheriti-cli-skill-stage-${randomUUID()}`);
     await cp(source, stage, { recursive: true, errorOnExist: true, force: false });
@@ -162,7 +189,7 @@ export async function reconcileCliSkill(
       await rename(stage, target); stage = undefined;
     }
     catch (error) { if (backup) { await rename(backup, target); backup = undefined; } throw error; }
-    return { status: existing ? 'updated' : 'installed', ...(backup ? { backup } : {}) };
+    return { status: existing ? 'updated' : 'installed', target, ...(backup ? { backup } : {}) };
   } finally {
     if (stage) await rm(stage, { recursive: true, force: true });
     await release();

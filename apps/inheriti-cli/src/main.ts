@@ -34,7 +34,7 @@ import { plans } from './commands/plan-command.js';
 import { isExplicitAutomationDenial, messageFor, providerDiagnosticFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
-import { reconcileCliSkill } from './skill-install.js';
+import { installSkill, readSkillChoice } from './commands/skill.js';
 
 export async function run(
   argv: readonly string[],
@@ -62,6 +62,9 @@ export async function run(
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
   if (command === 'setup') return await setup(rest, environmentVariables, terminal);
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
+  if (command === 'skill') return rest[0] === 'install'
+    ? installSkill(fileURLToPath(new URL('..', import.meta.url)), environmentVariables, terminal, rest.slice(1))
+    : (terminal.writeError(commandUsage(['skill'], environmentVariables)), 1);
   if (command === 'plans' && rest[0] === 'open') {
     if (!BUILD_DEPLOYMENT || !PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]) {
       terminal.writeError('Inheriti Workspace is unavailable.'); return 1;
@@ -260,13 +263,18 @@ if (isEntrypoint) {
   const terminal = processTerminal();
   const argv = process.argv.slice(2);
   const lifecycleInstall = argv[0] === '__skill-install' && process.env.npm_lifecycle_event === 'postinstall';
-  if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
-    try {
-      const result = await reconcileCliSkill(fileURLToPath(new URL('..', import.meta.url)), process.env);
-      if (result.status === 'installed' || result.status === 'updated')
-        terminal.writeError(`Inheriti CLI skill ${result.status}. ${result.backup ? `Previous copy saved at ${result.backup}. ` : ''}Start a new agent session to load it.`);
-      else if (result.status === 'skipped' && result.reason?.startsWith('Unsafe')) terminal.writeError(`Inheriti CLI skill: ${result.reason}.`);
-    } catch { terminal.writeError('Inheriti CLI skill could not be updated; the next CLI command will retry.'); }
+  if (argv[0] === '__skill-install') {
+    if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
+      const status = await installSkill(fileURLToPath(new URL('..', import.meta.url)), process.env, terminal, [], true);
+      if (status !== 0) terminal.writeError('Run inheriti skill install to retry.');
+      else if (!process.stdout.isTTY) {
+        try { if (!(await readSkillChoice(process.env))) terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
+        catch { terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
+      }
+    }
+  } else if (argv[0] && argv[0] !== '__skill-install' && argv[0] !== 'skill' &&
+      !['--help', 'help', '--version', 'version', 'completion', '__complete', 'setup'].includes(argv[0])) {
+    await installSkill(fileURLToPath(new URL('..', import.meta.url)), process.env, terminal, [], true);
   }
-  process.exitCode = argv[0] === '__skill-install' ? 0 : await run(argv, process.env, terminal);
+  if (argv[0] !== '__skill-install') process.exitCode = await run(argv, process.env, terminal);
 }

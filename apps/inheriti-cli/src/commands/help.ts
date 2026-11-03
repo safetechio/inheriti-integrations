@@ -54,6 +54,7 @@ inheriti <command>
   setup [--yes|--no-completion] [--shell bash|zsh|fish]
                      Enable shell autocomplete (Yes is the default)
   completion <shell> Print the tab-completion script for bash, zsh or fish
+  skill install      Choose Codex, Claude Code, both, or another skills folder
   update [--install] Check for a newer CLI build; install after confirmation
   version            Print the CLI version
   help [command]    Show detailed usage without signing in
@@ -75,6 +76,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
   if (command === 'secrets' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
     return 'Usage: inheriti secrets <exec|resolve>\n\nRun reveal-authorized secret delivery.';
   const details: Readonly<Record<string, string>> = {
+    skill: `Usage: inheriti skill install [--target codex|claude|all | --directory ABSOLUTE_PATH]\n\nChoose where to install the bundled agent skill. A terminal offers a selector; scripts must specify a target or directory.`,
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nSign out and clear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Inheriti® Business organisations or select one for this account.`,

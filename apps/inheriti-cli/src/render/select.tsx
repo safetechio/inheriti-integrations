@@ -93,7 +93,7 @@ export async function promptSelect(title: string, candidates: readonly Candidate
 }
 
 /** Reads one line without handing control of stdin to a second terminal UI. */
-export async function promptText(title: string): Promise<string | undefined> {
+export async function promptText(title: string, hint = 'Type a folder or .sh filename · Enter uses default · Esc cancels'): Promise<string | undefined> {
   let answer: string | undefined;
   let stop = () => {};
   function Input() {
@@ -107,7 +107,7 @@ export async function promptText(title: string): Promise<string | undefined> {
     });
     return <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width={72}>
       <Text bold color="cyan">{title}</Text>
-      <Text dimColor>Type a folder or .sh filename · Enter uses default · Esc cancels</Text>
+      <Text dimColor>{hint}</Text>
       <Text color="cyan">{`› ${value}▌`}</Text>
     </Box>;
   }
