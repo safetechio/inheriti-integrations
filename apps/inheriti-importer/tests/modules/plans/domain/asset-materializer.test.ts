@@ -29,12 +29,13 @@ describe('materialiseAsset', () => {
         'secret.username': { kind: 'source', sourceFieldId: 'f-user' },
         'secret.password': { kind: 'source', sourceFieldId: 'f-pass' },
         'secret.appOrWebsite': { kind: 'literal', value: new SensitiveValue('github.com') },
+        'secret.ipSource': { kind: 'source', sourceFieldId: 'f-ip' },
       },
     };
 
     const { asset, errors } = materialiseAsset(
       draft,
-      session({ 'f-user': 'octo', 'f-pass': 'p@ss' }),
+      session({ 'f-user': 'octo', 'f-pass': 'p@ss', 'f-ip': '10.0.0.1 / internal' }),
     );
 
     expect(errors).toEqual([]);
@@ -42,7 +43,7 @@ describe('materialiseAsset', () => {
       id: 'a1',
       type: 'USER-PSWD',
       meta: { name: 'GitHub' },
-      secret: { username: 'octo', password: 'p@ss', appOrWebsite: 'github.com' },
+      secret: { username: 'octo', password: 'p@ss', appOrWebsite: 'github.com', ipSource: '10.0.0.1 / internal' },
     });
   });
 

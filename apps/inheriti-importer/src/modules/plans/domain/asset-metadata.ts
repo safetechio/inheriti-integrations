@@ -119,6 +119,7 @@ const maxLengths: Record<string, number> = {
   'API-KEY.secret.app': 100,
   'API-KEY.secret.apiKey': 500,
   'USER-PSWD.secret.appOrWebsite': 100,
+  'USER-PSWD.secret.ipSource': 100,
   'USER-PSWD.secret.email': 254,
   'USER-PSWD.secret.username': 64,
   'RECOVERY-CODE.secret.appOrWebsite': 100,
