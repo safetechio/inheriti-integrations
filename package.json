@@ -26,6 +26,7 @@
       "electron"
     ],
     "overrides": {
+      "@electron/notarize": "3.1.2",
       "@safetech/inheriti-core-sdk": "4.0.40"
     }
   },
