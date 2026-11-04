@@ -9,7 +9,8 @@ type PairOptions = { apiUrl: string; organizationId: string; connectionId: strin
   runGh: Gh; operations: { startPairing(id: string, pairingId?: string): Promise<{ expiresAt: string }>;
     getConnection(id: string): Promise<{ status: string }> }; retry?: boolean;
   stateDirectory?: string; now?: () => number; wait?: (ms: number) => Promise<void>; pollAttempts?: number;
-  workflowDigest?: string; prepare?: () => Promise<void>; onProgress?: (phase: 'preparing' | 'registering' | 'pairing' | 'queued' | 'running' | 'verifying' | 'verified') => void };
+  workflowDigest?: string; prepare?: () => Promise<void>; onProgress?: (phase: 'preparing' | 'registering' | 'pairing' | 'queued' | 'running' | 'verifying' | 'verified') => void;
+  onRun?: (runId: number) => void };
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('github_pairing_invalid_response');
@@ -75,6 +76,8 @@ export async function pairGithubWorkflow(options: PairOptions): Promise<{ status
     if ((await operations.getConnection(connectionId)).status === 'VERIFIED') {
       options.onProgress?.('preparing');
       await options.prepare?.();
+      const runId = state?.runId;
+      if (typeof runId === 'number' && Number.isSafeInteger(runId) && runId > 0) options.onRun?.(runId);
       options.onProgress?.('verified');
       return { status: 'VERIFIED', pairingId: state?.pairingId ?? '', ...(state?.runId ? { runId: state.runId } : {}) };
     }
@@ -137,14 +140,17 @@ export async function pairGithubWorkflow(options: PairOptions): Promise<{ status
       state = { ...state, phase: 'running', runId };
       await save(file, state);
     }
+    if (typeof state.runId === 'number' && Number.isSafeInteger(state.runId) && state.runId > 0) options.onRun?.(state.runId);
+    options.onProgress?.('verifying');
     for (let attempt = 0; attempt < (options.pollAttempts ?? 30); attempt++) {
-      options.onProgress?.('verifying');
       if ((await operations.getConnection(connectionId)).status === 'VERIFIED') {
         options.onProgress?.('verified');
         return { status: 'VERIFIED', pairingId: state.pairingId, ...(state.runId ? { runId: state.runId } : {}) };
       }
       const run = object(await runGh(['api', `repos/${repository}/actions/runs/${state.runId}`, '-H', 'X-GitHub-Api-Version:2026-03-10']));
       if (run.status === 'in_progress') options.onProgress?.('running');
+      if (run.status === 'queued' || run.status === 'pending') options.onProgress?.('queued');
+      if (run.status === 'completed' && run.conclusion === 'success') options.onProgress?.('verifying');
       if (run.status === 'completed' && run.conclusion !== 'success') {
         state.phase = 'failed';
         await save(file, state);

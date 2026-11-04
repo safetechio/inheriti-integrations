@@ -229,6 +229,27 @@ describe('GitHub workflow setup', () => {
     expect(f.output.join('\n')).not.toContain('Connection verified.');
     expect(f.errors.join('\n')).toContain('Rerun the same setup command to resume');
   });
+  it.each(['success', 'pending'])('closes live progress after %s without leaving a timer', async outcome => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const region = { update: vi.fn(), close: vi.fn() };
+    f.terminal.interactive = true;
+    f.terminal.stdoutIsTTY = true;
+    f.terminal.createLiveRegion = () => region;
+    pairGithubWorkflow.mockImplementationOnce(async input => {
+      input.onProgress?.('running');
+      if (outcome === 'pending') throw new Error('github_pairing_pending');
+      input.onProgress?.('verified');
+      return { status: 'VERIFIED' as const, pairingId: 'pairing' };
+    });
+    try {
+      expect(await setup(f, [...setupArgs, '--apply'])).toBe(outcome === 'success' ? 0 : 1);
+      expect(region.update).toHaveBeenCalled();
+      expect(region.close).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(f.output).not.toContain('Pairing job running…');
+    } finally { vi.useRealTimers(); }
+  });
   it('forwards explicit retry without changing grants', async () => {
     const f = fixture({ connection: { ...selected, status: 'PENDING_VERIFICATION' } });
     pairGithubWorkflow.mockClear();

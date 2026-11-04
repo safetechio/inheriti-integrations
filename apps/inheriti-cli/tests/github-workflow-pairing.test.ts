@@ -32,6 +32,21 @@ describe('GitHub workflow pairing checkpoint', () => {
       expect(onProgress.mock.calls.map(call => call[0])).toContain('verified');
     } finally { await f.cleanup(); }
   });
+  it('reports the run once and keeps a running phase stable while checking identity', async () => {
+    const f = await fixture();
+    const onProgress = vi.fn();
+    const onRun = vi.fn();
+    try {
+      const runGh = vi.fn(async (args: string[]) => args.includes('POST')
+        ? { workflow_run_id: 42 } : { status: 'in_progress' });
+      await expect(pairGithubWorkflow({ ...f.options, pollAttempts: 3, wait: async () => {}, runGh, onProgress, onRun }))
+        .rejects.toThrow('github_pairing_pending');
+      expect(onRun).toHaveBeenCalledExactlyOnceWith(42);
+      const phases = onProgress.mock.calls.map(call => call[0]);
+      expect(phases.filter(phase => phase === 'verifying')).toHaveLength(1);
+      expect(phases.lastIndexOf('verifying')).toBeLessThan(phases.indexOf('running'));
+    } finally { await f.cleanup(); }
+  });
   it('resumes a queued run with the same pairing and dispatch IDs', async () => {
     const f = await fixture();
     try {

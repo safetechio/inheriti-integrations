@@ -7,6 +7,7 @@ import { BUILD_DEPLOYMENT, type CliConfiguration } from '../configuration.js';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import { promptSelect } from '../render/select.js';
+import { createGithubSetupPresenter } from '../render/github-setup.js';
 import { pairGithubWorkflow } from './github-workflow-pairing.js';
 import { loadGithubDevArtifact, uploadGithubDevArtifact } from './github-dev-artifact.js';
 import { connectionChoice, operationalConnections } from './automation-choices.js';
@@ -167,15 +168,24 @@ export async function githubAutomationSetup(
         ...(current ? { sha: value(current, 'sha') } : {}),
       });
     };
-    const shownProgress = new Set<string>();
     const progressLabels = { preparing: 'Preparing workflow and local package…', registering: 'Waiting for GitHub to register the workflow…',
       pairing: 'Opening identity pairing window…', queued: 'Dispatching pairing job…', running: 'Pairing job running…',
       verifying: 'Verifying connection identity…', verified: 'Connection verified.' };
-    const pair = (retry: boolean) => pairGithubWorkflow({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id,
-      connectionId, repository: repositoryName, workflowPath: path, ref: branch, runGh: run, operations,
-      workflowDigest: createHash('sha256').update(yaml).digest('hex'), prepare,
-      onProgress: phase => { if (!shownProgress.has(phase)) { terminal.write(progressLabels[phase]); shownProgress.add(phase); } },
-      retry, ...(dependencies.wait ? { wait: dependencies.wait } : {}) });
+    const pair = async (retry: boolean) => {
+      const presenter = createGithubSetupPresenter(terminal, repositoryName);
+      const shownProgress = new Set<string>();
+      try {
+        return await pairGithubWorkflow({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id,
+          connectionId, repository: repositoryName, workflowPath: path, ref: branch, runGh: run, operations,
+          workflowDigest: createHash('sha256').update(yaml).digest('hex'), prepare,
+          onProgress: phase => {
+            if (presenter) presenter.progress(progressLabels[phase]);
+            else if (!shownProgress.has(phase)) { terminal.write(progressLabels[phase]); shownProgress.add(phase); }
+          },
+          onRun: runId => presenter?.run(runId),
+          retry, ...(dependencies.wait ? { wait: dependencies.wait } : {}) });
+      } finally { presenter?.close(); }
+    };
     try { await pair(options.retry === true); }
     catch (error) {
       if (!terminal.interactive || options.retry || !(error instanceof Error) || error.message !== 'github_pairing_failed_retry_required' ||
