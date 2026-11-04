@@ -171,6 +171,7 @@ export { MemoryOperatorSessionStore } from './operator-auth.js';
 export { createNodeAutomationRevealClient } from '@safetech/inheriti-client-sdk/node-base';
 export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';
 export { createAutomationSetupOperations, automationRuntimeInstallInstructions, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector } from './automation-setup.js';
+export { githubAutomationDevWorkflow, isManagedGithubDevWorkflow, githubDevArtifactSecretName } from './github-dev-workflow.js';
 export type { AutomationSetupOperations, AutomationConnection, AutomationGrant, AutomationTrust, AutomationProvider, AutomationPlan, AutomationMember, VerifiedGithubRelease } from './automation-setup.js';
 export { AUTOMATION_PROVIDERS, AutomationProviderValue } from './automation-provider.js';
 export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';
@@ -195,3 +196,6 @@ export { applyCloudRunAutomation, applyCloudRunServiceAutomation } from './autom
 export type { CloudRunAutomationInput, CloudRunAutomationResult } from './automation-cloud-run-apply.js';
 export { runLocalAutomationSetupBrowser, runLocalAutomationProofBrowser } from './local-automation-setup-browser.js';
 export type { AutomationSetupResult, LocalAutomationSetupBrowserOptions } from './local-automation-setup-browser.js';
+
+export { createAutomationStatusReader, parseAutomationStatus } from './automation-status.js';
+export type { AutomationStatusSnapshot, AutomationStatusAction } from './automation-status.js';

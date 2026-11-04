@@ -21,6 +21,8 @@ import { registerCliCancel } from './cancellation.js';
 import { automationManage, automationMetadata, automationRuntimeInstructions, automationRuntimeInstallEc2 } from './commands/automations.js';
 import { automationRuntimeImage } from './commands/automation-runtime-image.js';
 import { automationSetup } from './commands/automation-setup.js';
+import { automationStatus } from './commands/automation-status.js';
+import { githubAutomationCreate } from './commands/github-automation-setup.js';
 import { pairAwsAutomationService } from './commands/automation-pair-aws.js';
 import { pairEc2AutomationInstance } from './commands/automation-pair-ec2.js';
 import { pairGoogleAutomationWorkload } from './commands/automation-pair-google.js';
@@ -136,7 +138,7 @@ export async function run(
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
     }
     if (command === 'automations') {
-      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'runtime', 'grant', 'setup', 'publish', 'pair'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
+      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'runtime', 'grant', 'setup', 'publish', 'pair', 'status'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       if (rest[0] === 'pair' && rest[1] === 'redeem' && rest.length === 2) {
         await pairAutomationIdentity(configuration.apiUrl, environmentVariables);
@@ -164,11 +166,30 @@ export async function run(
         }
         terminal.writeError(commandUsage(['automations', 'runtime'], environmentVariables)); return 1;
       }
-      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
+      const scopedAutomation = (rest[0] === 'setup' && rest[1] === 'github') || (rest[0] === 'create' && rest[1] === 'github') || rest[0] === 'grant' || rest[0] === 'status'
+        ? extractOrganization(rest) : undefined;
+      if (scopedAutomation && 'error' in scopedAutomation) { terminal.writeError(scopedAutomation.error); return 1; }
+      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, scopedAutomation?.organizationId);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;
-      if (rest[0] === 'list' || rest[0] === 'grants') return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? rest[1] : undefined);
-      if (rest[0] === 'setup') return await automationSetup(scoped, configuration, terminal, rest.slice(1));
+      if (rest[0] === 'status') {
+        const controller = new AbortController();
+        const unregister = registerCliCancel(controller);
+        try { return await automationStatus(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(1), controller.signal); }
+        finally { unregister(); }
+      }
+      if (rest[0] === 'list' || rest[0] === 'grants') {
+        const argumentsAfterVerb = rest.slice(1);
+        const all = argumentsAfterVerb.at(-1) === '--all';
+        const values = all ? argumentsAfterVerb.slice(0, -1) : argumentsAfterVerb;
+        if (rest[0] === 'list' ? values.length !== 0 : values.length !== 1 || !values[0] || values[0].startsWith('--')) {
+          terminal.writeError(rest[0] === 'list' ? 'Usage: inheriti automations list [--all]' : 'Usage: inheriti automations grants PLAN_ID [--all]');
+          return 1;
+        }
+        return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? values[0] : undefined, all);
+      }
+      if (rest[0] === 'setup') return await automationSetup(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(1));
+      if (rest[0] === 'create' && rest[1] === 'github') return await githubAutomationCreate(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(2));
       if (rest[0] === 'pair' && rest[1] === 'aws') {
         const controller = new AbortController();
         const unregister = registerCliCancel(controller);
@@ -189,7 +210,7 @@ export async function run(
       }
       const controller = new AbortController();
       const unregister = registerCliCancel(controller);
-      try { return await automationManage(scoped, configuration, terminal, controller.signal, rest); }
+      try { return await automationManage(scoped, configuration, terminal, controller.signal, scopedAutomation?.argv ?? rest); }
       finally { unregister(); }
     }
     if (command === 'secrets' && rest[0] === 'publish') {

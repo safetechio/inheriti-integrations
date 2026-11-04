@@ -34,33 +34,41 @@ Pick the provider whose identity the **running workload** will use. `--deploymen
 
 ### GitHub Actions
 
-**Already have a repository?** Choose the branch, workflow path, and job environment you will use. **Starting new?** [Create the repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository) and choose those values first. The initial pairing job must run in that repository with `id-token: write`; after verification and grant activation, Inheriti can generate the final workflow for the selected plan. The CLI does not create the repository or initial pairing job.
+Open your repository or project folder before running these commands. The CLI detects the GitHub repository and its default branch from that folder. Use the selectors above each snippet; no repository name, identity token or ID needs to be copied by hand.
 
-Required data:
-
-| Field | Why it is required | Where to find it |
-| --- | --- | --- |
-| `--repository` | Binds the connection to one repository. | The `owner/name` portion of its GitHub URL; `gh repo view --json nameWithOwner --jq .nameWithOwner` inside the checkout. |
-| `--environment` | Binds it to the job environment. | The job's `environment:` value and repository **Settings → Environments**. The job must use this environment. |
-| `--workflow` | Binds it to one workflow file and ref. | `owner/repo/.github/workflows/file.yml@refs/heads/branch`, matching GitHub's `workflow_ref` claim. |
-
-Run from the repository that owns the workflow. This copyable sequence asks only for values that cannot be inferred reliably:
+**1. Create the connection in Inheriti.** This registers the workload's identity in your organisation. It does not write to GitHub or grant access to a plan. Skip this step if the intended connection already exists.
 
 ```bash
-REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-read -r -p 'GitHub environment used by the job: ' JOB_ENV
-read -r -p 'Workflow file, for example deploy.yml: ' WORKFLOW_FILE
-read -r -p 'Branch that runs it, for example main: ' BRANCH
-inheriti automations create --name "$REPO deployment" --provider GITHUB \
-  --deployment-environment TEST --repository "$REPO" --environment "$JOB_ENV" \
-  --workflow "$REPO/.github/workflows/$WORKFLOW_FILE@refs/heads/$BRANCH"
+inheriti automations create github --organization ORGANISATION_ID
 ```
 
-The workflow job needs `permissions: id-token: write` and must request the **Expected audience** printed by the CLI. [GitHub documents the `repository`, `environment`, and `workflow_ref` claims](https://docs.github.com/en/actions/reference/security/oidc); [Settings → Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) shows the job environment. The public composite Action does not yet have a verified npm Action+CLI pair, so there is no supported workflow YAML to paste. Do not use a guessed commit, `@main`, or npm's `latest` tag. After a published dev CLI passes a real GitHub/Business dev/SafeKey run, Business will provide the verified pair automatically. The [GitHub Action page](../../../integrations/github-actions/README.md) tracks that release gate.
+The default GitHub environment is `inheriti` and the default file is `.github/workflows/inheriti.yml`. These defaults need no selectors in the basic guide. Advanced CLI callers can override them with `--environment` or `--workflow`.
 
-After the connection is verified and its plan grant is active, generate a workflow with `inheriti automations usage --plan PLAN_ID --connection CONNECTION_ID --field ASSET.FIELD`. The IDs can be selected interactively. Find the nonsecret `ASSET.FIELD` selector in the plan's **Data** tab. The command fetches the verified Action commit and CLI version from Business, fills the plan and connection IDs, and prints a smoke-test YAML plus the exact repository, `.github/workflows/…` file, and branch where it belongs. That location must match the verified connection. It fails if the release is not available or the workflow reference is invalid; until the release is published, no customer workflow is generated. The MCP tool `github_automation_usage` returns the same location and YAML with these three nonsecret inputs; an agent should ask you for the field selector if it cannot see the plan Data tab.
+**2. Configure GitHub.** Select the pending or verified connection, plan and field above this snippet:
 
-For the first job, run `inheriti automations usage --field database.password` and select the plan and connection when prompted. Paste its YAML into the **exact file and branch printed by the CLI**, commit it, then run that workflow from GitHub's **Actions** tab. The generated `run` command is a smoke check for the injected variable. To use the value in your own job, replace that command with the process that reads the mapped variable; if that process needs repository files, add a checkout step first. Keep the generated Action commit, CLI version, plan ID, connection ID, audience, and field mapping. The job may wait for SafeKey Mobile approval; inspect the [result in Business](#4-execute-and-check-the-result). This step is unavailable until Business serves the verified release.
+```bash
+inheriti automations setup github --organization ORGANISATION_ID \
+  --connection CONNECTION_ID --plan PLAN_ID --field ASSET.FIELD --apply
+```
+
+Setup uses the connection's stored identity, writes or reuses its dedicated generated workflow and verifies the connection through GitHub. It never creates a connection or changes plan access. `--apply` commits the file on the default branch; its narrow push trigger registers the workflow in Actions, with both jobs skipped on that push. The CLI then dispatches pairing explicitly. The commit can also trigger other existing push workflows. Without `--apply`, setup only previews its actions. An unrelated file is never overwritten. Missing permissions, a missing verified Action/CLI release or an expired pairing window stop setup without claiming success.
+
+**3. Assign the responsible member and plan access.** Select the verified connection, plan and member; both commands use the same generated grant ID:
+
+```bash
+inheriti automations grant create --organization ORGANISATION_ID --plan PLAN_ID --connection CONNECTION_ID --member MEMBER_ID --id GRANT_ID
+inheriti automations grant activate --organization ORGANISATION_ID --plan PLAN_ID --grant GRANT_ID
+```
+
+**4. Run the automation.** Once access is active, run the generated workflow from the same folder, using the filename stored on the selected connection:
+
+The protected plan's normal SafeKey Mobile approval may still be required during this run.
+
+```bash
+gh workflow run inheriti.yml -f pair_inheriti=false
+```
+
+The pairing and usage jobs are separately gated. Normal runs still follow the plan's SafeKey approval policy. `inheriti automations usage --plan PLAN_ID --connection CONNECTION_ID --field ASSET.FIELD` remains available to export usage YAML after verification and grant activation; it is not required to install the generated workflow.
 
 ### Google Cloud Run
 
@@ -372,3 +380,7 @@ inheriti secrets publish google --plan PLAN_ID --project "$GOOGLE_PROJECT" \
 ```
 
 Use repeatable `--map KEY=ASSET.FIELD`, `--only ASSET.FIELD`, or `--map-all`. With `--map-all`, `--except ASSET.FIELD` excludes selected fields. Only plan text fields are eligible. Preview inspects target metadata without revealing values. Apply uses the plan's normal master key, custodian share, and governance flow, then adds a [new secret version](https://docs.cloud.google.com/secret-manager/docs/add-secret-version) for each mapped field. Secret values never appear in the CLI result. A partial failure may leave earlier secrets updated; inspect their versions before retrying. The command does not update Cloud Run services or other consumers.
+
+### Check progress (all providers)
+
+Run `inheriti automations status --plan PLAN_ID --connection CONNECTION_ID` to see connection, identity, plan access, the next action and actor, and recent execution attempts. Add `--job JOB_ID` to track one known attempt, `--watch` to refresh every five seconds until Ctrl+C, or `--json` for safe structured output. With `--watch --json`, each update is one JSON line. This read-only command does not check whether GitHub, AWS, Google Cloud, or another runner finished. A ready setup does not require a first reveal.

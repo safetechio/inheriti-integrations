@@ -18,6 +18,7 @@ import { promptText } from '../render/select.js';
 import { chmod, realpath, stat, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { cliAutomationProvider } from './automation-provider.js';
+import { githubAutomationSetup } from './github-automation-setup.js';
 
 const usage = [
   'Usage: inheriti automations setup --plan PLAN_ID [--connection CONNECTION_ID]',
@@ -80,6 +81,7 @@ export async function automationSetup(
   terminal: Terminal,
   argv: readonly string[],
 ): Promise<number> {
+  if (argv[0] === 'github') return githubAutomationSetup(context, configuration, terminal, argv.slice(1));
   const separator = argv.indexOf('--');
   const applicationCommand = separator < 0 ? [] : argv.slice(separator + 1);
   const parsed = parse(separator < 0 ? argv : argv.slice(0, separator));
@@ -146,7 +148,7 @@ export async function automationSetup(
   const connectionId = options['--connection'] ?? (terminal.interactive
     ? await promptSelect('Which verified connection?', (await operations.listConnections())
       .filter(item => item.status === 'VERIFIED' && item.provider !== 'GITHUB' && eligibleIds.has(item.id))
-      .map(({ id, name }) => ({ value: id, description: name })))
+      .map(item => ({ value: item.id, description: [item.name, item.provider, item.environment, item.status].join(' · ') })))
     : undefined);
   if (!connectionId) {
     terminal.writeError('Select a verified connection with an active grant for this plan.');

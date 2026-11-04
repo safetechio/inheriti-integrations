@@ -144,12 +144,25 @@ export function isGithubAutomationSelector(selector: string): boolean {
   return separator > 0 && separator === selector.lastIndexOf('.') && validateAssetIntegrationCode(selector.slice(0, separator)) && /^[A-Za-z][A-Za-z0-9]*$/.test(selector.slice(separator + 1));
 }
 
-export function githubAutomationWorkflow(input: { release: VerifiedGithubRelease; environment: string; planId: string; connectionId: string; selector: string }): string {
+export function githubAutomationWorkflow(input: { release: VerifiedGithubRelease; environment: string; planId: string; connectionId: string; selector: string; includePairing?: boolean }): string {
   const { release, environment, planId, connectionId, selector } = input;
   if (release.actionRepository !== 'safetechio/inheriti-integrations' || !/^[a-f0-9]{40}$/i.test(release.actionRef) || !VERIFIED_CLI_VERSION.test(release.cliVersion) || !isGithubAutomationSelector(selector) || [environment, planId, connectionId].some(value => !value || /[\r\n]/.test(value))) throw new Error('Invalid GitHub workflow input');
   return [
-    'name: Inheriti secret usage', 'on: workflow_dispatch', 'permissions:', '  contents: read', '  id-token: write',
-    'jobs:', '  use-secret:', '    runs-on: ubuntu-latest', `    environment: ${JSON.stringify(environment)}`, '    steps:',
+    'name: Inheriti secret usage', ...(input.includePairing ? [
+      "run-name: ${{ inputs.pair_inheriti && format('Inheriti pairing {0}', inputs.pairing_attempt) || 'Inheriti secret usage' }}",
+      'on:', '  push:', '    paths:', "      - '.github/workflows/**'", '  workflow_dispatch:', '    inputs:', '      pair_inheriti:', '        type: boolean', '        default: false',
+      '      pairing_attempt:', '        type: string', '        required: false',
+    ] : ['on: workflow_dispatch']),
+    'permissions:', '  contents: read', '  id-token: write', 'jobs:',
+    ...(input.includePairing ? [
+      '  pair-inheriti:', "    if: ${{ github.event_name == 'workflow_dispatch' && inputs.pair_inheriti }}", '    runs-on: ubuntu-latest', '    container: node:22-bookworm-slim',
+      `    environment: ${JSON.stringify(environment)}`, '    steps:', '      - name: Pair Inheriti connection',
+      '        env:', `          INHERITI_AUTOMATION_CONNECTION_ID: ${JSON.stringify(connectionId)}`,
+      `          INHERITI_AUTOMATION_AUDIENCE: ${JSON.stringify(AutomationProviderValue.from('GITHUB').expectedAudience(connectionId)!)}`,
+      '        run: |', `          npm install --global --engine-strict @safetech/inheriti-cli@${release.cliVersion}`,
+      '          inheriti automations pair redeem',
+    ] : []),
+    '  use-secret:', ...(input.includePairing ? ["    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.pair_inheriti }}"] : []), '    runs-on: ubuntu-latest', `    environment: ${JSON.stringify(environment)}`, '    steps:',
     `      - uses: ${release.actionRepository}/integrations/github-actions@${release.actionRef}`, '        with:',
     `          cli-version: ${JSON.stringify(release.cliVersion)}`, `          plan: ${JSON.stringify(planId)}`,
     `          connection-id: ${JSON.stringify(connectionId)}`, `          audience: ${JSON.stringify(AutomationProviderValue.from('GITHUB').expectedAudience(connectionId)!)}`,

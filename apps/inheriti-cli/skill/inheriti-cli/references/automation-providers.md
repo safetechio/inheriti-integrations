@@ -4,7 +4,9 @@ Read only the section for the workload that will actually execute the protected 
 
 ## GitHub Actions
 
-Identify the intended repository, GitHub job environment, workflow file, and ref before binding `automations create --provider GITHUB` to the exact `--repository OWNER/REPO`, `--environment NAME`, and `--workflow OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH`. Keep the Business deployment (`local`/`dev`), connection deployment-environment, and GitHub environment distinct; do not infer one from another. The CLI does not create a repository or initial pairing job.
+For automatic configuration from the user's repository/project folder, prefer the [automatic setup path](github-workflow.md#automatic-setup-from-the-project-folder). It discovers the repository and installs a dedicated generated workflow; do not ask the user to inspect or edit YAML. Use the detailed inspection below when the request specifically concerns an existing application workflow.
+
+Use repository, GitHub job environment, workflow file, and ref already selected in Business; resolve only missing inputs before binding `automations create --provider GITHUB` to the exact `--repository OWNER/REPO`, `--environment NAME`, and `--workflow OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH`. For an empty repository, propose a dedicated pairing workflow file and explicit ref instead of assuming one exists. Keep the Business deployment (`local`/`dev`), connection deployment-environment, and GitHub environment distinct; do not infer one from another. The generic `automations create --provider GITHUB` command creates only Inheriti metadata. The automatic `automations setup github` command installs and runs its dedicated pairing workflow; it does not create the repository.
 
 ### Resolve missing context
 
