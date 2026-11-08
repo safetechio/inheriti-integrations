@@ -1,8 +1,8 @@
 import { BUSINESS_DEPLOYMENTS, BUSINESS_INTERACTIVE_CLIENT_ID } from '../../../../../packages/core/src/deployment.js';
 import { createNodeIntegrationCore } from '../../../../../packages/core/src/node-base.js';
 import type { BusinessOrganization, NodeIntegrationCore, NodeIntegrationCoreOptions } from '../../../../../packages/core/src/node-base.js';
-import HttpElementsApiPort from '../../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
-import type { FileAccessStatus } from '../../../../../../inheriti-client-sdk/sdk/src/elements/elements-api-port.js';
+import { HttpElementsApiPort } from '@safetech/inheriti-client-sdk/node';
+import type { FileAccessStatus } from '@safetech/inheriti-client-sdk';
 import { inspectStartupFileAccess, inspectStartupFileMime, openStartupFileAccess } from '../access/file-access.js';
 import type { GuestMime, PreviewMime } from '../access/policy.js';
 import { openSystemBrowser, waitForOAuthCallback } from './oauth-callback.js';

@@ -3,7 +3,11 @@
   "version": "0.0.1",
   "private": true,
   "dependencies": {
-    "@napi-rs/keyring": "2.1.0"
+    "@napi-rs/keyring": "2.1.0",
+    "@safetech/inheriti-client-sdk": "1.17.28"
+  },
+  "devDependencies": {
+    "@safetech/inheriti-core-sdk": "4.0.39"
   },
   "scripts": {
     "test": "cargo test --offline --manifest-path src-tauri/Cargo.toml",

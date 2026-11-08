@@ -2,9 +2,8 @@
  * This is the host's file policy boundary, not an isolation runtime.
  */
 import { randomUUID } from 'node:crypto';
-import type { FileAccessStatus } from '../../../../../../inheriti-client-sdk/sdk/src/elements/elements-api-port.js';
-import { ElementsApiRequestFailed } from '../../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
-import { inspectInheritiFileAccess, openInheritiFileAccess, readInheritiFileHeader, MAX_INHERITI_FILE_BYTES } from '../../../../../../inheriti-client-sdk/sdk/node.js';
+import type { FileAccessStatus } from '@safetech/inheriti-client-sdk';
+import { ElementsApiRequestFailed, inspectInheritiFileAccess, openInheritiFileAccess, readInheritiFileHeader, MAX_INHERITI_FILE_BYTES } from '@safetech/inheriti-client-sdk/node';
 import type { WorkspaceApi } from '../session/workspace-session.js';
 import { readStartupFile } from './startup-file.js';
 import { checkGuestPolicy, checkOpenedPreview, checkPreviewPolicy } from './policy.js';

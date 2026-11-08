@@ -5,9 +5,8 @@ import type { WorkspaceCore, WorkspaceApi } from '../../src-tauri/sidecar/sessio
 import { mkdtemp, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sealInheritiFile } from '../../../../../inheriti-client-sdk/sdk/src/elements/inheriti-file.js';
-import { ElementsApiRequestFailed } from '../../../../../inheriti-client-sdk/sdk/src/elements/http-elements-api-port.js';
-import { encryptRSAOAEP } from '../../../../../../inheriti-core-sdk/crypto.js';
+import { ElementsApiRequestFailed, sealInheritiFile } from '@safetech/inheriti-client-sdk/node';
+import { encryptRSAOAEP } from '@safetech/inheriti-core-sdk/crypto';
 import { checkGuestPolicy, checkPreviewPolicy } from '../../src-tauri/sidecar/access/policy.js';
 
 vi.mock('../../../../packages/core/src/node-base.js', () => ({ createNodeIntegrationCore: vi.fn(() => ({})) }));
