@@ -9,7 +9,8 @@ vi.mock('electron', () => ({ app: { get isPackaged() { return electron.packaged;
 
 import { ensureStartAtLogin, isBackgroundLaunch } from '../src/modules/launcher/main/start-at-login.js';
 
-const prior = { config: process.env.XDG_CONFIG_HOME, data: process.env.XDG_DATA_HOME, appImage: process.env.APPIMAGE };
+const prior = { config: process.env.XDG_CONFIG_HOME, data: process.env.XDG_DATA_HOME, appImage: process.env.APPIMAGE,
+  apiUrl: process.env.INHERITI_API_URL, issuer: process.env.INHERITI_OIDC_ISSUER, appUrl: process.env.INHERITI_APP_URL };
 let directory: string | undefined;
 afterEach(() => {
   if (directory) rmSync(directory, { recursive: true, force: true });
@@ -17,6 +18,9 @@ afterEach(() => {
   process.env.XDG_CONFIG_HOME = prior.config;
   process.env.XDG_DATA_HOME = prior.data;
   process.env.APPIMAGE = prior.appImage;
+  process.env.INHERITI_API_URL = prior.apiUrl;
+  process.env.INHERITI_OIDC_ISSUER = prior.issuer;
+  process.env.INHERITI_APP_URL = prior.appUrl;
   electron.packaged = false;
   electron.openedAtLogin = false;
   electron.setLoginItemSettings.mockClear();
@@ -57,4 +61,24 @@ it('does not leave an autostart entry for a missing AppImage', () => {
   electron.packaged = true;
   ensureStartAtLogin('dev');
   expect(readdirSync(directory)).toEqual([]);
+});
+
+it('keeps local harness endpoints in the desktop launcher and autostart entry', () => {
+  directory = mkdtempSync(join(tmpdir(), 'go-autostart-'));
+  process.env.XDG_CONFIG_HOME = directory;
+  process.env.XDG_DATA_HOME = join(directory, 'data');
+  process.env.APPIMAGE = join(directory, 'Inheriti Go LOCAL.AppImage');
+  process.env.INHERITI_API_URL = 'http://localhost:3000/integrations/';
+  process.env.INHERITI_OIDC_ISSUER = 'http://localhost:8180/realms/inheriti-business-e2e';
+  process.env.INHERITI_APP_URL = 'http://localhost:8081';
+  writeFileSync(process.env.APPIMAGE, 'test installer');
+  electron.packaged = true;
+  ensureStartAtLogin('local');
+  for (const file of [join(directory, 'autostart/inheriti-go-local.desktop'),
+    join(directory, 'data/applications/inheriti-go-local.desktop')]) {
+    const desktop = readFileSync(file, 'utf8');
+    expect(desktop).toContain('INHERITI_OIDC_ISSUER=http://localhost:8180/realms/inheriti-business-e2e');
+    expect(desktop).toContain('INHERITI_API_URL=http://localhost:3000/integrations/');
+    expect(desktop).toContain('INHERITI_APP_URL=http://localhost:8081');
+  }
 });
