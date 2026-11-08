@@ -14,6 +14,11 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
   runLocalAutomationProofBrowser: mock.browser,
   createNativeWindowSession: () => ({ open: mock.open, close: mock.close, complete: mock.complete }),
 }));
+vi.mock('../src/feature-flags.js', async importOriginal => {
+  const original = await importOriginal<typeof import('../src/feature-flags.js')>();
+  return { ...original, MCP_FEATURE_FLAGS: Object.fromEntries(Object.entries(original.MCP_FEATURE_FLAGS).map(([deployment, flags]) =>
+    [deployment, { ...flags, automation: true }])) };
+});
 
 import { MetadataTools, createServer, safeResult } from '../src/server.js';
 import { registerGetAutomationRuntimeInstallInstructions } from '../src/tools/get_automation_runtime_install_instructions.js';
@@ -34,7 +39,7 @@ it('rejects disabled automation without opening a window', async () => {
   expect(mock.createConnection).not.toHaveBeenCalled();
 });
 
-it('allows automation only in local and dev deployments', async () => {
+it('allows retained automation behavior only in local and dev deployments with the test flag enabled', async () => {
   mock.connections.mockResolvedValue([]);
   for (const [deployment, apiUrl] of [
     ['local', 'http://business.localhost:3400/integrations/'],
@@ -135,7 +140,8 @@ it('cancels automation setup on logout', async () => {
   mock.browser.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('private proof')), { once: true })));
   const { jobId } = await tools.startAutomationSetup('connection');
   expect(await tools.logout()).toEqual({ signedOut: true });
-  expect(await tools.automationSetupStatus(jobId)).toEqual({ jobId, status: 'CANCELED', phase: 'CANCELED' });
+  expect(tools.automationJob.status).toBe('CANCELED');
+  await expect(tools.automationSetupStatus(jobId)).rejects.toMatchObject({ code: 'automation_local_only' });
 });
 
 it('creates a connection with nonsecret trust and returns no trust or proof', async () => {

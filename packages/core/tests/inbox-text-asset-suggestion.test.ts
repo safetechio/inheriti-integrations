@@ -10,6 +10,12 @@ describe('Inbox text asset suggestion', () => {
       ['App: Payments\nAPI key: sk-test-123', 'API-KEY', { app: 'Payments', apiKey: 'sk-test-123' }],
       ['Recovery code: 1234-5678', 'RECOVERY-CODE', { code: '1234-5678' }],
       ['Device: Tablet\nPIN: 1234', 'PIN-CODE', { deviceOrApp: 'Tablet', code: '1234' }],
+      ['IP/source: private network\nPassword: correct horse', 'USER-PSWD',
+        { ipSource: 'private network', password: 'correct horse' }],
+      ['Source: support desk\nPassword: correct horse', 'USER-PSWD',
+        { ipSource: 'support desk', password: 'correct horse' }],
+      ['IP: office VPN\nPassword: correct horse', 'USER-PSWD',
+        { ipSource: 'office VPN', password: 'correct horse' }],
     ] as const) {
       const suggestion = suggestInboxTextAsset(text);
       expect(suggestion.assetType).toBe(type);
@@ -22,7 +28,9 @@ describe('Inbox text asset suggestion', () => {
 
   it('keeps ambiguous or unrepresented text intact as editable plain text', () => {
     for (const text of ['an unlabeled secret', 'Password: one\nAPI key: two',
-      'Seed phrase: alpha beta gamma', 'Password: one\nUnknown: two', 'PIN: 12345678901']) {
+      'Seed phrase: alpha beta gamma', 'Password: one\nUnknown: two', 'PIN: 12345678901',
+      'Source: support desk\nAPI key: sk-test-123',
+      `Password: one\nIP/source: ${'x'.repeat(101)}`]) {
       expect(suggestInboxTextAsset(text)).toEqual({ title: 'Saved message', assetType: 'PLAIN-TEXT',
         assetName: 'Saved message', fields: { text } });
     }

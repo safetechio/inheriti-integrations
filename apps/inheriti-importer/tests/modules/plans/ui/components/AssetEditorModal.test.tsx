@@ -39,6 +39,7 @@ describe('AssetEditorModal', () => {
     expect(screen.getByLabelText('Asset name')).toBeTruthy();
     expect(screen.getByLabelText('username')).toBeTruthy();
     expect(screen.getByLabelText('password')).toBeTruthy();
+    expect(screen.getByLabelText('IP/source')).toBeTruthy();
   });
 
   it('pre-fills the form when editing an existing Asset', () => {

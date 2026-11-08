@@ -154,6 +154,7 @@ type PlanField = string | {
 };
 type FieldBatch = { fields: ReadonlyArray<PlanField>;
   destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void> };
+import type { OperationContext } from './operation-context.js';
 
 export async function consumePlanFields(
   context: SecretRevealContext,
@@ -163,7 +164,7 @@ export async function consumePlanFields(
   fields: ReadonlyArray<PlanField>,
   signal: AbortSignal | undefined,
   destination: (fields: ReadonlyArray<{ selector: string; value: unknown }>) => void | Promise<void>,
-  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void } = {},
+  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void; operationContext?: OperationContext } = {},
 ): Promise<boolean> {
   return consumePlanFieldBatches(context, terminal, planId, plan, [{ fields, destination }], signal, options);
 }
@@ -176,7 +177,7 @@ export async function consumePlanFieldBatches(
   plan: CliRevealPlan,
   batches: ReadonlyArray<FieldBatch>,
   signal: AbortSignal | undefined,
-  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void } = {},
+  options: { quiet?: boolean; completion?: string; onSession?: (expiresAt: string | Date) => void; operationContext?: OperationContext } = {},
 ): Promise<boolean> {
   let lastLine: string | undefined;
   let lastProgress: RevealProgress | undefined;
@@ -206,6 +207,7 @@ export async function consumePlanFieldBatches(
   if (!presenter && !options.quiet) terminal.write('Opening the plan.');
   try {
     await context.core.withReveal(planId, {
+      ...(options.operationContext ? { operationContext: options.operationContext } : {}),
       mode: revealModeOf(plan),
       ...custodianOptions,
       ...(custodianOptions.selectCustodianDevice ? { selectCustodianDevice: async () => {

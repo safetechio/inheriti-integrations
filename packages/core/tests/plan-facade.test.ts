@@ -12,6 +12,46 @@ function facadeThatFailsWith(error: unknown): SdkPlanFacade {
 }
 
 describe('SdkPlanFacade', () => {
+  it('forwards organisation read filters and preserves safe pages', async () => {
+    const page = { items: [{ id: 'member-1', displayName: 'Ari', role: 'OWNER', status: 'ACTIVE' }], total: 1 };
+    const listOrganizationMembers = vi.fn(async () => page);
+    const facade = new SdkPlanFacade({ listOrganizationMembers } as never);
+    await expect(facade.listOrganizationMembers({ limit: 5, offset: 10 })).resolves.toBe(page);
+    expect(listOrganizationMembers).toHaveBeenCalledWith({ limit: 5, offset: 10 });
+  });
+
+  it('reports denied organisation queries as a permission error without a raw response', async () => {
+    const error = Object.assign(new Error('private upstream detail'), { status: 403, requestId: 'req-1' });
+    const facade = new SdkPlanFacade({
+      listOrganizationMembers: async () => { throw error; },
+      listOrganizationAuditTrail: async () => { throw error; },
+      getOrganizationInsights: async () => { throw error; },
+    } as never);
+    for (const operation of [
+      facade.listOrganizationMembers(),
+      facade.listOrganizationAuditTrail({ from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' }),
+      facade.getOrganizationInsights(),
+    ]) {
+      const failure = await operation.catch((reason: unknown) => reason);
+      expect(failure).toMatchObject({ code: 'organization_permission_required', status: 403, requestId: 'req-1' });
+      expect(JSON.stringify(failure)).not.toContain('private upstream detail');
+    }
+  });
+
+  it('reports an inaccessible plan responsibility listing as absent', async () => {
+    const facade = new SdkPlanFacade({ getPlanResponsibilities: async () => {
+      throw Object.assign(new Error('foreign plan'), { status: 403 });
+    } } as never);
+    await expect(facade.getPlanResponsibilities('foreign')).rejects.toMatchObject({ code: 'plan_not_found' });
+    expect(() => facade.getPlanResponsibilities('')).toThrow(PlanRequestFailed);
+  });
+
+  it('does not turn a missing organisation query route into a missing plan', async () => {
+    const facade = new SdkPlanFacade({ getOrganizationInsights: async () => {
+      throw Object.assign(new Error('missing endpoint'), { status: 404 });
+    } } as never);
+    await expect(facade.getOrganizationInsights()).rejects.toMatchObject({ code: 'organization_query_unavailable', status: 404 });
+  });
   it('reads only the active reveal metadata through the SDK', async () => {
     const getActivePlanReveal = vi.fn(async () => ({ id: 'reveal-1' }));
     const facade = new SdkPlanFacade({ getActivePlanReveal } as never);

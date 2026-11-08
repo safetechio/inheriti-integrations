@@ -19,6 +19,7 @@ const RULES: AliasRule[] = [
     type: 'USER-PSWD',
     fields: {
       'secret.appOrWebsite': ['url', 'website', 'app', 'appname', 'domain', 'host'],
+      'secret.ipSource': ['ipsource', 'ip/source', 'ipaddress', 'sourceip'],
       'secret.email': ['email', 'mail'],
       'secret.username': ['username', 'user', 'login', 'account'],
       'secret.password': ['password', 'pass', 'pwd'],

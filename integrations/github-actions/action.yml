@@ -21,6 +21,18 @@ inputs:
     description: Child output policy (suppress or inherit)
     default: suppress
     required: false
+  reason:
+    description: Non-secret purpose recorded with the automation operation
+    required: false
+  target:
+    description: Non-secret deployment target
+    required: false
+  image:
+    description: Non-secret image identifier
+    required: false
+  version:
+    description: Non-secret version identifier
+    required: false
   cli-version:
     description: Published @safetech/inheriti-cli version
     default: latest
@@ -38,4 +50,8 @@ runs:
         INHERITI_SECRETS_OUTPUT: ${{ inputs.output }}
         INHERITI_SECRETS_COMMAND: ${{ inputs.run }}
         INHERITI_CLI_VERSION: ${{ inputs.cli-version }}
+        INHERITI_AUTOMATION_REASON: ${{ inputs.reason }}
+        INHERITI_AUTOMATION_TARGET: ${{ inputs.target }}
+        INHERITI_AUTOMATION_IMAGE: ${{ inputs.image }}
+        INHERITI_AUTOMATION_VERSION: ${{ inputs.version }}
       run: bash "${GITHUB_ACTION_PATH}/entrypoint.sh"

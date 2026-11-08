@@ -13,6 +13,7 @@ const fieldsByLabel: Readonly<Record<string, string>> = {
   website: 'appOrWebsite', apporwebsite: 'appOrWebsite', service: 'appOrWebsite',
   app: 'app', apikey: 'apiKey', recoverycode: 'recoveryCode', pin: 'pinCode',
   device: 'deviceOrApp', deviceorapp: 'deviceOrApp',
+  ip: 'ipSource', source: 'ipSource', ipsource: 'ipSource',
 };
 
 const categories: readonly { type: string; required: string; field: string; name: string }[] = [
@@ -30,7 +31,7 @@ export function suggestInboxTextAsset(text: string): InboxTextAssetSuggestion {
   const values = new Map<string, string>();
   for (const line of text.split(/\r?\n/u)) {
     if (!line.trim()) continue;
-    const match = /^\s*([\p{L}][\p{L}\p{N} _-]{0,39})\s*[:=]\s*(.+?)\s*$/u.exec(line);
+    const match = /^\s*([\p{L}][\p{L}\p{N} _\/-]{0,39})\s*[:=]\s*(.+?)\s*$/u.exec(line);
     if (!match) return fallback();
     const label = match[1]!.normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/giu, '').toLowerCase();
     const field = fieldsByLabel[label];

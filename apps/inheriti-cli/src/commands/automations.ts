@@ -22,6 +22,7 @@ import type { Terminal } from '../output.js';
 import { renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { cliAutomationProvider } from './automation-provider.js';
+import { connectionChoice, grantChoice, operationalConnections, operationalGrants } from './automation-choices.js';
 
 function flags(argv: readonly string[]): Record<string, string> | undefined {
   if (argv.length % 2) return;
@@ -271,7 +272,7 @@ export async function automationManage(
       return 1;
     }
     const connectionId = await choose(options['--connection'], terminal, 'Which connection?',
-      options['--connection'] ? [] : (await operations.listConnections()).map(({ id, name }) => ({ id, name })), signal);
+      options['--connection'] ? [] : operationalConnections(await operations.listConnections()).filter(item => item.status === 'PENDING_VERIFICATION').map(connectionChoice), signal);
     if (!connectionId) { terminal.writeError('Connection ID required.'); return 1; }
     const pairing = await operations.startPairing(connectionId);
     terminal.write(`Waiting for the configured workload to verify this connection until ${pairing.expiresAt}. Run inheriti automations pair redeem inside that workload.`);
@@ -294,7 +295,7 @@ export async function automationManage(
       grants.some(grant => grant.connectionId === item.id));
     const connectionId = await choose(
       options['--connection'], terminal, 'Which verified GitHub connection?',
-      connections.map(({ id, name }) => ({ id, name })), signal,
+      connections.map(connectionChoice), signal,
     );
     const connection = connections.find(item => item.id === connectionId);
     if (!connection || connection.trust.method !== 'GITHUB_ACTIONS_OIDC') {
@@ -363,7 +364,8 @@ export async function automationManage(
     }
     const connectionId = await choose(
       options['--connection'], terminal, 'Which connection?',
-      options['--connection'] ? [] : (await operations.listConnections()).map(({ id, name }) => ({ id, name })),
+      options['--connection'] ? [] : operationalConnections(await operations.listConnections())
+        .filter(item => action === 'verify' ? item.status === 'PENDING_VERIFICATION' : true).map(connectionChoice),
       signal,
     );
     if (!connectionId) { terminal.writeError('Connection ID required.'); return 1; }
@@ -389,22 +391,42 @@ export async function automationManage(
     plans.map(({ id, name, title }) => ({ id, name: name ?? title })), signal,
   );
   if (!planId) { terminal.writeError('Plan ID required.'); return 1; }
-  const existing = action === 'create' || options['--grant'] ? [] : await operations.listGrants(planId);
+  const grantConnections = action === 'create' || options['--grant'] ? [] : await operations.listConnections();
+  const existing = action === 'create' || options['--grant'] ? [] : operationalGrants(await operations.listGrants(planId), grantConnections).filter(item =>
+    action === 'activate' ? item.status === 'PENDING_VERIFICATION' : true);
+  const grantMembers = existing.length ? await operations.listMembers() : [];
   const grantId = action === 'create'
     ? options['--id'] ?? randomUUID()
-    : await choose(options['--grant'], terminal, 'Which grant?', existing.map(({ id }) => ({ id })), signal);
+    : await choose(options['--grant'], terminal, 'Which grant?', existing.map(item => grantChoice(item, grantConnections, grantMembers)), signal);
   if (!grantId) { terminal.writeError('Grant ID required.'); return 1; }
   if (action === 'create') {
     const connectionId = await choose(
       options['--connection'], terminal, 'Which connection?',
-      options['--connection'] ? [] : (await operations.listConnections()).map(({ id, name }) => ({ id, name })),
+      options['--connection'] ? [] : operationalConnections(await operations.listConnections()).filter(item => item.status === 'VERIFIED').map(connectionChoice),
       signal,
     );
     const memberId = await member(options['--member'], operations, terminal, signal);
     if (!connectionId || !memberId) { terminal.writeError('Connection and responsible member required.'); return 1; }
-    await operations.createGrant(planId, { id: grantId, connectionId, responsibleMemberId: memberId });
+    try { await operations.createGrant(planId, { id: grantId, connectionId, responsibleMemberId: memberId }); }
+    catch (error) {
+      if (!options['--id'] || !(error instanceof Error) || error.message !== 'automation_grant_already_exists' ||
+          !(await operations.listGrants(planId)).some(item => item.id === grantId && item.planId === planId &&
+            item.connectionId === connectionId && item.responsibleMemberId === memberId && ['PENDING_VERIFICATION', 'ACTIVE'].includes(item.status)))
+        throw error;
+      terminal.write(`Grant already exists: ${grantId}`);
+      return 0;
+    }
   }
-  if (action === 'activate') await operations.activateGrant(planId, grantId);
+  if (action === 'activate') {
+    try { await operations.activateGrant(planId, grantId); }
+    catch (error) {
+      if (!(error instanceof Error) || error.message !== 'automation_grant_already_active' ||
+          !(await operations.listGrants(planId)).some(item => item.id === grantId && item.planId === planId && item.status === 'ACTIVE'))
+        throw error;
+      terminal.write(`Grant already active: ${grantId}`);
+      return 0;
+    }
+  }
   if (action === 'revoke') await operations.revokeGrant(planId, grantId);
   if (action === 'member') {
     const memberId = await member(options['--member'], operations, terminal, signal);
@@ -424,9 +446,12 @@ async function member(
   terminal: Terminal,
   signal: AbortSignal,
 ): Promise<string | undefined> {
-  const items = value ? [] : (await operations.listMembers()).map(({ id, firstName, lastName }) => ({
-    id, name: [firstName, lastName].filter(Boolean).join(' '),
-  }));
+  const items = value ? [] : (await operations.listMembers()).filter(item => item.status === 'ACTIVE')
+    .map(({ id, firstName, lastName, email, masterKeyStatus }) => ({
+      id, name: [[firstName, lastName].filter(Boolean).join(' ') || email || id,
+        firstName || lastName ? email : undefined,
+        masterKeyStatus ? `Organisation key: ${masterKeyStatus}` : undefined].filter(Boolean).join(' · '),
+    }));
   return choose(value, terminal, 'Which responsible member?', items, signal);
 }
 
@@ -469,6 +494,7 @@ export async function automationMetadata(
   configuration: CliConfiguration,
   terminal: Terminal,
   planId?: string,
+  all = false,
 ): Promise<number> {
   if (!(await context.core.getAccessToken())) { terminal.writeError('Sign in before listing automations.'); return 1; }
   const operations = createAutomationSetupOperations({
@@ -477,7 +503,7 @@ export async function automationMetadata(
     getBearerToken: () => context.core.getAccessToken(),
   });
   if (planId) {
-    const grants = await operations.listGrants(planId);
+    const grants = all ? await operations.listGrants(planId) : operationalGrants(await operations.listGrants(planId), await operations.listConnections());
     renderJson(terminal, {
       organizationId: context.organization!.id,
       planId,
@@ -487,7 +513,7 @@ export async function automationMetadata(
     });
     return 0;
   }
-  const connections = await operations.listConnections();
+  const connections = all ? await operations.listConnections() : operationalConnections(await operations.listConnections());
   renderJson(terminal, {
     organizationId: context.organization!.id,
     items: connections.map(({ id, name, provider, environment, status }) => ({

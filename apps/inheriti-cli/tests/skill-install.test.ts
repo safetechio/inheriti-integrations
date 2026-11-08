@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { reconcileCliSkill } from '../src/skill-install.js';
 
@@ -27,6 +27,92 @@ async function fixture() {
 }
 
 describe('bundled CLI skill reconciliation', () => {
+  it('rejects a custom folder whose staging parent belongs to another user', async () => {
+    const { root, packageRoot } = await fixture();
+    const uid = (await stat(root)).uid;
+    if ((await stat(tmpdir())).uid === uid) return;
+    expect(await reconcileCliSkill(packageRoot, {}, root, uid, { agent: 'custom', skillsDirectory: root }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe Custom home ownership' });
+    await expect(stat(join(root, 'inheriti-cli'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('uses the default and configured homes for Codex and Claude', async () => {
+    const { root, packageRoot } = await fixture();
+    for (const agent of ['codex', 'claude'] as const) {
+      const home = join(root, `.${agent}`);
+      await mkdir(home);
+      const result = await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent });
+      expect(result).toMatchObject({ status: 'installed', target: join(home, 'skills', 'inheriti-cli') });
+    }
+    const configured = join(root, 'configured-claude');
+    await mkdir(configured);
+    expect(await reconcileCliSkill(packageRoot, { CLAUDE_CONFIG_DIR: configured }, root, process.getuid?.(), { agent: 'claude' }))
+      .toMatchObject({ status: 'installed', target: join(configured, 'skills', 'inheriti-cli') });
+  });
+
+  it('installs into an explicit custom skills directory and backs up edits outside it', async () => {
+    const { root, packageRoot } = await fixture();
+    const skillsDirectory = join(root, 'other', 'agent-skills');
+    await mkdir(join(root, 'other'));
+    const options = { agent: 'custom' as const, skillsDirectory };
+    const first = await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), options);
+    expect(first).toMatchObject({ status: 'installed', target: join(skillsDirectory, 'inheriti-cli') });
+    await writeFile(join(first.target!, 'SKILL.md'), 'local edit');
+    const second = await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), options);
+    expect(second.status).toBe('updated');
+    expect(relative(skillsDirectory, second.backup!).startsWith('..')).toBe(true);
+    expect(await readFile(join(second.backup!, 'SKILL.md'), 'utf8')).toBe('local edit');
+  });
+
+  it('creates a known agent home only when explicitly requested and its parent is safe', async () => {
+    const { root, packageRoot } = await fixture();
+    const home = join(root, '.claude');
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'claude' }))
+      .toMatchObject({ status: 'skipped', reason: 'Claude is not installed' });
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'claude', createHome: true }))
+      .toMatchObject({ status: 'installed', target: join(home, 'skills', 'inheriti-cli') });
+    expect((await stat(home)).isDirectory()).toBe(true);
+  });
+
+  it('rejects unsafe Claude and custom destinations without writing through them', async () => {
+    const { root, packageRoot } = await fixture();
+    const outside = join(root, 'outside');
+    await mkdir(outside);
+    expect(await reconcileCliSkill(packageRoot, { CLAUDE_CONFIG_DIR: 'relative' }, root, process.getuid?.(), { agent: 'claude' }))
+      .toMatchObject({ status: 'skipped', reason: 'Claude home is not absolute' });
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'custom', skillsDirectory: 'relative' }))
+      .toMatchObject({ status: 'skipped', reason: 'Custom skill directory is not absolute' });
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'custom', skillsDirectory: join(root, 'missing', 'skills') }))
+      .toMatchObject({ status: 'skipped', reason: 'Custom is not installed' });
+    expect(await reconcileCliSkill(packageRoot, { CLAUDE_CONFIG_DIR: join(root, 'missing', '.claude') }, root, process.getuid?.(), { agent: 'claude', createHome: true }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe Claude home parent' });
+    try { await symlink(outside, join(root, '.claude'), 'dir'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'EPERM') return; throw error; }
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'claude', createHome: true }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe Claude home' });
+    const skillsDirectory = join(root, 'outside', 'skills');
+    await symlink(root, skillsDirectory, 'dir');
+    expect(await reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'custom', skillsDirectory }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe skill directory' });
+    const owner = (await stat(outside)).uid;
+    expect(await reconcileCliSkill(packageRoot, {}, root, owner + 1, { agent: 'custom', skillsDirectory }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe Custom home ownership' });
+    expect(await reconcileCliSkill(packageRoot, { SUDO_USER: 'operator' }, root, 0, { agent: 'custom', skillsDirectory }))
+      .toMatchObject({ status: 'skipped', reason: 'Unsafe sudo user context' });
+    expect(await readdir(outside)).toEqual(['skills']);
+  });
+
+  it('keeps Claude reconciliation locked during concurrent installs', async () => {
+    const { root, packageRoot } = await fixture();
+    const home = join(root, '.claude');
+    await mkdir(home);
+    const results = await Promise.all([
+      reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'claude' }),
+      reconcileCliSkill(packageRoot, {}, root, process.getuid?.(), { agent: 'claude' }),
+    ]);
+    expect(results.filter(result => result.status === 'installed')).toHaveLength(1);
+    expect(results.every(result => ['installed', 'busy', 'current'].includes(result.status))).toBe(true);
+  });
   it('installs, stays quiet when current, and reinstalls a deleted skill', async () => {
     const { packageRoot, codexHome, content, target } = await fixture();
     const env = { CODEX_HOME: codexHome };

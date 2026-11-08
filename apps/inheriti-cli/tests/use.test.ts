@@ -32,6 +32,18 @@ function context(value = 'fixture-secret-never-print'): { core: Record<string, u
 }
 
 describe('plans use', () => {
+  it('forwards automation context and rejects operator context before reveal', async () => {
+    const input = context();
+    const options = {
+      envs: [{ name: 'TOKEN', selector: 'service.token' }], tempFiles: [], sockets: [], fds: [],
+      command: [process.execPath, '-e', 'process.exit(0)'], operationContext: { reason: 'Deploy' },
+    };
+    await expect(usePlan(input as never, terminal(), 'plan-1', options)).rejects.toThrow('requires secrets exec --automation');
+    expect(input.core.withReveal).not.toHaveBeenCalled();
+    await usePlan(input as never, terminal(), 'plan-1', { ...options, workload: true });
+    expect(input.core.withReveal).toHaveBeenCalledWith('plan-1', expect.objectContaining({ operationContext: { reason: 'Deploy' } }), expect.any(Function));
+  });
+
   it('authorizes every mapping with its actual non-visual destination', async () => {
     const input = context();
     await usePlan(input as never, terminal(), 'plan-1', {

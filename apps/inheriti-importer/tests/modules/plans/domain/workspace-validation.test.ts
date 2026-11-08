@@ -14,6 +14,15 @@ describe('validatePlanForExecution', () => {
     ).toBe('Please enter a value of max 254 chars');
   });
 
+  it('accepts ordinary IP/source text up to 100 characters', () => {
+    expect(validateAssetEditorValues('USER-PSWD', {
+      meta: {}, secret: { ipSource: 'internal host / 10.0.0.1' },
+    })['secret.ipSource']).toBeUndefined();
+    expect(validateAssetEditorValues('USER-PSWD', {
+      meta: {}, secret: { ipSource: 'x'.repeat(101) },
+    })['secret.ipSource']).toBe('Please enter a value of max 100 chars');
+  });
+
   it('rejects a source binding that no longer exists', () => {
     const plan = makePlanDraft('plan-1', 'Imported Plan');
     plan.assets.push({

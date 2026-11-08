@@ -9,6 +9,7 @@ import {
 import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import type { LocalPlanHints, AutomationProvider, AutomationTrust } from '@safetech/inheriti-elements-core/node-base';
 import type { NodeIntegrationCore, NodeIntegrationCoreOptions } from '@safetech/inheriti-elements-core/node-base';
+import { MCP_FEATURE_FLAGS } from './feature-flags.js';
 import { beginBrowserLogin } from './browser-login.js';
 import { planDetail, planSummary } from './metadata.js';
 import { registerTools } from './tools/index.js';
@@ -26,6 +27,7 @@ import { pairGoogleAutomationService } from './runtime/google-pair.js';
 import { createPlanWithAssistant, planCreationStatus } from './runtime/plan-assistant.js';
 import { applyAutomationRuntime, prepareAutomationRuntime } from './runtime/runtime-setup.js';
 import type { CloudTarget } from '@safetech/inheriti-elements-core/node-base';
+import type { ListPlansInput, ListOrganizationMembersInput, ListOrganizationAuditTrailInput, OrganizationInsightsInput } from '@safetech/inheriti-elements-core/node-base';
 import { reveal, revealFields, startReveal, revealStatus } from './runtime/reveal.js';
 import { registerRevealPlanSecret } from './tools/reveal_plan_secret.js';
 import { registerDownloadPlanAsset } from './tools/download_plan_asset.js';
@@ -407,10 +409,26 @@ export class MetadataTools {
     const { aborted } = await selected.core.abortPlanAccess(planId, expectedRevealId);
     return { organizationId: selected.organizationId, aborted };
   }
-  async listPlans(cursor?: string) {
+  async listPlans(input: ListPlansInput = {}) {
     const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
-    const page = await selected.core.listPlans(cursor ? { cursor, limit: 50 } : { limit: 50 });
+    const page = await selected.core.listPlans({ ...input, limit: input.limit ?? 50 });
     return { organizationId: selected.organizationId, items: page.items.map(planSummary), nextCursor: page.nextCursor };
+  }
+  async listOrganizationMembers(input: ListOrganizationMembersInput = {}) {
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    return { organizationId: selected.organizationId, ...await selected.core.listOrganizationMembers(input) };
+  }
+  async listOrganizationAuditTrail(input: ListOrganizationAuditTrailInput) {
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    return { organizationId: selected.organizationId, ...await selected.core.listOrganizationAuditTrail(input) };
+  }
+  async getOrganizationInsights(input: OrganizationInsightsInput = {}) {
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    return { organizationId: selected.organizationId, ...await selected.core.getOrganizationInsights(input) };
+  }
+  async getPlanResponsibilities(planId: string) {
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
+    return { organizationId: selected.organizationId, ...await selected.core.getPlanResponsibilities(planId) };
   }
   async getPlan(id: string) {
     const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
@@ -424,7 +442,7 @@ export class MetadataTools {
     });
     return { organizationId: selected.organizationId, ...page };
   }
-  async listMemberLogs(memberId: string, input: { source?: 'MEMBER' | 'AUTOMATION'; from?: string; to?: string; limit?: number; offset?: number }) {
+  async listMemberLogs(memberId: string, input: { source?: 'MEMBER' | 'AUTOMATION'; from?: string; to?: string; q?: string; limit?: number; offset?: number }) {
     const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
     return { organizationId: selected.organizationId, ...await selected.core.listMemberLogs(memberId, input) };
   }
@@ -438,11 +456,11 @@ export class MetadataTools {
   }
   localAutomation() {
     const deployment = businessDeployment(this.config?.deployment);
-    if (!deployment || !HOST_FEATURE_FLAGS[deployment].automation) throw coded('automation_local_only');
+    if (!deployment || !MCP_FEATURE_FLAGS[deployment].automation || !HOST_FEATURE_FLAGS[deployment].automation) throw coded('automation_local_only');
   }
   async automationOperations() {
-    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
     this.localAutomation();
+    const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
     return { organizationId: selected.organizationId, operations: createAutomationSetupOperations({ apiUrl: this.config!.apiUrl,
       organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() }) };
   }
@@ -490,24 +508,37 @@ export class MetadataTools {
   }
   async createPlanWithAssistant(hints?: LocalPlanHints) {
     const deployment = businessDeployment(this.config?.deployment);
-    if (!deployment || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
+    if (!deployment || !MCP_FEATURE_FLAGS[deployment].planCreation || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
     return createPlanWithAssistant.call(this, hints);
   }
   async planCreationStatus(jobId: string, cancel = false) {
     const deployment = businessDeployment(this.config?.deployment);
-    if (!deployment || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
+    if (!deployment || !MCP_FEATURE_FLAGS[deployment].planCreation || !HOST_FEATURE_FLAGS[deployment].planCreation) throw coded('plan_creation_unavailable');
     return planCreationStatus.call(this, jobId, cancel);
   }
-  async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD', options?: { openLimit?: number }) { return reveal.call(this, planId, selector, kind, options); }
+  async reveal(planId: string, selector: string, kind: 'FIELD' | 'ASSET' = 'FIELD', options?: { openLimit?: number }) {
+    this.requirePlanReveal();
+    return reveal.call(this, planId, selector, kind, options);
+  }
   async revealFields(planId: string, selection: { selector?: string | undefined; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined }) {
+    this.requirePlanReveal();
     return revealFields.call(this, planId, selection);
   }
   async startReveal(planId: string, request: { kind: 'ASSET'; asset: string; openLimit?: number } | { kind: 'FIELD'; selectors?: string[] | undefined; assets?: string[] | undefined; all?: boolean | undefined; single: boolean; publication?: { provider: 'AWS'; region: string; expectedAccountId: string; mappings: ReadonlyArray<{ selector: string; key: string }>; secretName?: string; parameterPrefix?: string } | { provider: 'GOOGLE_CLOUD'; projectId: string; secretPrefix: string; mappings: ReadonlyArray<{ selector: string; key: string }> } }) {
+    this.requirePlanReveal();
     return startReveal.call(this, planId, request);
   }
-  async revealStatus(jobId: string, cancel = false) { return revealStatus.call(this, jobId, cancel); }
+  private requirePlanReveal() {
+    const deployment = businessDeployment(this.config?.deployment);
+    if (!deployment || !MCP_FEATURE_FLAGS[deployment].planReveal) throw coded('plan_reveal_unavailable');
+  }
+  async revealStatus(jobId: string, cancel = false) {
+    this.requirePlanReveal();
+    return revealStatus.call(this, jobId, cancel);
+  }
   async publishPlanFieldsToAws(input: { planId: string; region: string; expectedAccountId: string;
     mappings: Array<{ selector: string; key: string }>; secretName?: string | undefined; parameterPrefix?: string | undefined; apply: boolean }) {
+    this.requirePlanReveal();
     const { planId, region, expectedAccountId, mappings, secretName, parameterPrefix, apply } = input;
     if (!!secretName === !!parameterPrefix || !mappings.length ||
       mappings.some(({ selector, key }) => !/^[^\s.]+\.[^\s.]+$/.test(selector) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) ||
@@ -533,6 +564,7 @@ export class MetadataTools {
 
   async publishPlanFieldsToGoogleCloud(input: { planId: string; projectId: string; secretPrefix: string;
     mappings: Array<{ selector: string; key: string }>; apply: boolean }) {
+    this.requirePlanReveal();
     const { planId, projectId, secretPrefix, mappings, apply } = input;
     if (!mappings.length || mappings.some(({ selector, key }) =>
       !/^[^\s.]+\.[^\s.]+$/.test(selector) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) ||
@@ -584,6 +616,7 @@ export function safeResult<T>(work: (args: T) => Promise<unknown>) {
 }
 
 export function registerRevealTools(server: McpServer, tools: MetadataTools) {
+  if (!lockedDeployment || !MCP_FEATURE_FLAGS[lockedDeployment].planReveal) return;
   registerRevealPlanSecret(server, tools);
   registerDownloadPlanAsset(server, tools);
   registerCheckRevealStatus(server, tools);

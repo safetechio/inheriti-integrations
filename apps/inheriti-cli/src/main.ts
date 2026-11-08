@@ -21,6 +21,8 @@ import { registerCliCancel } from './cancellation.js';
 import { automationManage, automationMetadata, automationRuntimeInstructions, automationRuntimeInstallEc2 } from './commands/automations.js';
 import { automationRuntimeImage } from './commands/automation-runtime-image.js';
 import { automationSetup } from './commands/automation-setup.js';
+import { automationStatus } from './commands/automation-status.js';
+import { githubAutomationCreate } from './commands/github-automation-setup.js';
 import { pairAwsAutomationService } from './commands/automation-pair-aws.js';
 import { pairEc2AutomationInstance } from './commands/automation-pair-ec2.js';
 import { pairGoogleAutomationWorkload } from './commands/automation-pair-google.js';
@@ -34,7 +36,7 @@ import { plans } from './commands/plan-command.js';
 import { isExplicitAutomationDenial, messageFor, providerDiagnosticFor, MESSAGES } from './commands/errors.js';
 import { CLI_FEATURE_FLAGS } from './feature-flags.js';
 import { openInheritiFile, PROTECTED_FILE_FLAGS } from '@safetech/inheriti-elements-core/node-base';
-import { reconcileCliSkill } from './skill-install.js';
+import { installSkill, readSkillChoice } from './commands/skill.js';
 
 export async function run(
   argv: readonly string[],
@@ -62,6 +64,9 @@ export async function run(
   // Printing a script needs no configuration, and must work before the CLI is ever configured.
   if (command === 'setup') return await setup(rest, environmentVariables, terminal);
   if (command === 'completion') return printCompletionScript(terminal, rest[0]);
+  if (command === 'skill') return rest[0] === 'install'
+    ? installSkill(fileURLToPath(new URL('..', import.meta.url)), environmentVariables, terminal, rest.slice(1))
+    : (terminal.writeError(commandUsage(['skill'], environmentVariables)), 1);
   if (command === 'plans' && rest[0] === 'open') {
     if (!BUILD_DEPLOYMENT || !PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]) {
       terminal.writeError('Inheriti Workspace is unavailable.'); return 1;
@@ -112,7 +117,7 @@ export async function run(
       if ((separator < 0 ? rest : rest.slice(0, separator)).includes('--organization'))
         throw new Error('automation_organization_option_forbidden');
       return await withAutomationSecrets(configuration.apiUrl, environmentVariables,
-        (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true));
+        (workload) => secrets(workload, terminal, rest, async (id) => requiredAutomationPlanId(id), true, environmentVariables));
     }
     const context = createCliContext(configuration, defaultSessionPath(environmentVariables));
     if (command === 'update') {
@@ -133,7 +138,7 @@ export async function run(
       return await organizationCommand(context, configuration, defaultConfigurationPath(environmentVariables), terminal, rest);
     }
     if (command === 'automations') {
-      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'runtime', 'grant', 'setup', 'publish', 'pair'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
+      if (!['list', 'grants', 'create', 'verify', 'trust', 'disable', 'usage', 'runtime', 'grant', 'setup', 'publish', 'pair', 'status'].includes(rest[0] ?? '')) { terminal.writeError(commandUsage(['automations'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       if (rest[0] === 'pair' && rest[1] === 'redeem' && rest.length === 2) {
         await pairAutomationIdentity(configuration.apiUrl, environmentVariables);
@@ -161,11 +166,30 @@ export async function run(
         }
         terminal.writeError(commandUsage(['automations', 'runtime'], environmentVariables)); return 1;
       }
-      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);
+      const scopedAutomation = (rest[0] === 'setup' && rest[1] === 'github') || (rest[0] === 'create' && rest[1] === 'github') || rest[0] === 'grant' || rest[0] === 'status'
+        ? extractOrganization(rest) : undefined;
+      if (scopedAutomation && 'error' in scopedAutomation) { terminal.writeError(scopedAutomation.error); return 1; }
+      const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal, scopedAutomation?.organizationId);
       const scoped = createCliContext(configuration, defaultSessionPath(environmentVariables), organization.id);
       scoped.organization = organization;
-      if (rest[0] === 'list' || rest[0] === 'grants') return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? rest[1] : undefined);
-      if (rest[0] === 'setup') return await automationSetup(scoped, configuration, terminal, rest.slice(1));
+      if (rest[0] === 'status') {
+        const controller = new AbortController();
+        const unregister = registerCliCancel(controller);
+        try { return await automationStatus(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(1), controller.signal); }
+        finally { unregister(); }
+      }
+      if (rest[0] === 'list' || rest[0] === 'grants') {
+        const argumentsAfterVerb = rest.slice(1);
+        const all = argumentsAfterVerb.at(-1) === '--all';
+        const values = all ? argumentsAfterVerb.slice(0, -1) : argumentsAfterVerb;
+        if (rest[0] === 'list' ? values.length !== 0 : values.length !== 1 || !values[0] || values[0].startsWith('--')) {
+          terminal.writeError(rest[0] === 'list' ? 'Usage: inheriti automations list [--all]' : 'Usage: inheriti automations grants PLAN_ID [--all]');
+          return 1;
+        }
+        return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? values[0] : undefined, all);
+      }
+      if (rest[0] === 'setup') return await automationSetup(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(1));
+      if (rest[0] === 'create' && rest[1] === 'github') return await githubAutomationCreate(scoped, configuration, terminal, (scopedAutomation?.argv ?? rest).slice(2));
       if (rest[0] === 'pair' && rest[1] === 'aws') {
         const controller = new AbortController();
         const unregister = registerCliCancel(controller);
@@ -186,7 +210,7 @@ export async function run(
       }
       const controller = new AbortController();
       const unregister = registerCliCancel(controller);
-      try { return await automationManage(scoped, configuration, terminal, controller.signal, rest); }
+      try { return await automationManage(scoped, configuration, terminal, controller.signal, scopedAutomation?.argv ?? rest); }
       finally { unregister(); }
     }
     if (command === 'secrets' && rest[0] === 'publish') {
@@ -260,13 +284,18 @@ if (isEntrypoint) {
   const terminal = processTerminal();
   const argv = process.argv.slice(2);
   const lifecycleInstall = argv[0] === '__skill-install' && process.env.npm_lifecycle_event === 'postinstall';
-  if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
-    try {
-      const result = await reconcileCliSkill(fileURLToPath(new URL('..', import.meta.url)), process.env);
-      if (result.status === 'installed' || result.status === 'updated')
-        terminal.writeError(`Inheriti CLI skill ${result.status}. ${result.backup ? `Previous copy saved at ${result.backup}. ` : ''}Start a new agent session to load it.`);
-      else if (result.status === 'skipped' && result.reason?.startsWith('Unsafe')) terminal.writeError(`Inheriti CLI skill: ${result.reason}.`);
-    } catch { terminal.writeError('Inheriti CLI skill could not be updated; the next CLI command will retry.'); }
+  if (argv[0] === '__skill-install') {
+    if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
+      const status = await installSkill(fileURLToPath(new URL('..', import.meta.url)), process.env, terminal, [], true);
+      if (status !== 0) terminal.writeError('Run inheriti skill install to retry.');
+      else if (!process.stdout.isTTY) {
+        try { if (!(await readSkillChoice(process.env))) terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
+        catch { terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
+      }
+    }
+  } else if (argv[0] && argv[0] !== '__skill-install' && argv[0] !== 'skill' &&
+      !['--help', 'help', '--version', 'version', 'completion', '__complete', 'setup'].includes(argv[0])) {
+    await installSkill(fileURLToPath(new URL('..', import.meta.url)), process.env, terminal, [], true);
   }
-  process.exitCode = argv[0] === '__skill-install' ? 0 : await run(argv, process.env, terminal);
+  if (argv[0] !== '__skill-install') process.exitCode = await run(argv, process.env, terminal);
 }

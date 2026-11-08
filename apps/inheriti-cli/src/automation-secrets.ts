@@ -87,6 +87,10 @@ export async function withAutomationSecrets<T>(
         getAccessToken: getBearerToken,
         getPlan: client.getPlan,
         async withReveal(planId, options, workReveal) {
+          if ('operationContext' in options && options.operationContext !== undefined
+            && (!('supportsOperationContext' in client) || client.supportsOperationContext !== true)) {
+            throw new Error('automation_context_sdk_update_required');
+          }
           const reveal = await client.openReveal(planId, options);
           try {
             const result = await workReveal(reveal);

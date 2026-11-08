@@ -309,6 +309,18 @@ describe('FieldAliasSuggestionStrategy', () => {
     expect(suggestion?.confidence).toBeGreaterThan(0.5);
   });
 
+  it.each(['IP source', 'IP/source'])('maps an imported %s value separately from the website', (label) => {
+    const [suggestion] = strategy.suggest({
+      session: sessionWith('Server login', {
+        username: 'admin', password: 'secret', website: 'example.com', [label]: '10.0.0.1 / internal',
+      }),
+      nodeIds: ['g1'], knownAssetTypes: KNOWN,
+    }).assets;
+    expect(Object.keys(suggestion!.fieldBindings)).toEqual(expect.arrayContaining([
+      'secret.appOrWebsite', 'secret.ipSource',
+    ]));
+  });
+
   it('maps an email-shaped username to email', () => {
     const session = sessionWith('Mail', { username: 'ada@example.com', password: 'secret' });
     session.sources = [

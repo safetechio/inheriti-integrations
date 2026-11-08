@@ -17,7 +17,15 @@ it('completes browser sign-in through the loopback callback', async () => {
     const callback = `${configuration.redirectUri}?code=approved&state=expected`;
     const response = await fetch(callback);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain('Signed in');
+    expect(response.headers.get('content-security-policy')).toContain('img-src data:; font-src data:');
+    const page = await response.text();
+    expect(page).toContain('Signed in');
+    expect(page).toContain('Browser step complete');
+    expect(page).toContain('Return to your MCP client.');
+    expect(page).toContain('Inheriti® MCP');
+    expect(page).toContain('data:image/png;base64,');
+    expect(page).toContain('data:font/ttf;base64,');
+    expect(page).not.toContain('approved');
     await expect(login.completed).resolves.toBeUndefined();
     expect(completeAuthorizationCode).toHaveBeenCalledExactlyOnceWith(callback);
   } finally {
@@ -35,7 +43,12 @@ it('does not report sign-in success when the authorization exchange fails', asyn
   try {
     const response = await fetch(`${configuration.redirectUri}?code=wrong&state=wrong`);
     expect(response.status).toBe(400);
-    expect(await response.text()).toContain('Sign-in failed');
+    const page = await response.text();
+    expect(page).toContain('Sign-in failed');
+    expect(page).toContain('Sign-in error');
+    expect(page).toContain('Inheriti® MCP');
+    expect(page).not.toContain('state_mismatch');
+    expect(page).not.toContain('wrong');
     await expect(login.completed).rejects.toThrow('state_mismatch');
   } finally {
     login.cancel();
@@ -53,7 +66,11 @@ it('passes silent login errors through the SDK for state validation', async () =
     const callback = `${configuration.redirectUri}?error=login_required&state=expected`;
     const response = await fetch(callback);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain('Continue sign-in');
+    const page = await response.text();
+    expect(page).toContain('Continue sign-in');
+    expect(page).toContain('Sign-in required');
+    expect(page).toContain('Inheriti® MCP');
+    expect(page).not.toContain('login_required');
     await expect(login.completed).rejects.toMatchObject({ code: 'login_required' });
     expect(auth.beginAuthorizationCode).toHaveBeenCalledExactlyOnceWith({ prompt: 'none' });
     expect(auth.completeAuthorizationCode).toHaveBeenCalledExactlyOnceWith(callback);

@@ -14,6 +14,12 @@ for connection configuration and the isolated E2E harness for provider tests.
 The command runs in one process. Values are not written to `GITHUB_ENV`; only the child process sees
 the mapped environment variables. Pin both the Action commit and `cli-version` in production.
 
+The optional `reason`, `target`, `image`, and `version` inputs record non-secret operation context.
+For example, a deployment workflow can set `reason: Deploy production service`,
+`target: api-prod`, and `version: ${{ github.sha }}`. The Action passes these as environment
+variables to the CLI; GitHub commit, workflow, and run URL are read from GitHub's standard
+environment by the CLI. Do not put secrets in these inputs.
+
 Child output defaults to `suppress`. Set `output: inherit` explicitly only when you accept that
 child logs may expose credentials. Suppression preserves command failures and does not control
 recipient retention. Pin the tested Action revision and exact CLI version together when that pair

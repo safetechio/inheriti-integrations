@@ -8,16 +8,19 @@ if (!environments.has(environment)) {
   throw new Error('INHERITI_RELEASE_ENV must be one of: dev, stg, prod');
 }
 
+const productName = environment === 'prod' ? 'Inheriti® Importer' : `Inheriti® Importer ${environment.toUpperCase()}`;
+const iconSuffix = environment === 'prod' ? '' : `-${environment}`;
+
 module.exports = {
-  icon: resolve(__dirname, 'public/icon.svg'),
+  icon: resolve(__dirname, `public/icon${iconSuffix}.svg`),
   appId:
     environment === 'prod'
       ? 'io.safetech.inheriti.importer'
       : `io.safetech.inheriti.importer.${environment}`,
-  productName:
-    environment === 'prod' ? 'Inheriti Importer' : `Inheriti Importer ${environment.toUpperCase()}`,
+  productName,
   artifactName: `Inheriti-Importer-${environment === 'prod' ? '' : `${environment}-`}\${version}-\${os}-\${arch}.\${ext}`,
   extraMetadata: {
+    productName,
     version: environment === 'prod' ? baseVersion : `${baseVersion}-${environment}.0`,
   },
   directories: {
@@ -25,6 +28,8 @@ module.exports = {
   },
   files: ['dist/**/*', 'electron/**/*', 'package.json'],
   linux: {
+    executableName: `inheriti-importer${environment === 'prod' ? '' : `-${environment}`}`,
+    icon: resolve(__dirname, `public/favicon${iconSuffix}.png`),
     category: 'Utility',
     syncDesktopName: true,
     target: ['AppImage'],

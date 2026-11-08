@@ -190,11 +190,11 @@ export async function manageAutomationGrant(
   return { organizationId: selected.organizationId, planId, grantId, action };
 }
 export async function startAutomationSetup(this: MetadataTools, connectionId: string) {
+  this.localAutomation();
   const version = this.selectionVersion;
   const selected = await this.selected();
   if (!('organizationId' in selected)) return selected;
   if (version !== this.selectionVersion) throw coded('organization_selection_changed');
-  this.localAutomation();
   if (this.automationJob?.status === 'WAITING') throw coded('automation_setup_in_progress');
   const controller = new AbortController();
   const windowState = { unavailable: false };
@@ -251,6 +251,7 @@ export async function startAutomationPairing(this: MetadataTools, connectionId: 
   };
 }
 export async function automationSetupStatus(this: MetadataTools, jobId: string, cancel = false) {
+  this.localAutomation();
   const job = this.automationJob;
   if (!job || job.id !== jobId) throw coded('automation_setup_not_found');
   if (cancel && job.status === 'WAITING') {

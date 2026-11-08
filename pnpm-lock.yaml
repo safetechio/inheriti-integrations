@@ -5,7 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@safetech/inheriti-core-sdk': 4.0.39
+  '@electron/notarize': 3.1.2
+  '@safetech/inheriti-core-sdk': 4.0.40
 
 importers:
 
@@ -36,8 +37,8 @@ importers:
         specifier: 2.1.0
         version: 2.1.0
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -86,8 +87,8 @@ importers:
   apps/inheriti-guard:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -105,8 +106,8 @@ importers:
   apps/inheriti-ide:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-brand':
         specifier: workspace:*
         version: link:../../packages/brand
@@ -124,8 +125,8 @@ importers:
         specifier: ^15.0.3
         version: 15.1.1(expo-font@57.0.4(expo@57.0.28)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@1.7.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@1.7.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -239,8 +240,8 @@ importers:
         specifier: ^1.12.0
         version: 1.30.0(zod@4.6.5)
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-elements-core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -278,11 +279,11 @@ importers:
         specifier: 6.3.0
         version: 6.3.0
       '@safetech/inheriti-client-sdk':
-        specifier: 1.17.28
-        version: 1.17.28(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 1.17.31
+        version: 1.17.31(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       socket.io-client:
         specifier: 4.8.4
         version: 4.8.4
@@ -294,8 +295,8 @@ importers:
   packages/test-kit:
     dependencies:
       '@safetech/inheriti-core-sdk':
-        specifier: 4.0.39
-        version: 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 4.0.40
+        version: 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
 
 packages:
 
@@ -885,9 +886,9 @@ packages:
     resolution: {integrity: sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ==}
     engines: {node: '>=14'}
 
-  '@electron/notarize@2.5.0':
-    resolution: {integrity: sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A==}
-    engines: {node: '>= 10.0.0'}
+  '@electron/notarize@3.1.2':
+    resolution: {integrity: sha512-S/EH6W/GTe3XiD4oYHW+6xuUWZWjc9F5gayMrNdmRLv7qG9KRYmYE26+RDgC1hYUZVY3qLpa1VftxuL+sL5VQg==}
+    engines: {node: '>= 22.12.0'}
 
   '@electron/osx-sign@1.3.3':
     resolution: {integrity: sha512-KZ8mhXvWv2rIEgMbWZ4y33bDHyUKMXnx4M0sTyPNK/vcB81ImdeY9Ggdqy0SWbMDgmbqyQ+phgejh6V3R2QuSg==}
@@ -1925,14 +1926,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@safetech/inheriti-client-sdk@1.17.28':
-    resolution: {integrity: sha512-XPeqzVE/NtReJqVZqaWh0kU4fu+j3urnLLNpCz4LJk2vlpv4egq7ZnL/CiDiI2JgKr/kA7bctP5V4tJINZMNTQ==}
+  '@safetech/inheriti-client-sdk@1.17.31':
+    resolution: {integrity: sha512-bHfrafeLUeYIVr6I6G/2DtXkFaL2V6l+DDVqGCORmpvGBNxMaHj/OSzW9BkPFXrKiZOXJmzSCmtxDM7TX2CyYg==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.1.0
 
-  '@safetech/inheriti-core-sdk@4.0.39':
-    resolution: {integrity: sha512-TXFZF9WkXvGMIn0bl9PQWWd4MJstUVhP6832S3HpvRVMynJKGjoE/pPwit8LZlcw2QJteb4ss9Q9ke34O94utA==}
+  '@safetech/inheriti-core-sdk@4.0.40':
+    resolution: {integrity: sha512-cT6JETTQIlhypal/pSUWpSagVBxUBXZr60c2X9jIPU9wLcXNyFDS6/KWvChacwNu0XruO3pZOXqSQq9WFs1QBw==}
     peerDependencies:
       '@tanstack/react-query': '*'
       react: ^18.2.0 || ^19.0.0
@@ -7629,10 +7630,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/notarize@2.5.0':
+  '@electron/notarize@3.1.2':
     dependencies:
       debug: 4.4.3
-      fs-extra: 9.1.0
       promise-retry: 2.0.1
     transitivePeerDependencies:
       - supports-color
@@ -8809,9 +8809,9 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.4':
     optional: true
 
-  '@safetech/inheriti-client-sdk@1.17.28(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-client-sdk@1.17.31(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
-      '@safetech/inheriti-core-sdk': 4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+      '@safetech/inheriti-core-sdk': 4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/safekey-sdk': 1.0.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -8826,7 +8826,7 @@ snapshots:
       - utf-8-validate
       - zustand
 
-  '@safetech/inheriti-core-sdk@4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@1.7.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-core-sdk@4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@1.7.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       '@safetech/safekey-sdk': 1.0.1
       '@tanstack/query-core': 5.104.0
@@ -8854,7 +8854,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@safetech/inheriti-core-sdk@4.0.39(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-core-sdk@4.0.40(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       '@safetech/safekey-sdk': 1.0.1
       '@tanstack/query-core': 5.104.0
@@ -9523,7 +9523,7 @@ snapshots:
       '@electron/asar': 3.4.1
       '@electron/fuses': 1.8.0
       '@electron/get': 3.1.0
-      '@electron/notarize': 2.5.0
+      '@electron/notarize': 3.1.2
       '@electron/osx-sign': 1.3.3
       '@electron/rebuild': 4.2.0
       '@electron/universal': 2.0.3

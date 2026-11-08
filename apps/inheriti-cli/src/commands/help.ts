@@ -24,6 +24,7 @@ inheriti <command>
   organizations use [id] Select an Inheriti® Business organisation
   ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
   ${automationEnabled ? 'automations grants PLAN_ID List safe grant metadata for one plan' : ''}
+  ${automationEnabled ? 'automations status  Show setup and execution progress' : ''}
   ${automationEnabled ? 'automations create|verify|trust|disable|usage|runtime Manage connections and runtime guidance' : ''}
   ${automationEnabled ? 'automations pair start|redeem|aws|google Verify a workload without copying its proof' : ''}
   ${automationEnabled ? 'secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)' : ''}
@@ -54,6 +55,7 @@ inheriti <command>
   setup [--yes|--no-completion] [--shell bash|zsh|fish]
                      Enable shell autocomplete (Yes is the default)
   completion <shell> Print the tab-completion script for bash, zsh or fish
+  skill install      Choose Codex, Claude Code, both, or another skills folder
   update [--install] Check for a newer CLI build; install after confirmation
   version            Print the CLI version
   help [command]    Show detailed usage without signing in
@@ -75,16 +77,18 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
   if (command === 'secrets' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
     return 'Usage: inheriti secrets <exec|resolve>\n\nRun reveal-authorized secret delivery.';
   const details: Readonly<Record<string, string>> = {
+    skill: `Usage: inheriti skill install [--target codex|claude|all | --directory ABSOLUTE_PATH]\n\nChoose where to install the bundled agent skill. A terminal offers a selector; scripts must specify a target or directory.`,
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nSign out and clear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Inheriti® Business organisations or select one for this account.`,
-    automations: `Usage: inheriti automations <list|grants PLAN_ID|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
+    automations: `Usage: inheriti automations <list|grants PLAN_ID|status|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
       `create|activate|member|revoke>\n\nManage Inheriti® Business automation connections and grants locally. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
-    'automations list': `Usage: inheriti automations list\n\nPrint safe connection metadata for the selected Inheriti® Business Organisation.`,
-    'automations grants': `Usage: inheriti automations grants PLAN_ID\n\nPrint safe grant metadata for one plan in the selected Inheriti® Business Organisation.`,
-    'automations create': `Usage: inheriti automations create --name NAME --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
+    'automations status': `Usage: inheriti automations status [--organization ID] [--plan ID] [--connection ID] [--job ID] [--watch] [--json]\n\nRead setup and recent execution progress for any automation provider. A terminal can select a missing plan or connection; scripts must pass both. --job narrows to one known attempt. --watch polls every five seconds until Ctrl+C; combined with --json it emits one JSON object per line. It never starts an action or verifies the external provider run.`,
+    'automations list': `Usage: inheriti automations list [--all]\n\nPrint safe operational connection metadata for the selected Inheriti® Business Organisation. Use --all to include disabled connections.`,
+    'automations grants': `Usage: inheriti automations grants PLAN_ID [--all]\n\nPrint safe operational grant metadata for one plan in the selected Inheriti® Business Organisation. Use --all to include revoked grants and grants linked to inactive connections.`,
+    'automations create': `GitHub: inheriti automations create github [--organization ID] [--repository OWNER/REPO] [--environment GH_ENV] [--workflow FILE.yml]\nRun inside the intended repository with gh installed and authenticated. Classic OAuth tokens need the workflow scope; use gh auth refresh -h github.com -s workflow if prompted. Creates or reuses only an active Inheriti connection; a disabled match stays disabled and a fresh connection is created. Setup and plan grant are separate.\n\nUsage: inheriti automations create --name NAME --provider GITHUB|GOOGLE_CLOUD|AWS|PORTABLE ` +
       `--deployment-environment TEST|LIVE [--id ID] PROVIDER_FIELDS\n\nGITHUB: --repository OWNER/REPO ` +
       `from the repository URL; --environment NAME from Settings > Environments and the job; ` +
       `--workflow 'OWNER/REPO/.github/workflows/FILE.yml@refs/heads/BRANCH' for the file and branch ` +
@@ -133,7 +137,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `(--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]\n\n` +
       `Preview one Google Cloud Secret Manager target per selected field. --apply publishes new versions only to new ` +
       `or Inheriti-managed secrets. Requires Application Default Credentials and Secret Manager permissions. Subsequent reads use Google Cloud IAM; plan changes or revocation do not update or delete these copies. No automatic synchronization or rotation.`,
-    'automations setup': `Usage: inheriti automations setup --plan PLAN_ID [--connection CONNECTION_ID] ` +
+    'automations setup': `GitHub: inheriti automations setup github --organization ID [--connection ID] [--plan ID] [--field ASSET.FIELD] [--apply] [--retry]\n\n` +
+      `Run inside the repository linked to the selected connection with gh installed and authenticated. Classic OAuth tokens need the workflow scope; use gh auth refresh -h github.com -s workflow if prompted. Environment, workflow, and branch come from its trust.\n` +
+      `Preview by default. Interactive setup can select missing safe inputs and confirm applying; noninteractive setup requires explicit connection, plan and field. --apply commits a dedicated workflow on the default branch; its narrow push trigger registers it in Actions but runs no pairing or protected job. Pairing starts through a separate manual dispatch. The commit may trigger other repository push workflows. --retry starts a new pairing attempt after a failed or expired one. A protected local DEV artifact profile can supply the CLI package without npm publication; setup uploads it and stores its short-lived URL as a GitHub Actions secret. Grant plan access separately; protected usage is not run.\n\n` +
+      `Usage: inheriti automations setup --plan PLAN_ID [--connection CONNECTION_ID] ` +
       `(--map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ... | --map NAME=ASSET.FIELD ... | --field ASSET.FIELD --env-name NAME) ` +
       `[--project PROJECT --region REGION (--job JOB | --service SERVICE) | --region REGION --cluster CLUSTER ` +
       `(--service SERVICE | --task-definition ARN) | --region REGION --instance INSTANCE_ID ` +
@@ -150,7 +157,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `and the revision from the preview. In an interactive terminal, review the safe preview and confirm ` +
       `instead of passing a revision. It does not build or publish images. Mount any private key only on ` +
       `the custom runner. Never pass secret values as flags.`,
-    'automations grant': `Usage: inheriti automations grant create|activate|member|revoke [--plan PLAN_ID] [--id GRANT_ID] [--grant ` +
+    'automations grant': `Usage: inheriti automations grant create|activate|member|revoke [--organization ID] [--plan PLAN_ID] [--id GRANT_ID] [--grant ` +
       `GRANT_ID] [--connection CONNECTION_ID] [--member MEMBER_ID]\n\nCreate accepts --id and requires connection and ` +
       `responsible member; activate/revoke require grant; member also requires a new responsible ` +
       `member. Missing IDs can be selected in a terminal.`,
@@ -210,10 +217,10 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     secrets: `Usage: inheriti secrets <exec|resolve|publish>\n\nDirect Inheriti runtime delivery uses exec and the same ` +
       `reveal and use flows as plans commands. Publish is an optional one-time cloud-store copy. Inheriti® Business commands accept --organization ID to select an ` +
       `eligible organisation for that command.`,
-    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--output inherit] -- ` +
+    'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--automation] [--reason TEXT] [--commit SHA] [--workflow REF] [--pipeline URL] [--target TEXT] [--image TEXT] [--version TEXT] [--output inherit] -- ` +
       `EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. ` +
       `The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; ` +
-      `--output inherit keeps the child's logs visible and may expose credentials.`,
+      `--output inherit keeps the child's logs visible and may expose credentials. Context flags require --automation and must precede --. GitHub automation can supply commit, workflow, and pipeline context from its allowlisted environment.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD ` +
       `--allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its ` +
       `value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its ` +

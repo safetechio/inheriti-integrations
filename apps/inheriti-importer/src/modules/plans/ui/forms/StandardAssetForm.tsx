@@ -3,6 +3,7 @@ import {
   validateAssetEditorValues,
 } from '@modules/plans/domain/asset-metadata';
 import type { AssetFormProps } from '@modules/plans/ui/asset-editor';
+import { getAssetFieldDisplayName } from '@modules/_shared/domain/asset-field-display-name';
 import { AssetForm, AssetTextField, useAssetForm, type AssetFormValues } from './AssetForm';
 
 const PASSWORD_FIELDS = new Set(['password', 'apiKey', 'privateKey', 'pinCode', 'code']);
@@ -37,7 +38,11 @@ export function StandardAssetForm({ asset, assetType, onSubmit, onCancel }: Asse
           <AssetTextField
             key={field.source}
             source={field.source as `secret.${string}`}
-            label={field.id.replaceAll('-', ' ')}
+            label={
+              field.source === 'secret.ipSource'
+                ? getAssetFieldDisplayName(field.source)
+                : field.id.replaceAll('-', ' ')
+            }
             multiline={field.inputKind === 'textarea' || field.inputKind === 'word-list'}
             secure={PASSWORD_FIELDS.has(field.source.split('.').at(-1) ?? '')}
           />

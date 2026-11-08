@@ -3,6 +3,8 @@ import type { LocalPlanHints } from '@safetech/inheriti-elements-core/node-base'
 import { isFieldSelector } from './reveal.js';
 import type { MemberLogsOptions } from './members.js';
 import type { ListPlansOptions, PlanLogsOptions } from './plans.js';
+import { contextFlag, validContextValue } from './operation-context.js';
+import type { OperationContext } from './operation-context.js';
 
 const GOVERNED_FLAG_REMOVED = 'Reveals no longer take --governed: the plan applies its own approval rules automatically.';
 
@@ -209,10 +211,18 @@ export function parseUseOptions(argv: readonly string[], commandName = 'plans us
   const tempFiles: Array<{ name: string; selector: string }> = [];
   const sockets: Array<{ name: string; selector: string }> = [];
   const fds: Array<{ fd: number; selector: string }> = [];
+  const operationContext: OperationContext = {};
   for (const position = { index: 0 }; position.index < separator; position.index += 1) {
     const option = argv[position.index];
     const value = argv[++position.index];
     if (!value) return { error: `Incomplete ${commandName} option: ${option}` };
+    const contextKey = commandName === 'secrets exec' ? contextFlag(option!) : undefined;
+    if (contextKey) {
+      if (operationContext[contextKey] !== undefined) return { error: `${option} may be given only once.` };
+      if (!validContextValue(contextKey, value)) return { error: `Invalid ${option} value.` };
+      operationContext[contextKey] = value;
+      continue;
+    }
     if (option === '--stdin') {
       if (state.stdin !== undefined) return { error: '--stdin may be mapped only once.' };
       state.stdin = value;
@@ -258,6 +268,7 @@ export function parseUseOptions(argv: readonly string[], commandName = 'plans us
   return {
     ...(state.stdin === undefined ? {} : { stdin: state.stdin }), envs, tempFiles, sockets, fds, command,
     ...(state.ttlMs === undefined ? {} : { ttlMs: state.ttlMs }), output: state.output,
+    ...(Object.keys(operationContext).length ? { operationContext } : {}),
   };
 }
 

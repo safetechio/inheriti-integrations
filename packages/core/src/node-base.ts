@@ -94,6 +94,8 @@ export { LocalPlanAssistant } from './local-plan-assistant.js';
 export { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local-plan-source.js';
 export { LocalPlanDraftValue, localPlanQuestions, localPlanFieldMaxLength } from './local-plan-draft.js';
 export { runLocalPlanBrowser } from './local-plan-browser.js';
+export type { LocalPlanCreationPhase } from './local-plan-browser.js';
+export { renderLocalPlanCreationProgressPage } from './local-plan-page.js';
 export { createNativeWindowSession } from './node-native-window.js';
 export { chooseInheritiFile, chooseSaveInheritiFile, openInheritiFile } from './node-workspace-launch.js';
 export { saveProtectedFile } from './node-protected-file.js';
@@ -156,6 +158,7 @@ export type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node-base';
 export type { QuickPlanEditPhase, QuickPlanEditApprovalProgress } from '@safetech/inheriti-client-sdk/node-base';
 
 export type { ListPlanLogsInput, OperatorSession, OperatorSessionStore, PlanDetail, PlanLog, PlanLogPage, PlanSummary } from './index.js';
+export type { ListPlansInput, ListOrganizationMembersInput, ListOrganizationAuditTrailInput, OrganizationInsightsInput } from './index.js';
 export { revealModeOf } from './plans.js';
 export { custodianShareCopy } from './custodian-copy.js';
 export { createSafeKeyProPinSession, findSafeKeyProDevice, waitForSafeKeyProDevice } from './node-safekey-pro.js';
@@ -168,6 +171,7 @@ export { MemoryOperatorSessionStore } from './operator-auth.js';
 export { createNodeAutomationRevealClient } from '@safetech/inheriti-client-sdk/node-base';
 export { readOrganizationPreferences, saveOrganizationPreferences } from './node-organization-preferences.js';
 export { createAutomationSetupOperations, automationRuntimeInstallInstructions, githubAutomationWorkflow, githubAutomationWorkflowLocation, isGithubAutomationSelector } from './automation-setup.js';
+export { githubAutomationDevWorkflow, isManagedGithubDevWorkflow, githubDevArtifactSecretName } from './github-dev-workflow.js';
 export type { AutomationSetupOperations, AutomationConnection, AutomationGrant, AutomationTrust, AutomationProvider, AutomationPlan, AutomationMember, VerifiedGithubRelease } from './automation-setup.js';
 export { AUTOMATION_PROVIDERS, AutomationProviderValue } from './automation-provider.js';
 export { generateAutomationRuntimeBundle } from './automation-runtime-setup.js';
@@ -192,3 +196,6 @@ export { applyCloudRunAutomation, applyCloudRunServiceAutomation } from './autom
 export type { CloudRunAutomationInput, CloudRunAutomationResult } from './automation-cloud-run-apply.js';
 export { runLocalAutomationSetupBrowser, runLocalAutomationProofBrowser } from './local-automation-setup-browser.js';
 export type { AutomationSetupResult, LocalAutomationSetupBrowserOptions } from './local-automation-setup-browser.js';
+
+export { createAutomationStatusReader, parseAutomationStatus } from './automation-status.js';
+export type { AutomationStatusSnapshot, AutomationStatusAction } from './automation-status.js';

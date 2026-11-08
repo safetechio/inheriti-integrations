@@ -204,6 +204,14 @@ describe('local plan assistant', () => {
     const draft = { title: 'Keys', asset: { type: 'API-KEY', name: 'Service', fields: { apiKey: { sourceId: source.id, start, end: source.text.length } } }, questions: [], unassignedSources: [] };
     expect(() => validateLocalPlanDraft(draft, [source])).toThrow('Invalid source value');
   });
+  it('preserves a declared IP/source value as ordinary text', () => {
+    const source = { id: 'message', kind: 'message' as const, text: 'password: sample-password\nsource: office VPN' };
+    const start = source.text.indexOf('office VPN');
+    const draft = { title: 'Account', asset: { type: 'USER-PSWD', name: 'Login', fields: {
+      ipSource: { sourceId: source.id, start, end: start + 'office VPN'.length },
+    } }, questions: [], unassignedSources: [] };
+    expect(confirmedLocalPlanInput(draft, [source]).asset.secret).toEqual({ ipSource: 'office VPN' });
+  });
   it('accepts multiple labeled asset types and permits selecting one explicitly', async () => {
     const source = parseLocalTextSource('chat', 'password: "example-123"\napiKey: "sample-key"');
     expect(localPlanAssetCandidates([source])).toEqual(['USER-PSWD', 'API-KEY']);

@@ -19,10 +19,15 @@ vi.mock('../src/local-browser.js', () => ({
 }));
 vi.mock('../src/safekey-pro.js', () => ({ openSafeKeyProPrompt: async () => ({ selectCustodianDevice: () => 'SK_MOBILE', close: () => undefined }) }));
 
-import { MetadataTools, registerRevealTools } from '../src/server.js';
+
+vi.mock('../src/feature-flags.js', () => ({ MCP_FEATURE_FLAGS: Object.fromEntries(
+  ['local', 'dev', 'stg', 'prod'].map(deployment => [deployment, { planCreation: true, planReveal: true }]),
+) }));
+import { MetadataTools } from '../src/server.js';
+import { registerDownloadPlanAsset } from '../src/tools/download_plan_asset.js';
 
 it('downloads a binary through the local page without returning bytes or a URL to MCP', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const bytes = Uint8Array.from([0, 255, 60, 62]);
   const exportAsset = vi.fn(async (_selector: string, destination: (asset: unknown) => Promise<void>) => {
     await destination({ id: 'file-1', fileName: 'report.pdf', mimeType: 'application/pdf', bytes });
@@ -49,7 +54,7 @@ it('registers the download tool with a status-only MCP result', async () => {
     schemas.set(name, options.inputSchema); handlers.set(name, handler);
   } };
   const reveal = vi.fn().mockResolvedValue({ jobId: 'job-1', status: 'WAITING', phase: 'STARTING' });
-  registerRevealTools(server as never, { reveal, revealStatus: vi.fn() } as never);
+  registerDownloadPlanAsset(server as never, { reveal, revealStatus: vi.fn() } as never);
   const result = await handlers.get('download_plan_asset')!({ planId: 'plan-1', asset: 'file-1' });
   expect(reveal).toHaveBeenCalledWith('plan-1', 'file-1', 'ASSET');
   expect(schemas.get('download_plan_asset')!.safeParse({ planId: 'plan-1', asset: 'file-1', protected: false }).success).toBe(false);
@@ -59,7 +64,7 @@ it('registers the download tool with a status-only MCP result', async () => {
 });
 
 it('rejects protected file options when the local flag is off', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org-1' });
   await expect(tools.reveal('plan-1', 'file-1', 'ASSET', { openLimit: 2 }))
@@ -69,7 +74,7 @@ it('rejects protected file options when the local flag is off', async () => {
 });
 
 it('allows the ordinary binary reveal when protected files are disabled', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { deployment: 'local' };
   const withReveal = vi.fn();
   tools.selected = async () => ({ organizationId: 'org-1', core: {
@@ -82,7 +87,7 @@ it('allows the ordinary binary reveal when protected files are disabled', async 
 });
 
 it('reports a named moderation denial without exposing delivered material', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'GOVERNED' }, participants: [{ id: 'm1',
       displayName: 'Ada', lifecycle: 'ACTIVE', relationships: ['MODERATOR'] }] }),
@@ -100,7 +105,7 @@ it('reports a named moderation denial without exposing delivered material', asyn
 });
 
 it.each(['FIELD', 'ASSET'] as const)('keeps %s delivery pending until local confirmation', async kind => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   let confirm!: () => void;
   const delivery = new Promise<void>(resolve => { confirm = resolve; });
   const deliver = kind === 'FIELD' ? deliverInBrowser : deliverAssetInBrowser;
@@ -124,7 +129,7 @@ it.each(['FIELD', 'ASSET'] as const)('keeps %s delivery pending until local conf
 });
 
 it.each(['local_window_unavailable', 'local_delivery_expired', 'local_delivery_canceled'])('reports %s from the delivery callback safely', async code => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   deliverAssetInBrowser.mockRejectedValueOnce(new Error(code));
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' } }),
@@ -145,7 +150,7 @@ it.each(['local_window_unavailable', 'local_delivery_expired', 'local_delivery_c
 });
 
 it.each([false, true])('delivers deduplicated selections in one reveal (all=%s)', async all => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const consumeFields = vi.fn(async (requests: Array<{ selector: string }>, destination: (fields: Array<{ value: string }>) => Promise<void>) => destination(requests.map(request => ({ value: `private-${request.selector}` }))));
   const bytes = Uint8Array.from([255]);
   const exportAsset = vi.fn(async (_selector, destination) => {
@@ -181,7 +186,7 @@ it.each([false, true])('delivers deduplicated selections in one reveal (all=%s)'
 });
 
 it('rejects conflicting or unknown selections before approvals', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const withReveal = vi.fn();
   tools.selected = async () => ({ organizationId: 'org', core: {
     getPlan: async () => ({ assets: [{ id: 'account', code: 'account', fieldNames: ['password'] }] }), withReveal,
@@ -196,7 +201,7 @@ it('rejects conflicting or unknown selections before approvals', async () => {
 
 
 it('does not open local delivery after the reveal grant expires', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const deliveryCalls = deliverFieldsInBrowser.mock.calls.length;
   tools.selected = async () => ({ organizationId: 'org', core: {
     getPlan: async () => ({ assets: [{ id: 'account', fieldNames: ['password'] }] }),

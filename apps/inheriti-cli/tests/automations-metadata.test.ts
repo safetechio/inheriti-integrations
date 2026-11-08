@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const { listConnections, listGrants, proofBrowser, createConnection, createGrant, activateGrant, disableConnection, changeTrust, revokeGrant, replaceResponsibleMember, getVerifiedGithubRelease, close, complete, windowClosed, select, installEc2Cli } = vi.hoisted(() => ({
-  listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'CI', provider: 'GITHUB', environment: 'TEST', status: 'ACTIVE', trust: { privateKey: 'NEVER_PRINT' }, verifiedIdentity: 'NEVER_PRINT' }]),
-  listGrants: vi.fn(async () => [{ id: 'grant-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE', proof: 'NEVER_PRINT' }]),
+  listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'CI', provider: 'GITHUB', environment: 'TEST', status: 'VERIFIED', trust: { privateKey: 'NEVER_PRINT' }, verifiedIdentity: 'NEVER_PRINT' }]),
+  listGrants: vi.fn(async (): Promise<Array<{ id: string; planId?: string; connectionId: string; responsibleMemberId: string; status: string; proof?: string }>> =>
+    [{ id: 'grant-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE', proof: 'NEVER_PRINT' }]),
   close: vi.fn(), complete: vi.fn(), windowClosed: { callback: undefined as undefined | ((reason: 'unavailable' | 'closed') => void) },
   proofBrowser: vi.fn(async (_options: { signal: AbortSignal }) => ({ action: 'verified' })),
   createConnection: vi.fn(async () => {}), createGrant: vi.fn(async () => {}), activateGrant: vi.fn(async () => {}),
@@ -41,6 +42,18 @@ it('prints only allowlisted connection and grant metadata', async () => {
   expect(printed).toContain('member-1');
   expect(printed).not.toContain('NEVER_PRINT');
   expect(listGrants).toHaveBeenCalledWith('plan-1');
+});
+
+it('hides grants on disabled connections by default and retains them with --all', async () => {
+  listConnections.mockResolvedValueOnce([
+    { id: 'connection-1', name: 'CI', provider: 'GITHUB', environment: 'TEST', status: 'DISABLED', trust: { method: 'GITHUB_ACTIONS_OIDC', repositoryName: 'owner/repo', environment: 'prod', workflow: 'owner/repo/.github/workflows/x.yml@refs/heads/main' } },
+  ] as never);
+  const output = terminal(false);
+  expect(await automationMetadata(context as never, configuration as never, output, 'plan-1')).toBe(0);
+  expect(output.write.mock.calls.flat().join('\n')).not.toContain('grant-1');
+  const history = terminal(false);
+  expect(await automationMetadata(context as never, configuration as never, history, 'plan-1', true)).toBe(0);
+  expect(history.write.mock.calls.flat().join('\n')).toContain('grant-1');
 });
 
 it('prints GitHub usage only for an active grant and verified connection with exact destination', async () => {
@@ -435,6 +448,38 @@ it('creates and activates a grant with explicit nonsecret IDs', async () => {
   expect(activateGrant).toHaveBeenCalledWith('plan-1', 'grant-2');
   expect(output.write.mock.calls.flat()).toContain('Grant created: grant-2');
   expect(output.write.mock.calls.flat()).toContain('Grant activated: grant-2');
+});
+
+it('accepts only an exact create retry with the same ID, connection, and member', async () => {
+  const output = terminal(false);
+  const run = () => automationManage(context as never, configuration as never, output, new AbortController().signal,
+    ['grant', 'create', '--plan', 'plan-1', '--connection', 'connection-1', '--member', 'member-1', '--id', 'grant-2']);
+  createGrant.mockRejectedValueOnce(new Error('automation_grant_already_exists'));
+  listGrants.mockResolvedValueOnce([{ id: 'grant-2', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'PENDING_VERIFICATION' }]);
+  expect(await run()).toBe(0);
+  expect(output.write.mock.calls.flat()).toContain('Grant already exists: grant-2');
+  createGrant.mockRejectedValueOnce(new Error('automation_grant_already_exists'));
+  listGrants.mockResolvedValueOnce([{ id: 'grant-2', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'other', status: 'ACTIVE' }]);
+  await expect(run()).rejects.toThrow('automation_grant_already_exists');
+  createGrant.mockRejectedValueOnce(new Error('automation_grant_already_exists'));
+  listGrants.mockResolvedValueOnce([{ id: 'other-grant', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE' }]);
+  await expect(run()).rejects.toThrow('automation_grant_already_exists');
+});
+
+it('accepts only an exact activation retry after confirming the grant is active', async () => {
+  const output = terminal(false);
+  const run = () => automationManage(context as never, configuration as never, output, new AbortController().signal,
+    ['grant', 'activate', '--plan', 'plan-1', '--grant', 'grant-2']);
+  activateGrant.mockRejectedValueOnce(new Error('automation_grant_already_active'));
+  listGrants.mockResolvedValueOnce([{ id: 'grant-2', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE' }]);
+  expect(await run()).toBe(0);
+  expect(output.write.mock.calls.flat()).toContain('Grant already active: grant-2');
+  activateGrant.mockRejectedValueOnce(new Error('automation_grant_already_active'));
+  listGrants.mockResolvedValueOnce([{ id: 'grant-2', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'PENDING_VERIFICATION' }]);
+  await expect(run()).rejects.toThrow('automation_grant_already_active');
+  activateGrant.mockRejectedValueOnce(new Error('automation_grant_already_active'));
+  listGrants.mockResolvedValueOnce([{ id: 'other-grant', planId: 'plan-1', connectionId: 'connection-1', responsibleMemberId: 'member-1', status: 'ACTIVE' }]);
+  await expect(run()).rejects.toThrow('automation_grant_already_active');
 });
 
 it('offers explicit connection and grant recovery actions', async () => {

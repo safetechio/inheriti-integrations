@@ -64,9 +64,9 @@ it('registers only always-on tools by default over the real stdio transport', as
     client = await connect(directory, false);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_reveal_status', 'check_update', 'download_plan_asset',
-      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'reveal_plan_secret', 'select_organization',
+      'abort_plan_access', 'check_update',
+      'get_backup_plan', 'get_organization_insights', 'get_plan_responsibilities', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organization_audit_trail', 'list_organization_members', 'list_organizations',
+      'logout', 'select_organization',
     ]);
     const result = await client.callTool({ name: 'check_update', arguments: {} });
     expect(result).toMatchObject({ content: [{ type: 'text', text: expect.stringContaining('"updateAvailable":false') }] });
@@ -76,27 +76,22 @@ it('registers only always-on tools by default over the real stdio transport', as
   }
 }, 30_000);
 
-it('registers local automation tools with schema and safe errors over real stdio', async () => {
-  const directory = await bundleMcp('local');
+it.each(['local', 'dev', 'stg', 'prod'])('omits automation tools over real stdio in %s', async deployment => {
+  const directory = await bundleMcp(deployment);
   let client: Client | undefined;
   try {
     client = await connect(directory, false);
     const registered = (await client.listTools()).tools;
     const tools = registered.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'activate_automation_grant', 'apply_automation_runtime', 'change_automation_trust', 'check_automation_setup_status', 'check_reveal_status', 'check_update', 'create_automation_connection', 'create_automation_grant', 'disable_automation_connection', 'download_plan_asset',
-      'get_automation_runtime_install_instructions', 'get_backup_plan', 'github_automation_usage', 'inspect_automation_cloud_identity', 'inspect_automation_ec2_identity', 'list_automation_connections', 'list_automation_grants', 'list_automation_members', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'pair_aws_automation_service', 'pair_google_cloud_run', 'prepare_automation_ec2', 'prepare_automation_runtime', 'publish_plan_fields_to_aws', 'publish_plan_fields_to_google_cloud', 'replace_automation_responsible_member', 'reveal_plan_secret', 'revoke_automation_grant', 'select_organization', 'start_automation_pairing', 'start_automation_setup',
+      'abort_plan_access', 'check_update', 'get_backup_plan', 'get_organization_insights', 'get_plan_responsibilities', 'list_backup_plan_logs', 'list_backup_plans',
+      'list_member_logs', 'list_organization_audit_trail', 'list_organization_members', 'list_organizations', 'logout', 'select_organization',
     ]);
-    const setup = registered.find(tool => tool.name === 'create_automation_connection');
-    expect(setup?.description).toContain('ask the human only for missing nonsecret provider values');
-    expect(JSON.stringify(setup?.inputSchema)).toContain('not fetched from Google');
-    expect(JSON.stringify(setup?.inputSchema)).toContain('taskRoleArn');
     const result = await client.callTool({
       name: 'check_automation_setup_status',
       arguments: { jobId: '00000000-0000-0000-0000-000000000000' },
     });
-    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'automation_setup_not_found' }] });
+    expect(result).toMatchObject({ isError: true });
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });
@@ -110,19 +105,10 @@ it('keeps the old flag working and returns a safe error over stdio', async () =>
     client = await connect(directory, true);
     const tools = (await client.listTools()).tools.map(tool => tool.name).sort();
     expect(tools).toEqual([
-      'abort_plan_access', 'check_reveal_status', 'check_update', 'download_plan_asset',
-      'get_backup_plan', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organizations',
-      'logout', 'reveal_plan_secret', 'select_organization',
+      'abort_plan_access', 'check_update',
+      'get_backup_plan', 'get_organization_insights', 'get_plan_responsibilities', 'list_backup_plan_logs', 'list_backup_plans', 'list_member_logs', 'list_organization_audit_trail', 'list_organization_members', 'list_organizations',
+      'logout', 'select_organization',
     ]);
-    const invalid = await client.callTool({ name: 'reveal_plan_secret', arguments: {
-      planId: 'plan', selector: 'account.password', all: true,
-    } });
-    expect(invalid).toMatchObject({ isError: true, content: [{ type: 'text', text: 'asset_selector_invalid' }] });
-    const result = await client.callTool({
-      name: 'check_reveal_status',
-      arguments: { jobId: '00000000-0000-0000-0000-000000000000' },
-    });
-    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'reveal_not_found' }] });
   } finally {
     await client?.close();
     await rm(directory, { recursive: true, force: true });
@@ -140,3 +126,25 @@ it('rejects the removed delivery flag', async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it.each(['local', 'dev', 'stg', 'prod'])('omits plan creation and content release in %s', async deployment => {
+  const directory = await bundleMcp(deployment);
+  let client: Client | undefined;
+  try {
+    client = await connect(directory, true);
+    const names = (await client.listTools()).tools.map(tool => tool.name);
+    expect(names).not.toContain('create_plan_with_assistant');
+    expect(names).not.toContain('check_plan_creation_status');
+    expect(names).not.toContain('reveal_plan_secret');
+    expect(names).not.toContain('download_plan_asset');
+    expect(names).not.toContain('check_reveal_status');
+    expect(names).not.toContain('open_inheriti_file');
+    expect(names).not.toContain('publish_plan_fields_to_aws');
+    expect(names).not.toContain('publish_plan_fields_to_google_cloud');
+    expect(names).toContain('abort_plan_access');
+    expect(names).toContain('get_backup_plan');
+  } finally {
+    await client?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);

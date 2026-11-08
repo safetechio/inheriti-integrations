@@ -21,3 +21,7 @@ The integrations share the Inheriti® Elements SDKs for authentication and plan 
 | `safeid-oidc` | The Client SDK stores an authority-bound SafeID access/refresh pair. Each host refreshes and revokes directly with SafeID; no Business family is created. | SafeID access token for `inheriti-integrations-api`, verified by the Business API before local user and organization authorization. |
 
 CLI, IDE, MCP, Go, Workspace, Importer, and Guard use the selected strategy. Stored sessions are bound to authority, API URL, audience, client, issuer, and environment; changing strategy or configuration requires a new sign-in. Keep the Client SDK and each host's dependency revision aligned before activation. The Web browser uses a different transport: its API broker owns provider refresh behind an HttpOnly cookie in SafeID mode. See the [Client SDK operator authentication guide](../elements/sdk/sdk/docs/operator-auth.md) and the [Business API authentication guide](../bussiness/api/docs/architecture/authentication-and-security.md).
+
+## CLI agent skill
+
+Run `inheriti skill install` in a terminal to choose Codex, Claude Code, both, or another skills folder. The CLI saves a successful selection in `skill-install.json` beside its configuration and refreshes the selected skill on later commands. For scripts, use `inheriti skill install --target codex|claude|all` or `--directory ABSOLUTE_PATH`. npm postinstall often has no terminal, so it prints the install command; the first interactive CLI command can also offer the selector. Start a new agent session after installation.

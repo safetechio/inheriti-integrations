@@ -20,19 +20,25 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
 }));
 vi.mock('../src/plan-assistant.js', () => ({ ensureLocalAssistant: async () => ({ executablePath: '/runtime', modelPath: '/model' }) }));
 
+
+vi.mock('../src/feature-flags.js', () => ({ MCP_FEATURE_FLAGS: Object.fromEntries(
+  ['local', 'dev', 'stg', 'prod'].map(deployment => [deployment, { planCreation: true, planReveal: true }]),
+) }));
 import { MetadataTools } from '../src/server.js';
 
 it('reuses the plan context and master key source when browser creation is retried', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const input = { title: 'Plan', assets: [{ type: 'PLAIN-TEXT', meta: { name: 'Note' }, secret: { text: 'private' } }] };
   mock.createContext.mockResolvedValue({ planId: 'plan', storage: { activeDataStorageLayerCount: 1 } });
-  mock.acquireKey.mockResolvedValue('key');
-  mock.createMany.mockRejectedValueOnce(new Error('distribution failed')).mockResolvedValueOnce({ planId: 'plan', status: 'READY' });
-  mock.runBrowser.mockImplementation(async ({ create }: { create: (value: typeof input) => Promise<{ planId: string; status: 'READY' | 'PENDING' }> }) => {
-    await expect(create(input)).rejects.toThrow('distribution failed');
-    return create(input);
+  mock.acquireKey.mockImplementation(async (_signal, onRelaySession) => { onRelaySession(); return 'key'; });
+  mock.createMany.mockImplementationOnce(async (_input, onProgress) => { onProgress?.('encrypting'); throw new Error('distribution failed'); })
+    .mockImplementationOnce(async (_input, onProgress) => { onProgress?.('verifying'); return { planId: 'plan', status: 'READY' }; });
+  const phases: string[] = [];
+  mock.runBrowser.mockImplementation(async ({ create }: { create: (value: typeof input, onProgress?: (phase: string) => void) => Promise<{ planId: string; status: 'READY' | 'PENDING' }> }) => {
+    await expect(create(input, phase => phases.push(phase))).rejects.toThrow('distribution failed');
+    return create(input, phase => phases.push(phase));
   });
   const hints = { title: 'Plan', description: 'Recovery', assetTypes: ['PLAIN-TEXT'] };
   const { jobId } = await tools.createPlanWithAssistant(hints);
@@ -43,6 +49,7 @@ it('reuses the plan context and master key source when browser creation is retri
   expect(mock.createMany).toHaveBeenCalledTimes(2);
   expect(mock.createMany.mock.calls[0]![0].context).toBe(mock.createMany.mock.calls[1]![0].context);
   expect(mock.createMany.mock.calls[0]![0].masterKeySource).toBe(mock.createMany.mock.calls[1]![0].masterKeySource);
+  expect(phases).toEqual(['preparing-key', 'awaiting-key', 'securing', 'encrypting', 'securing', 'verifying']);
   expect(await tools.planCreationStatus(jobId)).toEqual({ jobId, status: 'CREATED', phase: 'COMPLETE', planId: 'plan' });
 });
 
@@ -51,7 +58,7 @@ it('cancels plan creation when the native window closes', async () => {
     signal.addEventListener('abort', () => reject(new Error('local_plan_canceled')), { once: true });
   }));
   mock.nativeSession.close.mockClear();
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const { jobId } = await tools.createPlanWithAssistant();
@@ -70,7 +77,7 @@ it('waits for an in-flight create before reporting cancellation', async () => {
     void create({ title: 'Plan', assets: [{ type: 'PLAIN-TEXT', meta: { name: 'Note' }, secret: { text: 'private' } }] }).then(resolve, reject);
     signal.addEventListener('abort', () => reject(new Error('local_plan_canceled')), { once: true });
   }));
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { apiUrl: 'https://example.test', environment: 'TEST', deployment: 'local' };
   tools.selected = async () => ({ organizationId: 'org', core: { getAccessToken: async () => 'token' } });
   const { jobId } = await tools.createPlanWithAssistant();

@@ -81,7 +81,7 @@ it('shows provider diagnostics when publishing automation secrets', async () => 
 it('routes safe metadata commands and rejects missing plan IDs', async () => {
   expect((await run('local', ['automations', 'list'], false)).code).toBe(0);
   expect((await run('local', ['automations', 'grants', 'plan-1'], false)).code).toBe(0);
-  expect(metadata).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(), 'plan-1');
+  expect(metadata).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(), 'plan-1', false);
   expect((await run('local', ['automations', 'grants'], false)).code).toBe(1);
 });
 

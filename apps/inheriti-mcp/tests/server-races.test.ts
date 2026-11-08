@@ -2,6 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
+
+vi.mock('../src/feature-flags.js', () => ({ MCP_FEATURE_FLAGS: Object.fromEntries(
+  ['local', 'dev', 'stg', 'prod'].map(deployment => [deployment, { planCreation: true, planReveal: true }]),
+) }));
 import { MetadataTools, safeResult } from '../src/server.js';
 import { beginBrowserLogin } from '../src/browser-login.js';
 
@@ -14,7 +18,7 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async importOriginal => ({
 
 it.each([{ operator: 'revoked-org' }, {}])('forgets held keys when organization membership is revoked with preferences %j', async preferences => {
   const preferenceCount = Object.keys(preferences).length;
-  const tools = new MetadataTools();
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } });
   const controller = new AbortController();
   const forgetMasterKey = vi.fn();
   const save = vi.fn();
@@ -34,7 +38,7 @@ it.each([{ operator: 'revoked-org' }, {}])('forgets held keys when organization 
 });
 
 it('allows organization selection after a finished cancellation failure without hiding its outcome', async () => {
-  const tools = new MetadataTools();
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } });
   const job = { status: 'FAILED', code: 'reveal_cancellation_failed' };
   const save = vi.fn();
   Object.assign(tools, {
@@ -50,7 +54,7 @@ it('allows organization selection after a finished cancellation failure without 
 });
 
 it('cancels a plan assistant job on organization switch without a reveal job', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const controller = new AbortController();
   tools.planJob = { id: 'job', status: 'WAITING', phase: 'WINDOW', controller, done: Promise.resolve() };
   tools.ready = async () => ({ core: { listOrganizations: async () => [{ id: 'org-1', name: 'Org' }] } });
@@ -62,14 +66,14 @@ it('cancels a plan assistant job on organization switch without a reveal job', a
 });
 
 it('returns only safe plan creation status fields', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { deployment: 'local' };
   tools.planJob = { id: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1', controller: new AbortController(), done: Promise.resolve(), secret: 'hidden' };
   expect(await tools.planCreationStatus('job')).toEqual({ jobId: 'job', status: 'PENDING', phase: 'COMPLETE', planId: 'plan-1' });
 });
 
 it('uses the selected organization core for plan logs and returns the safe page', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const listPlanLogs = vi.fn().mockResolvedValue({ items: [{ id: 'log-1', event: 'PLAN_UPDATED', details: [] }], total: 1 });
   tools.selected = async () => ({ organizationId: 'org-1', core: { listPlanLogs } });
   expect(await tools.listPlanLogs('plan-1', 5, 10)).toEqual({ organizationId: 'org-1', items: [{ id: 'log-1', event: 'PLAN_UPDATED', details: [] }], total: 1 });
@@ -77,7 +81,7 @@ it('uses the selected organization core for plan logs and returns the safe page'
 });
 
 it('uses the selected organization core for filtered member logs', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const page = { items: [{ id: 'log-1', memberId: 'member-1', source: 'AUTOMATION', event: 'AUTOMATION_CREATED', occurredOn: '2026-10-15T00:00:00Z' }], total: 1 };
   const listMemberLogs = vi.fn().mockResolvedValue(page);
   tools.selected = async () => ({ organizationId: 'org-1', core: { listMemberLogs } });
@@ -93,7 +97,7 @@ function deferred<T>() {
 }
 
 it('clears an admitted OAuth token when tester access is denied', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const clear = vi.fn();
   tools.client = async () => ({
     getAccessToken: async () => 'token',
@@ -107,7 +111,7 @@ it('clears an admitted OAuth token when tester access is denied', async () => {
 });
 
 it('keeps network errors distinct from tester denial', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const clear = vi.fn();
   tools.client = async () => ({ getAccessToken: async () => 'token', listOrganizations: async () => { throw new Error('network unavailable'); } });
   tools.sessions = { load: async () => ({ principal: {} }), clear };
@@ -116,7 +120,7 @@ it('keeps network errors distinct from tester denial', async () => {
 });
 
 it('does not clear a newer login after an older admission check rejects', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const admission = deferred<never>();
   const entered = deferred<void>();
   const oldClear = vi.fn();
@@ -135,7 +139,7 @@ it('does not clear a newer login after an older admission check rejects', async 
 });
 
 it('revokes the retired Business session while a new login remains isolated', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const revoke = deferred<void>();
   const oldClear = vi.fn(() => revoke.promise);
   const oldStoreClear = vi.fn();
@@ -152,7 +156,7 @@ it('revokes the retired Business session while a new login remains isolated', as
 });
 
 it('clears MCP memory when Business revocation fails', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const clear = vi.fn().mockRejectedValue(new Error('network unavailable'));
   const local = vi.fn();
   tools.core = { auth: { clear } };
@@ -163,7 +167,7 @@ it('clears MCP memory when Business revocation fails', async () => {
 });
 
 it('starts a fresh browser login after successful login and later session loss', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.silentAttempted = true;
   let authenticated = false;
   const first = deferred<void>();
@@ -183,7 +187,7 @@ it('starts a fresh browser login after successful login and later session loss',
 });
 
 it('reports a failed browser login before offering another URL', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.silentAttempted = true;
   const completed = deferred<void>();
   const begin = vi.mocked(beginBrowserLogin).mockReset().mockResolvedValueOnce({ authorizationUrl: 'https://login/first', completed: completed.promise, cancel: vi.fn() })
@@ -202,7 +206,7 @@ it('reports a failed browser login before offering another URL', async () => {
 });
 
 it('uses an existing browser session without presenting an interactive challenge', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   let authenticated = false;
   const begin = vi.mocked(beginBrowserLogin).mockReset().mockImplementationOnce(async () => {
     authenticated = true;
@@ -216,7 +220,7 @@ it('uses an existing browser session without presenting an interactive challenge
 });
 
 it('falls back to one interactive challenge after silent login is unavailable', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const begin = vi.mocked(beginBrowserLogin).mockReset()
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/silent', completed: Promise.reject(Object.assign(new Error('login_required'), { code: 'login_required' })), cancel: vi.fn() })
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/interactive', completed: new Promise(() => undefined), cancel: vi.fn() });
@@ -229,7 +233,7 @@ it('falls back to one interactive challenge after silent login is unavailable', 
 });
 
 it('falls back to interactive login after the silent browser callback times out', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const begin = vi.mocked(beginBrowserLogin).mockReset()
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/silent', completed: Promise.reject(new Error('login_browser_callback_timed_out')), cancel: vi.fn() })
     .mockResolvedValueOnce({ authorizationUrl: 'https://login/interactive', completed: new Promise(() => undefined), cancel: vi.fn() });
@@ -240,7 +244,7 @@ it('falls back to interactive login after the silent browser callback times out'
 });
 
 it('reserves a reveal before plan detail and blocks delivery after organization switch', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const plan = deferred<unknown>();
   const withReveal = vi.fn();
   tools.selected = async () => ({ organizationId: 'old', core: { getPlan: () => plan.promise, withReveal } });
@@ -258,7 +262,7 @@ it('reserves a reveal before plan detail and blocks delivery after organization 
 });
 
 it('reports moderator approvals without counting authentication', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const pending = deferred<void>();
   let onProgress!: (progress: unknown) => void;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
@@ -281,7 +285,7 @@ it('reports moderator approvals without counting authentication', async () => {
 });
 
 it('reports an interrupted reveal without leaking the underlying error or opening a new request', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const withReveal = vi.fn().mockRejectedValue(Object.assign(new Error('secret diagnostic'), { code: 'reveal_restart_required' }));
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }), withReveal,
@@ -295,7 +299,7 @@ it('reports an interrupted reveal without leaking the underlying error or openin
 });
 
 it('keeps the governance repair code and instruction in a failed reveal job', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'MODERATED' }, participants: [] }),
     withReveal: async () => { throw Object.assign(new Error('private diagnostic'), { code: 'plan_governance_reconfiguration_required' }); },
@@ -308,7 +312,7 @@ it('keeps the governance repair code and instruction in a failed reveal job', as
 });
 
 it('points a full SafeKey PRO to the Desktop Tool', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }),
     withReveal: async () => { throw new Error('SAFEKEY_NO_SPACE'); },
@@ -319,7 +323,7 @@ it('points a full SafeKey PRO to the Desktop Tool', async () => {
 });
 
 it.each(['EXPIRED', 'PARTICIPANT_REVOKED', 'RECONCILIATION_REQUIRED'])('preserves %s progress after SDK rejection', async phase => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }),
     withReveal: async (_id: string, options: any) => {
@@ -336,7 +340,7 @@ it.each(['EXPIRED', 'PARTICIPANT_REVOKED', 'RECONCILIATION_REQUIRED'])('preserve
 });
 
 it.each(['reveal_cancellation_failed', 'master_key_relay_cancellation_failed'])('reports %s after a local abort', async code => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' }, participants: [] }),
     withReveal: async (_id: string, options: any) => {
@@ -354,7 +358,7 @@ it.each(['reveal_cancellation_failed', 'master_key_relay_cancellation_failed'])(
 });
 
 it('retires the session store on logout so late SDK writes cannot sign the operator back in', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const retired = tools.sessions;
   const token = deferred<string>();
   tools.client = async () => ({ getAccessToken: async () => {
@@ -371,7 +375,7 @@ it('retires the session store on logout so late SDK writes cannot sign the opera
 });
 
 it('aborts matching local work before recovering server plan access', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const controller = new AbortController();
   const abortPlanAccess = vi.fn().mockResolvedValue({ aborted: true });
   tools.selected = async () => ({ organizationId: 'org-1', core: { abortPlanAccess } });
@@ -382,7 +386,7 @@ it('aborts matching local work before recovering server plan access', async () =
 });
 
 it('clears held keys and cancels local work when SDK refresh loses the session', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   const controller = new AbortController();
   const forgetMasterKey = vi.fn();
   tools.scoped = { core: { forgetMasterKey } };
@@ -395,7 +399,7 @@ it('clears held keys and cancels local work when SDK refresh loses the session',
 });
 
 it('does not let retired authorization clear a fresh single-flight challenge', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.silentAttempted = true;
   const oldChallenge = deferred<any>();
   const newChallenge = deferred<any>();
@@ -423,7 +427,7 @@ it('does not let retired authorization clear a fresh single-flight challenge', a
 });
 
 it('reuses the selected SDK client and auth until the operator session changes', async () => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.config = { issuer: 'https://issuer.test', environment: 'TEST', apiUrl: 'https://api.test', clientId: 'client', redirectUri: 'http://localhost' };
   tools.preferences = async () => ({});
   const auth = { getAccessToken: vi.fn(async () => 'token') };
@@ -453,12 +457,12 @@ it.each([
     await writeFile(join(directory, folder, 'config.json'), JSON.stringify(environment === 'prod'
       ? { deployment: 'prod', business: true }
       : { apiUrl: 'https://api.test', issuer: 'https://issuer.test', clientId: 'client', environment }));
-    await expect((new MetadataTools() as any).client()).rejects.toMatchObject({ code: 'live_environment_unavailable_in_development_build' });
+    await expect((Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any).client()).rejects.toMatchObject({ code: 'live_environment_unavailable_in_development_build' });
   } finally { vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); }
 });
 
 it.each([null, undefined])('reports unknown rejection %s safely', async error => {
-  const tools = new MetadataTools() as any;
+  const tools = Object.assign(new MetadataTools(), { config: { deployment: 'local' } }) as any;
   tools.selected = async () => ({ organizationId: 'org-1', core: {
     getPlan: async () => ({ governance: { mode: 'DIRECT' } }),
     withReveal: async () => { throw error; },

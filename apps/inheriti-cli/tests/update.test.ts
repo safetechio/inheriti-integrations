@@ -96,7 +96,7 @@ describe('CLI update selection', () => {
 describe('Business CLI routing', () => {
   it.each([['login'], ['organizations', 'list'], ['plans', 'list']])('checks the signed-in session before %s', async (...args) => {
     vi.resetModules();
-    const listInternalBuilds = vi.fn(async () => [build('0.0.21', `${process.platform}-${process.arch}`)]);
+    const listInternalBuilds = vi.fn(async () => [build('999.0.0', `${process.platform}-${process.arch}`)]);
     const context = { sessions: { load: vi.fn(async () => ({})) }, core: { listInternalBuilds } } as unknown as CliContext;
     const login = vi.fn(async () => 0);
     vi.doMock('../src/configuration.js', async original => ({ ...(await original<object>()), BUILD_DEPLOYMENT: 'dev',

@@ -7,13 +7,13 @@ export const assetNames: Readonly<Record<string, string>> = {
   IMAGE: 'Image', VIDEO: 'Video',
 };
 export const fieldLabels: Readonly<Record<string, string>> = {
-  appOrWebsite: 'App or website', email: 'Email address', apiKey: 'API key', deviceOrApp: 'Device or app',
+  appOrWebsite: 'App or website', ipSource: 'IP/source', email: 'Email address', apiKey: 'API key', deviceOrApp: 'Device or app',
   publicAddress: 'Public address', privateKey: 'Private key', accountNumber: 'Account number',
   cardHolderName: 'Cardholder name', clientId: 'Client ID', cardNumber: 'Card number', expiryDate: 'Expiry date',
   pinCode: 'PIN code', mimeType: 'File type',
 };
 export const fieldMaxLengths: Readonly<Record<string, number>> = {
-  appOrWebsite: 100, email: 254, username: 64, deviceOrApp: 100,
+  appOrWebsite: 100, ipSource: 100, email: 254, username: 64, deviceOrApp: 100,
   app: 100, apiKey: 500, publicAddress: 128, privateKey: 256,
   bank: 64, accountNumber: 40, cardHolderName: 60, clientId: 50, pinCode: 10,
 };

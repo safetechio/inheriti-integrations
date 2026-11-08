@@ -14,7 +14,7 @@ const ROOT = candidates(
   ['login', 'Sign in'], ['logout', 'Sign out'], ['organizations', 'Manage Inheriti® Business organisations'],
   ['plans', 'List and use plans'], ['secrets', 'Machine-oriented secret delivery'],
   ['automations', 'Manage local Inheriti® Business automations'],
-  ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
+  ['skill', 'Install the agent skill'], ['setup', 'Enable shell autocomplete'], ['completion', 'Print shell completion'], ['help', 'Show help'], ['--help', 'Show help'],
 );
 const PLANS = candidates(
   ['create', 'Create a plan with the local assistant'], ['list', 'List plans'], ['show', 'Show plan details'], ['logs', 'Show plan activity'],

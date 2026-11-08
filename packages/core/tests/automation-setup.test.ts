@@ -20,6 +20,23 @@ describe('automation setup', () => {
     expect(yaml).toContain(`uses: safetechio/inheriti-integrations/integrations/github-actions@${'a'.repeat(40)}`);
     expect(yaml).toContain('INHERITI_SECRET=account.password');
     expect(yaml).toContain('run: "test -n \\"$INHERITI_SECRET\\""');
+    expect(yaml).toContain('on: workflow_dispatch');
+    expect(yaml).not.toContain('pair-inheriti:');
+    const paired = githubAutomationWorkflow({ release, environment: 'Production EU', planId: id, connectionId: id,
+      selector: 'account.password', includePairing: true });
+    expect(paired).toContain('      pair_inheriti:\n        type: boolean\n        default: false');
+    expect(paired).toContain('      pairing_attempt:\n        type: string\n        required: false');
+    expect(paired).toContain("run-name: ${{ inputs.pair_inheriti && format('Inheriti pairing {0}', inputs.pairing_attempt) || 'Inheriti secret usage' }}");
+    expect(paired).toContain("  push:\n    paths:\n      - '.github/workflows/**'");
+    expect(paired).toContain("  pair-inheriti:\n    if: ${{ github.event_name == 'workflow_dispatch' && inputs.pair_inheriti }}");
+    expect(paired).toContain("  use-secret:\n    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.pair_inheriti }}");
+    expect(paired).toContain('container: node:22-bookworm-slim');
+    expect(paired).toContain('environment: "Production EU"');
+    expect(paired).toContain(`INHERITI_AUTOMATION_CONNECTION_ID: "${id}"`);
+    expect(paired).toContain(`INHERITI_AUTOMATION_AUDIENCE: "urn:inheriti:automation:connection:${id}"`);
+    expect(paired).toContain('npm install --global --engine-strict @safetech/inheriti-cli@1.2.3');
+    expect(paired).toContain('inheriti automations pair redeem');
+    expect(paired).not.toContain('secret value');
     const devRelease = { ...release, cliVersion: '0.0.14-dev.0' };
     expect(githubAutomationWorkflow({ release: devRelease, environment: 'test', planId: id, connectionId: id, selector: 'account.password' })).toContain('cli-version: "0.0.14-dev.0"');
     await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: devRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(devRelease);

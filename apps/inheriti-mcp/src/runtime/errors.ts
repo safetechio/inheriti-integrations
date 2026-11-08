@@ -40,6 +40,8 @@ const safeCodes = new Set([
   'organization_access_denied',
   'organization_preference_invalid',
   'organization_selection_changed',
+  'organization_permission_required',
+  'organization_query_unavailable',
   'plan_not_found',
   'operator_reauthentication_required',
   'reauthentication_required',
