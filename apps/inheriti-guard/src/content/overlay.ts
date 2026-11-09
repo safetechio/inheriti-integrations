@@ -632,11 +632,14 @@ function semanticOf(input: HTMLInputElement): Semantic | undefined {
   const autocomplete = input.autocomplete.toLowerCase().split(/\s+/).at(-1);
   if (input.type === 'password') return 'password';
   if (input.type === 'email') return 'email';
-  if (autocomplete === 'username') return 'username'; if (autocomplete === 'email') return 'email';
+  if (input.type !== 'text' && input.type !== 'tel' && input.type !== 'search') return undefined;
   if (autocomplete === 'current-password' || autocomplete === 'new-password') return 'password';
+  const hint = input.type === 'text'
+    ? `${input.getAttribute('aria-label') ?? ''} ${input.name} ${input.id} ${input.placeholder} ${Array.from(input.labels ?? []).map((label) => label.textContent ?? '').join(' ')}`.toLowerCase() : '';
+  if (/e-?mail|correo(?:\s+electr[oó]nico)?/u.test(hint) || autocomplete === 'email') return 'email';
+  if (autocomplete === 'username') return 'username';
   if (input.type !== 'text') return undefined;
-  const hint = `${input.getAttribute('aria-label') ?? ''} ${input.name} ${input.id} ${input.placeholder}`.toLowerCase();
-  return /e-?mail/.test(hint) ? 'email' : /user|login|account/.test(hint) ? 'username' : undefined;
+  return /user|login|account/u.test(hint) ? 'username' : undefined;
 }
 function compatible(input: HTMLInputElement): boolean {
   if (semanticOf(input) === undefined || input.disabled || input.readOnly || input.hidden) return false;

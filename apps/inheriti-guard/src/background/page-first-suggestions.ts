@@ -24,10 +24,19 @@ export function pageFirstSuggestions(
         reason: protectedField.matchesOrigin ? 'exact-origin' : 'inferred-semantic',
       },
     }))));
-  return candidates.sort((left, right) => Number(right.suggestion.mapping.protectedField.matchesOrigin)
+  candidates.sort((left, right) => Number(right.suggestion.mapping.protectedField.matchesOrigin)
     - Number(left.suggestion.mapping.protectedField.matchesOrigin)
     || Number(right.suggestion.mapping.protectedField.fieldName === right.suggestion.mapping.pageTarget.semantic)
       - Number(left.suggestion.mapping.protectedField.fieldName === left.suggestion.mapping.pageTarget.semantic)
     || left.planName.localeCompare(right.planName)
     || left.suggestion.mapping.protectedField.selector.localeCompare(right.suggestion.mapping.protectedField.selector));
+  const inferred = new Set<string>();
+  return candidates.filter(({ suggestion }) => {
+    const { protectedField, pageTarget } = suggestion.mapping;
+    if (!protectedField.fieldNamesInferred) return true;
+    const key = JSON.stringify([protectedField.planId, protectedField.assetId, pageTarget.targetId]);
+    if (inferred.has(key)) return false;
+    inferred.add(key);
+    return true;
+  });
 }

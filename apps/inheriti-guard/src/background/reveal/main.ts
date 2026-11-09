@@ -12,6 +12,8 @@ import { RevealRelayStore } from './relay-store.js';
 import { RevealRecoveryStore } from './recovery-store.js';
 import { deliverBatchFields, deliverField } from './delivery.js';
 
+const EMPTY_IDENTIFIER = new Error('empty_legacy_identifier');
+
 export class ChromeRevealController {
   private active: AbortController | undefined;
   private activeBatchWindowId: number | undefined;
@@ -267,6 +269,15 @@ export class ChromeRevealController {
       return resultsFor(batch, 'canceled');
     }
     const outcomes = new Map<string, AccessFieldResultCode>();
+    const fallbackSelectors = new Map<string, string>();
+    for (const { protectedField } of batch.mappings) {
+      if (protectedField.fieldName !== 'email' && protectedField.fieldName !== 'username') continue;
+      const asset = plan.assets.find((item) => item.id === protectedField.assetId);
+      if (asset?.type !== 'USER-PSWD' || asset.fieldNames.length !== 5
+        || !['appOrWebsite', 'ipSource', 'email', 'username', 'password'].every((field) => asset.fieldNames.includes(field))) continue;
+      const alternative = protectedField.fieldName === 'email' ? 'username' : 'email';
+      fallbackSelectors.set(protectedField.selector, `${asset.code ?? asset.id}.${alternative}`);
+    }
     let lastProgress: RevealProgress | undefined;
     let pro: ProOptions | undefined;
     let relaySessionId: string | undefined;
@@ -295,12 +306,38 @@ export class ChromeRevealController {
       }, async (reveal) => {
         if (!this.ownsOperation(generation, abort)) throw stableError('access-request-failed');
         await this.remember({ id: reveal.session.id, expiresAt: reveal.session.expiresAt });
-        await reveal.consumeFields(batch.mappings.map((mapping) => ({
-          selector: mapping.protectedField.selector,
-          options: { action: 'AUTOFILL_FIELD' as const, origin: batch.identity.origin },
-        })), (fields) => deliverBatchFields(batch, fields, outcomes,
-          () => this.ownsOperation(generation, abort),
-          () => initiator !== 'OVERLAY' || this.overlayOriginAuthorized(batch.identity.origin)));
+        const isCurrent = () => this.ownsOperation(generation, abort);
+        const isAuthorized = () => initiator !== 'OVERLAY' || this.overlayOriginAuthorized(batch.identity.origin);
+        const request = (selector: string) => ({ selector,
+          options: { action: 'AUTOFILL_FIELD' as const, origin: batch.identity.origin } });
+        for (const mapping of batch.mappings) {
+          const alternate = fallbackSelectors.get(mapping.protectedField.selector);
+          if (!alternate) continue;
+          if (!isCurrent()) throw stableError('access-request-failed');
+          const one: AccessBatch = { identity: batch.identity, mappings: [mapping] };
+          try {
+            await reveal.consumeFields([request(mapping.protectedField.selector)], async (fields) => {
+              if (!isCurrent()) throw stableError('access-request-failed');
+              const value = fields.find((field) => field.selector === mapping.protectedField.selector)?.value;
+              if (typeof value !== 'string' || value.trim().length === 0) throw EMPTY_IDENTIFIER;
+              await deliverBatchFields(one, fields, outcomes, fallbackSelectors, isCurrent, isAuthorized);
+            });
+          } catch (error) {
+            if (error !== EMPTY_IDENTIFIER) throw error;
+            if (!isCurrent()) throw stableError('access-request-failed');
+            await reveal.consumeFields([request(alternate)], async (fields) => {
+              if (!isCurrent()) throw stableError('access-request-failed');
+              await deliverBatchFields(one, fields, outcomes, fallbackSelectors, isCurrent, isAuthorized);
+            });
+          }
+        }
+        const ordinary = batch.mappings.filter((mapping) => !fallbackSelectors.has(mapping.protectedField.selector));
+        if (ordinary.length > 0) {
+          if (!isCurrent()) throw stableError('access-request-failed');
+          await reveal.consumeFields(ordinary.map((mapping) => request(mapping.protectedField.selector)),
+            (fields) => deliverBatchFields({ identity: batch.identity, mappings: ordinary }, fields,
+              outcomes, fallbackSelectors, isCurrent, isAuthorized));
+        }
       });
       if (this.ownsOperation(generation, abort)) this.state = { kind: 'DONE', message: 'Autofill finished. Reveal closed.' };
     } catch (error) {

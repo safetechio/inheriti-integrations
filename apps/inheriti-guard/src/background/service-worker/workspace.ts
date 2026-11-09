@@ -171,11 +171,16 @@ export function createWorkspaceRuntime(deps: {
 
   function protectedFieldsOf(plan: WorkspacePlan, planId: string, origin: string): readonly ProtectedFieldRef[] {
     const allowed = new Set(['username', 'email', 'password']);
+    // shortcut: old APIs omit field provenance; retire the canonical-list check when all deployments report it.
+    const canonicalLoginFields = ['appOrWebsite', 'ipSource', 'email', 'username', 'password'];
     return plan.assets.flatMap((asset) => asset.isBinary ? [] : asset.fieldNames
       .filter((fieldName): fieldName is ProtectedFieldRef['fieldName'] => allowed.has(fieldName))
       .map((fieldName) => ({ planId, assetId: asset.id, assetCode: asset.code ?? asset.id, assetName: asset.name,
         assetType: typeof asset.type === 'string' ? asset.type : asset.type?.raw ?? '', fieldName,
-        selector: `${asset.code ?? asset.id}.${fieldName}`, matchesOrigin: asset.matchOrigins?.includes(origin) ?? false })))
+        selector: `${asset.code ?? asset.id}.${fieldName}`, matchesOrigin: asset.matchOrigins?.includes(origin) ?? false,
+        ...(asset.type === 'USER-PSWD' && asset.fieldNames.length === canonicalLoginFields.length
+          && canonicalLoginFields.every((name) => asset.fieldNames.includes(name))
+          ? { fieldNamesInferred: true } : {}) })))
       .sort((left, right) => Number(right.matchesOrigin) - Number(left.matchesOrigin) || left.selector.localeCompare(right.selector));
   }
 

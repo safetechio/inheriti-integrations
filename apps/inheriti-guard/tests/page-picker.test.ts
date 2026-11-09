@@ -103,4 +103,68 @@ describe('page picker cancellation', () => {
     } as unknown as Event);
     await expect(selected).resolves.toMatchObject({ semantic: 'email' });
   });
+
+  it('chooses email semantics for a text input with Spanish email hints', async () => {
+    const input = new FakeInput();
+    input.placeholder = 'Introduce tu correo electrónico';
+    const listeners = new Map<string, EventListener>();
+    globalThis.HTMLInputElement = FakeInput as unknown as typeof HTMLInputElement;
+    globalThis.window = {
+      location: { origin: 'https://app.metricool.com', href: 'https://app.metricool.com/login' },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    } as unknown as Window & typeof globalThis;
+    globalThis.document = {
+      querySelectorAll: () => [input],
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => listeners.set(type, listener as EventListener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    } as unknown as Document;
+    const selected = pickPageField();
+    listeners.get('click')!({
+      composedPath: () => [input], preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {},
+    } as unknown as Event);
+    await expect(selected).resolves.toMatchObject({ semantic: 'email' });
+  });
+
+  it('keeps username autocomplete on a telephone login input', async () => {
+    const input = new FakeInput();
+    input.type = 'tel';
+    const listeners = new Map<string, EventListener>();
+    globalThis.HTMLInputElement = FakeInput as unknown as typeof HTMLInputElement;
+    globalThis.window = {
+      location: { origin: 'https://login.example.test', href: 'https://login.example.test/form' },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    } as unknown as Window & typeof globalThis;
+    globalThis.document = {
+      querySelectorAll: () => [input],
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => listeners.set(type, listener as EventListener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    } as unknown as Document;
+    const selected = pickPageField();
+    listeners.get('click')!({
+      composedPath: () => [input], preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {},
+    } as unknown as Event);
+    await expect(selected).resolves.toMatchObject({ semantic: 'username' });
+  });
+
+  it('does not highlight a checkbox named email', async () => {
+    const input = new FakeInput();
+    input.type = 'checkbox';
+    input.name = 'email';
+    input.placeholder = 'Email';
+    const listeners = new Map<string, EventListener>();
+    globalThis.HTMLInputElement = FakeInput as unknown as typeof HTMLInputElement;
+    globalThis.window = {
+      location: { origin: 'https://login.example.test', href: 'https://login.example.test/form' },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    } as unknown as Window & typeof globalThis;
+    globalThis.document = {
+      querySelectorAll: () => [input],
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => listeners.set(type, listener as EventListener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    } as unknown as Document;
+    const selected = pickPageField();
+    expect(input.style.outline).toBe('initial');
+    listeners.get('keydown')!({ key: 'Escape', preventDefault() {}, stopPropagation() {} } as unknown as Event);
+    await expect(selected).resolves.toBeNull();
+  });
 });

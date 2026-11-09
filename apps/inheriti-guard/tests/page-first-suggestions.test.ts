@@ -45,6 +45,17 @@ describe('page-first protected-field suggestions', () => {
     }
   });
 
+  it('chooses one exact field automatically when the asset field list was inferred', () => {
+    for (const semantic of ['username', 'email'] as const) {
+      const fields = [field('plan-1', 'login.username', 'username', true),
+        field('plan-1', 'login.email', 'email', true)]
+        .map((one) => ({ ...one, fieldNamesInferred: true }));
+      const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: fields }],
+        [{ ...target, semantic }]);
+      expect(result.map(({ suggestion }) => suggestion.mapping.protectedField.fieldName)).toEqual([semantic]);
+    }
+  });
+
   it('offers a username asset for an email target and an email asset for a username target', () => {
     for (const [assetSemantic, pageSemantic] of [['username', 'email'], ['email', 'username']] as const) {
       const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [

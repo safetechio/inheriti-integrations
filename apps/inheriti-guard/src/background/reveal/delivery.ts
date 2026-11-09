@@ -23,6 +23,7 @@ export async function deliverBatchFields(
   batch: AccessBatch,
   fields: readonly { selector: string; value: unknown }[],
   outcomes: Map<string, AccessFieldResultCode>,
+  fallbackSelectors: ReadonlyMap<string, string>,
   isCurrent: () => boolean,
   isAuthorized: () => boolean | Promise<boolean>,
 ): Promise<void> {
@@ -37,8 +38,12 @@ export async function deliverBatchFields(
       outcomes.set(mapping.protectedField.selector, 'not-attempted');
       continue;
     }
-    const value = valuesBySelector.get(mapping.protectedField.selector);
-    if (typeof value !== 'string') {
+    const fallback = fallbackSelectors.get(mapping.protectedField.selector);
+    let value = valuesBySelector.get(mapping.protectedField.selector);
+    if (fallback && (typeof value !== 'string' || value.trim().length === 0)) {
+      value = valuesBySelector.get(fallback);
+    }
+    if (typeof value !== 'string' || (fallback !== undefined && value.trim().length === 0)) {
       outcomes.set(mapping.protectedField.selector, 'invalid-value');
       continue;
     }

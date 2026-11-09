@@ -56,7 +56,7 @@ const discovered = [
 ];
 let workspaceFields = discovered;
 let overlayFields = discovered;
-let planFieldNames: Array<'username' | 'email' | 'password'> = ['username'];
+let planFieldNames: string[] = ['username'];
 
 vi.mock('../src/background/reveal.js', () => ({
   ChromeRevealController: class {
@@ -923,6 +923,22 @@ describe('service worker access routing', () => {
     expect(selected.batch.mappings.map((mapping: any) => [mapping.protectedField.fieldName, mapping.pageTarget.targetId]))
       .toEqual([['email', 'target-email'], ['password', 'target-password']]);
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('does not offer a field selector for a legacy asset with a schema-inferred field list', async () => {
+    await request({ type: 'discard-access-workspace' });
+    planFieldNames = ['appOrWebsite', 'ipSource', 'email', 'username', 'password'];
+    overlayFields = [{ targetId: 'target-email', origin: 'https://example.test', navigationId: 'nav-1',
+      semantic: 'email', label: 'Email', autocomplete: 'email', inputType: 'email', name: 'email', elementId: 'email' }];
+    const target = { targetId: 'target-email', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'email', label: 'Email' };
+    const legacy = await overlayRequest({ type: 'overlay-load-candidates', target });
+    expect(legacy.candidates.filter((one: any) => one.planName === 'Exact plan')
+      .map((one: any) => one.suggestion.mapping.protectedField.fieldName)).toEqual(['email']);
+    planFieldNames = ['email', 'username', 'password'];
+    const explicit = await overlayRequest({ type: 'overlay-load-candidates', target });
+    expect(explicit.candidates.filter((one: any) => one.planName === 'Exact plan')
+      .map((one: any) => one.suggestion.mapping.protectedField.fieldName)).toEqual(['email', 'username']);
   });
 
   it('allocates a shared login target once when an asset has username and email fields', async () => {
