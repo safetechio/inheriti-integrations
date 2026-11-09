@@ -344,8 +344,9 @@ function option(candidate: Candidate, state: { selected: boolean; pending: boole
   button.setAttribute('aria-pressed', String(state.selected));
   const body = element('span', 'item-body');
   const contents = candidate.assetFieldNames.map(titleCase).join(' + ');
-  body.append(element('strong', '', field.assetName),
-    element('span', '', `${candidate.planName} · ${contents}${field.matchesOrigin ? ' · Exact origin' : ''}`));
+  const target = candidate.suggestion.mapping.pageTarget;
+  body.append(element('strong', '', `${field.assetName} · ${titleCase(field.fieldName)}`),
+    element('span', '', `${candidate.planName} · Fills ${titleCase(target.semantic)} · ${contents}${field.matchesOrigin ? ' · Exact origin' : ''}`));
   button.append(body, element('span', 'tick', state.selected ? '✓' : state.pending ? '…' : ''));
   button.addEventListener('click', state.onPick);
   return button;

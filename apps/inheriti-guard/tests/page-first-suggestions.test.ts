@@ -32,7 +32,7 @@ describe('page-first protected-field suggestions', () => {
     expect(JSON.stringify(result)).not.toMatch(/value|secret|token/iu);
   });
 
-  it('offers both username and email assets for either login target, with exact semantics first', () => {
+  it('offers both username and email fields from one asset, with the exact field first', () => {
     for (const semantic of ['username', 'email'] as const) {
       const pageTarget = { ...target, semantic };
       const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [
@@ -43,5 +43,24 @@ describe('page-first protected-field suggestions', () => {
       expect(result.map(({ suggestion }) => suggestion.mapping.protectedField.fieldName))
         .toEqual([semantic, semantic === 'username' ? 'email' : 'username']);
     }
+  });
+
+  it('offers a username asset for an email target and an email asset for a username target', () => {
+    for (const [assetSemantic, pageSemantic] of [['username', 'email'], ['email', 'username']] as const) {
+      const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [
+        field('plan-1', `login.${assetSemantic}`, assetSemantic, true),
+        field('plan-1', 'login.password', 'password', true),
+      ] }], [{ ...target, semantic: pageSemantic }]);
+      expect(result.map(({ suggestion }) => suggestion.mapping.protectedField.fieldName)).toEqual([assetSemantic]);
+    }
+  });
+
+  it('keeps distinct assets as separate choices even when their names match', () => {
+    const first = field('plan-1', 'first.email', 'email', true);
+    const second = { ...field('plan-1', 'second.email', 'email', true), assetId: 'second-asset', assetName: first.assetName };
+    const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [first, second] }],
+      [{ ...target, semantic: 'email' }]);
+    expect(result.map(({ suggestion }) => suggestion.mapping.protectedField.assetId))
+      .toEqual([first.assetId, second.assetId]);
   });
 });
