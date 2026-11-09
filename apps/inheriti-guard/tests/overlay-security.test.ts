@@ -52,7 +52,8 @@ describe('in-page overlay security surface', () => {
     expect(source).toContain('Autofill credentials');
     expect(source).toContain("field${mappings.length === 1 ? '' : 's'} ready");
     expect(source).toContain('candidate.assetFieldNames.map(titleCase)');
-    expect(source).toContain('`${field.assetName} · ${titleCase(field.fieldName)}`');
-    expect(source).toContain('Fills ${titleCase(target.semantic)}');
+    expect(source).toContain("body.append(element('strong', '', field.assetName)");
+    expect(source.indexOf("if (input.type === 'email') return 'email';"))
+      .toBeLessThan(source.indexOf("if (autocomplete === 'username') return 'username';"));
   });
 });

@@ -145,7 +145,7 @@ describe('side-panel access workspace', () => {
     expect(main).toContain("addAccount.addEventListener('click', () => {");
     expect(main).toContain("accountMenu!.open = false;\n  addAccount.disabled = true;\n  authStatus.textContent = 'Adding account'");
     expect(main).not.toContain("accountList.querySelectorAll<HTMLButtonElement>('.account-switch')");
-    expect(main).toContain("planAccessPanel.dataset.authenticated = 'pending';\n    required('session-skeleton').hidden = false");
+    expect(main).toContain("if (state.kind === 'LOADING') {\n    appMain.dataset.authenticated = 'pending';\n    planAccessPanel.dataset.authenticated = 'pending';\n    planAccessPanel.dataset.organization = 'selected';\n    required('session-skeleton').hidden = false");
     expect(main).toContain("() => requestState('sign-in', true)");
     expect(main).toContain('.filter((account) => !account.needsSignIn)');
     expect(main).not.toContain("el('span', 'account-meta', 'Sign in again')");
@@ -166,9 +166,16 @@ describe('side-panel access workspace', () => {
       expect(main).toContain(key);
     }
     expect(main).not.toContain("'inheriti.operatorProfiles'");
-    expect(main).toContain("renderPanel({ kind: 'LOADING' });\n    planAccessPanel.dataset.authenticated = 'pending';\n    required('session-skeleton').hidden = false;\n    authStatus.textContent = 'Updating account';\n    accessHeaderStatus.textContent = 'Plan Access: updating account';\n    planAccessPanel.setAttribute('aria-busy', 'true');\n    void reconfirmAccountContext();");
+    expect(main).toContain("renderPanel({ kind: 'LOADING' });\n    authStatus.textContent = 'Updating account';\n    accessHeaderStatus.textContent = 'Plan Access: updating account';\n    void reconfirmAccountContext();");
     expect(main).toContain("confirmedPanelState(() => send({ type: 'load-plans' })");
     expect(main).toContain('expectedGeneration: panelGeneration');
     expect(main).toContain('startedRevision !== contextRevision');
+  });
+
+  it('keeps reload pending and retries a failed session check without starting OAuth', () => {
+    expect(main).toContain("planAccessPanel.setAttribute('aria-busy', 'true');\n    authStatus.textContent = 'Checking session'");
+    expect(main).toContain("reloadPlans.addEventListener('click', () => { renderPanel({ kind: 'LOADING' }); void requestState('load-plans'); });");
+    expect(main).toContain("if (retrySessionCheck) { renderPanel({ kind: 'LOADING' }); void requestState('load-plans'); return; }");
+    expect(main).toContain("signedOutTitle.textContent = retrySessionCheck ? 'Could not check your session'");
   });
 });

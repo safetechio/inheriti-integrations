@@ -22,10 +22,11 @@ export function pickPageField(): Promise<DiscoveredPageField | null> {
   }
   const semanticFor = (input: HTMLInputElement): Semantic | undefined => {
     const autocomplete = input.autocomplete.toLowerCase().split(/\s+/).at(-1);
+    if (input.type === 'password') return 'password';
+    if (input.type === 'email') return 'email';
     if (autocomplete === 'username') return 'username';
     if (autocomplete === 'email') return 'email';
-    if (autocomplete === 'current-password' || autocomplete === 'new-password' || input.type === 'password') return 'password';
-    if (input.type === 'email') return 'email';
+    if (autocomplete === 'current-password' || autocomplete === 'new-password') return 'password';
     if (input.type !== 'text') return undefined;
     const hint = `${input.getAttribute('aria-label') ?? ''} ${input.name} ${input.id} ${input.placeholder}`.toLowerCase();
     if (/e-?mail/.test(hint)) return 'email';

@@ -67,6 +67,75 @@ describe('SessionStorageOperatorSessionStore', () => {
     expect(cleared).toBe(true);
   });
 
+  it('preserves a backup after a temporary read failure and restores it on retry', async () => {
+    let saved: Awaited<ReturnType<OperatorSessionBackup['load']>>;
+    let failing = false;
+    let cleared = false;
+    const backup: OperatorSessionBackup = {
+      load: async () => { if (failing) throw new Error('indexeddb_unavailable'); return saved; },
+      save: async (registry) => { saved = structuredClone(registry); },
+      clear: async () => { cleared = true; saved = undefined; },
+    };
+    const account = login('retry');
+    await enroll(new SessionStorageOperatorSessionStore(sessionArea().area, backup), account);
+    const restarted = new SessionStorageOperatorSessionStore(sessionArea().area, backup);
+    failing = true;
+    await expect(restarted.load()).rejects.toThrow('indexeddb_unavailable');
+    expect(cleared).toBe(false);
+    expect(saved).toBeDefined();
+    failing = false;
+    expect(await restarted.load()).toEqual(account);
+  });
+
+  it('preserves a backup when restoring session storage fails temporarily', async () => {
+    let saved: Awaited<ReturnType<OperatorSessionBackup['load']>>;
+    let cleared = false;
+    const backup: OperatorSessionBackup = {
+      load: async () => saved,
+      save: async (registry) => { saved = structuredClone(registry); },
+      clear: async () => { cleared = true; saved = undefined; },
+    };
+    const account = login('retry-write');
+    await enroll(new SessionStorageOperatorSessionStore(sessionArea().area, backup), account);
+    const fresh = sessionArea();
+    let failing = true;
+    const area = { get: fresh.area.get, remove: fresh.area.remove, set: async (entries: Record<string, unknown>) => {
+      if (failing) throw new Error('storage_unavailable');
+      await fresh.area.set(entries);
+    } } as chrome.storage.StorageArea;
+    const restarted = new SessionStorageOperatorSessionStore(area, backup);
+    await expect(restarted.load()).rejects.toThrow('storage_unavailable');
+    expect(cleared).toBe(false);
+    failing = false;
+    expect(await restarted.load()).toEqual(account);
+  });
+
+  it('does not invalidate a bound session when a cold worker checks generation before binding configuration', async () => {
+    const { area } = sessionArea();
+    let saved: Awaited<ReturnType<OperatorSessionBackup['load']>>;
+    const backup: OperatorSessionBackup = {
+      load: async () => saved,
+      save: async (registry) => { saved = structuredClone(registry); },
+      clear: async () => { saved = undefined; },
+    };
+    const account = login('cold-worker');
+    const configuration: ChromeConfiguration = { apiUrl: 'https://api.test/', issuer: account.principal.issuer,
+      clientId: account.principal.authorizedParty, environment: 'TEST', scopes: ['openid'], masterKeyCustody: 'EXTERNAL',
+      applicationId: 'application' };
+    const first = new SessionStorageOperatorSessionStore(area, backup);
+    first.bind(configuration);
+    await enroll(first, account);
+    const restarted = new SessionStorageOperatorSessionStore(area, backup);
+    expect((await restarted.snapshot()).session).toEqual(account);
+    expect((await restarted.profiles())[0]?.needsSignIn).toBe(false);
+    expect(saved?.profiles[0]?.session).toEqual(account);
+    restarted.bind(configuration);
+    expect(await restarted.load()).toEqual(account);
+    const incompatible = new SessionStorageOperatorSessionStore(area, backup);
+    incompatible.bind({ ...configuration, clientId: 'other-client' });
+    expect(await incompatible.load()).toBeUndefined();
+  });
+
   it('keeps an OIDC Business session and accepts a bound refresh', async () => {
     const { area } = sessionArea();
     const store = new SessionStorageOperatorSessionStore(area);
@@ -261,7 +330,10 @@ describe('SessionStorageOperatorSessionStore', () => {
     await enroll(store, session);
     values.set(MASTER_KEY_CACHE_PREFIX + 'org-a', 'a'.repeat(64));
 
-    expect(await new SessionStorageOperatorSessionStore(area).load()).toBeUndefined();
+    const configured = new SessionStorageOperatorSessionStore(area);
+    configured.bind({ apiUrl: 'https://api.test/integrations/', issuer: session.principal.issuer,
+      clientId: session.principal.authorizedParty, environment: 'TEST', scopes: ['openid'], masterKeyCustody: 'EXTERNAL' });
+    expect(await configured.load()).toBeUndefined();
     expect((await store.profiles())[0]).toMatchObject({ subject: 'business-user', needsSignIn: true, active: false });
     expect(String(values.get('inheriti.operatorProfiles'))).not.toContain('business-user-refresh');
     expect(values.has(MASTER_KEY_CACHE_PREFIX + 'org-a')).toBe(false);

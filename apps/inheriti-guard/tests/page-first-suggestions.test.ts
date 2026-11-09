@@ -32,7 +32,7 @@ describe('page-first protected-field suggestions', () => {
     expect(JSON.stringify(result)).not.toMatch(/value|secret|token/iu);
   });
 
-  it('offers both username and email fields from one asset, with the exact field first', () => {
+  it('offers both fields of one asset in exact-first order for a single picker row', () => {
     for (const semantic of ['username', 'email'] as const) {
       const pageTarget = { ...target, semantic };
       const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [

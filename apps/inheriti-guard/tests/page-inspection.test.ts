@@ -54,4 +54,14 @@ describe('page field discovery', () => {
     expect(snapshot.origin).toBe('https://example.test');
     expect(snapshot.navigationId).toBeTruthy();
   });
+
+  it('classifies an email input as email despite username autocomplete', () => {
+    const email = input({ type: 'email', autocomplete: 'username', name: 'login' });
+    globalThis.window = {
+      location: { origin: 'https://app.metricool.com', href: 'https://app.metricool.com/login' },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    } as unknown as Window & typeof globalThis;
+    globalThis.document = { querySelectorAll: () => [email], getElementById: () => null } as unknown as Document;
+    expect(discoverPageFields().fields.map((field) => field.semantic)).toEqual(['email']);
+  });
 });

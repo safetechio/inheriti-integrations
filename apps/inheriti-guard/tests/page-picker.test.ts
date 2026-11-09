@@ -81,4 +81,26 @@ describe('page picker cancellation', () => {
     await expect(selected).resolves.toBeNull();
     expect(input.style.outline).toBe('initial');
   });
+
+  it('chooses email semantics for an email input with username autocomplete', async () => {
+    const input = new FakeInput();
+    input.type = 'email';
+    const listeners = new Map<string, EventListener>();
+    globalThis.HTMLInputElement = FakeInput as unknown as typeof HTMLInputElement;
+    globalThis.window = {
+      location: { origin: 'https://app.metricool.com', href: 'https://app.metricool.com/login' },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    } as unknown as Window & typeof globalThis;
+    globalThis.document = {
+      querySelectorAll: () => [input],
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => listeners.set(type, listener as EventListener),
+      removeEventListener: (type: string) => listeners.delete(type),
+    } as unknown as Document;
+
+    const selected = pickPageField();
+    listeners.get('click')!({
+      composedPath: () => [input], preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {},
+    } as unknown as Event);
+    await expect(selected).resolves.toMatchObject({ semantic: 'email' });
+  });
 });
