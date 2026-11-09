@@ -91,14 +91,14 @@ describe('field suggestions', () => {
   it('preserves a manual mapping when suggestions refresh', () => {
     const manual: FieldMapping = {
       protectedField: protectedField('login.username', 'username'),
-      pageTarget: pageField('manual-target', 'username').target,
+      pageTarget: pageField('manual-target', 'email').target,
       source: 'MANUAL',
     };
     const result = suggestFieldMappings({
       planId,
       protectedFields: [manual.protectedField, protectedField('login.password', 'password')],
       pageFields: [
-        pageField('manual-target', 'username', { autocomplete: 'username' }),
+        pageField('manual-target', 'email', { autocomplete: 'email' }),
         pageField('password-target', 'password', { autocomplete: 'current-password' }),
       ],
       existingMappings: [manual],
@@ -112,6 +112,38 @@ describe('field suggestions', () => {
         source: 'SUGGESTED',
       }),
     ]);
+  });
+
+  it('suggests username and email across page semantics after exact matches', () => {
+    const result = suggestFieldMappings({
+      planId,
+      protectedFields: [protectedField('login.email', 'email'), protectedField('login.username', 'username')],
+      pageFields: [pageField('username-target', 'username', { autocomplete: 'username' }),
+        pageField('email-target', 'email', { autocomplete: 'email' })],
+    });
+    if (!result.accepted) throw new Error('unexpected rejection');
+    expect(result.mappings.map((mapping) => [mapping.protectedField.fieldName, mapping.pageTarget.semantic]))
+      .toEqual([['email', 'email'], ['username', 'username']]);
+
+    for (const [assetSemantic, pageSemantic] of [['email', 'username'], ['username', 'email']] as const) {
+      const cross = suggestFieldMappings({ planId,
+        protectedFields: [protectedField(`login.${assetSemantic}`, assetSemantic)],
+        pageFields: [pageField('login-target', pageSemantic)],
+      });
+      expect(cross).toMatchObject({ accepted: true, mappings: [{
+        protectedField: { fieldName: assetSemantic }, pageTarget: { semantic: pageSemantic },
+      }] });
+    }
+  });
+
+  it('keeps password separate from username and email', () => {
+    const result = suggestFieldMappings({ planId,
+      protectedFields: [protectedField('login.password', 'password'), protectedField('login.email', 'email')],
+      pageFields: [pageField('username-target', 'username'), pageField('password-target', 'password')],
+    });
+    if (!result.accepted) throw new Error('unexpected rejection');
+    expect(result.mappings.map((mapping) => [mapping.protectedField.fieldName, mapping.pageTarget.semantic]))
+      .toEqual([['password', 'password'], ['email', 'username']]);
   });
 
   it('rejects mixed plans and duplicate protected selectors or page targets', () => {

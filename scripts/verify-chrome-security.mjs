@@ -53,7 +53,7 @@ for (const file of await sourceFiles(sourceRoot)) {
   if (/<script[^>]+src=["']https?:/i.test(source)) errors.push(`${name}: remote script is forbidden`);
 }
 
-// The operator's tokens must live only in the session area, which a content script cannot read.
+// Live tokens stay in the session area; the durable backup stores ciphertext only.
 const sessionStore = await readFile(resolve(sourceRoot, 'background/session-store.ts'), 'utf8');
 if (!sessionStore.includes('chrome.storage.session') && !/StorageArea/.test(sessionStore)) {
   errors.push('background/session-store.ts: the session must be held in chrome.storage.session');
@@ -64,7 +64,7 @@ for (const file of await sourceFiles(sourceRoot)) {
   const name = relative(target, file);
   // Configuration — an API origin, an issuer, a public client id — survives a browser restart in the
   // local area, or an installed extension would have to be reconfigured on every start. Session
-  // material must not: it stays in the session area, which is what `session-store.ts` is checked for.
+  // material must not appear there in plaintext; the backup uses an encrypted record.
   const configurationOnly = name.includes('options/') || name.endsWith('background/service-worker/main.ts');
   if (!configurationOnly && /chrome\.storage\.local/.test(source)) {
     errors.push(`${name}: chrome.storage.local must not hold session material`);
@@ -83,8 +83,16 @@ const authSource = await readFile(resolve(sourceRoot, 'background/auth.ts'), 'ut
 if (!authSource.includes('launchWebAuthFlow')) errors.push('background/auth.ts: sign-in must use launchWebAuthFlow');
 
 const worker = await readFile(resolve(sourceRoot, 'background/service-worker/main.ts'), 'utf8');
-if (!worker.includes('chrome.action.onClicked')) errors.push('side panel must open from explicit action click');
-if (!worker.includes('chrome.sidePanel.open')) errors.push('side panel open call is missing');
+if (!worker.includes("chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })")) {
+  errors.push('persistent storage must be limited to trusted extension contexts');
+}
+const backup = await readFile(resolve(sourceRoot, 'background/encrypted-session-backup.ts'), 'utf8');
+if (!backup.includes("name: 'AES-GCM'") || !backup.includes('false, [\'encrypt\', \'decrypt\']')) {
+  errors.push('persistent operator sessions must be encrypted with a nonextractable key');
+}
+if (!worker.includes('chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })')) {
+  errors.push('side panel must open from the toolbar action');
+}
 if (!worker.includes('chrome.tabs.onUpdated') || !worker.includes('chrome.tabs.onActivated')) {
   errors.push('tab navigation/change invalidation listeners are required');
 }

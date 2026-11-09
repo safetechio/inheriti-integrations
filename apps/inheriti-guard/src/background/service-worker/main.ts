@@ -3,6 +3,7 @@ import { cancelPageFieldPicker } from '../page-picker.js';
 import { PendingTabContextStore } from '../pending-tab-context.js';
 import { isGuardContentRequest, isGuardRequest, isOverlayRequest, isSidePanelRequest, type SidePanelRequest, type SidePanelResponse } from '../../shared/messages.js';
 import { SessionStorageOperatorSessionStore } from '../session-store.js';
+import { EncryptedOperatorSessionBackup } from '../encrypted-session-backup.js';
 import { loadPlanAssets } from '../plans.js';
 import { BUSINESS_DEPLOYMENTS, businessUiRpId } from '@safetech/inheriti-elements-core/browser';
 import { resolveConfiguration } from '../../shared/configuration.js';
@@ -16,8 +17,9 @@ import { createAccessRuntime } from './access.js';
 import { GuardController } from '../guard/controller.js';
 
 const pendingContext = new PendingTabContextStore();
-// Session-scoped, and unreachable from a content script. Never `chrome.storage.local`.
-const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session);
+void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => undefined);
+const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session,
+  new EncryptedOperatorSessionBackup(chrome.storage.local));
 let keyOwner: 'Application' | 'Organisation' = 'Application';
 const overlayPermissions = new OverlayPermissionController();
 const pendingSignIns = new Set<AbortController>();
@@ -66,11 +68,7 @@ const guard = new GuardController({
 let organizationRevision = 0;
 let organizationSwitching = false;
 let activeWork = 0;
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab.id === undefined || tab.windowId === undefined || tab.url === undefined) return;
-  if (pendingContext.set(tab.id, tab.url) === undefined) return;
-  await chrome.sidePanel.open({ windowId: tab.windowId });
-});
+void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url !== undefined) {

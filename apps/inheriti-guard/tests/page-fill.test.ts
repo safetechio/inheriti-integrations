@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fillPageTarget, preflightPageTarget } from '../src/background/page-fill.js';
+import { fillPageField, fillPageTarget, preflightPageTarget } from '../src/background/page-fill.js';
 import { revalidatePageTarget, writePageTarget } from '../src/background/page-target.js';
 
 const executeScript = vi.fn();
@@ -14,6 +14,34 @@ beforeEach(() => {
 const target = { tabId: 7, frameId: 3, targetId: 'opaque-1', origin: 'https://example.test', navigationId: 'nav-1' };
 
 describe('page target execution', () => {
+  it('fills compatible login inputs when the exact field is absent and prefers an exact field', () => {
+    class Input {
+      private currentValue = '';
+      get value() { return this.currentValue; }
+      set value(value: string) { this.currentValue = value; }
+      dispatchEvent = vi.fn();
+    }
+    const username = new Input();
+    const email = new Input();
+    const inputs = new Map<string, Input>([
+      ['input[autocomplete="username"]', username], ['input[type="email"]', email],
+    ]);
+    Object.assign(globalThis, { HTMLInputElement: Input,
+      document: { querySelector: (selector: string) => inputs.get(selector) ?? null } });
+    fillPageField('username', 'user');
+    fillPageField('email', 'mail');
+    expect(username.value).toBe('user');
+    expect(email.value).toBe('mail');
+    inputs.delete('input[autocomplete="username"]');
+    fillPageField('username', 'fallback-user');
+    expect(email.value).toBe('fallback-user');
+    inputs.set('input[autocomplete="username"]', username);
+    inputs.delete('input[type="email"]');
+    fillPageField('email', 'fallback-mail');
+    expect(username.value).toBe('fallback-mail');
+    expect(() => fillPageField('password', 'secret')).toThrow('page_field_not_found');
+  });
+
   it('preflights the exact frame and opaque document target', async () => {
     executeScript.mockResolvedValue([{ result: 'ready' }]);
     await expect(preflightPageTarget(target, revalidatePageTarget)).resolves.toBe('ready');

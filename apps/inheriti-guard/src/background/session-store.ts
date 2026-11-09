@@ -35,6 +35,12 @@ interface Profile {
 }
 interface Registry { profiles: Profile[]; active?: string; generation: number }
 
+export interface OperatorSessionBackup {
+  load(): Promise<Registry | undefined>;
+  save(registry: Registry): Promise<void>;
+  clear(): Promise<void>;
+}
+
 export function operatorProfileId(session: OperatorSession): string {
   const principal = session.principal;
   if (!principal || !principal.issuer || !principal.environment || !principal.authorizedParty || !principal.subject
@@ -69,12 +75,12 @@ function profileFor(session: OperatorSession, epoch: number, context?: string): 
   return profile;
 }
 
-/** Credentials remain in memory-backed extension storage and never reach the panel or local storage. */
+/** Live credentials stay in session storage; the optional durable backup encrypts them. */
 export class SessionStorageOperatorSessionStore implements OperatorSessionStore {
   private queue: Promise<unknown> = Promise.resolve();
   private context: ChromeConfiguration | undefined;
 
-  public constructor(private readonly area: chrome.storage.StorageArea) {}
+  public constructor(private readonly area: chrome.storage.StorageArea, private readonly backup?: OperatorSessionBackup) {}
 
   public bind(configuration: ChromeConfiguration): void { this.context = configuration; }
 
@@ -113,6 +119,21 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
   private async read(): Promise<Registry> {
     const stored = await this.area.get([LEGACY_SESSION_KEY, PROFILES_KEY, ACTIVE_KEY, GENERATION_KEY]);
     if (stored[LEGACY_SESSION_KEY] !== undefined) await this.area.remove(LEGACY_SESSION_KEY);
+    if (stored[PROFILES_KEY] === undefined && stored[GENERATION_KEY] === undefined && this.backup) {
+      try {
+        const restored = await this.backup.load();
+        if (restored) {
+          if (!Array.isArray(restored.profiles) || !Number.isSafeInteger(restored.generation)
+            || restored.generation < 0) throw new Error('invalid_operator_session_backup');
+          await this.area.set({ [PROFILES_KEY]: JSON.stringify(restored.profiles),
+            [GENERATION_KEY]: restored.generation });
+          if (restored.active !== undefined) await this.area.set({ [ACTIVE_KEY]: restored.active });
+          return this.read();
+        }
+      } catch {
+        await this.backup.clear();
+      }
+    }
     const generation = stored[GENERATION_KEY];
     const value = stored[PROFILES_KEY];
     const active = stored[ACTIVE_KEY];
@@ -173,11 +194,13 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
       await this.area.remove([PROFILES_KEY, ACTIVE_KEY]);
       await this.area.set({ [GENERATION_KEY]: empty.generation + 1 });
       await this.clearKeys();
+      await this.backup?.clear();
       return { profiles: [], generation: empty.generation + 1 };
     }
   }
 
   private async write(registry: Registry): Promise<void> {
+    await this.backup?.save(registry);
     await this.area.set({
       [PROFILES_KEY]: JSON.stringify(registry.profiles),
       [ACTIVE_KEY]: registry.active ?? null,
@@ -340,7 +363,9 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
     return this.exclusive(async () => {
       const registry = await this.read();
       await this.clearKeys();
-      await this.write({ profiles: [], generation: registry.generation + 1 });
+      await this.backup?.clear();
+      await this.area.set({ [PROFILES_KEY]: '[]', [GENERATION_KEY]: registry.generation + 1 });
+      await this.area.remove(ACTIVE_KEY);
     });
   }
 }

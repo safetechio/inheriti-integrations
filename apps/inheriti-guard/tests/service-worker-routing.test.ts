@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listeners: Record<string, ((...args: any[]) => any) | undefined> = {};
+const panelBehaviors: chrome.sidePanel.PanelBehavior[] = [];
+const storageAccessLevels: chrome.storage.AccessLevel[] = [];
 const fillBatch = vi.fn(async (_batch: unknown, _initiator?: string) => [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }]);
 const fillField = vi.fn(async () => ({ kind: 'DONE', message: 'Filled.' }));
 const clearSession = vi.fn(async () => { mockProfiles = mockProfiles.filter((profile) => !profile.active); mockGeneration += 1; });
@@ -154,8 +156,8 @@ vi.mock('../src/background/auth.js', () => ({ signIn: signInMock, chooseAnotherS
 
 beforeAll(async () => {
   Object.assign(globalThis, { chrome: {
-    storage: { session: storageArea({}), local: storageArea(localValues) },
-    action: { onClicked: { addListener: (listener: (...args: any[]) => any) => { listeners.action = listener; } } },
+    storage: { session: storageArea({}), local: { ...storageArea(localValues),
+      setAccessLevel: async ({ accessLevel }: { accessLevel: chrome.storage.AccessLevel }) => { storageAccessLevels.push(accessLevel); } } },
     tabs: {
       query: vi.fn(async () => [{ id: 7, windowId: 2, url: 'https://example.test/login' }]),
       sendMessage: vi.fn(async (_tabId: number, message: { type?: string }) => message.type === 'inheriti-overlay-discover-targets'
@@ -167,7 +169,7 @@ beforeAll(async () => {
       remove: vi.fn(async () => undefined),
       onCreated: { addListener: (listener: (...args: any[]) => any) => { listeners.created = listener; } },
     },
-    sidePanel: { open: vi.fn(async () => undefined) },
+    sidePanel: { open: vi.fn(async () => undefined), setPanelBehavior: async (behavior: chrome.sidePanel.PanelBehavior) => { panelBehaviors.push(behavior); } },
     alarms: { onAlarm: { addListener: vi.fn() }, create: vi.fn(async () => undefined), clear: vi.fn(async () => true) },
     permissions: {
       request: vi.fn(async () => true),
@@ -200,7 +202,6 @@ beforeAll(async () => {
     identity: { getRedirectURL: () => 'https://extension.test/oauth' },
   } });
   await import('../src/background/service-worker/main.js');
-  await listeners.action!({ id: 7, windowId: 2, url: 'https://example.test/login' });
 });
 
 beforeEach(() => {
@@ -232,6 +233,15 @@ function overlayRequest(message: unknown, sender: Record<string, unknown> = {
 }
 
 describe('service worker access routing', () => {
+  it('lets Chrome toggle the panel and verifies active tab context when the panel requests it', async () => {
+    expect(panelBehaviors).toEqual([{ openPanelOnActionClick: true }]);
+    expect(storageAccessLevels).toEqual(['TRUSTED_CONTEXTS']);
+    expect(await request({ type: 'get-active-context' })).toEqual({ ok: true, context: { origin: 'https://example.test' } });
+    (chrome.tabs.query as unknown as { mockResolvedValueOnce(value: unknown): void })
+      .mockResolvedValueOnce([{ id: 8, windowId: 2, url: 'chrome://settings' }]);
+    expect(await request({ type: 'get-active-context' })).toMatchObject({ ok: false, error: 'stale-tab-context' });
+    expect(chrome.sidePanel.open).not.toHaveBeenCalled();
+  });
   it('shares the active Core when concurrent requests construct it', async () => {
     let release!: () => void;
     let entered!: () => void;
@@ -905,6 +915,27 @@ describe('service worker access routing', () => {
     expect(selected.batch.mappings.map((mapping: any) => [mapping.protectedField.fieldName, mapping.pageTarget.targetId]))
       .toEqual([['email', 'target-email'], ['password', 'target-password']]);
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('allocates a shared login target once when an asset has username and email fields', async () => {
+    await request({ type: 'discard-access-workspace' });
+    planFieldNames = ['username', 'email', 'password'];
+    overlayFields = [
+      { targetId: 'target-login', origin: 'https://example.test', navigationId: 'nav-1', semantic: 'username',
+        label: 'Login', autocomplete: 'username', inputType: 'text', name: 'login', elementId: 'login' },
+      { targetId: 'target-password', origin: 'https://example.test', navigationId: 'nav-1', semantic: 'password',
+        label: 'Password', autocomplete: 'current-password', inputType: 'password', name: 'password', elementId: 'password' },
+    ];
+    const target = { targetId: 'target-password', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'password', label: 'Password' };
+    const candidates = await overlayRequest({ type: 'overlay-load-candidates', target });
+    const candidate = candidates.candidates.find((one: any) => one.planName === 'Exact plan');
+    const selected = await overlayRequest({ type: 'overlay-select-candidate',
+      mapping: candidate.suggestion.mapping, planName: candidate.planName });
+
+    expect(selected.ok).toBe(true);
+    expect(selected.batch.mappings.map((mapping: any) => [mapping.protectedField.fieldName, mapping.pageTarget.targetId]))
+      .toEqual([['password', 'target-password'], ['username', 'target-login']]);
   });
 
   it('binds an overlay-created batch to the exact authorized iframe', async () => {

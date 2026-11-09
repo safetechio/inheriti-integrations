@@ -4,6 +4,7 @@ import { createWorkspaceRuntime, type WorkspacePlan } from './workspace.js';
 import { PendingTabContextStore } from '../pending-tab-context.js';
 import type { OverlayRequest, SidePanelResponse } from '../../shared/messages.js';
 import { pageFirstSuggestions } from '../page-first-suggestions.js';
+import { compatibleFieldSemantics } from '../field-suggestions.js';
 import { validateAccessBatch, type AccessBatch, type FieldMapping, type ProtectedFieldRef } from '../../shared/access-contract.js';
 import { OverlayPermissionController, secureOrigin } from '../overlay-permissions.js';
 import { codeOf } from '../../shared/plan-view.js';
@@ -126,7 +127,7 @@ export function createAccessRuntime(deps: {
     const draft = pendingContext.getDraft(tabId);
     if (draft === undefined) return { ok: false, error: 'stale-page-context' };
     if (!sameProtectedField(draft.protectedFields, mapping.protectedField) || !samePageTarget(draft.pageTargets, mapping.pageTarget)
-      || mapping.protectedField.fieldName !== mapping.pageTarget.semantic) return { ok: false, error: 'invalid-access-batch' };
+      || !compatibleFieldSemantics(mapping.protectedField.fieldName, mapping.pageTarget.semantic)) return { ok: false, error: 'invalid-access-batch' };
     const mappings = draft.mappings.filter((current) => current.protectedField.selector !== mapping.protectedField.selector
       && current.pageTarget.targetId !== mapping.pageTarget.targetId);
     const batch = { identity: draft.identity, mappings: [...mappings, mapping] } satisfies AccessBatch;
@@ -139,14 +140,22 @@ export function createAccessRuntime(deps: {
     const draft = pendingContext.getDraft(tabId);
     if (draft === undefined || !sameProtectedField(draft.protectedFields, selected.protectedField)
       || !samePageTarget(draft.pageTargets, selected.pageTarget)
-      || selected.protectedField.fieldName !== selected.pageTarget.semantic) return { ok: false, error: 'invalid-access-batch' };
-    const siblings = draft.protectedFields
-      .filter((field) => field.assetId === selected.protectedField.assetId && field.selector !== selected.protectedField.selector)
-      .flatMap((field): FieldMapping[] => {
-        const targets = draft.pageTargets.filter((target) => target.semantic === field.fieldName
-          && target.targetId !== selected.pageTarget.targetId);
-        return targets.length === 1 ? [{ protectedField: field, pageTarget: targets[0]!, source: 'SUGGESTED' }] : [];
-      });
+      || !compatibleFieldSemantics(selected.protectedField.fieldName, selected.pageTarget.semantic)) return { ok: false, error: 'invalid-access-batch' };
+    const fields = draft.protectedFields.filter((field) => field.assetId === selected.protectedField.assetId
+      && field.selector !== selected.protectedField.selector);
+    const occupied = new Set([selected.pageTarget.targetId]);
+    const siblings: FieldMapping[] = [];
+    for (const exactOnly of [true, false]) {
+      for (const field of fields) {
+        if (siblings.some((mapping) => mapping.protectedField.selector === field.selector)) continue;
+        const targets = draft.pageTargets.filter((target) => !occupied.has(target.targetId)
+          && (exactOnly ? target.semantic === field.fieldName
+            : compatibleFieldSemantics(field.fieldName, target.semantic)));
+        if (targets.length !== 1) continue;
+        siblings.push({ protectedField: field, pageTarget: targets[0]!, source: 'SUGGESTED' });
+        occupied.add(targets[0]!.targetId);
+      }
+    }
     const batch = { identity: draft.identity, mappings: [selected, ...siblings] } satisfies AccessBatch;
     if (!validateAccessBatch(batch).valid) return { ok: false, error: 'invalid-access-batch' };
     pendingContext.updateMappings(tabId, batch.mappings);

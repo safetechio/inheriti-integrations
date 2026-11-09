@@ -31,4 +31,17 @@ describe('page-first protected-field suggestions', () => {
     });
     expect(JSON.stringify(result)).not.toMatch(/value|secret|token/iu);
   });
+
+  it('offers both username and email assets for either login target, with exact semantics first', () => {
+    for (const semantic of ['username', 'email'] as const) {
+      const pageTarget = { ...target, semantic };
+      const result = pageFirstSuggestions([{ planName: 'Plan', protectedFields: [
+        field('plan-1', 'login.username', 'username', true),
+        field('plan-1', 'login.email', 'email', true),
+        field('plan-1', 'login.password', 'password', true),
+      ] }], [pageTarget]);
+      expect(result.map(({ suggestion }) => suggestion.mapping.protectedField.fieldName))
+        .toEqual([semantic, semantic === 'username' ? 'email' : 'username']);
+    }
+  });
 });

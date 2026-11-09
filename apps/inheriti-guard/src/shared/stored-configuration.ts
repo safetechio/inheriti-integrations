@@ -13,12 +13,11 @@ export const MASTER_KEY_CACHE_PREFIX = 'inheriti.masterKeyCache.';
 export const CUSTODY_KEYS = ['masterKeyCustody', 'masterKeySalt'] as const;
 
 /**
- * The operator's own secret, and the one value that must never reach `chrome.storage.local`.
+ * The operator's own secret must never reach `chrome.storage.local`.
  *
  * A passphrase written to disk would outlive the browser and be readable by anything with storage
- * access, which is the property `local` was chosen *against* for tokens. It stays in the session
- * area with them: memory-backed, cleared on restart, unreachable from a content script. Re-entering
- * it once per browser session is the cost, and it is the right one.
+ * access. It stays in the session area: memory-backed, cleared on restart, and unreachable from a
+ * content script. Unlike operator credentials, the passphrase has no encrypted durable backup.
  */
 export const SESSION_ONLY_KEYS = ['masterKeySecret'] as const;
 const ORGANIZATION_PREFERENCES = 'inheriti.businessOrganizations';

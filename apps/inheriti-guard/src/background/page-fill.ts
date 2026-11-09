@@ -8,8 +8,10 @@ export function fillPageField(fieldName: string, value: string): void {
   const selectors = fieldName === 'password'
     ? ['input[type="password"]']
     : fieldName === 'email'
-      ? ['input[type="email"]', 'input[autocomplete="email"]', 'input[name="email"]']
-      : ['input[autocomplete="username"]', 'input[name="username"]', 'input[type="text"]'];
+      ? ['input[type="email"]', 'input[autocomplete="email"]', 'input[name="email"]',
+        'input[autocomplete="username"]', 'input[name="username"]', 'input[type="text"]']
+      : ['input[autocomplete="username"]', 'input[name="username"]', 'input[type="text"]',
+        'input[type="email"]', 'input[autocomplete="email"]', 'input[name="email"]'];
   const element = selectors
     .map((selector) => document.querySelector<HTMLInputElement>(selector))
     .find((candidate) => candidate !== null);

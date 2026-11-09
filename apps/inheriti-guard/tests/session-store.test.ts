@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OperatorSession } from '@safetech/inheriti-elements-core';
 import { MASTER_KEY_CACHE_PREFIX } from '../src/shared/stored-configuration.js';
 import { operatorProfileId, SessionStorageOperatorSessionStore } from '../src/background/session-store.js';
+import type { OperatorSessionBackup } from '../src/background/session-store.js';
 import type { ChromeConfiguration } from '../src/shared/configuration.js';
 
 function login(subject: string, sessionId = subject): OperatorSession {
@@ -32,6 +33,40 @@ async function enroll(store: SessionStorageOperatorSessionStore, session: Operat
 }
 
 describe('SessionStorageOperatorSessionStore', () => {
+  it('restores a session into a fresh session area and removes revoked credentials from the backup', async () => {
+    let saved: Awaited<ReturnType<OperatorSessionBackup['load']>>;
+    const backup: OperatorSessionBackup = {
+      load: async () => saved,
+      save: async (registry) => { saved = structuredClone(registry); },
+      clear: async () => { saved = undefined; },
+    };
+    const first = new SessionStorageOperatorSessionStore(sessionArea().area, backup);
+    const account = login('restored');
+    await enroll(first, account);
+    const restarted = new SessionStorageOperatorSessionStore(sessionArea().area, backup);
+    expect(await restarted.load()).toEqual(account);
+    await (await restarted.forProfile(operatorProfileId(account))).clear();
+    const afterRevoke = new SessionStorageOperatorSessionStore(sessionArea().area, backup);
+    expect(await afterRevoke.load()).toBeUndefined();
+    expect((await afterRevoke.profiles())[0]?.needsSignIn).toBe(true);
+    await afterRevoke.clearAll();
+    expect(saved).toBeUndefined();
+    expect(await new SessionStorageOperatorSessionStore(sessionArea().area, backup).profiles()).toEqual([]);
+  });
+
+  it('rejects a malformed durable registry and clears its backup', async () => {
+    let cleared = false;
+    const backup: OperatorSessionBackup = {
+      load: async () => ({ profiles: [{ id: 'invalid', epoch: 1, issuer: 'x', environment: 'x',
+        authorizedParty: 'x', subject: 'x', session: login('stolen') }], generation: 1 }),
+      save: async () => undefined,
+      clear: async () => { cleared = true; },
+    };
+    const store = new SessionStorageOperatorSessionStore(sessionArea().area, backup);
+    expect(await store.load()).toBeUndefined();
+    expect(cleared).toBe(true);
+  });
+
   it('keeps an OIDC Business session and accepts a bound refresh', async () => {
     const { area } = sessionArea();
     const store = new SessionStorageOperatorSessionStore(area);

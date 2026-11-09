@@ -51,6 +51,10 @@ interface RankedPair {
   readonly reason: AccessSuggestionReason;
 }
 
+export function compatibleFieldSemantics(field: ProtectedFieldSemantic, target: ProtectedFieldSemantic): boolean {
+  return field === target || (field !== 'password' && target !== 'password');
+}
+
 /** Refreshes suggestions without replacing mappings explicitly chosen by the operator. */
 export function suggestFieldMappings(input: SuggestFieldMappingsInput): FieldSuggestionResult {
   const protectedSelectors = new Set<string>();
@@ -134,14 +138,15 @@ function rankPair(
   pageField: SuggestionPageField,
 ): Omit<RankedPair, 'protectedField' | 'pageField'> | undefined {
   const semantic = protectedField.fieldName;
-  if (pageField.target.semantic !== semantic) return undefined;
+  if (!compatibleFieldSemantics(semantic, pageField.target.semantic)) return undefined;
 
   const autocomplete = normalize(pageField.autocomplete);
   const exactAutocomplete = autocompleteTokens(semantic).includes(autocomplete);
   const inputType = normalize(pageField.inputType);
   const exactType = inputTypeMatches(semantic, inputType);
   const heuristic = heuristicReason(semantic, pageField);
-  const originBonus = protectedField.matchesOrigin ? 1_000 : 0;
+  const originBonus = (protectedField.matchesOrigin ? 1_000 : 0)
+    + (semantic === pageField.target.semantic ? 0 : -500);
 
   if (exactAutocomplete) {
     return { score: originBonus + 400, confidence: 'HIGH', reason: 'autocomplete' };
