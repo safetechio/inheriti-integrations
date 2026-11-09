@@ -83,7 +83,8 @@ const authSource = await readFile(resolve(sourceRoot, 'background/auth.ts'), 'ut
 if (!authSource.includes('launchWebAuthFlow')) errors.push('background/auth.ts: sign-in must use launchWebAuthFlow');
 
 const worker = await readFile(resolve(sourceRoot, 'background/service-worker/main.ts'), 'utf8');
-if (!worker.includes("chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })")) {
+if (!worker.includes("typeof chrome.storage.local.setAccessLevel === 'function'")
+  || !worker.includes("chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => undefined)")) {
   errors.push('persistent storage must be limited to trusted extension contexts');
 }
 const backup = await readFile(resolve(sourceRoot, 'background/encrypted-session-backup.ts'), 'utf8');
