@@ -29,7 +29,7 @@
   padding: 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--importer-radius-control);
-  background: var(--importer-color-surface);
+  background-color: var(--importer-color-surface);
   color: inherit;
 }
 .asset-review-search {
@@ -185,7 +185,7 @@
   padding: 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--importer-radius-control);
-  background: var(--importer-color-surface);
+  background-color: var(--importer-color-surface);
 }
 .asset-inspector-actions {
   padding-top: 16px;
