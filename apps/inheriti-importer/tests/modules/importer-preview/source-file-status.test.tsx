@@ -22,8 +22,13 @@ describe('source file status', () => {
 
     expect(screen.getByText('Master password')).toBeTruthy();
     const passwordInput = screen.getByLabelText('Master password') as HTMLInputElement;
-    expect(passwordInput.style.flex).toBe('');
-    expect(passwordInput.parentElement?.parentElement?.style.flex).toBe('1 1 180px');
+    expect(passwordInput.closest('.source-unlock-panel')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose file' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeTruthy();
+    expect((screen.getByLabelText('KeePass key file') as HTMLInputElement).tabIndex).toBe(-1);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Show password' }), { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Hide password' })).toBeTruthy();
+    expect(screen.queryByText('Unlock required')).toBeNull();
     fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [keyFile] } });
     await screen.findByText('vault.key');
     const submit = screen.getAllByRole('button', { name: 'Unlock' })[1];
@@ -31,6 +36,64 @@ describe('source file status', () => {
     fireEvent.click(submit);
 
     await waitFor(() => expect(onUnlock).toHaveBeenCalledWith(source, '', keyBytes));
+  });
+
+  it('cancels unlock, clears factors, and restores focus to the trigger', async () => {
+    const source: ImportFile = { name: 'cancel.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const bytes = new Uint8Array([1, 2]).buffer;
+    const selected = new File(['key'], 'cancel.key');
+    Object.defineProperty(selected, 'arrayBuffer', { value: vi.fn().mockResolvedValue(bytes) });
+    render(<FileRow file={source} onUnlock={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: 'Unlock' });
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: 'secret' } });
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    await screen.findByText('cancel.key');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(new Uint8Array(bytes)).toEqual(new Uint8Array(2));
+    expect(screen.queryByLabelText('Master password')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    expect((screen.getByLabelText('Master password') as HTMLInputElement).value).toBe('');
+    expect(screen.queryByText('cancel.key')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Unlock' })[1].hasAttribute('disabled')).toBe(true);
+  });
+
+  it('wipes a key file read that finishes after cancellation', async () => {
+    const bytes = new Uint8Array([7, 8]).buffer;
+    let finishRead!: (value: ArrayBuffer) => void;
+    const selected = new File(['key'], 'late.key');
+    Object.defineProperty(selected, 'arrayBuffer', {
+      value: () => new Promise<ArrayBuffer>((resolve) => { finishRead = resolve; }),
+    });
+    render(<FileRow file={{ name: 'late.kdbx', format: 'KeePass', status: 'unlock-required' }} initiallyShowUnlock onUnlock={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    finishRead(bytes);
+    await waitFor(() => expect(new Uint8Array(bytes)).toEqual(new Uint8Array(2)));
+    expect(screen.queryByText('late.key')).toBeNull();
+  });
+
+  it('shows a KeePass error in the password field only after an unlock attempt', () => {
+    const source: ImportFile = {
+      name: 'error.kdbx', format: 'KeePass', status: 'unlock-required',
+      detail: 'Could not open KeePass database. Check the password or key file.',
+    };
+    const props = { initiallyShowUnlock: true, onUnlock: vi.fn() };
+    const { rerender } = render(<FileRow file={source} {...props} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(source.detail!)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: 'wrong' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unlock' })[1]);
+    rerender(<FileRow file={{ ...source, status: 'unlocking', detail: undefined }} {...props} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    rerender(<FileRow file={source} {...props} />);
+    expect(screen.getByRole('alert').textContent).toBe(source.detail);
+    expect((screen.getByLabelText('Master password') as HTMLInputElement).value).toBe('wrong');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows the full source filename in the native hover title', () => {

@@ -14,6 +14,7 @@
     "dev:stg": "node scripts/dev-environment.mjs stg",
     "dev:prod": "node scripts/dev-environment.mjs prod",
     "dev:web": "vite",
+    "review:local": "node scripts/review-local.mjs",
     "ladle": "ladle serve",
     "ladle:build": "ladle build",
     "build": "node scripts/build-environment.mjs dev",

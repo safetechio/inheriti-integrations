@@ -1,4 +1,5 @@
 import * as kdbxweb from 'kdbxweb';
+import { readFile } from 'node:fs/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { setupKdbxCrypto } from '@shared/infrastructure/crypto/crypto-engine';
 import { parseKeepass } from '@modules/import/infrastructure/parsers/keepass';
@@ -29,6 +30,21 @@ async function makeDatabase(password: string | null, keyFile?: ArrayBuffer) {
 describe('parseKeepass', () => {
   const keyFile = new Uint8Array(32).fill(7).buffer;
   const wrongKeyFile = new Uint8Array(32).fill(8).buffer;
+
+  it('reports failed credentials for the real demo vault and then opens it on retry', async () => {
+    const bytes = await readFile(
+      new URL('../../../../fixtures/sample-imports/keepass-demo-vault.kdbx', import.meta.url),
+    );
+    const data = Uint8Array.from(bytes).buffer;
+
+    await expect(parseKeepass(data)).rejects.toThrow(
+      'This KeePass database is protected. Enter the master password to unlock it.',
+    );
+    await expect(parseKeepass(data, { password: 'wrong' })).rejects.toThrow(
+      'Could not open this KeePass database. Check the master password or key file.',
+    );
+    expect((await parseKeepass(data, { password: 'demo-password' })).entries).toHaveLength(4);
+  });
 
   it('reads a password-protected kdbx file', async () => {
     const data = await makeDatabase('master-key');

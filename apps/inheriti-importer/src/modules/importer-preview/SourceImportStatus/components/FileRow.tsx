@@ -5,6 +5,7 @@ import {
   Card,
   FormTextInput,
   Icon,
+  IconAction,
   Notice,
   Text,
   theme,
@@ -38,6 +39,10 @@ export function FileRow({
   const [keyFileName, setKeyFileName] = useState('');
   const [showUnlock, setShowUnlock] = useState(initiallyShowUnlock);
   const [showPassword, setShowPassword] = useState(false);
+  const [attemptedUnlock, setAttemptedUnlock] = useState(false);
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  const unlockTriggerRef = useRef<HTMLElement | null>(null);
+  const restoreUnlockFocus = useRef(false);
   useEffect(() => {
     if (file.status === 'unlock-required' || file.status === 'unlocking') return;
     keyReadRevision.current += 1;
@@ -47,6 +52,7 @@ export function FileRow({
     setKeyFile(undefined);
     setKeyFileName('');
     setShowPassword(false);
+    setAttemptedUnlock(false);
   }, [file.status]);
   useEffect(
     () => () => {
@@ -55,18 +61,38 @@ export function FileRow({
     },
     [],
   );
+  useEffect(() => {
+    if (!showUnlock && restoreUnlockFocus.current) {
+      unlockTriggerRef.current?.querySelector<HTMLElement>('[role="button"]')?.focus();
+      restoreUnlockFocus.current = false;
+    }
+  }, [showUnlock]);
+  const locked = file.status === 'unlock-required' || file.status === 'unlocking';
+  const cancelUnlock = () => {
+    keyReadRevision.current += 1;
+    if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
+    keyFileRef.current = undefined;
+    setKeyFile(undefined);
+    setKeyFileName('');
+    if (keyInputRef.current) keyInputRef.current.value = '';
+    setPassword('');
+    setShowPassword(false);
+    setAttemptedUnlock(false);
+    restoreUnlockFocus.current = true;
+    setShowUnlock(false);
+  };
   const canRetry = file.status === 'failed';
   return (
     <Card tone="default" className="source-file-card">
       <Box
         flexDirection="row"
-        alignItems="center"
+        alignItems="flex-start"
         gap={theme.importer.spacing.sectionGap}
         style={{ flexWrap: 'wrap' }}
       >
         <Icon
           name={
-            file.status === 'unlock-required' || file.status === 'unlocking'
+            locked
               ? 'lock'
               : file.format === 'KeePass'
                 ? 'database'
@@ -74,7 +100,7 @@ export function FileRow({
                   ? 'shield'
                   : 'file-lines'
           }
-          color={theme.colors.gray120}
+          color={theme.colors[locked ? 'warning120' : 'gray120']}
         />
         <Box gap={2} style={{ flex: '1 1 220px', minWidth: 0 }}>
           <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
@@ -90,7 +116,7 @@ export function FileRow({
               {file.format}
             </Badge>
           </Box>
-          <Text variant="importerSourceMeta" color="gray">
+          <Text variant="importerSourceMeta" color={locked ? 'warning120' : 'gray'}>
             {file.status === 'failed' || file.status === 'retrying'
               ? 'Not parsed'
               : file.status === 'unlocking'
@@ -99,18 +125,26 @@ export function FileRow({
                   ? 'Locked database'
                   : `${file.entries ?? 0} entr${file.entries === 1 ? 'y' : 'ies'}`}
           </Text>
-          {file.detail ? (
+          {file.detail && !locked ? (
             <Text variant="bodySmall" color="gray">
               {file.detail}
             </Text>
           ) : null}
         </Box>
-        <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
-          <Badge tone={statusBadge[file.status].tone} icon={statusBadge[file.status].icon}>
-            {file.status === 'warning'
-              ? `${file.warnings ?? 0} warning${file.warnings === 1 ? '' : 's'}`
-              : labels[file.status]}
-          </Badge>
+        <Box
+          className={locked ? 'source-file-actions source-file-actions-locked' : 'source-file-actions'}
+          flexDirection="row"
+          alignItems="flex-start"
+          gap="s"
+          style={locked ? undefined : { flexWrap: 'wrap' }}
+        >
+          {!locked ? (
+            <Badge tone={statusBadge[file.status].tone} icon={statusBadge[file.status].icon}>
+              {file.status === 'warning'
+                ? `${file.warnings ?? 0} warning${file.warnings === 1 ? '' : 's'}`
+                : labels[file.status]}
+            </Badge>
+          ) : null}
           {file.status === 'warning' ? (
             <Button
               title="View warnings"
@@ -124,17 +158,105 @@ export function FileRow({
               onPress={() => onViewWarnings?.(file)}
             />
           ) : null}
-          {file.status === 'unlock-required' ? (
-            <Button
-              title="Unlock"
-              startIcon={<Icon name="unlock" size={11} />}
-              variant="outlined"
-              size="sm"
-              minHeight={theme.importer.controls.sourceActionHeight}
-              paddingHorizontal={theme.importer.spacing.sectionGap}
-              textVariant="buttonDefault"
-              onPress={() => setShowUnlock(true)}
-            />
+          {locked ? (
+            <Box className="source-unlock-column" alignItems="flex-end" gap="s">
+              <Box ref={(element) => { unlockTriggerRef.current = element; }}>
+                <Button
+                  title="Unlock"
+                  variant="outlined"
+                  size="sm"
+                  minHeight={theme.importer.controls.sourceActionHeight}
+                  paddingHorizontal={theme.importer.spacing.sectionGap}
+                  textVariant="buttonDefault"
+                  disabled={showUnlock || file.status === 'unlocking'}
+                  onPress={() => setShowUnlock(true)}
+                />
+              </Box>
+              {showUnlock ? (
+                <Box className="source-unlock-panel" gap="m">
+                  <Box gap="xxs" alignItems="flex-start">
+                    <Button
+                      title="Choose file"
+                      variant="outlined"
+                      color="gray"
+                      size="sm"
+                      disabled={file.status === 'unlocking'}
+                      onPress={() => keyInputRef.current?.click()}
+                    />
+                    <input
+                      ref={keyInputRef}
+                      className="source-unlock-file-input"
+                      type="file"
+                      tabIndex={-1}
+                      aria-label="KeePass key file"
+                      disabled={file.status === 'unlocking'}
+                      onChange={async (event) => {
+                        const selected = event.target.files?.[0];
+                        const revision = ++keyReadRevision.current;
+                        if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
+                        keyFileRef.current = undefined;
+                        setKeyFile(undefined);
+                        setKeyFileName('');
+                        const bytes = selected ? await selected.arrayBuffer() : undefined;
+                        if (revision !== keyReadRevision.current) {
+                          if (bytes) new Uint8Array(bytes).fill(0);
+                          return;
+                        }
+                        keyFileRef.current = bytes;
+                        setKeyFile(bytes);
+                        setKeyFileName(selected?.name ?? '');
+                      }}
+                    />
+                    {keyFileName ? (
+                      <Text variant="bodySmall" color="gray" numberOfLines={1}>
+                        {keyFileName}
+                      </Text>
+                    ) : null}
+                  </Box>
+                  <Box className="source-unlock-password">
+                    <FormTextInput
+                      label="Master password"
+                      autoFocus
+                      editable={file.status !== 'unlocking'}
+                      secureTextEntry={!showPassword}
+                      error={attemptedUnlock && file.status === 'unlock-required' ? file.detail : undefined}
+                      value={password}
+                      onChangeText={setPassword}
+                      style={{ paddingRight: 44 }}
+                    />
+                    <Box className="source-unlock-reveal">
+                      <IconAction
+                        name={showPassword ? 'eye-slash' : 'eye'}
+                        label={showPassword ? 'Hide password' : 'Show password'}
+                        disabled={file.status === 'unlocking'}
+                        onPress={() => setShowPassword((value) => !value)}
+                      />
+                    </Box>
+                  </Box>
+                  <Box flexDirection="row" justifyContent="space-between" alignItems="center">
+                    <Button
+                      title="Cancel"
+                      variant="plain"
+                      color="gray"
+                      disabled={file.status === 'unlocking'}
+                      onPress={cancelUnlock}
+                    />
+                    <Button
+                      title="Unlock"
+                      disabled={
+                        file.status === 'unlocking' ||
+                        !onUnlock ||
+                        (password.length === 0 && !keyFile)
+                      }
+                      onPress={() => {
+                        setAttemptedUnlock(true);
+                        onUnlock?.(file, password, keyFile);
+                      }}
+                    />
+                  </Box>
+                </Box>
+              ) : null}
+            </Box>
           ) : null}
           {canRetry ? (
             <Button
@@ -162,74 +284,6 @@ export function FileRow({
           ) : null}
         </Box>
       </Box>
-      {(file.status === 'unlock-required' || file.status === 'unlocking') && showUnlock ? (
-        <Box
-          className="source-unlock-panel"
-          flexDirection="row"
-          alignItems="flex-end"
-          gap="s"
-          style={{ flexWrap: 'wrap' }}
-        >
-          <Text variant="bodySmall" color="info120" style={{ width: '100%' }}>
-            Enter the credentials required by this KeePass file.
-          </Text>
-          <Box style={{ flex: '1 1 180px', minWidth: 180 }}>
-            <FormTextInput
-              label="Master password"
-              autoFocus
-              editable={file.status !== 'unlocking'}
-              secureTextEntry={!showPassword}
-              placeholder="Master password"
-              value={password}
-              onChangeText={setPassword}
-            />
-          </Box>
-          <Button
-            title={showPassword ? 'Hide password' : 'Show password'}
-            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-            startIcon={<Icon name={showPassword ? 'eye-slash' : 'eye'} size={14} />}
-            variant="plain"
-            color="gray"
-            disabled={file.status === 'unlocking'}
-            onPress={() => setShowPassword((value) => !value)}
-          />
-          <Box gap="xxs">
-            <input
-              type="file"
-              aria-label="KeePass key file"
-              disabled={file.status === 'unlocking'}
-              onChange={async (event) => {
-                const selected = event.target.files?.[0];
-                const revision = ++keyReadRevision.current;
-                if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
-                keyFileRef.current = undefined;
-                setKeyFile(undefined);
-                setKeyFileName('');
-                const bytes = selected ? await selected.arrayBuffer() : undefined;
-                if (revision !== keyReadRevision.current) {
-                  if (bytes) new Uint8Array(bytes).fill(0);
-                  return;
-                }
-                keyFileRef.current = bytes;
-                setKeyFile(bytes);
-                setKeyFileName(selected?.name ?? '');
-              }}
-            />
-            {keyFileName ? (
-              <Text variant="bodySmall" color="gray">
-                {keyFileName}
-              </Text>
-            ) : null}
-          </Box>
-          <Button
-            title="Unlock"
-            disabled={
-              file.status === 'unlocking' || !onUnlock || (password.length === 0 && !keyFile)
-            }
-            onPress={() => onUnlock?.(file, password, keyFile)}
-          />
-        </Box>
-      ) : null}
       {file.status === 'failed' ? (
         <Notice
           compact

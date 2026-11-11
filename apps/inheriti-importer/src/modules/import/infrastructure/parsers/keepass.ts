@@ -44,7 +44,12 @@ class KeepassParser {
       return await kdbxweb.Kdbx.load(this.data.slice(0), credentials);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/invalid key|invalid credentials|hmac|hash|keyfile|password/i.test(message)) {
+      const hasCredentials = Boolean(password || options.keyFile);
+      if (
+        hasCredentials &&
+        ((error instanceof kdbxweb.KdbxError && error.code === 'InvalidKey') ||
+          /invalid key|invalid credentials|hmac|hash|keyfile|password/i.test(message))
+      ) {
         throw new VaultUnlockError(
           'Could not open this KeePass database. Check the master password or key file.',
           { needsPassword: true, needsKeyFile: Boolean(options.keyFile) },

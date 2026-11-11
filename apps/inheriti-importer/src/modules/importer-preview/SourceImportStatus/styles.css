@@ -15,16 +15,48 @@
   box-shadow: none;
 }
 .source-unlock-panel {
+  box-sizing: border-box;
+  width: 100%;
   padding: 12px;
   border: 1px solid var(--info-30);
   border-radius: 10px;
-  background: var(--info-10);
+  background: var(--info-5);
+}
+.source-file-actions {
+  justify-content: flex-end;
+  max-width: 100%;
+}
+.source-file-actions-locked {
+  width: min(490px, 100%);
+  margin-left: auto;
+  flex-wrap: nowrap !important;
+}
+.source-unlock-column {
+  flex: 1 1 400px;
+  min-width: 0;
+  max-width: 400px;
+}
+.source-unlock-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.source-unlock-password {
+  position: relative;
+  width: 100%;
+}
+.source-unlock-reveal {
+  position: absolute;
+  right: 5px;
+  top: 30px;
 }
 @media (max-width: 640px) {
   .source-file-card {
     padding: 12px !important;
   }
-  .source-file-card button {
-    margin-left: 30px;
+  .source-file-actions {
+    width: 100%;
   }
 }
