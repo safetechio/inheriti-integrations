@@ -19,7 +19,9 @@ import {
   automaticCompanion,
   assetMatchesSuggestion,
   plainTextValueWithoutNote,
+  convertToCanonicalType,
 } from './importer-workspace-suggestions';
+import type { AssetTypeOverrides } from './importer-workspace-types';
 
 // Apply review edits before building the visible asset rows.
 export function projectSuggestions(
@@ -28,24 +30,49 @@ export function projectSuggestions(
   mappingOverrides: MappingOverrides,
   plainTextOverrides: PlainTextOverrides,
   plainTextAssetIds: ReadonlySet<string>,
+  typeOverrides: AssetTypeOverrides = {},
 ): SuggestedAsset[] {
-  return found.map((suggestion) => {
-    const structured =
+  const projectOne = (suggestion: SuggestedAsset): SuggestedAsset => {
+    const primary =
       suggestion.variant === 'additional-fields'
-        ? automaticCompanion(session, found, suggestion, mappingOverrides)
-        : applyMappingOverrides(suggestion, mappingOverrides);
+        ? found.find(
+            (candidate) =>
+              candidate.fromNodeId === suggestion.fromNodeId &&
+              candidate.variant !== 'additional-fields',
+          )
+        : undefined;
+    const projectedPrimary = primary ? projectOne(primary) : undefined;
+    const structured = primary
+      ? automaticCompanion(
+          session,
+          [projectedPrimary?.type === 'PLAIN-TEXT' ? primary : projectedPrimary!],
+          suggestion,
+          mappingOverrides,
+        )
+      : applyMappingOverrides(suggestion, mappingOverrides);
     const overridden = applyMappingOverrides(structured, mappingOverrides);
-    const converted = plainTextAssetIds.has(statusKey(suggestion))
-      ? convertToPlainText(
+    const converted = typeOverrides[statusKey(suggestion)]
+      ? convertToCanonicalType(
           session,
           overridden,
+          typeOverrides[statusKey(suggestion)],
           found.some(
             (candidate) =>
               candidate.fromNodeId === suggestion.fromNodeId &&
               candidate.variant === 'additional-fields',
           ),
         )
-      : overridden;
+      : plainTextAssetIds.has(statusKey(suggestion))
+        ? convertToPlainText(
+            session,
+            overridden,
+            found.some(
+              (candidate) =>
+                candidate.fromNodeId === suggestion.fromNodeId &&
+                candidate.variant === 'additional-fields',
+            ),
+          )
+        : overridden;
     let mapped =
       converted === overridden ? overridden : applyMappingOverrides(converted, mappingOverrides);
     const noteOverride = mappingOverrides[statusKey(converted)];
@@ -75,7 +102,8 @@ export function projectSuggestions(
         'secret.text': { kind: 'literal' as const, value },
       },
     };
-  });
+  };
+  return found.map(projectOne);
 }
 
 /** Show accepted suggestions that have not been placed in a plan. */
@@ -97,6 +125,9 @@ function projectUnassigned(
       id: statusKey(suggestion),
       name: suggestion.name,
       type: suggestion.type,
+      source: session.sources.find(
+        (item) => item.id === session.nodesById[suggestion.fromNodeId]?.sourceId,
+      )?.fileName,
       valid: true,
     }));
 }
@@ -125,6 +156,11 @@ function projectPlans(
           id: suggestion ? statusKey(suggestion) : asset.id,
           name: asset.name,
           type: asset.type,
+          source: suggestion
+            ? session.sources.find(
+                (item) => item.id === session.nodesById[suggestion.fromNodeId]?.sourceId,
+              )?.fileName
+            : undefined,
           valid: !invalidAssetIds.has(asset.id),
         };
       }),
@@ -141,6 +177,7 @@ export function projectImporterWorkspace(
   mappingOverrides: MappingOverrides = {},
   plainTextOverrides: PlainTextOverrides = {},
   plainTextAssetIds: ReadonlySet<string> = new Set(),
+  typeOverrides: AssetTypeOverrides = {},
 ): ImporterWorkspaceProjection {
   const found = sourceSuggestions(session);
   const suggestions = projectSuggestions(
@@ -149,8 +186,16 @@ export function projectImporterWorkspace(
     mappingOverrides,
     plainTextOverrides,
     plainTextAssetIds,
+    typeOverrides,
   );
-  const assets = projectAssets(session, suggestions, workspace, decisions, plainTextAssetIds);
+  const assets = projectAssets(
+    session,
+    suggestions,
+    workspace,
+    decisions,
+    plainTextAssetIds,
+    typeOverrides,
+  );
   const unassigned = projectUnassigned(session, suggestions, workspace, decisions);
   const plans = projectPlans(session, workspace, suggestions);
   return { suggestions, assets, unassigned, plans };

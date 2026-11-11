@@ -8,8 +8,8 @@
   background: var(--importer-color-surface);
 }
 .staging-checklist-row.needs-fix {
-  border-color: var(--warning-30);
-  background: var(--warning-5);
+  border-color: var(--gray-30);
+  background: var(--gray-5);
 }
 .staging-checklist-row.has-error {
   border-color: var(--danger-30);
@@ -30,8 +30,8 @@
   background: var(--success-10);
 }
 .staging-checklist-row.needs-fix .staging-check-mark {
-  border-color: var(--warning-30);
-  background: var(--warning-10);
+  border-color: var(--gray-30);
+  background: var(--gray-5);
 }
 .staging-checklist-row.has-error .staging-check-mark {
   border-color: var(--danger-30);

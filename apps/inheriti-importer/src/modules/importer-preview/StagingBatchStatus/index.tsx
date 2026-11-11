@@ -23,10 +23,17 @@ export function StagingBatchStatus({
   const batch = projectStagingBatch(items, plans);
   if (!running && batch.completed === items.length) return null;
   return (
-    <Box gap="s" padding="m" backgroundColor="gray5" borderRadius="s">
+    <Box
+      gap="s"
+      padding="m"
+      backgroundColor="gray5"
+      borderColor="gray30"
+      borderWidth={1}
+      borderRadius="s"
+    >
       <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap="s">
         <Text variant="bodySmall" bold>
-          {batch.completed} of {items.length} Plans staged
+          {batch.completed} of {items.length} {items.length === 1 ? 'plan' : 'plans'} staged
         </Text>
         {running ? (
           <Button title="Cancel staging" variant="plain" size="sm" onPress={onCancel} />
@@ -47,9 +54,24 @@ export function StagingBatchStatus({
           backgroundColor="white"
           borderRadius="s"
         >
-          <Text variant="bodySmall">
-            {plan.name} · {plan.outcome}
-          </Text>
+          <Box flex={1} gap="xs">
+            <Text variant="bodySmall">
+              {plan.name} · {plan.outcome}
+            </Text>
+            <Box
+              accessibilityRole="progressbar"
+              accessibilityLabel={`${plan.name} staging progress`}
+              accessibilityValue={{ min: 0, max: 1, now: plan.outcome === 'Staged' ? 1 : 0 }}
+              height={6}
+              backgroundColor="gray10"
+              borderRadius="s"
+              overflow="hidden"
+            >
+              {plan.outcome === 'Staged' ? (
+                <Box width="100%" height={6} backgroundColor="success" />
+              ) : null}
+            </Box>
+          </Box>
           {plan.retry ? (
             <Button
               title="Retry staging"

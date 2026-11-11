@@ -1,4 +1,4 @@
-import { Box, Stack, Text } from '@main-components';
+import { Stack } from '@main-components';
 import { ChecklistRows } from './components/ChecklistRows';
 import { StageActions } from './components/StageActions';
 import { StagingSuccess } from './components/StagingSuccess';
@@ -15,6 +15,7 @@ export function FinalStagingChecklist({
   onRetry,
   onStartAgain,
   showActions = true,
+  progress,
 }: FinalStagingChecklistProps) {
   if (state === 'staged')
     return <StagingSuccess description={description} onStartAgain={onStartAgain} />;
@@ -22,28 +23,25 @@ export function FinalStagingChecklist({
   const failed = state === 'failed-stage' || state === 'retry';
   return (
     <Stack gap="m" className="staging-checklist-surface">
-      <Box gap="s">
-        <Box gap="xs">
-          <Text variant="heading3">Pre-flight</Text>
-          {description ? (
-            <Text variant="bodySmall" color="gray" style={{ fontSize: 13, opacity: 0.8 }}>
-              {description}
-            </Text>
-          ) : null}
-        </Box>
-        <Stack gap="m" className="staging-checklist-list">
-          <ChecklistRows items={items} />
-        </Stack>
-      </Box>
-      {showActions ? (
-        <StageActions
-          failed={failed}
-          canStage={canStage}
-          state={state}
-          onStage={onStage}
-          onRetry={onRetry}
+      <Stack gap="m" className="staging-checklist-list">
+        <ChecklistRows
+          items={items.slice(-2)}
+          secureAction={
+            <>
+              {progress}
+              {showActions ? (
+                <StageActions
+                  failed={failed}
+                  canStage={canStage}
+                  state={state}
+                  onStage={onStage}
+                  onRetry={onRetry}
+                />
+              ) : null}
+            </>
+          }
         />
-      ) : null}
+      </Stack>
     </Stack>
   );
 }

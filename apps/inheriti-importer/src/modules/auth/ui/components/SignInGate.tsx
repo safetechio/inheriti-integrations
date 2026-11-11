@@ -52,19 +52,21 @@ export function SignInGate({
         {status === 'switching' ? (
           <Box alignItems="center" gap="s" role="status" aria-live="polite" aria-busy={true}>
             <ActivityIndicator size="small" color={uiTheme.colors.gray30} />
-            <Text variant="heading3" align="center">Switching account…</Text>
+            <Text variant="heading3" align="center">
+              Switching account…
+            </Text>
           </Box>
         ) : null}
-        {status !== 'switching' ? <BrandLogo business className="auth-logo" /> : null}
+        {status !== 'switching' ? <BrandLogo className="auth-logo" /> : null}
         {status !== 'switching' ? (
-        <Box gap="s" className="auth-copy">
-          <Text variant="heading3" align="center">
-            Sign in to your workspace
-          </Text>
-          <Text variant="bodySmall" align="center" color="gray">
-            Import your secrets, review them, and create secure plans for your organisation.
-          </Text>
-        </Box>
+          <Box gap="s" className="auth-copy">
+            <Text variant="heading3" align="center">
+              Sign in to your workspace
+            </Text>
+            <Text variant="bodySmall" align="center" color="gray">
+              Import your secrets, review them, and create secure plans for your organisation.
+            </Text>
+          </Box>
         ) : null}
         {status === 'checking' ? (
           <Box alignItems="center" gap="s">
@@ -82,15 +84,19 @@ export function SignInGate({
           </Box>
         ) : null}
         {status !== 'switching' && message ? <Alert>{message}</Alert> : null}
-        {status !== 'checking' && status !== 'switching' && accounts.map((account, index) => (
-          <Button
-            key={account.key}
-            title={`Continue with saved account${accounts.length > 1 ? ` ${index + 1}` : ''}`}
-            variant="outlined"
-            block
-            onPress={() => { void onActivateAccount(account.key); }}
-          />
-        ))}
+        {status !== 'checking' &&
+          status !== 'switching' &&
+          accounts.map((account, index) => (
+            <Button
+              key={account.key}
+              title={`Continue with saved account${accounts.length > 1 ? ` ${index + 1}` : ''}`}
+              variant="outlined"
+              block
+              onPress={() => {
+                void onActivateAccount(account.key);
+              }}
+            />
+          ))}
         {status !== 'checking' && status !== 'switching' ? (
           <Button
             title="Sign in with SafeID"

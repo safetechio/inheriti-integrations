@@ -27,7 +27,7 @@ export function PlanDraftList({
   onUnassign,
 }: PlanDraftListProps) {
   return (
-    <Stack gap="s" className="plan-grouping-plans" style={{ flex: '2 1 420px', minWidth: 0 }}>
+    <Stack gap="s" className="plan-grouping-plans" style={{ flex: '1 1 auto', minWidth: 0 }}>
       {plans.length ? (
         plans.map((plan) => (
           <PlanCard

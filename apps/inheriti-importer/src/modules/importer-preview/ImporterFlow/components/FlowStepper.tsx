@@ -1,11 +1,10 @@
-import { Box, Card, Icon, InteractiveSurface, Text, theme } from '@main-components';
+import { Box, Card, InteractiveSurface, Text } from '@main-components';
 import { importerFlowStages, type ImporterFlowStage } from '../hooks/use-importer-flow';
 import type { ReviewAsset } from '../../AssetReviewQueue';
 import type { GroupingAsset, PlanDraft } from '../../PlanGroupingSurface';
 import type { ImportFile } from '../../SourceImportStatus';
 import { isPlanOverCapacity } from '../../PlanGroupingSurface/capacity';
 import type { ImporterFlowReadiness } from '../application/flow-readiness';
-import { UpdateStatus } from '@modules/_shared/ui/components/UpdateStatus';
 
 type FlowStepperProps = {
   stage: ImporterFlowStage;
@@ -41,17 +40,17 @@ export function FlowStepper({
   const invalidPlans = plans.filter((plan) => !plan.valid || isPlanOverCapacity(plan)).length;
   const stepStatus = {
     sources: readiness.sources
-      ? `${files.length} sources ready`
+      ? `${files.length} source${files.length === 1 ? '' : 's'}`
       : files.length
         ? `${lockedSources + failedSources} need attention`
         : 'Add a source',
     assets: readiness.assets
-      ? 'All reviewed'
+      ? `${assets.length} asset${assets.length === 1 ? '' : 's'} reviewed`
       : assets.length
         ? `${undecided} to review`
-        : 'No Assets detected',
+        : 'No assets detected',
     plans: readiness.plans
-      ? `${plans.length} plans ready`
+      ? `${plans.length} plan${plans.length === 1 ? '' : 's'}`
       : plans.length
         ? unassigned.length
           ? `${unassigned.length} unassigned`
@@ -60,7 +59,7 @@ export function FlowStepper({
     staging: readiness.staging
       ? organizationKeyLoaded
         ? 'Ready to stage'
-        : 'Request Organization Key'
+        : 'Load Organisation Key'
       : 'Complete previous steps',
   };
 
@@ -71,8 +70,7 @@ export function FlowStepper({
           Import steps
         </Text>
         {importerFlowStages.map((item, index) => {
-          const ready = readiness[item.id] && (item.id !== 'staging' || organizationKeyLoaded);
-          const statusIcon = getStepStatusIcon(item.id, ready);
+          const ready = index < active && readiness[item.id];
           const disabled =
             locked ||
             (index > active &&
@@ -95,7 +93,7 @@ export function FlowStepper({
                 <Text
                   className="importer-flow-step-number"
                   variant="importerStepNumber"
-                  color={ready ? 'success120' : index === active ? 'white' : 'primary50'}
+                  color={index === active ? 'white' : ready ? 'success120' : 'gray50'}
                 >
                   {ready ? '✓' : index + 1}
                 </Text>
@@ -109,10 +107,9 @@ export function FlowStepper({
                 alignItems="center"
                 gap="xxs"
               >
-                <Icon name={statusIcon.name} size={10} color={statusIcon.color} />
                 <Text
                   variant="importerStepStatus"
-                  color={ready ? 'success120' : item.id === 'staging' ? 'gray' : 'warning200'}
+                  color={index === active ? 'primary120' : ready ? 'success120' : 'gray'}
                 >
                   {stepStatus[item.id]}
                 </Text>
@@ -138,27 +135,13 @@ export function FlowStepper({
               {label}
             </Text>
             <Text className="importer-flow-counter-value" variant="importerCounterValue">
-              {value}
+              {value || '–'}
             </Text>
           </Box>
         ))}
       </Box>
-      <UpdateStatus className="importer-flow-version" />
     </Card>
   );
-}
-
-function getStepStatusIcon(stage: ImporterFlowStage, ready: boolean) {
-  if (ready) return { name: 'circle-check', color: theme.colors.success120 };
-
-  switch (stage) {
-    case 'plans':
-      return { name: 'layer-group', color: theme.colors.warning200 };
-    case 'staging':
-      return { name: 'lock', color: theme.colors.gray };
-    default:
-      return { name: 'circle-exclamation', color: theme.colors.warning200 };
-  }
 }
 
 export default FlowStepper;

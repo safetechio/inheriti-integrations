@@ -50,7 +50,7 @@ describe('StagingBatchStatus', () => {
     );
 
     expect(screen.getByText('Alpha · Staged')).toBeTruthy();
-    expect(screen.getByText('Beta · Not staged')).toBeTruthy();
+    expect(screen.getByText('Beta · Staging failed')).toBeTruthy();
     expect(screen.queryByText(/created|configured/i)).toBeNull();
     const retries = screen.getAllByRole('button', { name: 'Retry staging' });
     fireEvent.click(retries[0]!);

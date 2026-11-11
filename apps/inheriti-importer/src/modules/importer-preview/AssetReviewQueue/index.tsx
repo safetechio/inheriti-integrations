@@ -1,12 +1,4 @@
-import {
-  Box,
-  FilterChip,
-  NoItemsPlaceholder,
-  PanelHeader,
-  ProgressBar,
-  Stack,
-  Text,
-} from '@main-components';
+import { Box, Icon, FilterChip, NoItemsPlaceholder, Stack, Text } from '@main-components';
 import { useEffect, useState } from 'react';
 import { AssetRow } from './components/AssetRow';
 import { Inspector } from './components/Inspector';
@@ -23,7 +15,6 @@ export type {
 
 export function AssetReviewQueue({
   assets,
-  description = 'Accept or exclude every detected Asset before continuing.',
   selectedId,
   onSelect,
   onAction,
@@ -35,6 +26,21 @@ export function AssetReviewQueue({
   const [filter, setFilter] = useState<'all' | 'review' | 'accepted' | 'excluded'>(() =>
     assets.some((asset) => !['accepted', 'excluded'].includes(asset.status)) ? 'review' : 'all',
   );
+  const [source, setSource] = useState('all');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState<'list' | 'tree'>('list');
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
+  const sourceKey = (asset: (typeof assets)[number]) =>
+    asset.sourceId ?? asset.sourceFileName ?? asset.source.split(' · ')[0];
+  const sources = [
+    ...new Map(
+      assets.map((asset) => [
+        sourceKey(asset),
+        asset.sourceFileName ?? asset.source.split(' · ')[0],
+      ]),
+    ).entries(),
+  ];
   const reviewed = assets.filter((asset) => ['accepted', 'excluded'].includes(asset.status)).length;
   const counts = {
     all: assets.length,
@@ -44,11 +50,61 @@ export function AssetReviewQueue({
   };
   const visible = assets.filter(
     (asset) =>
-      filter === 'all' ||
-      (filter === 'review' && !['accepted', 'excluded'].includes(asset.status)) ||
-      filter === asset.status,
+      (source === 'all' || sourceKey(asset) === source) &&
+      (!search.trim() ||
+        asset.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) &&
+      (filter === 'all' ||
+        (filter === 'review' && !['accepted', 'excluded'].includes(asset.status)) ||
+        filter === asset.status),
   );
   const selected = visible.find((asset) => asset.id === selectedId) ?? visible[0];
+  const canShowTree =
+    source !== 'all' &&
+    assets.some((asset) => sourceKey(asset) === source && Boolean(asset.folderPath?.length));
+  const folderCounts = new Map<string, number>();
+  for (const asset of visible) {
+    const parts = asset.folderPath ?? [];
+    for (let index = 0; index < parts.length; index++) {
+      const path = parts.slice(0, index + 1).join('/');
+      folderCounts.set(path, (folderCounts.get(path) ?? 0) + 1);
+    }
+  }
+  const rows =
+    view === 'tree' && canShowTree
+      ? visible.flatMap((asset) => {
+          const parts = asset.folderPath ?? [];
+          const entries: {
+            key: string;
+            label?: string;
+            count?: number;
+            depth: number;
+            asset?: typeof asset;
+          }[] = [];
+          for (let index = 0; index < parts.length; index++) {
+            const key = parts.slice(0, index + 1).join('/');
+            if (
+              !visible
+                .slice(0, visible.indexOf(asset))
+                .some((prior) => prior.folderPath?.slice(0, index + 1).join('/') === key)
+            )
+              entries.push({
+                key: `folder:${key}`,
+                label: parts[index],
+                count: folderCounts.get(key),
+                depth: index,
+              });
+          }
+          if (parts.every((_, index) => openFolders.has(parts.slice(0, index + 1).join('/'))))
+            entries.push({ key: asset.id, asset, depth: parts.length });
+          return entries;
+        })
+      : visible.map((asset) => ({
+          key: asset.id,
+          asset,
+          depth: 0,
+          label: undefined,
+          count: undefined,
+        }));
 
   useEffect(() => {
     if (filter === 'review' && counts.review === 0) setFilter('all');
@@ -65,9 +121,14 @@ export function AssetReviewQueue({
         target.matches("input, textarea, select, [contenteditable='true']")
       )
         return;
-      if (event.key.toLowerCase() === 'a' && hasIncludedSchemaField(selected))
+      if (
+        event.key.toLowerCase() === 'a' &&
+        selected.status !== 'accepted' &&
+        hasIncludedSchemaField(selected)
+      )
         onAction('accept', selected);
-      if (event.key.toLowerCase() === 'x') onAction('exclude', selected);
+      if (event.key.toLowerCase() === 'x' && selected.status !== 'excluded')
+        onAction('exclude', selected);
       if (!['ArrowUp', 'ArrowDown'].includes(event.key) || !onSelect) return;
       event.preventDefault();
       const currentIndex = visible.findIndex((asset) => asset.id === selected.id);
@@ -80,21 +141,59 @@ export function AssetReviewQueue({
   }, [onAction, onSelect, selected, visible]);
   return (
     <Stack gap="m" style={{ gap: 12 }}>
-      <PanelHeader
-        title="Detected Assets"
-        actions={
-          <Text variant="bodySmall" color="gray">
-            {reviewed} of {assets.length} decided
-          </Text>
-        }
-      >
-        {description ? (
-          <Text variant="bodySmall" color="gray" style={{ fontSize: 13, opacity: 0.8 }}>
-            {description}
-          </Text>
-        ) : null}
-      </PanelHeader>
-      <ProgressBar value={reviewed} max={assets.length || 1} label="Assets reviewed" />
+      <Box flexDirection="row" alignItems="center" gap="s" className="asset-review-toolbar">
+        <label className="asset-review-source-label">
+          Source
+          <select
+            aria-label="Filter by source"
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+          >
+            <option value="all">All sources</option>
+            {sources.map(([key, name]) => (
+              <option key={key} value={key}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {searchOpen ? (
+          <Box flexDirection="row" alignItems="center" className="asset-review-search">
+            <Icon name="magnifying-glass" size={14} color="gray" />
+            <input
+              autoFocus
+              aria-label="Search assets"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search assets"
+            />
+            {search ? (
+              <button type="button" aria-label="Clear asset search" onClick={() => setSearch('')}>
+                ×
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Close asset search"
+              onClick={() => {
+                setSearchOpen(false);
+                setSearch('');
+              }}
+            >
+              Close
+            </button>
+          </Box>
+        ) : (
+          <button
+            type="button"
+            className="asset-review-search-toggle"
+            aria-label="Search assets"
+            onClick={() => setSearchOpen(true)}
+          >
+            <Icon name="magnifying-glass" size={16} color="gray" />
+          </button>
+        )}
+      </Box>
       <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
         <Box flexDirection="row" gap="s" style={{ flexWrap: 'wrap' }}>
           {(
@@ -105,8 +204,14 @@ export function AssetReviewQueue({
               ['excluded', 'Excluded'],
             ] as const
           ).map(([value, label]) => (
-            <FilterChip key={value} selected={filter === value} onPress={() => setFilter(value)}>
-              {label} · {counts[value]}
+            <FilterChip
+              key={value}
+              variant="tab"
+              count={counts[value]}
+              selected={filter === value}
+              onPress={() => setFilter(value)}
+            >
+              {label}
             </FilterChip>
           ))}
         </Box>
@@ -120,6 +225,16 @@ export function AssetReviewQueue({
           </Text>
         ) : null}
       </Box>
+      {canShowTree ? (
+        <Box flexDirection="row" gap="s" className="asset-review-view-picker">
+          <FilterChip selected={view === 'list'} onPress={() => setView('list')}>
+            List
+          </FilterChip>
+          <FilterChip selected={view === 'tree'} onPress={() => setView('tree')}>
+            Tree
+          </FilterChip>
+        </Box>
+      ) : null}
       <Box
         flexDirection="row"
         gap="m"
@@ -132,14 +247,35 @@ export function AssetReviewQueue({
           ) : !visible.length ? (
             <NoItemsPlaceholder description="No Assets match this filter." />
           ) : null}
-          {visible.map((asset) => (
-            <AssetRow
-              key={asset.id}
-              asset={asset}
-              selected={asset.id === selected?.id}
-              onSelect={onSelect}
-            />
-          ))}
+          {rows.map((row) =>
+            row.asset ? (
+              <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
+                <AssetRow
+                  asset={row.asset}
+                  selected={row.asset.id === selected?.id}
+                  onSelect={onSelect}
+                />
+              </Box>
+            ) : (
+              <button
+                key={row.key}
+                type="button"
+                className="asset-review-folder"
+                style={{ paddingLeft: row.depth * 16 + 8 }}
+                onClick={() =>
+                  setOpenFolders((current) => {
+                    const next = new Set(current);
+                    const path = row.key.slice(7);
+                    if (next.has(path)) next.delete(path);
+                    else next.add(path);
+                    return next;
+                  })
+                }
+              >
+                {openFolders.has(row.key.slice(7)) ? '⌄' : '›'} {row.label} ({row.count})
+              </button>
+            ),
+          )}
         </Stack>
         <Box className="asset-review-inspector">
           <Inspector

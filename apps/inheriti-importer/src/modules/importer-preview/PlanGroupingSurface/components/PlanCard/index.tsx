@@ -1,4 +1,4 @@
-import { Badge, Box, Icon, IconAction, Meter, Pressable, Stack, Text } from '@main-components';
+import { Badge, Box, IconAction, Meter, Pressable, Stack, Text } from '@main-components';
 import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
 import { AssignedAssets } from '../AssignedAssets';
 import { PlanAlerts } from '../PlanAlerts';
@@ -69,7 +69,6 @@ export function PlanCard({
             {...keyboardActivation(onSelect)}
           >
             <Box flexDirection="row" alignItems="center" gap="s">
-              <Icon name="layer-group" size={15} />
               <Text variant="importerPlanTitle">{plan.name}</Text>
             </Box>
           </Pressable>
@@ -80,17 +79,14 @@ export function PlanCard({
             {onDelete ? (
               <IconAction name="trash" label={`Delete ${plan.name}`} onPress={onDelete} />
             ) : null}
-            {selected ? (
-              <Badge size="sm" tone="primary" variant="soft" emphasis="selected">
-                Selected
+            {plan.valid || (!selected && plan.assets === 0) || plan.assets > 0 ? (
+              <Badge
+                tone={overCapacity ? 'danger' : plan.valid ? 'success' : 'warning'}
+                icon={overCapacity || !plan.valid ? 'circle-exclamation' : 'circle-check'}
+              >
+                {overCapacity ? 'Over capacity' : plan.valid ? 'Valid draft' : 'Needs review'}
               </Badge>
             ) : null}
-            <Badge
-              tone={overCapacity ? 'danger' : plan.valid ? 'success' : 'warning'}
-              icon={overCapacity || !plan.valid ? 'circle-exclamation' : 'circle-check'}
-            >
-              {overCapacity ? 'Over capacity' : plan.valid ? 'Valid draft' : 'Needs review'}
-            </Badge>
           </Box>
         </Box>
         {plan.description ? (
@@ -102,21 +98,6 @@ export function PlanCard({
           <Box flexDirection="row" justifyContent="space-between" gap="s">
             <Text variant="importerPlanBody" color="gray">
               {capacityUsed} of {capacityLimit} Assets
-            </Text>
-            <Text
-              variant="importerPlanBody"
-              color={
-                overCapacity
-                  ? 'danger120'
-                  : plan.capacityWarning || capacityRatio >= 0.8
-                    ? 'warning120'
-                    : 'success120'
-              }
-              semibold
-            >
-              {overCapacity
-                ? 'Advisory limit exceeded'
-                : `${capacityLimit - capacityUsed} slots left`}
             </Text>
           </Box>
           <Meter
@@ -145,7 +126,9 @@ export function PlanCard({
               ? `Drop to add to ${plan.name}`
               : dropState === 'over-invalid'
                 ? 'This plan cannot accept it'
-                : 'Drag an Asset here'}
+                : plan.assets === 0
+                  ? 'Add at least one Asset to this draft plan.'
+                  : 'Drag an Asset here'}
           </Text>
         </Box>
         <PlanAlerts plan={plan} dropState={dropState} showGovernance={selected} />

@@ -9,6 +9,7 @@ import {
   createPlan,
   removeAsset,
   removePlan,
+  reorderPlans,
   updatePlanMetadata,
 } from '@modules/plans/domain/workspace-commands';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
@@ -48,13 +49,28 @@ export function createPlanActions(context: ImporterWorkspaceContext) {
 
   function createNewPlan() {
     const clientId = crypto.randomUUID();
+    updateWorkspace((current) => {
+      const created = createPlan(current, {
+        clientId,
+        name: `Plan ${current.planOrder.length + 1}`,
+      });
+      return reorderPlans(created, { order: [clientId, ...current.planOrder] });
+    });
+    return clientId;
+  }
+
+  function ensureFirstPlan() {
     updateWorkspace((current) =>
-      createPlan(current, { clientId, name: `Plan ${current.planOrder.length + 1}` }),
+      current.planOrder.length
+        ? current
+        : createPlan(current, { clientId: crypto.randomUUID(), name: 'Plan 1' }),
     );
   }
 
   function deletePlan(plan: Pick<PreviewPlanDraft, 'id'>) {
-    updateWorkspace((current) => removePlan(current, { clientId: plan.id }));
+    updateWorkspace((current) =>
+      current.planOrder.length > 1 ? removePlan(current, { clientId: plan.id }) : current,
+    );
   }
 
   function editPlanMetadata(plan: Pick<PreviewPlanDraft, 'id'>, values: PlanMetadataValues) {
@@ -71,6 +87,7 @@ export function createPlanActions(context: ImporterWorkspaceContext) {
     assignAsset,
     unassignAsset,
     createPlan: createNewPlan,
+    ensureFirstPlan,
     deletePlan,
     updatePlanMetadata: editPlanMetadata,
   };

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +30,7 @@ function runtime(): Runtime {
 }
 
 function loadUpdates(isPackaged: boolean) {
-  const app = { isPackaged, getVersion: () => '0.1.1', quit: vi.fn() };
+  const app = { isPackaged, getVersion: () => '0.1.1', quit: vi.fn(), relaunch: vi.fn() };
   const shell = { openPath: vi.fn(async () => ''), showItemInFolder: vi.fn() };
   const bearerApiFetch = vi.fn();
   Module._load = function (id: string, parent: unknown, isMain: boolean) {
@@ -64,26 +65,41 @@ it('rejects a corrupt catalog download before opening or replacing it', async ()
       status: 200,
       body: {
         result: {
-          items: [{
-            id: 'build-1', integration: 'importer', platform, version: '0.1.2-dev.0',
-            fileName: 'Inheriti-Importer-dev-0.1.2-dev.0-linux-x64.AppImage',
-            size: 7, checksum: 'a'.repeat(64),
-          }],
+          items: [
+            {
+              id: 'build-1',
+              integration: 'importer',
+              platform,
+              version: '0.1.2-dev.0',
+              fileName: 'Inheriti-Importer-dev-0.1.2-dev.0-linux-x64.AppImage',
+              size: 7,
+              checksum: 'a'.repeat(64),
+            },
+          ],
         },
       },
     })
     .mockResolvedValueOnce({ status: 201, body: { url: 'https://storage.inheriti.test/update' } });
   const response = new Response('corrupt');
   Object.defineProperty(response, 'url', { value: 'https://storage.inheriti.test/update' });
-  vi.stubGlobal('fetch', vi.fn(async () => response));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => response),
+  );
 
-  await expect(harness.updates.installUpdate('build-1', runtime())).rejects.toThrow('checksum mismatch');
-  expect(harness.bearerApiFetch.mock.calls.map(([request]: [{ path: string }]) => request.path)).toEqual([
+  await expect(harness.updates.installUpdate('build-1', runtime())).rejects.toThrow(
+    'checksum mismatch',
+  );
+  expect(
+    harness.bearerApiFetch.mock.calls.map(([request]: [{ path: string }]) => request.path),
+  ).toEqual([
     '/integrations/v1/internal-builds',
     '/integrations/v1/internal-builds/build-1/download',
   ]);
   expect(harness.bearerApiFetch.mock.calls[0][0]).toMatchObject({
-    token: 'operator-token', environment: 'TEST', method: 'GET',
+    token: 'operator-token',
+    environment: 'TEST',
+    method: 'GET',
   });
   expect(harness.shell.openPath).not.toHaveBeenCalled();
 });
@@ -101,13 +117,15 @@ it('replaces a writable AppImage and retains the previous executable', async () 
     expect(await readFile(process.env.APPIMAGE, 'utf8')).toBe('verified-update');
     const staging = (await readdir(directory)).find((name) => name.startsWith('.inheriti-update-'));
     expect(staging).toBeDefined();
-    expect(await readFile(path.join(directory, staging!, 'previous.AppImage'), 'utf8')).toBe('previous');
+    expect(await readFile(path.join(directory, staging!, 'previous.AppImage'), 'utf8')).toBe(
+      'previous',
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-it('starts a verified Windows installer silently before quitting', async () => {
+it('starts the verified Windows installer with explicit post-update relaunch before quitting', async () => {
   const harness = loadUpdates(false);
   const installer = Object.assign(new EventEmitter(), { unref: vi.fn() });
   const start = vi.fn(() => {
@@ -117,9 +135,68 @@ it('starts a verified Windows installer silently before quitting', async () => {
 
   await harness.updates.runWindowsInstaller('C:\\Verified Update\\Importer.exe', start);
 
-  expect(start).toHaveBeenCalledWith('C:\\Verified Update\\Importer.exe', ['/S'], {
-    detached: true, stdio: 'ignore', windowsHide: true,
-  });
+  expect(start).toHaveBeenCalledWith(
+    'C:\\Verified Update\\Importer.exe',
+    ['/S', '--force-run', '--updated'],
+    {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    },
+  );
   expect(installer.unref).toHaveBeenCalledOnce();
   expect(harness.app.quit).toHaveBeenCalledOnce();
+});
+
+it('relaunches the verified replacement AppImage and blocks unwritable locations', async () => {
+  if (process.platform !== 'linux') return;
+  process.env.INHERITI_ENV = 'dev';
+  const harness = loadUpdates(true);
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'importer-update-install-'));
+  const current = path.join(directory, 'Importer.AppImage');
+  const payload = 'verified-update';
+  const item = {
+    id: 'build-1',
+    integration: 'importer',
+    platform: `${process.platform}-${process.arch}`,
+    version: '0.1.2-dev.0',
+    fileName: 'Importer.AppImage',
+    size: payload.length,
+    checksum: createHash('sha256').update(payload).digest('hex'),
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      const response = new Response(payload);
+      Object.defineProperty(response, 'url', { value: 'https://storage.inheriti.test/update' });
+      return response;
+    }),
+  );
+  const catalog = { status: 200, body: { result: { items: [item] } } };
+  const link = { status: 201, body: { url: 'https://storage.inheriti.test/update' } };
+  try {
+    await writeFile(current, 'previous');
+    process.env.APPIMAGE = current;
+    harness.bearerApiFetch.mockResolvedValueOnce(catalog).mockResolvedValueOnce(link);
+    await expect(harness.updates.installUpdate(item.id, runtime())).resolves.toMatchObject({
+      installed: true,
+      relaunching: true,
+    });
+    expect(await readFile(current, 'utf8')).toBe(payload);
+    expect(harness.app.relaunch).toHaveBeenCalledWith({
+      execPath: current,
+      args: process.argv.slice(1),
+    });
+    expect(harness.app.quit).toHaveBeenCalledOnce();
+
+    process.env.APPIMAGE = path.join(directory, 'missing.AppImage');
+    harness.bearerApiFetch.mockResolvedValueOnce(catalog).mockResolvedValueOnce(link);
+    await expect(harness.updates.installUpdate(item.id, runtime())).rejects.toThrow(
+      'writable AppImage',
+    );
+    expect(harness.app.relaunch).toHaveBeenCalledOnce();
+    expect(harness.app.quit).toHaveBeenCalledOnce();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

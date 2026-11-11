@@ -2,7 +2,15 @@ import { useState, type Dispatch, type RefObject, type SetStateAction } from 're
 import type { SavedAccount } from '@modules/auth/infrastructure/electron-auth-provider';
 import { useGetIdentity } from '@modules/organization/infrastructure/importer-api';
 import { useGetCurrentMember } from '@modules/organization/infrastructure/organization-resources-api';
-import { ActivityIndicator, BaseModal, Box, Pressable, Text } from '@modules/_shared/ui/components';
+import {
+  ActivityIndicator,
+  BaseModal,
+  Box,
+  Icon,
+  Pressable,
+  Text,
+  theme,
+} from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { AccountDestinations } from '../AccountDestinations';
 import { AccountUnlinkAction } from '../AccountUnlinkAction';
@@ -46,15 +54,26 @@ export function AccountMenu({
       ? identity.fullName
       : (identity?.email ?? 'Account');
 
-  const notice = accountError || (authNotice && !/(?:^|\W)AUTH_CANCELLED(?:$|\W)/u.test(authNotice) ? authNotice : null);
-  const pendingDestination = destinations.find((destination) => destination.accountKey === pendingAccount?.key);
-  const pendingName = pendingDestination?.displayName && pendingDestination.displayName !== pendingDestination.email
-    ? pendingDestination.displayName : 'this saved account';
+  const notice =
+    accountError ||
+    (authNotice && !/(?:^|\W)AUTH_CANCELLED(?:$|\W)/u.test(authNotice) ? authNotice : null);
+  const pendingDestination = destinations.find(
+    (destination) => destination.accountKey === pendingAccount?.key,
+  );
+  const pendingName =
+    pendingDestination?.displayName && pendingDestination.displayName !== pendingDestination.email
+      ? pendingDestination.displayName
+      : 'this saved account';
   const activeAccount = accounts.find((account) => account.active);
-  const pendingRemovalDestination = destinations.find((destination) => destination.accountKey === pendingRemoval?.key);
-  const pendingRemovalName = pendingRemoval?.active ? displayName
-    : pendingRemovalDestination?.displayName && pendingRemovalDestination.displayName !== pendingRemovalDestination.email
-      ? pendingRemovalDestination.displayName : 'this saved account';
+  const pendingRemovalDestination = destinations.find(
+    (destination) => destination.accountKey === pendingRemoval?.key,
+  );
+  const pendingRemovalName = pendingRemoval?.active
+    ? displayName
+    : pendingRemovalDestination?.displayName &&
+        pendingRemovalDestination.displayName !== pendingRemovalDestination.email
+      ? pendingRemovalDestination.displayName
+      : 'this saved account';
 
   return (
     <>
@@ -77,10 +96,27 @@ export function AccountMenu({
             closeOrganizationMenu(false);
           }}
         >
-          <Box className="account-summary account-menu-avatar" width={40} height={40} borderRadius="pill" alignItems="center" justifyContent="center">
-            <Text color="white" style={{ fontWeight: 400, fontSize: 13 }}>
-              {displayName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}
+          <Box
+            className="account-summary"
+            flexDirection="row"
+            alignItems="center"
+            gap="s"
+            borderWidth={1}
+            borderColor="gray30"
+            borderRadius="pill"
+            paddingHorizontal="m"
+            height={40}
+          >
+            <Icon name="user" size={16} color={theme.colors.gray120} label="Account" />
+            <Text variant="bodySmall" color="gray120" numberOfLines={1} style={{ maxWidth: 180 }}>
+              {displayName}
             </Text>
+            <Icon
+              name="chevron-down"
+              size={14}
+              color={theme.colors.gray120}
+              label="Open account menu"
+            />
           </Box>
         </Pressable>
         {open ? (
@@ -105,30 +141,86 @@ export function AccountMenu({
             }}
           >
             <Box className="account-menu-current" flexDirection="row" alignItems="center" gap="m">
-              <Box className="account-menu-avatar" width={56} height={56} borderRadius="pill" alignItems="center" justifyContent="center">
+              <Box
+                className="account-menu-avatar"
+                width={56}
+                height={56}
+                borderRadius="pill"
+                alignItems="center"
+                justifyContent="center"
+              >
                 <Text color="white" style={{ fontWeight: 400, fontSize: 19 }}>
-                  {displayName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}
+                  {displayName
+                    .trim()
+                    .split(/\s+/u)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join('')
+                    .toUpperCase() || '?'}
                 </Text>
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="bodySmall" color="primary200" numberOfLines={1} style={{ fontWeight: 700 }}>{displayName}</Text>
-                {identity?.email ? <Text variant="bodySmall" color="gray50" numberOfLines={1}>{identity.email}</Text> : null}
-                {member?.role?.name ? <Text variant="bodySmall" color="gray" numberOfLines={1}>{member.role.name.replace(/Tenant/g, 'Organisation')}</Text> : null}
+                <Text
+                  variant="bodySmall"
+                  color="primary200"
+                  numberOfLines={1}
+                  style={{ fontWeight: 700 }}
+                >
+                  {displayName}
+                </Text>
+                {identity?.email ? (
+                  <Text variant="bodySmall" color="gray50" numberOfLines={1}>
+                    {identity.email}
+                  </Text>
+                ) : null}
+                {member?.role?.name ? (
+                  <Text variant="bodySmall" color="gray" numberOfLines={1}>
+                    {member.role.name.replace(/Tenant/g, 'Organisation')}
+                  </Text>
+                ) : null}
               </Box>
               {activeAccount ? (
-                <AccountUnlinkAction name={displayName} onPress={() => { closeMenu(); setPendingRemoval(activeAccount); }} />
+                <AccountUnlinkAction
+                  name={displayName}
+                  onPress={() => {
+                    closeMenu();
+                    setPendingRemoval(activeAccount);
+                  }}
+                />
               ) : null}
             </Box>
             {destinationsLoading && !hasLoaded ? (
-              <Box className="account-menu-status" accessibilityRole="status" {...{ 'aria-live': 'polite' }} alignItems="center" justifyContent="center" gap="s">
+              <Box
+                className="account-menu-status"
+                accessibilityRole="status"
+                {...{ 'aria-live': 'polite' }}
+                alignItems="center"
+                justifyContent="center"
+                gap="s"
+              >
                 <ActivityIndicator size="small" />
-                <Text variant="bodySmall" color="gray">Loading accounts…</Text>
+                <Text variant="bodySmall" color="gray">
+                  Loading accounts…
+                </Text>
               </Box>
             ) : null}
             {accountError ? (
-              <Box className="account-menu-status" accessibilityRole="alert" alignItems="center" justifyContent="center" gap="s">
-                <Text variant="bodySmall" color="danger">{accountError}</Text>
-                <Button title="Retry loading accounts" variant="plain" size="sm" onPress={() => void menu.loadAccounts(true)} />
+              <Box
+                className="account-menu-status"
+                accessibilityRole="alert"
+                alignItems="center"
+                justifyContent="center"
+                gap="s"
+              >
+                <Text variant="bodySmall" color="danger">
+                  {accountError}
+                </Text>
+                <Button
+                  title="Retry loading accounts"
+                  variant="plain"
+                  size="sm"
+                  onPress={() => void menu.loadAccounts(true)}
+                />
               </Box>
             ) : null}
             <AccountDestinations
@@ -140,20 +232,34 @@ export function AccountMenu({
                 setPendingRemoval(account);
               }}
             />
-            <Pressable accessibilityRole="menuitem" accessibilityLabel="Add account" onPress={() => {
-              closeMenu();
-              menu.addAccount();
-            }}>
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityLabel="Add account"
+              onPress={() => {
+                closeMenu();
+                menu.addAccount();
+              }}
+            >
               <Box className="account-menu-add" flexDirection="row" alignItems="center" gap="m">
                 <Box width={34} height={34} alignItems="center" justifyContent="center">
-                  <Text color="gray" style={{ fontSize: 20, lineHeight: 20 }}>＋</Text>
+                  <Text color="gray" style={{ fontSize: 20, lineHeight: 20 }}>
+                    ＋
+                  </Text>
                 </Box>
-                <Text variant="bodySmall" color="gray">Add another account</Text>
+                <Text variant="bodySmall" color="gray">
+                  Add another account
+                </Text>
               </Box>
             </Pressable>
-            <Pressable accessibilityRole="menuitem" accessibilityLabel={accounts.length > 1 ? 'Log out of all accounts' : 'Log out'} onPress={accounts.length > 1 ? menu.requestSignOutAll : menu.signOut}>
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityLabel={accounts.length > 1 ? 'Log out of all accounts' : 'Log out'}
+              onPress={accounts.length > 1 ? menu.requestSignOutAll : menu.signOut}
+            >
               <Box className="account-menu-signout-all" alignItems="center" justifyContent="center">
-                <Text variant="bodySmall" color="danger">{accounts.length > 1 ? 'Log out of all accounts' : 'Log out'}</Text>
+                <Text variant="bodySmall" color="danger">
+                  {accounts.length > 1 ? 'Log out of all accounts' : 'Log out'}
+                </Text>
               </Box>
             </Pressable>
           </Box>
@@ -182,23 +288,48 @@ export function AccountMenu({
           footer={
             <>
               <Button title="Cancel" variant="outlined" onPress={() => setPendingRemoval(null)} />
-              <Button title="Unlink account" color="danger" onPress={() => {
-                if (pendingRemoval) menu.removeAccount(pendingRemoval);
-                setPendingRemoval(null);
-              }} />
+              <Button
+                title="Unlink account"
+                color="danger"
+                onPress={() => {
+                  if (pendingRemoval) menu.removeAccount(pendingRemoval);
+                  setPendingRemoval(null);
+                }}
+              />
             </>
           }
         >
           <>
             <Box className="account-unlink-card" flexDirection="row" alignItems="center" gap="m">
-              <Box className="account-menu-avatar" width={48} height={48} borderRadius="pill" alignItems="center" justifyContent="center">
-                <Text color="white">{pendingRemovalName.trim().split(/\s+/u).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?'}</Text>
+              <Box
+                className="account-menu-avatar"
+                width={48}
+                height={48}
+                borderRadius="pill"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Text color="white">
+                  {pendingRemovalName
+                    .trim()
+                    .split(/\s+/u)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join('')
+                    .toUpperCase() || '?'}
+                </Text>
               </Box>
               <Box style={{ minWidth: 0 }}>
-                <Text variant="bodySmall" color="gray">Account:</Text>
-                <Text variant="bodySmall" color="primary200" style={{ fontWeight: 600 }}>{pendingRemovalName}</Text>
+                <Text variant="bodySmall" color="gray">
+                  Account:
+                </Text>
+                <Text variant="bodySmall" color="primary200" style={{ fontWeight: 600 }}>
+                  {pendingRemovalName}
+                </Text>
                 {(pendingRemoval?.active ? identity?.email : pendingRemovalDestination?.email) ? (
-                  <Text variant="bodySmall" color="gray50">{pendingRemoval?.active ? identity?.email : pendingRemovalDestination?.email}</Text>
+                  <Text variant="bodySmall" color="gray50">
+                    {pendingRemoval?.active ? identity?.email : pendingRemovalDestination?.email}
+                  </Text>
                 ) : null}
               </Box>
             </Box>
@@ -223,8 +354,22 @@ export function AccountMenu({
           </Text>
         </BaseModal>
         {notice && (!open || !accountError) ? (
-          <Box className="account-menu-notice" accessibilityRole="alert" position="absolute" right={0} top="100%" width={340} padding="s" backgroundColor="white" borderRadius="s" borderWidth={1} borderColor="gray10">
-            <Text variant="bodySmall" color="danger">{notice}</Text>
+          <Box
+            className="account-menu-notice"
+            accessibilityRole="alert"
+            position="absolute"
+            right={0}
+            top="100%"
+            width={340}
+            padding="s"
+            backgroundColor="white"
+            borderRadius="s"
+            borderWidth={1}
+            borderColor="gray10"
+          >
+            <Text variant="bodySmall" color="danger">
+              {notice}
+            </Text>
           </Box>
         ) : null}
       </Box>

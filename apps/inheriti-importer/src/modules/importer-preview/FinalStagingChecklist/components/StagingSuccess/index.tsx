@@ -10,7 +10,7 @@ const ExternalLink = Pressable as ComponentType<
 >;
 
 export function StagingSuccess({
-  description = 'Go to Inheriti® Business and complete your Protection Plans.',
+  description = 'Finish creating your protection plans in Inheriti® Business.',
   onStartAgain,
 }: {
   description?: string;
@@ -39,14 +39,13 @@ export function StagingSuccess({
       </Box>
       <Box alignItems="center" gap="s">
         <Text variant="heading2" align="center" color="success120">
-          Import staged successfully
+          Import staged
         </Text>
-        <Text variant="bodyDefault" align="center" color="gray">
+        <Text variant="bodyRegular" align="center" color="gray">
           {description}
         </Text>
         <Text variant="bodySmall" align="center" color="gray">
-          Your staged import expires in 7 days. If it expires before you complete the Protection
-          Plans, the staged encrypted data is deleted and you will need to import it again.
+          Staged imports will be deleted in 7 days.
         </Text>
       </Box>
       <Box alignItems="center" gap="s">
@@ -54,7 +53,7 @@ export function StagingSuccess({
           href={businessImportsUrl}
           hrefAttrs={{ target: '_blank', rel: 'noreferrer' }}
           accessibilityRole="link"
-          accessibilityLabel="Go to Inheriti Business"
+          accessibilityLabel="Continue in Inheriti Business"
         >
           <Box
             className="staging-success-link"
@@ -68,13 +67,13 @@ export function StagingSuccess({
             backgroundColor="primary"
           >
             <Text variant="buttonDefault" color="white">
-              Go to Inheriti® Business
+              Continue in Inheriti® Business
             </Text>
             <Icon name="arrow-up-right-from-square" size={12} color={theme.colors.white} />
           </Box>
         </ExternalLink>
         <Button
-          title="Start again"
+          title="Start a new import"
           variant="outlined"
           onPress={() => onStartAgain?.()}
           disabled={!onStartAgain}

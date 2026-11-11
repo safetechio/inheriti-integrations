@@ -22,10 +22,10 @@ function state(overrides: Partial<FlowState> = {}): FlowState {
   };
 }
 
-function plan(assets: number): PlanDraft {
+function plan(assets: number, id = 'plan-1', name = 'Plan draft 1'): PlanDraft {
   return {
-    id: 'plan-1',
-    name: 'Plan draft 1',
+    id,
+    name,
     assets,
     capacity: '11 / 10 Assets',
     valid: true,
@@ -59,17 +59,39 @@ describe('importer preview state', () => {
     });
 
     expect(next.stagingState).toBe('configured');
-    expect(next.plans[1]?.name).toBe('Plan draft 2');
+    expect(next.plans.map((item) => item.id)).toEqual(['plan-2', 'plan-1']);
+    expect(next.plans[0]?.name).toBe('Plan 2');
+  });
+
+  it('ignores a duplicate create-plan action', () => {
+    const current = state({ plans: [plan(3)] });
+    const next = flowReducer(current, { type: 'create-plan', id: 'plan-1' });
+
+    expect(next).toEqual(current);
   });
 
   it('deletes a draft and returns its Assets to Unassigned', () => {
     const asset = { id: 'asset-1', name: 'Credential', type: 'USER-PSWD' };
-    const next = flowReducer(state({ plans: [{ ...plan(1), assignedAssets: [asset] }] }), {
-      type: 'delete-plan',
-      id: 'plan-1',
-    });
-    expect(next.plans).toEqual([]);
+    const next = flowReducer(
+      state({
+        plans: [{ ...plan(1), assignedAssets: [asset] }, plan(0, 'plan-2', 'Plan draft 2')],
+      }),
+      {
+        type: 'delete-plan',
+        id: 'plan-1',
+      },
+    );
+    expect(next.plans.map((item) => item.id)).toEqual(['plan-2']);
     expect(next.unassigned).toEqual([asset]);
+  });
+
+  it('protects the default first Plan from deletion', () => {
+    const asset = { id: 'asset-1', name: 'Credential', type: 'USER-PSWD' };
+    const current = state({ plans: [{ ...plan(1), assignedAssets: [asset] }] });
+    const next = flowReducer(current, { type: 'delete-plan', id: 'plan-1' });
+
+    expect(next.plans).toEqual(current.plans);
+    expect(next.unassigned).toEqual([]);
   });
 
   it('uses mutable plan usage so an over-capacity draft can recover', () => {

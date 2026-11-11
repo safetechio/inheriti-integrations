@@ -70,9 +70,6 @@ export function InspectorFields({
             {getAssetTypeDisplayName(asset.type)} fields
           </Text>
           {secretFields.map((field) => renderField(field))}
-          <Text variant="bodySmall" color="gray">
-            Only mapped schema fields are included. Other imported fields stay out of this Asset.
-          </Text>
         </Box>
       )}
       {metadataField ? (

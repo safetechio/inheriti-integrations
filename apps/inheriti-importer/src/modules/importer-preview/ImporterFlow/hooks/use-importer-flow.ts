@@ -13,9 +13,9 @@ export const importerFlowStages: Array<{
   label: string;
 }> = [
   { id: 'sources', label: 'Import sources' },
-  { id: 'assets', label: 'Review Assets' },
-  { id: 'plans', label: 'Group Plans' },
-  { id: 'staging', label: 'Review & stage' },
+  { id: 'assets', label: 'Review assets' },
+  { id: 'plans', label: 'Create plans' },
+  { id: 'staging', label: 'Authorise staging' },
 ];
 type InitialState = {
   initialStage?: ImporterFlowStage;
@@ -39,7 +39,8 @@ export type ImporterFlowCallbacks = {
   onEditPlainText?: (asset: ReviewAsset, value: string) => void;
   onAssignAsset?: (asset: GroupingAsset, plan: PlanDraft) => void;
   onUnassignAsset?: (asset: GroupingAsset, plan: PlanDraft) => void;
-  onCreatePlan?: () => void;
+  onCreatePlan?: () => string | void;
+  onEnsureFirstPlan?: () => void;
   onDeletePlan?: (plan: PlanDraft) => void;
   onUpdatePlan?: (plan: PlanDraft, values: PlanMetadataValues) => void;
   onStage?: () => void;
@@ -168,13 +169,17 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
     },
     createPlan: () => {
       if (isControlled) {
-        controlled?.callbacks.onCreatePlan?.();
-        return;
+        return controlled?.callbacks.onCreatePlan?.();
       }
       const id = `plan-${Math.max(0, ...plans.map((plan) => Number(plan.id.match(/^plan-(\d+)$/)?.[1] ?? 0))) + 1}`;
       stagingRevision.current += 1;
       dispatch({ type: 'create-plan', id });
       return id;
+    },
+    ensureFirstPlan: () => {
+      if (plans.length) return;
+      if (isControlled) controlled?.callbacks.onEnsureFirstPlan?.();
+      else dispatch({ type: 'create-plan', id: 'plan-1' });
     },
     deletePlan: (plan: PlanDraft) => {
       if (isControlled) controlled?.callbacks.onDeletePlan?.(plan);

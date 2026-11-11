@@ -130,40 +130,43 @@ export function StageContent({
         fixLabel: 'Review Plans',
         onFix: () => flow.goTo('plans'),
       };
-    if (item.label === 'Organization Key')
+    if (item.label === 'Organization Key' || item.label === 'Load Organisation Key')
       return {
         ...item,
+        label: 'Load Organisation Key',
         complete: keyReady,
         loading: flow.stagingState === 'releasing',
         error: keyReady ? undefined : (keyError ?? undefined),
         detail: keyReady
-          ? 'Organization Key loaded securely and ready for local encryption.'
+          ? 'Key securely loaded.'
           : keyError
             ? 'The Organization Key could not be loaded from SafeKey Mobile.'
             : flow.stagingState === 'releasing'
-              ? 'Waiting release from Safekey Mobile. Approve the request in the mobile app.'
-              : 'Release the Organization Key from SafeKey Mobile to continue.',
+              ? 'Waiting for SafeKey Mobile to release the key.'
+              : 'Send a key release request to SafeKey Mobile.',
         fixLabel:
           flow.stagingState === 'releasing'
             ? 'Cancel request'
             : keyError
               ? 'Retry release'
-              : 'Request via SafeKey Mobile',
+              : 'Send request to SafeKey Mobile',
         onFix:
           flow.stagingState === 'releasing'
             ? flow.cancelStage
-            : flow.stagingState === 'waiting-release'
+            : !keyReady
               ? flow.requestOrganizationKey
               : undefined,
+        fixDisabled: flow.stagingState !== 'releasing' && !readiness.staging,
         secondaryFixLabel: 'Simulate locally',
         onSecondaryFix:
           flow.stagingState === 'releasing' && canSimulateOrganizationKeyRelease
             ? onOpenLocalReleaseSimulator
             : undefined,
       };
-    if (item.label === 'Encryption')
+    if (item.label === 'Encryption' || item.label === 'Secure staging')
       return {
         ...item,
+        label: 'Secure staging',
         complete: encryptionReady,
         loading: flow.stagingState === 'encrypting',
         error:
@@ -172,12 +175,12 @@ export function StageContent({
             : undefined,
         detail:
           flow.stagingState === 'encrypting'
-            ? 'Encrypting every field locally with the Organization Key.'
+            ? 'Encrypting data & transmitting to Inheriti® Business for staging.'
             : encryptionReady
               ? 'Every field was encrypted locally with the Organization Key.'
               : keyReady
-                ? 'Ready to encrypt every field locally with the Organization Key.'
-                : 'The loaded Organization Key will encrypt every field locally before staging.',
+                ? 'Locally encrypt all data prior to transmission to Inheriti® Business.'
+                : 'Locally encrypt all data prior to transmission to Inheriti® Business.',
       };
     return item;
   });
@@ -191,19 +194,21 @@ export function StageContent({
         canStage={readiness.staging && keyReady}
         onStage={flow.markStaged}
         onStartAgain={flow.startAgain}
-        showActions={false}
+        showActions={true}
         blockerCount={blockerCount}
+        progress={
+          stagingBatch ? (
+            <StagingBatchStatus
+              items={stagingBatch.items}
+              plans={flow.plans}
+              running={stagingBatch.running}
+              onRetryCreate={stagingBatch.onRetryCreate}
+              onRetryConfigure={stagingBatch.onRetryConfigure}
+              onCancel={stagingBatch.onCancel}
+            />
+          ) : null
+        }
       />
-      {stagingBatch ? (
-        <StagingBatchStatus
-          items={stagingBatch.items}
-          plans={flow.plans}
-          running={stagingBatch.running}
-          onRetryCreate={stagingBatch.onRetryCreate}
-          onRetryConfigure={stagingBatch.onRetryConfigure}
-          onCancel={stagingBatch.onCancel}
-        />
-      ) : null}
     </Stack>
   );
 }

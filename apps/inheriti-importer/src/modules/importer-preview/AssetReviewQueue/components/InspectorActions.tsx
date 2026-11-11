@@ -8,11 +8,11 @@ export function InspectorActions({
   asset: ReviewAsset;
   onAction?: (action: string, asset: ReviewAsset) => void;
 }) {
-  const canAccept = Boolean(onAction) && hasIncludedSchemaField(asset);
-  const canUsePlainText = asset.type !== 'PLAIN-TEXT' && asset.alternatives.includes('PLAIN-TEXT');
+  const canAccept =
+    Boolean(onAction) && asset.status !== 'accepted' && hasIncludedSchemaField(asset);
   return (
     <Box gap="s" className="asset-inspector-actions">
-      {!canAccept && onAction ? (
+      {!hasIncludedSchemaField(asset) && onAction ? (
         <Text variant="bodySmall" color="warning120">
           {asset.type === 'PLAIN-TEXT'
             ? 'Enter a Plain Text secret before accepting this Asset.'
@@ -30,30 +30,16 @@ export function InspectorActions({
           startIcon={<Icon name="ban" size={12} color={theme.colors.danger120} />}
           variant="outlined"
           color="danger"
-          disabled={!onAction}
+          disabled={!onAction || asset.status === 'excluded'}
           onPress={() => onAction?.('exclude', asset)}
         />
         <Button
-          title={`Accept as ${getAssetTypeDisplayName(asset.type)}`}
+          title="Accept"
           startIcon={<Icon name="check" size={12} color={theme.colors.white} />}
           disabled={!canAccept}
           onPress={() => onAction?.('accept', asset)}
         />
       </Box>
-      {canUsePlainText ? (
-        <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
-          <Text variant="bodySmall" color="gray">
-            Prefer the generic option?
-          </Text>
-          <Button
-            title="Use Plain Text instead"
-            variant="outlined"
-            size="sm"
-            disabled={!onAction}
-            onPress={() => onAction?.('alternate:PLAIN-TEXT', asset)}
-          />
-        </Box>
-      ) : null}
       {asset.convertedFromType ? (
         <Button
           title={`Back to suggested ${getAssetTypeDisplayName(asset.convertedFromType)}`}

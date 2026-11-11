@@ -38,7 +38,7 @@ export function stagingOutcome(status: string): StagingOutcome {
     case 'COMPLETE':
       return 'Staged';
     case 'FAILED_CREATE':
-      return 'Not staged';
+      return 'Staging failed';
     case 'FAILED_CONFIGURE':
       return 'Staging failed';
     case 'CANCELLED':

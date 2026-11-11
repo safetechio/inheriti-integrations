@@ -5,7 +5,7 @@ import type { GroupingAsset, PlanDraft } from '../../PlanGroupingSurface';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
 
 export type ImporterWorkspaceAction =
-  'accept' | 'exclude' | 'alternate:PLAIN-TEXT' | 'restore-suggestion';
+  'accept' | 'exclude' | `alternate:${string}` | 'restore-suggestion';
 
 export type WorkspaceSetter = (
   next: WorkspaceState | ((current: WorkspaceState) => WorkspaceState),
@@ -26,3 +26,4 @@ export interface ImporterWorkspaceProjection {
 export type MappingOverrides = Record<string, Record<string, string | undefined>>;
 export type PlainTextOverrides = Record<string, SensitiveValue>;
 export type ReviewDecisions = Record<string, AssetReviewStatus>;
+export type AssetTypeOverrides = Record<string, string>;

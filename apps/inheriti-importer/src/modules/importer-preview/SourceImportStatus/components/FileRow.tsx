@@ -9,7 +9,7 @@ import {
   Text,
   theme,
 } from '@main-components';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parserGuidance } from '@modules/import/application/parser-guidance';
 import { labels, statusBadge } from './status';
 import type { ImportFile } from '../types';
@@ -35,6 +35,14 @@ export function FileRow({
   const [keyFile, setKeyFile] = useState<ArrayBuffer>();
   const [keyFileName, setKeyFileName] = useState('');
   const [showUnlock, setShowUnlock] = useState(initiallyShowUnlock);
+  const [showPassword, setShowPassword] = useState(false);
+  useEffect(() => {
+    if (file.status === 'unlock-required') return;
+    setPassword('');
+    setKeyFile(undefined);
+    setKeyFileName('');
+    setShowPassword(false);
+  }, [file.status]);
   const canRetry = file.status === 'failed';
   return (
     <Card tone="default" className="source-file-card">
@@ -46,17 +54,26 @@ export function FileRow({
       >
         <Icon
           name={
-            file.format === 'KeePass'
-              ? 'database'
-              : file.format === 'Vault'
-                ? 'shield'
-                : 'file-lines'
+            file.status === 'unlock-required'
+              ? 'lock'
+              : file.format === 'KeePass'
+                ? 'database'
+                : file.format === 'Vault'
+                  ? 'shield'
+                  : 'file-lines'
           }
-          color={statusHex[file.status]}
+          color={theme.colors.gray120}
         />
         <Box gap={2} style={{ flex: '1 1 220px', minWidth: 0 }}>
           <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
-            <Text variant="importerSourceName">{file.name}</Text>
+            <Text
+              variant="importerSourceName"
+              numberOfLines={1}
+              title={file.name}
+              style={{ maxWidth: '25ch' }}
+            >
+              {file.name}
+            </Text>
             <Badge tone="primary" variant="metadata">
               {file.format}
             </Badge>
@@ -65,8 +82,8 @@ export function FileRow({
             {file.status === 'failed' || file.status === 'retrying'
               ? 'Not parsed'
               : file.status === 'unlock-required'
-                ? 'Locked database · entries unknown'
-                : `${file.entries} entries · ${file.warnings} warnings`}
+                ? 'Locked database'
+                : `${file.entries ?? 0} entr${file.entries === 1 ? 'y' : 'ies'}`}
           </Text>
           {file.detail ? (
             <Text variant="bodySmall" color="gray">
@@ -76,7 +93,9 @@ export function FileRow({
         </Box>
         <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
           <Badge tone={statusBadge[file.status].tone} icon={statusBadge[file.status].icon}>
-            {file.status === 'warning' ? `${file.warnings ?? 0} warnings` : labels[file.status]}
+            {file.status === 'warning'
+              ? `${file.warnings ?? 0} warning${file.warnings === 1 ? '' : 's'}`
+              : labels[file.status]}
           </Badge>
           {file.status === 'warning' ? (
             <Button
@@ -141,11 +160,20 @@ export function FileRow({
           </Text>
           <FormTextInput
             label="Master password"
-            secureTextEntry
+            autoFocus
+            secureTextEntry={!showPassword}
             placeholder="Master password"
             value={password}
             onChangeText={setPassword}
             style={{ flex: '1 1 180px', minWidth: 180 }}
+          />
+          <Button
+            title={showPassword ? 'Hide password' : 'Show password'}
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            startIcon={<Icon name={showPassword ? 'eye-slash' : 'eye'} size={14} />}
+            variant="plain"
+            color="gray"
+            onPress={() => setShowPassword((value) => !value)}
           />
           <Box gap="xxs">
             <input
@@ -186,11 +214,3 @@ export function FileRow({
     </Card>
   );
 }
-
-const statusHex = {
-  imported: theme.colors.success120,
-  warning: theme.colors.warning200,
-  'unlock-required': theme.colors.info120,
-  retrying: theme.colors.info120,
-  failed: theme.colors.danger120,
-};

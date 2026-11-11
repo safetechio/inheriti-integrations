@@ -27,13 +27,34 @@ const invalidAsset: GroupingAsset = {
 };
 
 describe('PlanGroupingSurface controls', () => {
-  it('confirms deletion of an empty draft', () => {
+  it('keeps the last draft and deletes an empty extra draft immediately', () => {
     const onDeletePlan = vi.fn();
     render(<PlanGroupingSurface unassigned={[]} plans={[plan]} onDeletePlan={onDeletePlan} />);
+    expect(screen.queryByRole('button', { name: 'Delete Production' })).toBeNull();
+    cleanup();
+    const extra = { ...plan, id: 'extra', name: 'Extra', assets: 0, assignedAssets: [] };
+    render(
+      <PlanGroupingSurface unassigned={[]} plans={[plan, extra]} onDeletePlan={onDeletePlan} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Extra' }));
+    expect(screen.queryByRole('dialog', { name: 'Delete Extra?' })).toBeNull();
+    expect(onDeletePlan).toHaveBeenCalledWith(extra);
+  });
+  it('confirms deletion when assigned assets will return to Unassigned', () => {
+    const onDeletePlan = vi.fn();
+    const assigned = { ...plan, assignedAssets: [validAsset] };
+    const extra = { ...plan, id: 'extra', name: 'Extra' };
+    render(
+      <PlanGroupingSurface unassigned={[]} plans={[assigned, extra]} onDeletePlan={onDeletePlan} />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Delete Production' }));
     expect(screen.getByRole('dialog', { name: 'Delete Production?' })).toBeTruthy();
+    expect(screen.getByText('The 1 Asset in this plan will return to Unassigned.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onDeletePlan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Production' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete draft' }));
-    expect(onDeletePlan).toHaveBeenCalledWith(plan);
+    expect(onDeletePlan).toHaveBeenCalledWith(assigned);
   });
   it('enables assignment only when the asset, plan capacity, and callback allow it', () => {
     render(

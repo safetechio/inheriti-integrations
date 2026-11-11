@@ -24,12 +24,12 @@ export function ProtectedSourceValue({
   if (!sourceFieldId)
     return (
       <Text variant="importerFieldMono" color="gray">
-        Not included
+        —
       </Text>
     );
 
   const value = revealed ? resolveSourceValue?.(sourceFieldId) : undefined;
-  const displayValue = revealed ? (value?.reveal() ?? 'Value unavailable') : '••••••••';
+  const displayValue = revealed ? (value?.reveal() ?? 'Value unavailable') : '•••••••';
 
   return (
     <Box flexDirection="row" alignItems="center" justifyContent="space-between" gap="s">

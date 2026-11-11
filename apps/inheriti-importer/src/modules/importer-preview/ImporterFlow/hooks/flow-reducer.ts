@@ -34,6 +34,8 @@ export type FlowAction =
     }
   | { type: 'set-staging'; state: StagingState };
 export function flowReducer(state: FlowState, action: FlowAction): FlowState {
+  if (action.type === 'create-plan' && state.plans.some((plan) => plan.id === action.id))
+    return state;
   if (action.type === 'stage') return { ...state, stage: action.stage };
   if (action.type === 'source-status')
     return {
@@ -61,20 +63,20 @@ export function flowReducer(state: FlowState, action: FlowAction): FlowState {
       ...state,
       stagingState: 'configured',
       plans: [
-        ...state.plans,
         {
           id: action.id,
-          name: `Plan draft ${state.plans.length + 1}`,
+          name: `Plan ${state.plans.length + 1}`,
           assets: 0,
           capacity: '0 / 10 Assets',
           valid: true,
           assignedAssets: [],
         },
+        ...state.plans,
       ],
     };
   if (action.type === 'delete-plan') {
     const removed = state.plans.find((plan) => plan.id === action.id);
-    if (!removed) return state;
+    if (!removed || state.plans.length <= 1) return state;
     return {
       ...state,
       stagingState: 'configured',

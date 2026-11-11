@@ -8,10 +8,6 @@ type FlowActionsProps = {
   onNext: () => void;
   showComplete: boolean;
   nextLabel: string;
-  isStaging?: boolean;
-  canStage?: boolean;
-  onStage?: () => void;
-  stagingState?: string;
 };
 
 export function FlowActions({
@@ -21,10 +17,6 @@ export function FlowActions({
   onNext,
   showComplete,
   nextLabel,
-  isStaging = false,
-  canStage = false,
-  onStage,
-  stagingState,
 }: FlowActionsProps) {
   const theme = useTheme();
 
@@ -63,21 +55,6 @@ export function FlowActions({
           disabled={!canGoNext}
           endIcon={<Icon name="chevron-right" size={11} color={theme.colors.white} />}
           onPress={onNext}
-        />
-      ) : isStaging && !['staged', 'retry', 'failed-stage'].includes(stagingState ?? '') ? (
-        <Button
-          title={stagingState === 'encrypting' ? 'Staging…' : 'Encrypt and stage'}
-          startIcon={<Icon name="shield" size={12} color={theme.colors.white} />}
-          minHeight={theme.importer.controls.footerPrimaryHeight}
-          paddingHorizontal={theme.importer.spacing.actionPaddingInline}
-          textVariant="buttonFooterPrimary"
-          loading={stagingState === 'encrypting' || stagingState === 'releasing'}
-          disabled={
-            !canStage ||
-            !onStage ||
-            ['waiting-release', 'releasing', 'encrypting', 'staged'].includes(stagingState ?? '')
-          }
-          onPress={() => onStage?.()}
         />
       ) : null}
     </Box>

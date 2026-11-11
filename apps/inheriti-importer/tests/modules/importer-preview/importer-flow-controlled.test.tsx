@@ -88,7 +88,7 @@ describe('ImporterFlow controlled mode', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Accept as Plain Text' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
   });
 
   it('confirms cancellation with the imported file and Plan counts', async () => {
@@ -100,7 +100,7 @@ describe('ImporterFlow controlled mode', () => {
     fireEvent.click(opener);
     expect(onCancel).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Cancel import?' })).toBeTruthy();
-    expect(screen.getByText('1 imported file · 1 Plan will be removed.')).toBeTruthy();
+    expect(screen.getByText('1 imported file · 1 plan will be removed.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Keep importing' }));
     await waitFor(() => expect(document.activeElement).toBe(opener));
 
@@ -154,14 +154,14 @@ describe('ImporterFlow controlled mode', () => {
     expect(onViewWarnings).toHaveBeenCalledWith(file);
   });
 
-  it('requires a staging action and loaded Organization Key before enabling Encrypt and stage', () => {
+  it('requires a staging action and loaded Organization Key before enabling Encrypt & stage', () => {
     const { rerender } = renderFlow({});
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(
-      screen.getByRole('button', { name: 'Encrypt and stage' }).getAttribute('aria-disabled'),
+      screen.getByRole('button', { name: 'Encrypt & stage' }).getAttribute('aria-disabled'),
     ).toBe('true');
 
     const onStage = vi.fn();
@@ -178,9 +178,9 @@ describe('ImporterFlow controlled mode', () => {
       />,
     );
     expect(
-      (screen.getByRole('button', { name: 'Encrypt and stage' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: 'Encrypt & stage' }) as HTMLButtonElement).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Encrypt and stage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Encrypt & stage' }));
     expect(onStage).not.toHaveBeenCalled();
     rerender(
       <ImporterFlow
@@ -196,7 +196,7 @@ describe('ImporterFlow controlled mode', () => {
       />,
     );
     expect(
-      screen.getByRole('button', { name: 'Encrypt and stage' }).getAttribute('aria-disabled'),
+      screen.getByRole('button', { name: 'Encrypt & stage' }).getAttribute('aria-disabled'),
     ).toBe('true');
     rerender(
       <ImporterFlow
@@ -211,7 +211,7 @@ describe('ImporterFlow controlled mode', () => {
         callbacks={{ onStage }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Encrypt and stage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Encrypt & stage' }));
     expect(onStage).toHaveBeenCalledTimes(1);
   });
 
@@ -261,9 +261,9 @@ describe('ImporterFlow controlled mode', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: 'Encrypt and stage' }).getAttribute('aria-disabled'),
+      screen.getByRole('button', { name: 'Encrypt & stage' }).getAttribute('aria-disabled'),
     ).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Request via SafeKey Mobile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send request to SafeKey Mobile' }));
     expect(onRequestOrganizationKey).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -278,8 +278,10 @@ describe('ImporterFlow controlled mode', () => {
         callbacks={{ onCancelStage }}
       />,
     );
-    expect(screen.getByText('Waiting for release from SafeKey Mobile.')).toBeTruthy();
-    expect(screen.getByRole('progressbar', { name: 'Organization Key in progress' })).toBeTruthy();
+    expect(screen.getByText('Waiting for SafeKey Mobile to release the key.')).toBeTruthy();
+    expect(
+      screen.getByRole('progressbar', { name: 'Load Organisation Key in progress' }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
     expect(onCancelStage).toHaveBeenCalledTimes(1);
 
@@ -332,8 +334,8 @@ describe('ImporterFlow controlled mode', () => {
         callbacks={{ onStage }}
       />,
     );
-    expect(screen.queryByRole('button', { name: 'Request via SafeKey Mobile' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Encrypt and stage' }));
+    expect(screen.queryByRole('button', { name: 'Send request to SafeKey Mobile' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Encrypt & stage' }));
     expect(onStage).toHaveBeenCalledTimes(1);
 
     const onStartAgain = vi.fn();
@@ -349,11 +351,11 @@ describe('ImporterFlow controlled mode', () => {
         callbacks={{ onStartAgain }}
       />,
     );
-    expect(screen.getByText('Import staged successfully')).toBeTruthy();
-    expect(screen.getByText(/Your staged import expires in 7 days/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    expect(screen.getByText('Import staged')).toBeTruthy();
+    expect(screen.getByText('Staged imports will be deleted in 7 days.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new import' }));
     expect(onStartAgain).toHaveBeenCalledTimes(1);
-    const continueLink = screen.getByRole('link', { name: 'Go to Inheriti Business' });
+    const continueLink = screen.getByRole('link', { name: 'Continue in Inheriti Business' });
     expect(continueLink.getAttribute('href')).toBe(`${__WEB_APP_URL__}/organization/imports`);
     expect(continueLink.getAttribute('target')).toBe('_blank');
   });
@@ -404,9 +406,7 @@ describe('ImporterFlow controlled mode', () => {
       />,
     );
 
-    expect(
-      screen.getByText('Organization Key loaded securely and ready for local encryption.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Key securely loaded.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel request' })).toBeNull();
     expect((screen.getByRole('button', { name: 'Back' }) as HTMLButtonElement).disabled).toBe(true);
     expect(
@@ -430,8 +430,10 @@ describe('ImporterFlow controlled mode', () => {
     expect(screen.queryByRole('button', { name: 'Request via SafeKey Mobile' })).toBeNull();
     expect((screen.getByRole('button', { name: 'Back' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('Some Plans were not staged');
-    expect(screen.queryByRole('button', { name: 'Retry staging' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Encrypt and stage' })).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: 'Retry staging' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Encrypt & stage' })).toBeNull();
     expect(onRetryStage).not.toHaveBeenCalled();
     expect(onStage).not.toHaveBeenCalled();
   });

@@ -50,9 +50,7 @@ describe('Asset schema mapping', () => {
       />,
     );
 
-    expect(
-      screen.getByDisplayValue('•'.repeat('username: octo\npassword: secret'.length)),
-    ).toBeTruthy();
+    expect(screen.getByDisplayValue('•••••••')).toBeTruthy();
     expect(screen.queryByText('53% confidence')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
     expect(screen.getByRole('button', { name: 'Hide plain text' })).toBeTruthy();
@@ -85,7 +83,7 @@ describe('Asset schema mapping', () => {
       />,
     );
 
-    expect(screen.getByDisplayValue('••••••••')).toBeTruthy();
+    expect(screen.getByDisplayValue('•••••••')).toBeTruthy();
     expect(resolveSourceValue).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
     await waitFor(() =>
@@ -194,8 +192,8 @@ describe('Asset schema mapping', () => {
       />,
     );
 
-    expect(screen.queryByText('Value source')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Use all imported fields' })).toBeNull();
+    expect(screen.getByText('Value source')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reset to all imported fields' })).toBeTruthy();
   });
 
   it('offers restore only for a converted Plain Text asset', () => {
@@ -231,8 +229,9 @@ describe('Asset schema mapping', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Use Plain Text instead' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Private Key' })).toBeNull();
+    const typePicker = screen.getByRole('combobox', { name: 'Asset type' }) as HTMLSelectElement;
+    expect(typePicker.querySelector('option[value="PLAIN-TEXT"]')).toBeTruthy();
+    expect(typePicker.querySelector('option[value="PRIVATE-KEY"]')).toBeTruthy();
   });
 
   it('blocks a whitespace-only Plain Text secret', () => {
@@ -257,9 +256,9 @@ describe('Asset schema mapping', () => {
     );
 
     expect(screen.getByText('Please fill in this field')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Accept as Plain Text' }).getAttribute('aria-disabled'),
-    ).toBe('true');
+    expect(screen.getByRole('button', { name: 'Accept' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
   });
 
   it('resolves a protected value only while the user has revealed it', () => {
@@ -273,7 +272,7 @@ describe('Asset schema mapping', () => {
       />,
     );
 
-    expect(screen.getByText('••••••••')).toBeTruthy();
+    expect(screen.getByText('•••••••')).toBeTruthy();
     expect(resolveSourceValue).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal API key value' }));
@@ -288,7 +287,7 @@ describe('Asset schema mapping', () => {
       />,
     );
     expect(screen.queryByText('protected-example')).toBeNull();
-    expect(screen.getByText('••••••••')).toBeTruthy();
+    expect(screen.getByText('•••••••')).toBeTruthy();
     expect(resolveSourceValue).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal API key value' }));
@@ -300,13 +299,13 @@ describe('Asset schema mapping', () => {
       />,
     );
     expect(screen.queryByText('protected-example')).toBeNull();
-    expect(screen.getByText('••••••••')).toBeTruthy();
+    expect(screen.getByText('•••••••')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal API key value' }));
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     fireEvent(document, new Event('visibilitychange'));
     expect(screen.queryByText('protected-example')).toBeNull();
-    expect(screen.getByText('••••••••')).toBeTruthy();
+    expect(screen.getByText('•••••••')).toBeTruthy();
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   });
 
@@ -352,9 +351,9 @@ describe('Asset schema mapping', () => {
     expect(
       screen.getByText('Include at least one schema field before accepting this Asset.'),
     ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Accept as API Key' }).getAttribute('aria-disabled'),
-    ).toBe('true');
+    expect(screen.getByRole('button', { name: 'Accept' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
     fireEvent.keyDown(window, { key: 'a' });
     expect(onAction).not.toHaveBeenCalled();
   });

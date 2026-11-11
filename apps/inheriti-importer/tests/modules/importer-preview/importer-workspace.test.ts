@@ -165,7 +165,13 @@ describe('projectImporterWorkspace', () => {
 
     expect(result.assets[0]?.status).toBe('accepted');
     expect(result.unassigned).toEqual([
-      { id: 'entry-1:PLAIN-TEXT', name: 'Stripe', type: 'PLAIN-TEXT', valid: true },
+      {
+        id: 'entry-1:PLAIN-TEXT',
+        name: 'Stripe',
+        type: 'PLAIN-TEXT',
+        source: '.env',
+        valid: true,
+      },
     ]);
   });
 

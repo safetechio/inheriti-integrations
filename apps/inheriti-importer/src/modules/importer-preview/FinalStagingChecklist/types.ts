@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export type StagingState =
   | 'idle'
   | 'configured'
@@ -17,6 +19,7 @@ export interface ChecklistItem {
   error?: string;
   onFix?: () => void;
   fixLabel?: string;
+  fixDisabled?: boolean;
   onSecondaryFix?: () => void;
   secondaryFixLabel?: string;
 }
@@ -30,4 +33,5 @@ export interface FinalStagingChecklistProps {
   onStartAgain?: () => void;
   showActions?: boolean;
   blockerCount?: number;
+  progress?: ReactNode;
 }

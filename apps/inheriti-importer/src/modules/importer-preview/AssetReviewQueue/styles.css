@@ -4,10 +4,75 @@
 .asset-review-queue {
   flex: 1 1 260px;
   min-width: 0;
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .asset-review-inspector {
   flex: 2 1 400px;
   min-width: 0;
+  position: sticky;
+  top: 16px;
+}
+.asset-review-toolbar {
+  flex-wrap: wrap;
+}
+.asset-review-source-label {
+  display: grid;
+  gap: 4px;
+  color: var(--gray);
+  font-size: 12px;
+}
+.asset-review-source-label select,
+.asset-type-select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--importer-radius-control);
+  background: var(--importer-color-surface);
+  color: inherit;
+}
+.asset-review-search {
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--importer-radius-control);
+}
+.asset-review-search input {
+  min-width: 150px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+.asset-review-search button,
+.asset-review-search-toggle {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--gray);
+}
+.asset-review-row-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asset-review-folder {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-weight: 600;
+}
+.asset-type-select {
+  width: min(100%, 320px);
 }
 .asset-review-row {
   width: 100%;
@@ -36,6 +101,10 @@
 .asset-inspector-heading-text {
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+.asset-inspector-heading-text + .asset-inspector-heading-text {
+  font-size: 12px !important;
+  text-transform: lowercase;
 }
 .asset-preview-block {
   padding: 12px;
@@ -79,7 +148,7 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--importer-color-surface);
+  background: var(--gray-5);
 }
 .asset-metadata-section {
   padding-top: 16px;
@@ -106,8 +175,6 @@
   display: grid;
   width: min(100%, 320px);
   gap: 4px;
-}
-.asset-source-select-label {
   color: var(--gray);
   font-size: 12px;
   font-weight: 600;
@@ -137,6 +204,7 @@
   }
   .asset-review-inspector {
     flex: 1 1 480px;
+    position: static;
   }
 }
 @media (max-width: 640px) {

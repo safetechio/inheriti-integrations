@@ -2,6 +2,11 @@
   width: 100%;
   gap: 12px !important;
 }
+.source-import-header {
+  flex-wrap: wrap;
+  padding-bottom: var(--importer-content-gap);
+  border-bottom: var(--importer-border-width) solid var(--line);
+}
 .source-file-card {
   border-radius: var(--importer-radius-input) !important;
   padding: var(--importer-row-padding-block) var(--importer-card-padding) !important;

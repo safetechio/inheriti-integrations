@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import { filesFromList, openVaultFiles } from '@shared/infrastructure/files';
 import { type OpenedVaultFile } from '@modules/import/domain/vault';
 import { Alert, Box, Text } from '@modules/_shared/ui/components';
@@ -84,34 +83,18 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
         }}
       >
         <Box alignItems="center" style={{ width: '100%', gap: uiTheme.spacing.l }}>
-          <BrandLogo mark className="hero-mark" style={{ margin: 0 }} />
-          <Text
-            variant="heading1"
-            className="dropzone-heading"
-            color="primary200"
-            align="center"
-            style={{ width: '100%', maxWidth: 760, margin: 0, fontSize: 32, lineHeight: 1.15 }}
-          >
-            Import your secrets, then{' '}
-            <Text
-              variant="heading1"
-              color="primary"
-              style={{ fontStyle: 'italic', fontSize: 32, lineHeight: 1.15 }}
-            >
-              review them
-            </Text>
-            .
+          <Text variant="heading1" className="dropzone-heading" color="primary150" align="center">
+            Import. Review. Protect.
           </Text>
           <Text
             variant="bodyRegular"
-            color="gray"
+            color="primary150"
             className="muted"
             align="center"
             style={{ width: '100%' }}
           >
-            Files are parsed locally. Nothing leaves this computer until you choose Encrypt and
-            stage. At that point, fields are encrypted locally before transmission to Inheriti®
-            Business.
+            Uploaded files are parsed locally, and their data is encrypted on your device before
+            secure transmission to Inheriti® Business.
           </Text>
         </Box>
         <Box
@@ -172,15 +155,6 @@ function SourceCard({
   children: ReactNode;
 }) {
   const uiTheme = useTheme();
-  const kindColors: Record<string, string> = {
-    keepass: uiTheme.colors.primary120,
-    onepassword: uiTheme.colors.primary,
-    passbolt: uiTheme.colors.primary150,
-    kubernetes: '#326CE5',
-    vault: '#8A6D00',
-    dotenv: uiTheme.colors.success120,
-    cloud: uiTheme.colors.primary,
-  };
   return (
     <Box
       className="source-card"
@@ -194,13 +168,17 @@ function SourceCard({
         backgroundColor: uiTheme.colors.primary5,
       }}
     >
-      <Text variant="smallUppercase" className={`kind ${kind}`} style={{ color: kindColors[kind] }}>
+      <Text
+        variant="smallUppercase"
+        className={`kind ${kind}`}
+        style={{ color: uiTheme.colors.primary150 }}
+      >
         {title}
       </Text>
-      <Text variant="heading3" color="gray120">
+      <Text variant="heading3" color="primary150">
         {heading}
       </Text>
-      <Text variant="bodySmall" color="gray">
+      <Text variant="bodySmall" color="primary150">
         {children}
       </Text>
     </Box>

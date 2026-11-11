@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
-import { Badge, BaseModal, Box, Button, Icon, Text, theme } from '@main-components';
+import { useRef, useState, type ReactNode } from 'react';
+import { BaseModal, Box, Button, Icon, Text, theme } from '@main-components';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
+import { AppVersionBar } from '@modules/import/ui/components/AppShell';
 
-export function FlowHeader({
+export function CancelImportControl({
   fileCount,
   planCount,
   onCancel,
@@ -21,41 +22,23 @@ export function FlowHeader({
 
   return (
     <>
-      <Box
-        className="importer-flow-header"
-        flexDirection="row"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <Box flexDirection="row" alignItems="center" gap="m">
-          <BrandLogo />
-          <Text className="importer-flow-product" variant="importerProduct">
-            Import
-          </Text>
-        </Box>
-        <Box flexDirection="row" alignItems="center" gap="m">
-          <Badge tone="primary" variant="outline" size="lg" uppercase>
-            Local draft
-          </Badge>
-          <Button
-            title="Cancel import"
-            startIcon={<Icon name="xmark" size={12} color={theme.colors.danger120} />}
-            variant="outlined"
-            color="danger"
-            size="sm"
-            disabled={!onCancel}
-            onPress={() => {
-              cancelOpener.current =
-                document.activeElement instanceof HTMLElement ? document.activeElement : null;
-              setConfirming(true);
-            }}
-          />
-        </Box>
-      </Box>
+      <Button
+        title="Cancel import"
+        startIcon={<Icon name="xmark" size={12} color={theme.colors.danger120} />}
+        variant="outlined"
+        color="danger"
+        size="sm"
+        disabled={!onCancel}
+        onPress={() => {
+          cancelOpener.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setConfirming(true);
+        }}
+      />
       <BaseModal
         visible={confirming}
         title="Cancel import?"
-        description="This clears every imported file, mapping, review decision, Plan draft, and Organization Key operation in this session. It cannot be undone."
+        description="Your imported sources, reviewed assets and draft plans will be removed. This cannot be undone."
         onDismiss={dismissConfirmation}
         footer={
           <>
@@ -72,10 +55,27 @@ export function FlowHeader({
         }
       >
         <Text variant="bodySmall" color="gray">
-          {fileCount} imported file{fileCount === 1 ? '' : 's'} · {planCount} Plan
+          {fileCount} imported file{fileCount === 1 ? '' : 's'} · {planCount} plan
           {planCount === 1 ? '' : 's'} will be removed.
         </Text>
       </BaseModal>
+    </>
+  );
+}
+
+export function FlowHeader({ actions }: { actions?: ReactNode }) {
+  return (
+    <>
+      <AppVersionBar />
+      <Box
+        className="importer-flow-header titlebar"
+        flexDirection="row"
+        justifyContent="space-between"
+        alignItems="center"
+      >
+        <BrandLogo />
+        {actions}
+      </Box>
     </>
   );
 }

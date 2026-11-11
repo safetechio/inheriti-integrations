@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import { Box } from '@modules/_shared/ui/components';
 import { AppHeader } from '../AppHeader';
+import { UpdateStatus } from '@modules/_shared/ui/components/UpdateStatus';
 import type { DiscardSummary } from '../DiscardAllControl';
 
 type AppShellProps = {
@@ -11,6 +12,20 @@ type AppShellProps = {
   discardSummary?: DiscardSummary;
   onConfirmDiscardAll?: () => void;
 };
+
+export function AppVersionBar() {
+  return (
+    <Box
+      backgroundColor="gray10"
+      paddingHorizontal="m"
+      alignItems="flex-end"
+      justifyContent="center"
+      style={{ minHeight: 28 }}
+    >
+      <UpdateStatus />
+    </Box>
+  );
+}
 
 export function AppShell({
   dirtyCount,
@@ -22,11 +37,12 @@ export function AppShell({
   return (
     <Box
       className="app"
-      style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100vh' }}
+      style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr)', minHeight: '100vh' }}
     >
-      <header className="titlebar">
+      <AppVersionBar />
+      <Box className="titlebar" accessibilityRole="header">
         <Box className="brand">
-          <BrandLogo business className="brand-logo" />
+          <BrandLogo className="brand-logo" />
         </Box>
         <AppHeader
           dirtyCount={dirtyCount}
@@ -34,7 +50,7 @@ export function AppShell({
           discardSummary={discardSummary}
           onConfirmDiscardAll={onConfirmDiscardAll}
         />
-      </header>
+      </Box>
       {children}
     </Box>
   );

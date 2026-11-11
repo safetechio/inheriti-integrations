@@ -2,6 +2,7 @@ export interface GroupingAsset {
   id: string;
   name: string;
   type: string;
+  source?: string;
   valid?: boolean;
 }
 export interface PlanDraft {

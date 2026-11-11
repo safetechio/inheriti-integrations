@@ -5,7 +5,6 @@ import { hasPlanCapacity } from '../capacity';
 export function usePlanGrouping() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<Record<string, DropState>>({});
-  const [assignedId, setAssignedId] = useState<string | null>(null);
   const startDrag = (id: string) => setDraggedId(id);
   const endDrag = () => {
     setDraggedId(null);
@@ -18,7 +17,6 @@ export function usePlanGrouping() {
   ) => {
     if (!asset.valid || !hasPlanCapacity(plan) || !onAssign) return;
     onAssign(asset, plan);
-    setAssignedId(asset.id);
     endDrag();
   };
   const updateDrop = (plan: PlanDraft, state: DropState) =>
@@ -34,7 +32,6 @@ export function usePlanGrouping() {
   return {
     draggedId,
     dropState,
-    assignedId,
     startDrag,
     endDrag,
     assign,

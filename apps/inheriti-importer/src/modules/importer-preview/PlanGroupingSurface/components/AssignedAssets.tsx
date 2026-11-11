@@ -11,14 +11,19 @@ export function AssignedAssets({
 }) {
   return (
     <Stack gap="xs">
-      <Text variant="bodySmall" color="gray">
-        Assigned Assets
-      </Text>
       {assets.map((asset) => (
         <Box key={asset.id} flexDirection="row" justifyContent="space-between" alignItems="center">
-          <Text variant="bodySmall">{asset.name}</Text>
+          <Text variant="bodyDefault" semibold>
+            {asset.name}
+          </Text>
           {onRemove ? (
-            <Button title="Remove" size="sm" variant="plain" onPress={() => onRemove(asset)} />
+            <Button
+              title="Remove"
+              size="sm"
+              variant="plain"
+              color="danger"
+              onPress={() => onRemove(asset)}
+            />
           ) : onMove ? (
             <Button
               title={`Move ${asset.name} to selected Plan`}

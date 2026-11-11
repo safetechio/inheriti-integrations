@@ -59,7 +59,7 @@ async function replaceAppImage(downloaded) {
 }
 
 async function runWindowsInstaller(destination, start = spawn) {
-  const installer = start(destination, ['/S'], {
+  const installer = start(destination, ['/S', '--force-run', '--updated'], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
@@ -131,7 +131,11 @@ async function installUpdate(id, runtime) {
   )
     throw new Error('Invalid update');
   if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
-  const link = await request(runtime, 'POST', `/integrations/v1/internal-builds/${encodeURIComponent(id)}/download`);
+  const link = await request(
+    runtime,
+    'POST',
+    `/integrations/v1/internal-builds/${encodeURIComponent(id)}/download`,
+  );
   if (!runtime.isCurrent(capture)) throw new Error('AUTH_CONTEXT_CHANGED');
   if (
     (link.status !== 200 && link.status !== 201) ||
@@ -168,10 +172,11 @@ async function installUpdate(id, runtime) {
     if (process.platform === 'linux') {
       if (await replaceAppImage(destination)) {
         await fs.rm(directory, { recursive: true, force: true });
-        return { installed: true };
+        app.relaunch({ execPath: process.env.APPIMAGE, args: process.argv.slice(1) });
+        app.quit();
+        return { installed: true, relaunching: true };
       }
-      shell.showItemInFolder(destination);
-      return { installed: false, openedInstaller: false };
+      throw new Error('Automatic update requires a writable AppImage location');
     }
     if (process.platform === 'win32') {
       await runWindowsInstaller(destination);

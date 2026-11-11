@@ -33,8 +33,8 @@ export function SourceFieldPicker({
       >
         {field.sourceFieldId || !compactWhenUnmapped ? (
           <Box gap="xxs">
-            <Text variant="smallUppercase" color="gray">
-              Imported source
+            <Text variant="bodySmall" color="gray" style={{ fontSize: 11 }}>
+              Source
             </Text>
             <Text variant="bodySmall" semibold>
               {field.sourceFieldName ? displayName(field.sourceFieldName) : 'Not included'}
@@ -44,7 +44,7 @@ export function SourceFieldPicker({
         <Box flexDirection="row" gap="xs">
           {field.sourceFieldId ? (
             <Button
-              title="Remove"
+              title="Remove mapping"
               variant="plain"
               color="danger"
               size="sm"
@@ -53,8 +53,9 @@ export function SourceFieldPicker({
             />
           ) : null}
           <Button
-            title={open ? 'Close' : field.sourceFieldId ? 'Change' : 'Choose source'}
+            title={open ? 'Close' : field.sourceFieldId ? 'Change source' : 'Choose source'}
             variant="outlined"
+            color="gray"
             size="sm"
             onPress={() => setOpen((current) => !current)}
             accessibilityLabel={`${field.sourceFieldId ? 'Change' : 'Choose'} ${field.label} source field`}

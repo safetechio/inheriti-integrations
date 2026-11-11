@@ -14,6 +14,20 @@
 
 .plan-grouping-unassigned {
   border-color: var(--primary-30) !important;
+  min-height: 155px;
+}
+
+.plan-asset-filters input,
+.plan-asset-filters select {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--gray-30);
+  border-radius: 6px;
+  background: white;
+}
+
+.plan-asset-filters input {
+  flex: 1;
 }
 
 .plan-grouping-details {
@@ -63,10 +77,10 @@
 }
 
 .plan-drop-zone {
-  padding: var(--importer-section-gap);
-  border: var(--importer-border-width) dashed var(--gray-30);
+  padding: 8px var(--importer-section-gap);
+  border: var(--importer-border-width) solid var(--primary-30);
   border-radius: 10px;
-  background: var(--gray-5);
+  background: var(--primary-10);
   text-align: center;
 }
 
@@ -93,7 +107,7 @@
     max-width: none;
   }
 
-  .plan-grouping-plans {
+  .plan-draft-column {
     flex-basis: calc(100% - 300px) !important;
   }
 }
@@ -104,7 +118,7 @@
   }
 
   .plan-grouping-unassigned,
-  .plan-grouping-plans,
+  .plan-draft-column,
   .plan-grouping-details {
     width: 100%;
     flex-basis: auto !important;

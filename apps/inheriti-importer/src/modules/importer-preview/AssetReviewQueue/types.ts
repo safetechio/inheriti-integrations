@@ -13,6 +13,9 @@ export interface ReviewAsset {
   mapped: string[];
   unmapped: string[];
   source: string;
+  sourceId?: string;
+  sourceFileName?: string;
+  folderPath?: string[];
   alternatives: string[];
   previewFields?: string[];
   schemaFields?: ReviewAssetField[];

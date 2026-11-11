@@ -23,15 +23,9 @@ export function PlainTextEditor({
     (candidate) => candidate.id === textField.sourceFieldId,
   );
   const hasEditedValue = Boolean(asset.plainTextValue);
-  const combinedLength = asset.plainTextSources?.every((source) => source.length !== undefined)
-    ? asset.plainTextSources.reduce(
-        (total, source, index) =>
-          total + source.name.length + 2 + source.length! + Number(index > 0),
-        0,
-      )
-    : undefined;
-  const hiddenLength =
-    asset.plainTextValue?.length ?? selectedSource?.length ?? combinedLength ?? 0;
+  const hasValue = Boolean(
+    asset.plainTextValue?.length || selectedSource || asset.plainTextSources?.length,
+  );
 
   useEffect(() => {
     if (previousAssetId.current === asset.id) return;
@@ -79,13 +73,7 @@ export function PlainTextEditor({
       <FormTextarea
         label="Plain text secret"
         accessibilityLabel="Plain text value"
-        value={
-          revealed
-            ? value
-            : hiddenLength || asset.plainTextSources?.length || selectedSource
-              ? '•'.repeat(hiddenLength || 8)
-              : ''
-        }
+        value={revealed ? value : hasValue ? '•••••••' : ''}
         editable={revealed && Boolean(onEdit)}
         error={asset.schemaFields?.find((field) => field.key === 'secret.text')?.validationError}
         onChangeText={(next) => {
@@ -99,13 +87,14 @@ export function PlainTextEditor({
         size="sm"
         onPress={toggle}
       />
-      {textField?.candidates && textField.candidates.length > 1 ? (
+      {textField?.candidates && (textField.candidates.length > 1 || hasEditedValue) ? (
         <Box gap="xs" className="asset-source-picker">
           <Text variant="smallUppercase" color="gray">
             Value source
           </Text>
           <Text variant="bodySmall" semibold>
-            {selectedSource?.name ?? (hasEditedValue ? 'Edited text' : 'All imported fields')}
+            {selectedSource?.name ??
+              (hasEditedValue ? 'Modified imported fields' : 'All imported fields')}
           </Text>
           <Text variant="bodySmall" color="gray">
             {selectedSource
@@ -117,7 +106,7 @@ export function PlainTextEditor({
           <Button
             title={
               selectedSource || hasEditedValue
-                ? 'Use all imported fields'
+                ? 'Reset to all imported fields'
                 : 'Use one imported field'
             }
             variant="outlined"
@@ -134,7 +123,7 @@ export function PlainTextEditor({
           />
           {sourcePickerOpen ? (
             <label className="asset-source-select-wrap">
-              <span className="asset-source-select-label">Choose imported field</span>
+              Choose imported field
               <select
                 className="asset-source-select"
                 aria-label="Choose imported field"

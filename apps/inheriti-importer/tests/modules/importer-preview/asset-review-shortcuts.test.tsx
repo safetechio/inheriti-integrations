@@ -55,4 +55,51 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
 
     expect(onAction).not.toHaveBeenCalled();
   });
+
+  it('keeps search while switching status filters and scopes assets by source', () => {
+    const other = {
+      ...asset,
+      id: 'asset-2',
+      name: 'Other token',
+      source: 'staging.env',
+      sourceFileName: 'staging.env',
+      status: 'accepted' as const,
+    };
+    render(<AssetReviewQueue assets={[{ ...asset, sourceFileName: 'prod.kdbx' }, other]} />);
+    fireEvent.click(screen.getByLabelText('Search assets'));
+    fireEvent.change(screen.getByLabelText('Search assets'), { target: { value: 'Other' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Accepted 1' }));
+    expect(screen.getByLabelText('Inspect Other token')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    expect(screen.queryByLabelText('Inspect Other token')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Clear asset search'));
+    expect((screen.getByLabelText('Search assets') as HTMLInputElement).value).toBe('');
+  });
+
+  it('shows a collapsed tree only for a source with real folders', () => {
+    render(
+      <AssetReviewQueue
+        assets={[
+          { ...asset, sourceFileName: 'prod.kdbx', folderPath: ['Infrastructure', 'Database'] },
+        ]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    fireEvent.click(screen.getByText('Tree'));
+    expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
+    fireEvent.click(screen.getByText(/Infrastructure/));
+    fireEvent.click(screen.getByText(/Database/));
+    expect(screen.getByLabelText('Inspect Production database')).toBeTruthy();
+  });
+
+  it('disables the decision already made while allowing the opposite decision', () => {
+    const accepted = { ...asset, status: 'accepted' as const };
+    render(<AssetReviewQueue assets={[accepted]} onAction={vi.fn()} />);
+    expect((screen.getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((screen.getByRole('button', { name: 'Exclude' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
 });

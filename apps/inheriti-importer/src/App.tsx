@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AuthGate } from '@/modules/auth/ui';
-import { BaseModal, Text } from '@modules/_shared/ui/components';
-import Button from '@modules/_shared/ui/components/Base/Button';
+import { UpdateGate } from '@modules/_shared/ui/components/UpdateStatus/UpdateGate';
+import { SourceWarningsModal } from '@modules/importer-preview/SourceImportStatus/components/SourceWarningsModal';
+import { AppHeader } from '@modules/import/ui/components/AppHeader';
 import { openVaultFiles } from '@modules/_shared/infrastructure/files';
 import { useImportLifecycle } from '@modules/import/application/use-import-lifecycle';
 import { VaultContext } from '@modules/import/infrastructure/stores/vault-context';
@@ -29,6 +30,8 @@ import { usePlanBatchController } from '@modules/batch/application/use-plan-batc
 import { secureCleanup } from '@modules/_shared/application/secure-cleanup-controller';
 import { useAuthProvider } from '@shared/infrastructure/importer-api';
 import type { ElectronAuthProvider } from '@modules/auth/infrastructure/electron-auth-provider';
+import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import type { ImporterWorkspaceAction } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-types';
 
 const stagingChecklist: ChecklistItem[] = [
   {
@@ -61,7 +64,9 @@ const stagingChecklist: ChecklistItem[] = [
 export function App() {
   return (
     <AuthGate>
-      <AuthenticatedImporter />
+      <UpdateGate>
+        <AuthenticatedImporter />
+      </UpdateGate>
     </AuthGate>
   );
 }
@@ -73,10 +78,18 @@ function AuthenticatedImporter() {
     createHistory(createEmptyWorkspace()),
   );
   const [warningFile, setWarningFile] = useState<ImportFile | null>(null);
+  const [acknowledgedWarnings, setAcknowledgedWarnings] = useState<Set<string>>(() => new Set());
   const [stagingComplete, setStagingComplete] = useState(false);
   const planWorkspace = workspaceHistory.present;
   const importSession = useMemo(() => importSessionFromVaultState(imports.state), [imports.state]);
-  const files = useMemo(() => projectImportSources(imports.state), [imports.state]);
+  const files = useMemo(
+    () =>
+      projectImportSources(imports.state).map((file) => ({
+        ...file,
+        warningsAcknowledged: acknowledgedWarnings.has(warningKey(file)),
+      })),
+    [imports.state, acknowledgedWarnings],
+  );
 
   function setPlanWorkspace(next: WorkspaceState | ((current: WorkspaceState) => WorkspaceState)) {
     setWorkspaceHistory((history) =>
@@ -116,11 +129,19 @@ function AuthenticatedImporter() {
       replaceHistory(history, createEmptyWorkspace(), clearWorkspaceLiterals),
     );
     setWarningFile(null);
+    setAcknowledgedWarnings(new Set());
   }
 
   useEffect(() => secureCleanup.register(discardAll));
-  useEffect(() => authProvider.blockTransitionsWhile(() =>
-    imports.busy || files.length > 0 || batchController.running || Boolean(batchController.organizationKey.activePlanId)));
+  useEffect(() =>
+    authProvider.blockTransitionsWhile(
+      () =>
+        imports.busy ||
+        files.length > 0 ||
+        batchController.running ||
+        Boolean(batchController.organizationKey.activePlanId),
+    ),
+  );
 
   const releaseCancelled =
     batchController.organizationKey.error === 'Organization Key release was cancelled.';
@@ -144,12 +165,7 @@ function AuthenticatedImporter() {
   const stagingReady = batchController.ready;
 
   function reviewAsset(action: string, asset: ReviewAsset) {
-    if (
-      action === 'accept' ||
-      action === 'exclude' ||
-      action === 'alternate:PLAIN-TEXT' ||
-      action === 'restore-suggestion'
-    ) {
+    if (isSupportedReviewAction(action)) {
       workspace.reviewAsset(action, asset);
     }
   }
@@ -175,6 +191,12 @@ function AuthenticatedImporter() {
     ) : (
       <>
         <ImporterFlow
+          headerActions={
+            <AppHeader
+              dirtyCount={0}
+              accountActionsDisabled={imports.busy || batchController.running}
+            />
+          }
           files={files}
           assets={workspace.assets}
           unassigned={workspace.unassigned}
@@ -206,6 +228,7 @@ function AuthenticatedImporter() {
             onAssignAsset: workspace.assignAsset,
             onUnassignAsset: workspace.unassignAsset,
             onCreatePlan: workspace.createPlan,
+            onEnsureFirstPlan: workspace.ensureFirstPlan,
             onDeletePlan: workspace.deletePlan,
             onUpdatePlan: workspace.updatePlanMetadata,
             onCancel: discardAll,
@@ -216,23 +239,14 @@ function AuthenticatedImporter() {
             onStartAgain: discardAll,
           }}
         />
-        <BaseModal
-          visible={Boolean(warningFile)}
-          title={warningFile ? `Warnings from ${warningFile.name}` : 'Import warnings'}
-          description="The source was imported. Review these parser warnings before continuing."
+        <SourceWarningsModal
+          file={warningFile}
           onDismiss={() => setWarningFile(null)}
-          footer={<Button title="Close" onPress={() => setWarningFile(null)} />}
-        >
-          {warningFile?.warningMessages?.map((warning, index) => (
-            <Text
-              key={`${warningFile.id ?? warningFile.name}-warning-${index}`}
-              variant="bodySmall"
-              color="warning200"
-            >
-              {warning}
-            </Text>
-          ))}
-        </BaseModal>
+          onUnderstood={(file) => {
+            setAcknowledgedWarnings((current) => new Set(current).add(warningKey(file)));
+            setWarningFile(null);
+          }}
+        />
       </>
     );
 
@@ -240,5 +254,18 @@ function AuthenticatedImporter() {
     <VaultContext.Provider value={{ state: imports.state, dispatch: imports.dispatch }}>
       {content}
     </VaultContext.Provider>
+  );
+}
+
+function warningKey(file: ImportFile) {
+  return JSON.stringify([file.id ?? file.name, file.warningMessages, file.warnings]);
+}
+
+function isSupportedReviewAction(action: string): action is ImporterWorkspaceAction {
+  return (
+    action === 'accept' ||
+    action === 'exclude' ||
+    action === 'restore-suggestion' ||
+    getCorePlanAssetTypes().some((type) => action === `alternate:${type}`)
   );
 }

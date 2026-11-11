@@ -25,7 +25,7 @@ export function StageActions({
       ) : null}
       {!failed && state !== 'staged' ? (
         <Button
-          title={state === 'encrypting' ? 'Staging…' : 'Encrypt and stage'}
+          title={state === 'encrypting' ? 'Staging…' : 'Encrypt & stage'}
           startIcon={<Icon name="shield" size={12} color={theme.colors.white} />}
           onPress={() => onStage?.()}
           disabled={

@@ -17,6 +17,7 @@ export function createMappingActions(context: ImporterWorkspaceContext) {
   const {
     session,
     mappingOverrides,
+    typeOverrides,
     setPlainTextOverrides,
     setMappingOverrides,
     setDecisions,
@@ -72,7 +73,7 @@ export function createMappingActions(context: ImporterWorkspaceContext) {
       converted && suggestion.type === 'PLAIN-TEXT' && !suggestion.variant
         ? new Set([statusKey(converted)])
         : new Set<string>();
-    return projectSuggestions(session, originals, overrides, {}, convertedIds).find(
+    return projectSuggestions(session, originals, overrides, {}, convertedIds, typeOverrides).find(
       (candidate) => statusKey(candidate) === key,
     )?.fieldBindings['secret.text'];
   }

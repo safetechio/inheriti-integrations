@@ -10,6 +10,7 @@ export function createSourceActions(context: ImporterWorkspaceContext) {
     setPlainTextOverrides,
     setPlainTextAssetIds,
     setStructuredSuggestions,
+    setTypeOverrides,
     updateWorkspace,
     replaceWorkspace,
   } = context;
@@ -34,6 +35,7 @@ export function createSourceActions(context: ImporterWorkspaceContext) {
     });
     setPlainTextAssetIds(new Set());
     setStructuredSuggestions({});
+    setTypeOverrides({});
   }
 
   function removeSource(sourceId: string) {
@@ -58,6 +60,9 @@ export function createSourceActions(context: ImporterWorkspaceContext) {
     });
     setPlainTextAssetIds((current) => new Set([...current].filter((key) => !belongsToSource(key))));
     setStructuredSuggestions((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !belongsToSource(key))),
+    );
+    setTypeOverrides((current) =>
       Object.fromEntries(Object.entries(current).filter(([key]) => !belongsToSource(key))),
     );
     const remove = (current: Parameters<typeof removeSourceFromWorkspace>[1]) =>

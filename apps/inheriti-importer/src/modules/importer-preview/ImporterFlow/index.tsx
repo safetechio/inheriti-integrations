@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Box, Icon, Text, theme } from '@main-components';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Box, Text } from '@main-components';
 import type { ReviewAsset } from '../AssetReviewQueue';
 import type { ChecklistItem, StagingState } from '../FinalStagingChecklist';
 import type { GroupingAsset, PlanDraft } from '../PlanGroupingSurface';
@@ -7,10 +7,12 @@ import type { ImportFile } from '../SourceImportStatus';
 import type { StagingBatchStatusProps } from '../StagingBatchStatus';
 import type { ImporterFlowReadiness } from './application/flow-readiness';
 import { FlowActions } from './components/FlowActions';
-import { FlowHeader } from './components/FlowHeader';
+import { FlowHeader, CancelImportControl } from './components/FlowHeader';
 import { FlowStepper } from './components/FlowStepper';
 import { StageContent } from './components/StageContent';
 import { LocalOrganizationKeyReleaseModal } from './components/LocalOrganizationKeyReleaseModal';
+import { ModalPortal } from '@modules/_shared/ui/components/Base/Portal';
+import { StagingSuccess } from '../FinalStagingChecklist/components/StagingSuccess';
 import {
   importerFlowStages,
   type ImporterFlowStage,
@@ -20,6 +22,7 @@ import {
 import './styles.css';
 
 export type ImporterFlowProps = {
+  headerActions?: ReactNode;
   files: ImportFile[];
   assets: ReviewAsset[];
   unassigned: GroupingAsset[];
@@ -39,6 +42,7 @@ export type ImporterFlowProps = {
 };
 
 export function ImporterFlow({
+  headerActions,
   files,
   assets,
   unassigned,
@@ -73,6 +77,9 @@ export function ImporterFlow({
   const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(plans[0]?.id);
   const [localReleaseSimulatorVisible, setLocalReleaseSimulatorVisible] = useState(false);
   const stage = flow.stage;
+  useEffect(() => {
+    if (stage === 'plans' && flow.plans.length === 0) flow.ensureFirstPlan();
+  }, [stage, flow.plans.length, flow.ensureFirstPlan]);
   const flowLocked = ['releasing', 'encrypting', 'retry', 'failed-stage', 'staged'].includes(
     flow.stagingState,
   );
@@ -112,13 +119,37 @@ export function ImporterFlow({
     keyLoaded,
   });
 
+  if (stage === 'staging' && flow.stagingState === 'staged') {
+    return (
+      <ModalPortal visible>
+        <Box
+          position="fixed"
+          top={0}
+          right={0}
+          bottom={0}
+          left={0}
+          alignItems="center"
+          justifyContent="center"
+          backgroundColor="gray5"
+          padding="l"
+        >
+          <Box
+            accessibilityRole="dialog"
+            accessibilityLabel="Import staged"
+            aria-modal="true"
+            width="100%"
+            maxWidth={640}
+          >
+            <StagingSuccess onStartAgain={flow.startAgain} />
+          </Box>
+        </Box>
+      </ModalPortal>
+    );
+  }
+
   return (
     <Box className="importer-flow-page">
-      <FlowHeader
-        fileCount={flow.files.length}
-        planCount={flow.plans.length}
-        onCancel={flow.cancel}
-      />
+      <FlowHeader actions={headerActions} />
       <Box className="importer-flow-workspace">
         <FlowStepper
           stage={stage}
@@ -139,26 +170,20 @@ export function ImporterFlow({
               </Text>
               <Text className="stage-headline" variant="importerStageHeadline">
                 {stage === 'staging' && flow.stagingState === 'staged'
-                  ? 'Your import is ready'
+                  ? 'Import staged'
                   : stageHeadline(stage)}
               </Text>
             </Box>
-            <Box
-              className="importer-flow-security-note"
-              flexDirection="row"
-              alignItems="flex-start"
-              gap="s"
-            >
-              <Icon name="lock" size={13} color={theme.colors.primary120} />
-              <Text
-                className="importer-flow-security-copy"
-                variant="importerFooterNote"
-                color="gray"
-              >
-                Files are parsed locally. Nothing leaves this computer until you choose Encrypt and
-                stage. Fields are encrypted locally before transmission to Inheriti® Business.
-              </Text>
-            </Box>
+            <Text variant="importerFooterNote" color="gray">
+              {stageHelpers[stage]}
+            </Text>
+            {flow.stagingState !== 'staged' ? (
+              <CancelImportControl
+                fileCount={flow.files.length}
+                planCount={flow.plans.length}
+                onCancel={flow.cancel}
+              />
+            ) : null}
           </Box>
           <Box className="importer-flow-scroll">
             <StageContent
@@ -196,10 +221,6 @@ export function ImporterFlow({
             onNext={flow.goNext}
             showComplete={stage !== 'staging'}
             nextLabel={nextAction[stage]}
-            isStaging={stage === 'staging'}
-            canStage={readiness.staging && keyLoaded}
-            onStage={flow.isControlled && !callbacks?.onStage ? undefined : flow.markStaged}
-            stagingState={flow.stagingState}
           />
         </Box>
       </Box>
@@ -223,10 +244,17 @@ const nextAction = {
 };
 
 const stageDescriptions = {
-  sources: 'Confirm what was imported',
-  assets: 'Decide which assets to import',
-  plans: 'Put every Asset in a plan draft',
-  staging: 'Encrypt and stage for Inheriti® Business',
+  sources: 'Confirm imported sources',
+  assets: 'Review detected assets',
+  plans: 'Draft plan creation',
+  staging: 'Authorise plan staging',
+};
+
+const stageHelpers = {
+  sources: 'Add or remove sources from the list below.',
+  assets: 'Review each asset’s assigned type and data, then accept or exclude it from the import.',
+  plans: 'Drag an asset onto a plan or select a plan, then click Assign on an asset.',
+  staging: 'Secure your draft plans and data for transmission to Inheriti® Business.',
 };
 
 function stageHeadline(stage: keyof typeof stageDescriptions) {
@@ -250,8 +278,7 @@ function getStageDescription({
 }) {
   if (stage === 'sources' && sourceIssueGroups)
     return 'Unlock, retry, remove, or add a source before continuing.';
-  if (stage === 'assets')
-    return 'Accept or exclude every detected Asset before continuing.';
+  if (stage === 'assets') return 'Accept or exclude every detected Asset before continuing.';
   if (stage === 'plans' && planIssueGroups)
     return 'Create valid Plans and assign every accepted Asset before continuing.';
   if (stage !== 'staging') return 'This step is clear.';

@@ -1,5 +1,6 @@
 import {
   getPlanAssetFormFields,
+  getCorePlanAssetTypes,
   validateAssetEditorValues,
 } from '@modules/plans/domain/asset-metadata';
 import type { ImportSession } from '@modules/import/domain/import-model';
@@ -15,7 +16,9 @@ import {
   suggestionFields,
   mappedFieldIds,
   assetMatchesSuggestion,
+  sourceSuggestions,
 } from './importer-workspace-suggestions';
+import type { AssetTypeOverrides } from './importer-workspace-types';
 
 /** Include schema and materialisation errors in the review row. */
 function suggestionValidationErrors(
@@ -56,8 +59,18 @@ export function projectAssets(
   workspace: WorkspaceState,
   decisions: Record<string, AssetReviewStatus>,
   plainTextAssetIds: ReadonlySet<string>,
+  typeOverrides: AssetTypeOverrides = {},
 ): ReviewAsset[] {
+  const originals = sourceSuggestions(session);
   return suggestions.map((suggestion): ReviewAsset => {
+    const original = originals.find(
+      (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
+    );
+    const originalId = original ? statusKey(original) : undefined;
+    const node = session.nodesById[suggestion.fromNodeId];
+    const sourceFileName =
+      session.sources.find((source) => source.id === node?.sourceId)?.fileName ?? 'Imported source';
+    const folderPath = node?.path.flatMap((segment) => segment.split(' / ').filter(Boolean)) ?? [];
     const fields = suggestionFields(session, suggestion);
     const mappedIds = mappedFieldIds(suggestion);
     const mapped = fields.filter((field) => mappedIds.has(field.id)).map((field) => field.name);
@@ -115,10 +128,11 @@ export function projectAssets(
       rationale: suggestion.rationale,
       mapped,
       unmapped,
-      source: fields[0]
-        ? `${session.sources.find((source) => source.id === fields[0].sourceId)?.fileName ?? 'Imported source'} · ${suggestion.name}`
-        : 'Imported source',
-      alternatives: suggestion.type === 'PLAIN-TEXT' ? [] : ['PLAIN-TEXT'],
+      source: sourceFileName,
+      sourceId: node?.sourceId,
+      sourceFileName,
+      folderPath,
+      alternatives: getCorePlanAssetTypes().filter((type) => type !== suggestion.type),
       previewFields: mapped,
       schemaFields,
       plainTextValue:
@@ -133,9 +147,12 @@ export function projectAssets(
               length: session.fieldsById[source.sourceFieldId]?.value.length,
             }))
           : undefined,
-      convertedFromType: (suggestion.variant === 'additional-fields' ? [] : [...plainTextAssetIds])
-        .find((id) => id.slice(0, id.lastIndexOf(':')) === suggestion.fromNodeId)
-        ?.slice(suggestion.fromNodeId.length + 1),
+      convertedFromType:
+        originalId && typeOverrides[originalId]
+          ? original?.type
+          : (suggestion.variant === 'additional-fields' ? [] : [...plainTextAssetIds])
+              .find((id) => id.slice(0, id.lastIndexOf(':')) === suggestion.fromNodeId)
+              ?.slice(suggestion.fromNodeId.length + 1),
     };
   });
 }

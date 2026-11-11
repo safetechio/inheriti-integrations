@@ -1,4 +1,7 @@
-import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import {
+  getCorePlanAssetTypes,
+  getPlanAssetFormFields,
+} from '@modules/plans/domain/asset-metadata';
 import type { ImportSession, ImportedField } from '@modules/import/domain/import-model';
 import {
   fieldsOf,
@@ -15,6 +18,28 @@ export const statusKey = (suggestion: SuggestedAsset) =>
   `${suggestion.fromNodeId}:${
     suggestion.variant === 'additional-fields' ? 'PLAIN-TEXT-ADDITIONAL' : suggestion.type
   }`;
+
+/** Reclassify with only bindings valid in the destination schema; the source fields stay in the session. */
+export function convertToCanonicalType(
+  session: ImportSession,
+  suggestion: SuggestedAsset,
+  type: string,
+  hasCompanion: boolean,
+): SuggestedAsset {
+  if (!getCorePlanAssetTypes().includes(type as ReturnType<typeof getCorePlanAssetTypes>[number]))
+    return suggestion;
+  if (type === 'PLAIN-TEXT') return convertToPlainText(session, suggestion, hasCompanion);
+  const allowed = new Set(getPlanAssetFormFields(type).map((field) => field.source));
+  return {
+    ...suggestion,
+    type,
+    confidence: 0,
+    rationale: 'Asset type changed during review. Map and validate its fields before accepting.',
+    fieldBindings: Object.fromEntries(
+      Object.entries(suggestion.fieldBindings).filter(([field]) => allowed.has(field)),
+    ),
+  };
+}
 
 /** Read only fields belonging to this suggestion's source node. */
 export function suggestionFields(

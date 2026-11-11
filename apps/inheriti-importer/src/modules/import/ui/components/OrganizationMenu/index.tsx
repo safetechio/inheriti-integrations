@@ -1,5 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
-import { Box, Icon, Pressable, Text } from '@modules/_shared/ui/components';
+import { Box, Icon, Pressable, Text, theme } from '@modules/_shared/ui/components';
 import useOrganizationMemberships from '@modules/organization/application/use-organization-memberships';
 import useSelectCurrentOrganization from '@modules/organization/application/use-select-current-organization';
 import { organizationDisplayName } from '@modules/organization/application/organization-display-name';
@@ -41,17 +41,22 @@ export function OrganizationMenu({
           alignItems="center"
           gap="s"
           borderWidth={1}
-          borderColor="primary30"
+          borderColor="gray30"
           borderRadius="pill"
           paddingHorizontal="m"
           height={40}
           style={{ cursor: switching ? 'wait' : 'pointer', opacity: switching ? 0.7 : 1 }}
         >
-          <Icon name="building" size={18} color="primary" label="Organisation" />
-          <Text variant="bodySmall" color="primary120" numberOfLines={1}>
+          <Icon name="building" size={18} color={theme.colors.gray120} label="Organisation" />
+          <Text variant="bodySmall" color="gray120" numberOfLines={1}>
             {selectedOrganizationName}
           </Text>
-          <Icon name="chevron-down" size={16} color="primary" label="Change organisation" />
+          <Icon
+            name="chevron-down"
+            size={16}
+            color={theme.colors.gray120}
+            label="Change organisation"
+          />
         </Box>
       </Pressable>
       {open ? (

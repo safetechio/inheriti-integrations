@@ -1,6 +1,13 @@
+import type { ReactNode } from 'react';
 import { Box, Button, Icon, Text, theme } from '@main-components';
 import type { ChecklistItem } from '../types';
-export function ChecklistRows({ items }: { items: ChecklistItem[] }) {
+export function ChecklistRows({
+  items,
+  secureAction,
+}: {
+  items: ChecklistItem[];
+  secureAction?: ReactNode;
+}) {
   return (
     <>
       {items.map((item) => (
@@ -15,14 +22,22 @@ export function ChecklistRows({ items }: { items: ChecklistItem[] }) {
         >
           <Box className="staging-check-mark">
             <Icon
-              name={item.complete ? 'check' : 'circle-exclamation'}
+              name={
+                item.complete
+                  ? 'check'
+                  : item.loading
+                    ? 'spinner'
+                    : item.label === 'Secure staging'
+                      ? 'hourglass'
+                      : 'spinner'
+              }
               size={12}
               color={
                 item.error
                   ? theme.colors.danger120
                   : item.complete
                     ? theme.colors.success120
-                    : theme.colors.warning200
+                    : theme.colors.gray50
               }
             />
           </Box>
@@ -48,12 +63,13 @@ export function ChecklistRows({ items }: { items: ChecklistItem[] }) {
                 <Box
                   height={6}
                   width="35%"
-                  backgroundColor="warning"
+                  backgroundColor="primary"
                   borderRadius="s"
                   className="staging-indeterminate-bar"
                 />
               </Box>
             ) : null}
+            {item.label === 'Secure staging' ? secureAction : null}
           </Box>
           {!item.complete && (item.onFix || item.onSecondaryFix) ? (
             <Box flexDirection="row" alignItems="center" gap="s">
@@ -68,10 +84,16 @@ export function ChecklistRows({ items }: { items: ChecklistItem[] }) {
               {item.onFix ? (
                 <Button
                   title={item.fixLabel ?? 'Review'}
-                  endIcon={<Icon name="chevron-right" size={10} />}
+                  endIcon={
+                    item.fixLabel === 'Cancel request' ? undefined : (
+                      <Icon name="chevron-right" size={10} />
+                    )
+                  }
                   size="sm"
-                  variant="outlined"
+                  variant={item.fixLabel === 'Cancel request' ? 'plain' : 'outlined'}
+                  color={item.fixLabel === 'Cancel request' ? 'gray' : undefined}
                   onPress={item.onFix}
+                  disabled={item.fixDisabled}
                 />
               ) : null}
             </Box>

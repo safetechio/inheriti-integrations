@@ -5,7 +5,6 @@ import type { GroupingAsset } from '../../types';
 interface AssetRowProps {
   asset: GroupingAsset;
   dragged: boolean;
-  assigned: boolean;
   onStart: () => void;
   onEnd: () => void;
   onAssign?: () => void;
@@ -15,7 +14,6 @@ interface AssetRowProps {
 export function AssetRow({
   asset,
   dragged,
-  assigned,
   onStart,
   onEnd,
   onAssign,
@@ -43,11 +41,6 @@ export function AssetRow({
         {asset.valid === false ? (
           <Text variant="bodySmall" color="danger120">
             Invalid Asset binding
-          </Text>
-        ) : null}
-        {assigned ? (
-          <Text variant="bodySmall" color="success120">
-            Assigned to Plan draft
           </Text>
         ) : null}
       </Box>

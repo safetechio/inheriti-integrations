@@ -9,6 +9,7 @@ import {
   type MappingOverrides,
   type PlainTextOverrides,
   type ReviewDecisions,
+  type AssetTypeOverrides,
   type WorkspaceReplacer,
   type WorkspaceSetter,
 } from './importer-workspace-types';
@@ -25,7 +26,10 @@ export interface ImporterWorkspaceContext {
   projection: ImporterWorkspaceProjection;
   mappingOverrides: MappingOverrides;
   plainTextOverrides: PlainTextOverrides;
+  plainTextAssetIds: ReadonlySet<string>;
   structuredSuggestions: Record<string, SuggestedAsset>;
+  typeOverrides: AssetTypeOverrides;
+  setTypeOverrides: Dispatch<SetStateAction<AssetTypeOverrides>>;
   setDecisions: Dispatch<SetStateAction<ReviewDecisions>>;
   setMappingOverrides: Dispatch<SetStateAction<MappingOverrides>>;
   setPlainTextOverrides: Dispatch<SetStateAction<PlainTextOverrides>>;
@@ -49,6 +53,7 @@ export function useImporterWorkspace(
   const [structuredSuggestions, setStructuredSuggestions] = useState<
     Record<string, SuggestedAsset>
   >({});
+  const [typeOverrides, setTypeOverrides] = useState<AssetTypeOverrides>({});
   const projection = useMemo(
     () =>
       projectImporterWorkspace(
@@ -58,8 +63,17 @@ export function useImporterWorkspace(
         mappingOverrides,
         plainTextOverrides,
         plainTextAssetIds,
+        typeOverrides,
       ),
-    [session, workspace, decisions, mappingOverrides, plainTextOverrides, plainTextAssetIds],
+    [
+      session,
+      workspace,
+      decisions,
+      mappingOverrides,
+      plainTextOverrides,
+      plainTextAssetIds,
+      typeOverrides,
+    ],
   );
   const context: ImporterWorkspaceContext = {
     session,
@@ -67,7 +81,10 @@ export function useImporterWorkspace(
     projection,
     mappingOverrides,
     plainTextOverrides,
+    plainTextAssetIds,
     structuredSuggestions,
+    typeOverrides,
+    setTypeOverrides,
     setDecisions,
     setMappingOverrides,
     setPlainTextOverrides,

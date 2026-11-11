@@ -84,6 +84,11 @@
 .importer-flow-counters > div {
   grid-column: 1/-1;
 }
+.importer-flow-counters > div:nth-child(2),
+.importer-flow-counters > div:last-child {
+  padding-top: var(--importer-compact-padding-block);
+  border-top: var(--importer-border-width) solid var(--line);
+}
 .importer-flow-version {
   margin-inline: calc(-1 * var(--importer-rail-padding-inline));
   padding-inline: var(--importer-rail-padding-inline);

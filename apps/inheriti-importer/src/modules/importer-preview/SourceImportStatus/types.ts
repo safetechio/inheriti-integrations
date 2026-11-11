@@ -9,6 +9,7 @@ export interface ImportFile {
   status: ImportFileStatus;
   detail?: string;
   warningMessages?: string[];
+  warningsAcknowledged?: boolean;
 }
 export interface SourceImportStatusProps {
   files: ImportFile[];
