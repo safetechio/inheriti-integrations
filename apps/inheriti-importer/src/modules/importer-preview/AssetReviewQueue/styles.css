@@ -247,6 +247,13 @@
   border-radius: 8px;
   background: var(--primary-5);
 }
+.asset-source-options [role='button'] {
+  max-width: 100%;
+}
+.asset-source-options [role='button'] * {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .asset-source-select-wrap {
   display: grid;
   width: min(100%, 320px);

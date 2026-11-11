@@ -1,10 +1,13 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
 import { SourceImportStatus } from '@modules/importer-preview/SourceImportStatus';
 import type { ImportFile } from '@modules/importer-preview/SourceImportStatus';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('source file status', () => {
   it('supports unlocking a KeePass source with only a key file', async () => {
@@ -72,6 +75,62 @@ describe('source file status', () => {
     finishRead(bytes);
     await waitFor(() => expect(new Uint8Array(bytes)).toEqual(new Uint8Array(2)));
     expect(screen.queryByText('late.key')).toBeNull();
+  });
+
+  it('renders a floating popover and dismisses with Escape or outside pointer', () => {
+    const source: ImportFile = { name: 'floating.kdbx', format: 'KeePass', status: 'unlock-required' };
+    render(<FileRow file={source} onUnlock={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: 'Unlock' });
+    fireEvent.click(trigger);
+    const panel = screen.getByRole('dialog', { name: 'Unlock KeePass database' });
+    expect(panel.parentElement).toBe(document.body);
+    expect(panel.closest('.source-file-card')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText('Master password'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('dismisses an idle floating popover when its trigger scrolls offscreen', () => {
+    render(<FileRow file={{ name: 'scroll.kdbx', format: 'KeePass', status: 'unlock-required' }} onUnlock={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: 'Unlock' });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    vi.spyOn(trigger.parentElement!, 'getBoundingClientRect').mockReturnValue({
+      top: -50, bottom: -10, left: 100, right: 180, width: 80, height: 40,
+    } as DOMRect);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('dismisses when an ancestor scrollport clips the trigger', () => {
+    let notify!: IntersectionObserverCallback;
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    render(<FileRow file={{ name: 'clipped.kdbx', format: 'KeePass', status: 'unlock-required' }} onUnlock={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    act(() => notify([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the floating popover and factors while unlocking', () => {
+    const source: ImportFile = { name: 'busy.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const props = { initiallyShowUnlock: true, onUnlock: vi.fn() };
+    const { rerender } = render(<FileRow file={source} {...props} />);
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: 'test' } });
+    rerender(<FileRow file={{ ...source, status: 'unlocking' }} {...props} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect((screen.getByLabelText('Master password') as HTMLInputElement).value).toBe('test');
+    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('shows a KeePass error in the password field only after an unlock attempt', () => {

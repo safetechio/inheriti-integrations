@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, Text } from '@main-components';
+import { Box, Button, FilterChip, Text } from '@main-components';
 import type { ReviewAssetField, ReviewAssetSourceCandidate } from '../../types';
 
 export function SourceFieldPicker({
@@ -68,20 +68,20 @@ export function SourceFieldPicker({
         </Box>
       </Box>
       {open ? (
-        <Box gap="xs" className="asset-source-options">
+        <Box flexDirection="row" flexWrap="wrap" gap="xs" className="asset-source-options">
           {candidates.map((candidate: ReviewAssetSourceCandidate) => (
-            <Button
+            <FilterChip
               key={candidate.id}
-              title={displayName(candidate.name)}
-              variant={candidate.id === field.sourceFieldId ? 'contained' : 'outlined'}
-              size="sm"
-              block
+              variant="pill"
+              selected={candidate.id === field.sourceFieldId}
               onPress={() => {
                 onChange(candidate.id);
                 setOpen(false);
               }}
               accessibilityLabel={`Map ${field.label} to ${displayName(candidate.name)}`}
-            />
+            >
+              {displayName(candidate.name)}
+            </FilterChip>
           ))}
         </Box>
       ) : null}

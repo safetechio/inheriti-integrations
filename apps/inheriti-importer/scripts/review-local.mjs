@@ -166,7 +166,15 @@ async function capture(window, output, name) {
   await window.screenshot({ path: join(output, name), fullPage: false });
 }
 
-async function measureUnlock(app, window, row, panel, output, prefix = '02c-unlock') {
+async function measureUnlock(
+  app,
+  window,
+  row,
+  panel,
+  output,
+  prefix = '02c-unlock',
+  closedCardHeight,
+) {
   const original = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].getContentSize(),
   );
@@ -201,8 +209,15 @@ async function measureUnlock(app, window, row, panel, output, prefix = '02c-unlo
       noHorizontalOverflow: viewport.scrollWidth <= viewport.width,
       popupInsideViewport:
         popup.x >= 0 && right(popup) <= viewport.width && bottom(popup) <= viewport.height,
-      popupInsideCard: bottom(popup) <= bottom(card) + 2,
+      popupOutsideCard:
+        popup.x < card.x ||
+        right(popup) > right(card) ||
+        popup.y < card.y ||
+        bottom(popup) > bottom(card),
       popupRightAlignedToTrigger: Math.abs(right(popup) - right(trigger)) <= 2,
+      popupBesideAnchor: popup.y >= bottom(trigger) + 2 || bottom(popup) <= trigger.y - 2,
+      cardHeightUnchanged:
+        closedCardHeight === undefined || Math.abs(card.height - closedCardHeight) <= 1,
       eyeInsideInput:
         eye.x >= input.x &&
         right(eye) <= right(input) &&
@@ -217,6 +232,25 @@ async function measureUnlock(app, window, row, panel, output, prefix = '02c-unlo
       checks,
     });
     await capture(window, output, `${prefix}-${width}x${height}.png`);
+    if (width === 980 && prefix === '02c-unlock') {
+      await window.mouse.move(10, Math.min(400, height - 20));
+      await window.mouse.wheel(0, 200);
+      await window.waitForTimeout(150);
+      const movedTrigger = await bounds(row.getByRole('button', { name: 'Unlock' }).first());
+      const movedPanel = await bounds(panel);
+      const moved = Math.abs(movedTrigger.y - trigger.y) > 1;
+      results.at(-1).scrollReposition = moved
+        ? {
+            verified: Math.abs(right(movedPanel) - right(movedTrigger)) <= 2,
+            trigger: movedTrigger,
+            panel: movedPanel,
+          }
+        : { verified: null, reason: 'Single-source page did not scroll at this viewport' };
+      if (moved)
+        results.at(-1).checks.scrollRepositioned = results.at(-1).scrollReposition.verified;
+      await window.mouse.wheel(0, -200);
+      await window.waitForTimeout(150);
+    }
   }
   await app.evaluate(
     ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size),
@@ -232,6 +266,61 @@ async function measureUnlock(app, window, row, panel, output, prefix = '02c-unlo
     'Real unlock geometry check failed; see unlock-geometry.json',
   );
   return original;
+}
+
+async function verifySourceChips(window, output) {
+  const section = window.locator('.asset-metadata-section').last();
+  const trigger = section.getByRole('button', { name: /^(Choose|Change).+source field$/ }).first();
+  await trigger.waitFor({ timeout: 15000 });
+  const mapped = (await trigger.getAttribute('aria-label')).startsWith('Change');
+  await trigger.click();
+  const options = section.locator('.asset-source-options');
+  await options.waitFor();
+  const chips = options.getByRole('button');
+  const count = await chips.count();
+  assert(count > 0, 'Real Notes field has no source candidates');
+  const metrics = await options.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      container: { x: box.x, y: box.y, width: box.width, height: box.height },
+      flexDirection: style.flexDirection,
+      flexWrap: style.flexWrap,
+      chips: Array.from(element.querySelectorAll('[role="button"]')).map((chip) => {
+        const bounds = chip.getBoundingClientRect();
+        return {
+          label: chip.getAttribute('aria-label'),
+          ariaPressed: chip.getAttribute('aria-pressed'),
+          bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+        };
+      }),
+    };
+  });
+  await capture(window, output, '06-real-source-chips.png');
+  await writeFile(
+    join(output, 'source-chips.json'),
+    JSON.stringify({ mapped, ...metrics }, null, 2),
+    { mode: 0o600 },
+  );
+  assert.equal(metrics.flexDirection, 'row');
+  assert.equal(metrics.flexWrap, 'wrap');
+  assert(
+    metrics.chips.every(
+      (chip) => chip.bounds.height <= 36 && chip.bounds.width <= metrics.container.width + 1,
+    ),
+    'Source chips exceed compact bounds',
+  );
+  if (mapped) {
+    assert(
+      metrics.chips.some((chip) => chip.ariaPressed === 'true'),
+      'Mapped source has no selected chip',
+    );
+    await options.locator('[aria-pressed="true"]').first().press('Enter');
+  } else {
+    await trigger.click();
+  }
+  await options.waitFor({ state: 'hidden' });
+  if (mapped) assert((await trigger.getAttribute('aria-label')).startsWith('Change'));
 }
 
 async function verifyImport(app, window, output, checkpoint) {
@@ -254,9 +343,10 @@ async function verifyImport(app, window, output, checkpoint) {
   const row = window.locator('.source-file-card').filter({ hasText: 'keepass-demo-vault.kdbx' });
   await row.getByText('Locked database').waitFor({ timeout: 30000 });
   await capture(window, output, '02-locked-database.png');
+  const closedCardHeight = (await row.boundingBox()).height;
   checkpoint.stage = 'empty unlock form';
   await row.getByRole('button', { name: 'Unlock' }).first().click();
-  const panel = row.locator('.source-unlock-panel');
+  const panel = window.locator('.source-unlock-panel');
   const password = panel.getByLabel('Master password', { exact: true });
   await password.waitFor();
   assert(
@@ -265,11 +355,19 @@ async function verifyImport(app, window, output, checkpoint) {
   );
   await capture(window, output, '02b-unlock-empty.png');
   checkpoint.stage = 'responsive unlock geometry';
-  const contentSize = await measureUnlock(app, window, row, panel, output);
+  const contentSize = await measureUnlock(
+    app,
+    window,
+    row,
+    panel,
+    output,
+    '02c-unlock',
+    closedCardHeight,
+  );
   checkpoint.stage = 'wrong password';
   await password.fill('incorrect-review-password');
   await panel.getByRole('button', { name: 'Unlock' }).click();
-  await row
+  await panel
     .getByText('Could not open this KeePass database. Check the master password or key file.')
     .waitFor({ timeout: 30000 });
   await row.getByText('Locked database').waitFor();
@@ -299,6 +397,8 @@ async function verifyImport(app, window, output, checkpoint) {
   await window.getByRole('button', { name: 'Continue' }).click();
   await window.getByText('Review detected assets').waitFor({ timeout: 30000 });
   await capture(window, output, '05-real-step-2.png');
+  checkpoint.stage = 'real Step 2 source chips';
+  await verifySourceChips(window, output);
   return { entries: 4, contentSize };
 }
 
@@ -363,7 +463,10 @@ async function main() {
     const sourceFiles = [
       'src/App.tsx',
       'src/modules/importer-preview/SourceImportStatus/components/FileRow.tsx',
+      'src/modules/importer-preview/SourceImportStatus/components/KeePassUnlockPopover/index.tsx',
       'src/modules/importer-preview/SourceImportStatus/styles.css',
+      'src/modules/importer-preview/AssetReviewQueue/components/SourceFieldPicker/index.tsx',
+      'src/modules/importer-preview/AssetReviewQueue/styles.css',
       'scripts/review-local.mjs',
     ];
     const sourceSha256 = Object.fromEntries(
@@ -416,6 +519,7 @@ async function main() {
                 '03b-wrong-password-980x680.png',
                 '04-real-kdbx-entries.png',
                 '05-real-step-2.png',
+                '06-real-source-chips.png',
               ],
         },
         null,

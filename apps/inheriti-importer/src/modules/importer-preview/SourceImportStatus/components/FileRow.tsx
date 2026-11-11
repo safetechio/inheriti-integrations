@@ -13,6 +13,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { parserGuidance } from '@modules/import/application/parser-guidance';
 import { labels, statusBadge } from './status';
+import { KeePassUnlockPopover } from './KeePassUnlockPopover';
 import type { ImportFile } from '../types';
 
 type FileRowProps = {
@@ -68,7 +69,7 @@ export function FileRow({
     }
   }, [showUnlock]);
   const locked = file.status === 'unlock-required' || file.status === 'unlocking';
-  const cancelUnlock = () => {
+  const cancelUnlock = (restoreFocus = true) => {
     keyReadRevision.current += 1;
     if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
     keyFileRef.current = undefined;
@@ -78,7 +79,7 @@ export function FileRow({
     setPassword('');
     setShowPassword(false);
     setAttemptedUnlock(false);
-    restoreUnlockFocus.current = true;
+    restoreUnlockFocus.current = restoreFocus;
     setShowUnlock(false);
   };
   const canRetry = file.status === 'failed';
@@ -132,11 +133,11 @@ export function FileRow({
           ) : null}
         </Box>
         <Box
-          className={locked ? 'source-file-actions source-file-actions-locked' : 'source-file-actions'}
+          className="source-file-actions"
           flexDirection="row"
           alignItems="flex-start"
           gap="s"
-          style={locked ? undefined : { flexWrap: 'wrap' }}
+          style={{ flexWrap: 'wrap' }}
         >
           {!locked ? (
             <Badge tone={statusBadge[file.status].tone} icon={statusBadge[file.status].icon}>
@@ -159,7 +160,7 @@ export function FileRow({
             />
           ) : null}
           {locked ? (
-            <Box className="source-unlock-column" alignItems="flex-end" gap="s">
+            <Box>
               <Box ref={(element) => { unlockTriggerRef.current = element; }}>
                 <Button
                   title="Unlock"
@@ -173,7 +174,11 @@ export function FileRow({
                 />
               </Box>
               {showUnlock ? (
-                <Box className="source-unlock-panel" gap="m">
+                <KeePassUnlockPopover
+                  triggerRef={unlockTriggerRef}
+                  busy={file.status === 'unlocking'}
+                  onDismiss={cancelUnlock}
+                >
                   <Box gap="xxs" alignItems="flex-start">
                     <Button
                       title="Choose file"
@@ -216,7 +221,6 @@ export function FileRow({
                   <Box className="source-unlock-password">
                     <FormTextInput
                       label="Master password"
-                      autoFocus
                       editable={file.status !== 'unlocking'}
                       secureTextEntry={!showPassword}
                       error={attemptedUnlock && file.status === 'unlock-required' ? file.detail : undefined}
@@ -239,7 +243,7 @@ export function FileRow({
                       variant="plain"
                       color="gray"
                       disabled={file.status === 'unlocking'}
-                      onPress={cancelUnlock}
+                      onPress={() => cancelUnlock()}
                     />
                     <Button
                       title="Unlock"
@@ -254,7 +258,7 @@ export function FileRow({
                       }}
                     />
                   </Box>
-                </Box>
+                </KeePassUnlockPopover>
               ) : null}
             </Box>
           ) : null}
