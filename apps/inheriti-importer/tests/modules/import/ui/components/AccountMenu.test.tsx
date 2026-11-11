@@ -12,18 +12,42 @@ let mockLoading = false;
 let mockError: string | null = null;
 const mockLoadAccounts = vi.fn();
 vi.mock('@modules/import/ui/components/AccountMenu/hooks/use-account-menu', () => ({
-  useAccountMenu: () => ({ accounts: mockAccounts, destinations: [], destinationsLoading: mockLoading, hasLoaded: false, pendingAccount: null,
-    setPendingAccount: vi.fn(), confirmSignOutAll: false, setConfirmSignOutAll: vi.fn(), accountError: mockError,
-    authNotice: null, accountBusy: false, addingAccount: false, loadAccounts: mockLoadAccounts }),
+  useAccountMenu: () => ({
+    accounts: mockAccounts,
+    destinations: [],
+    destinationsLoading: mockLoading,
+    hasLoaded: false,
+    pendingAccount: null,
+    setPendingAccount: vi.fn(),
+    confirmSignOutAll: false,
+    setConfirmSignOutAll: vi.fn(),
+    accountError: mockError,
+    authNotice: null,
+    accountBusy: false,
+    addingAccount: false,
+    loadAccounts: mockLoadAccounts,
+  }),
 }));
 
 import { AccountMenu } from '@modules/import/ui/components/AccountMenu';
 
-afterEach(() => { cleanup(); mockAccounts = []; mockLoading = false; mockError = null; mockLoadAccounts.mockClear(); });
+afterEach(() => {
+  cleanup();
+  mockAccounts = [];
+  mockLoading = false;
+  mockError = null;
+  mockLoadAccounts.mockClear();
+});
 
 it('centers initial progress and offers an inline retry after failure', () => {
   mockLoading = true;
-  const props = { menuRef: { current: null }, open: true, setOpen: vi.fn(), closeMenu: vi.fn(), closeOrganizationMenu: vi.fn() };
+  const props = {
+    menuRef: { current: null },
+    open: true,
+    setOpen: vi.fn(),
+    closeMenu: vi.fn(),
+    closeOrganizationMenu: vi.fn(),
+  };
   const view = render(<AccountMenu {...props} />);
   expect(screen.getByRole('status').className).toContain('account-menu-status');
   expect(screen.getByText('Loading accounts…')).toBeTruthy();
@@ -36,14 +60,42 @@ it('centers initial progress and offers an inline retry after failure', () => {
 });
 
 it('shows current account email between name and role', () => {
-  const { container } = render(<AccountMenu menuRef={{ current: null }} open setOpen={vi.fn()} closeMenu={vi.fn()} closeOrganizationMenu={vi.fn()} />);
+  const { container } = render(
+    <AccountMenu
+      menuRef={{ current: null }}
+      open
+      setOpen={vi.fn()}
+      closeMenu={vi.fn()}
+      closeOrganizationMenu={vi.fn()}
+    />,
+  );
   const current = container.querySelector('.account-menu-current');
   expect(current?.textContent).toContain('Ada Lovelaceada@example.comOrganisation Admin');
   expect(screen.getByText('ada@example.com')).toBeTruthy();
 });
 
+it('shows the current account avatar in the selector trigger', () => {
+  const { container } = render(
+    <AccountMenu
+      menuRef={{ current: null }}
+      open={false}
+      setOpen={vi.fn()}
+      closeMenu={vi.fn()}
+      closeOrganizationMenu={vi.fn()}
+    />,
+  );
+  const trigger = screen.getByRole('button', { name: 'Open account menu for Ada Lovelace' });
+  expect(trigger.querySelector('.account-menu-avatar')?.textContent).toBe('AL');
+  expect(container.querySelector('.account-summary [aria-label="Account"]')).toBeNull();
+});
+
 it('does not request accounts when the menu opens or closes', () => {
-  const props = { menuRef: { current: null }, setOpen: vi.fn(), closeMenu: vi.fn(), closeOrganizationMenu: vi.fn() };
+  const props = {
+    menuRef: { current: null },
+    setOpen: vi.fn(),
+    closeMenu: vi.fn(),
+    closeOrganizationMenu: vi.fn(),
+  };
   const view = render(<AccountMenu {...props} open={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'Open account menu for Ada Lovelace' }));
   view.rerender(<AccountMenu {...props} open />);
@@ -53,7 +105,15 @@ it('does not request accounts when the menu opens or closes', () => {
 
 it('offers a hover unlink action for the active account and confirms it', () => {
   mockAccounts = [{ key: 'active', subject: 'owner', active: true }];
-  render(<AccountMenu menuRef={{ current: null }} open setOpen={vi.fn()} closeMenu={vi.fn()} closeOrganizationMenu={vi.fn()} />);
+  render(
+    <AccountMenu
+      menuRef={{ current: null }}
+      open
+      setOpen={vi.fn()}
+      closeMenu={vi.fn()}
+      closeOrganizationMenu={vi.fn()}
+    />,
+  );
   const action = screen.getByRole('menuitem', { name: 'Unlink Ada Lovelace from this device' });
   expect(action.parentElement?.getAttribute('title')).toBe('Unlink Ada Lovelace from this device');
   fireEvent.click(action);

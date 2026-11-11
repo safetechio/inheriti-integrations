@@ -53,6 +53,14 @@ export function AccountMenu({
     identity?.fullName && identity.fullName !== 'Unknown'
       ? identity.fullName
       : (identity?.email ?? 'Account');
+  const initials =
+    displayName
+      .trim()
+      .split(/\s+/u)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || '?';
 
   const notice =
     accountError ||
@@ -107,7 +115,18 @@ export function AccountMenu({
             paddingHorizontal="m"
             height={40}
           >
-            <Icon name="user" size={16} color={theme.colors.gray120} label="Account" />
+            <Box
+              className="account-menu-avatar"
+              width={24}
+              height={24}
+              borderRadius="pill"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Text color="white" style={{ fontWeight: 400, fontSize: 11 }}>
+                {initials}
+              </Text>
+            </Box>
             <Text variant="bodySmall" color="gray120" numberOfLines={1} style={{ maxWidth: 180 }}>
               {displayName}
             </Text>
@@ -150,13 +169,7 @@ export function AccountMenu({
                 justifyContent="center"
               >
                 <Text color="white" style={{ fontWeight: 400, fontSize: 19 }}>
-                  {displayName
-                    .trim()
-                    .split(/\s+/u)
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join('')
-                    .toUpperCase() || '?'}
+                  {initials}
                 </Text>
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>

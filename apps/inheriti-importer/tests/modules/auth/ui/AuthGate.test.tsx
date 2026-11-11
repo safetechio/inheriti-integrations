@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as renderWithTestingLibrary,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement, ReactNode } from 'react';
 
 const useAuthProvider = vi.fn();
 const useAuthState = vi.fn();
@@ -38,6 +47,15 @@ vi.mock('@modules/organization/infrastructure/organization-resources-api', () =>
 }));
 
 import { AuthGate } from '@modules/auth/ui';
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderWithTestingLibrary(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 type AuthProviderMock = {
   state?: { authInitialized: boolean; isLoggedIn: boolean };
@@ -84,7 +102,11 @@ function stubReadyOrganization(
   useGetJoinedOrganizations.mockReturnValue({ data: [], loading: false, isRefetching: false });
   useGetSelectedOrganizationId.mockReturnValue('org-a');
   useGetSelectedOrganization.mockReturnValue({
-    data: { id: 'org-a', name: 'Acme', isActivationPending: overrides.isActivationPending ?? false },
+    data: {
+      id: 'org-a',
+      name: 'Acme',
+      isActivationPending: overrides.isActivationPending ?? false,
+    },
     loading: false,
   });
   useSelectedOrganizationMemberCapabilities.mockReturnValue({
@@ -196,7 +218,9 @@ describe('AuthGate — restore / sign-in / cancel', () => {
 
     stubAuthState({ authInitialized: true, isLoggedIn: false, accountsRevision: 1 });
     view.rerender(<AuthGate>content</AuthGate>);
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Continue with saved account' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Continue with saved account' })).toBeNull(),
+    );
   });
 
   it('ignores a late saved-account list from before sign-out-all completed', async () => {
@@ -280,7 +304,8 @@ describe('AuthGate — organization selection and sign-out', () => {
     );
 
     expect(
-      (await screen.findAllByText('That organisation is no longer available for this account.')).length,
+      (await screen.findAllByText('That organisation is no longer available for this account.'))
+        .length,
     ).toBeGreaterThan(0);
     expect(screen.queryByTestId('protected')).toBeNull();
   });
@@ -317,11 +342,7 @@ describe('AuthGate — organization selection and sign-out', () => {
     expect(screen.queryByTestId('protected')).toBeNull();
   });
 
-  it('signing out from the organization gate calls the provider logout', async () => {
-    // The gate's own "Sign out" affordance lives on the selection screen
-    // itself (it disappears once `children` renders — the account-menu sign
-    // out in AppShell covers the post-selection case), so exercise it from
-    // the blocked-organization state.
+  it('signing out from the landing account menu calls the provider logout', async () => {
     const logout = vi.fn().mockResolvedValue(undefined);
     useAuthProvider.mockReturnValue(makeAuthProvider({ logout }));
     stubAuthState({ authInitialized: true, isLoggedIn: true });
@@ -338,7 +359,8 @@ describe('AuthGate — organization selection and sign-out', () => {
       ).toBeTruthy(),
     );
 
-    fireEvent.click(screen.getByText('Sign out'));
+    fireEvent.click(screen.getByRole('button', { name: /Open account menu/u }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }));
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 });

@@ -53,7 +53,8 @@ export function useImportLifecycle() {
       dispatch({
         type: 'source-status',
         sourceId,
-        status: 'retrying',
+        status: secrets ? 'unlocking' : 'retrying',
+        detail: secrets ? '' : undefined,
       });
       try {
         const result = await parseVaultFile(file.data, file.name, secrets);

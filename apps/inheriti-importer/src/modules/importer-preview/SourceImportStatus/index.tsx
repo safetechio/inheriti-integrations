@@ -16,10 +16,12 @@ export function SourceImportStatus({
 }: SourceImportStatusProps) {
   const [filter, setFilter] = useState<'all' | 'warnings' | 'locked'>('all');
   const warnings = files.filter((file) => file.status === 'warning' && !file.warningsAcknowledged);
-  const locked = files.filter((file) => file.status === 'unlock-required');
+  const locked = files.filter(
+    (file) => file.status === 'unlock-required' || file.status === 'unlocking',
+  );
   const visible = filter === 'warnings' ? warnings : filter === 'locked' ? locked : files;
   const rank = (file: (typeof files)[number]) =>
-    file.status === 'unlock-required'
+    file.status === 'unlock-required' || file.status === 'unlocking'
       ? 0
       : file.status === 'warning' && !file.warningsAcknowledged
         ? 1

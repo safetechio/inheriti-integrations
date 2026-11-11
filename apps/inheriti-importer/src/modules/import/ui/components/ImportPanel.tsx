@@ -9,9 +9,19 @@ type ImportPanelProps = {
   busy: boolean;
   error: string | null;
   onImport: (files: OpenedVaultFile[]) => Promise<void> | void;
+  disabled?: boolean;
+  notice?: string;
+  onRetry?: () => void;
 };
 
-export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
+export function ImportPanel({
+  busy,
+  error,
+  onImport,
+  disabled = false,
+  notice,
+  onRetry,
+}: ImportPanelProps) {
   const uiTheme = useTheme();
   const [over, setOver] = useState(false);
   const dropzoneRef = useRef<HTMLElement | null>(null);
@@ -23,6 +33,7 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
     const onDragOver = (event: globalThis.DragEvent) => {
       event.preventDefault();
       event.stopPropagation();
+      if (disabled) return;
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
       setOver(true);
     };
@@ -34,6 +45,7 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
       event.preventDefault();
       event.stopPropagation();
       setOver(false);
+      if (disabled) return;
       const files = event.dataTransfer?.files;
       if (files?.length) await onImport(await filesFromList(files));
     };
@@ -48,7 +60,7 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
       element.removeEventListener('dragleave', onDragLeave);
       element.removeEventListener('drop', onDrop);
     };
-  }, [onImport]);
+  }, [disabled, onImport]);
 
   return (
     <Box
@@ -131,10 +143,19 @@ export function ImportPanel({ busy, error, onImport }: ImportPanelProps) {
           </SourceCard>
         </Box>
         <Box className="choose-files-action" alignItems="center">
+          {notice ? (
+            <Text variant="bodySmall" color="gray" align="center">
+              {notice}
+            </Text>
+          ) : null}
+          {onRetry ? <Button title="Retry" onPress={onRetry} /> : null}
           <Button
             title={busy ? 'Opening…' : 'Choose files'}
-            disabled={busy}
-            onPress={async () => onImport(await openVaultFiles())}
+            disabled={busy || disabled}
+            onPress={async () => {
+              if (busy || disabled) return;
+              await onImport(await openVaultFiles());
+            }}
           />
         </Box>
         {error ? <Alert>{error}</Alert> : null}

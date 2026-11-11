@@ -60,6 +60,71 @@ function renderFlow(callbacks: Parameters<typeof ImporterFlow>[0]['callbacks']) 
 }
 
 describe('ImporterFlow controlled mode', () => {
+  it('keeps completed step numbers and explains imported sources and pending assignments', () => {
+    render(
+      <ImporterFlow
+        initialStage="plans"
+        files={[file, { ...file, name: 'second.env' }, { ...file, name: 'third.env' }]}
+        assets={[asset]}
+        unassigned={[1, 2, 3].map((id) => ({
+          id: String(id),
+          name: `Asset ${id}`,
+          type: 'PLAIN-TEXT',
+        }))}
+        plans={[plan]}
+        checklist={checklist}
+      />,
+    );
+
+    expect(screen.getByText('3 sources imported')).toBeTruthy();
+    expect(screen.getByText('3 assets to assign')).toBeTruthy();
+    expect(
+      document.querySelector('.importer-flow-step.is-complete .importer-flow-step-number')
+        ?.textContent,
+    ).toBe('1');
+  });
+
+  it('selects a new empty plan without showing its warning', () => {
+    render(
+      <ImporterFlow
+        initialStage="plans"
+        files={[file]}
+        assets={[asset]}
+        unassigned={[]}
+        plans={[plan]}
+        checklist={checklist}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'New plan' }));
+    expect(
+      screen.getByRole('button', { name: 'Select Plan 2' }).closest('.is-selected'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Add at least one Asset to this draft plan.')).toBeNull();
+  });
+
+  it('keeps an empty plan warning after returning from Assets', () => {
+    const first = { ...plan, id: 'empty-a', name: 'Empty A', assets: 0, valid: false };
+    const second = { ...plan, id: 'empty-b', name: 'Empty B', assets: 0, valid: false };
+    render(
+      <ImporterFlow
+        initialStage="plans"
+        files={[file]}
+        assets={[asset]}
+        unassigned={[]}
+        plans={[first, second]}
+        checklist={checklist}
+        callbacks={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select Empty B' }));
+    expect(screen.getByText('Add at least one Asset to this draft plan.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: /Create plans/ }));
+    expect(screen.getByText('Add at least one Asset to this draft plan.')).toBeTruthy();
+  });
+
   it('preserves the selected row when a structured id changes to plain text', () => {
     const first = { ...asset, id: 'entry-1:API-KEY', name: 'First', type: 'API-KEY' };
     const second = { ...asset, id: 'entry-2:API-KEY', name: 'Second', type: 'API-KEY' };

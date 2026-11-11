@@ -33,14 +33,16 @@ export function FlowStepper({
   const undecided = assets.filter(
     (asset) => !['accepted', 'excluded'].includes(asset.status),
   ).length;
-  const lockedSources = files.filter((file) => file.status === 'unlock-required').length;
+  const lockedSources = files.filter(
+    (file) => file.status === 'unlock-required' || file.status === 'unlocking',
+  ).length;
   const failedSources = files.filter(
     (file) => file.status === 'failed' || file.status === 'retrying',
   ).length;
   const invalidPlans = plans.filter((plan) => !plan.valid || isPlanOverCapacity(plan)).length;
   const stepStatus = {
     sources: readiness.sources
-      ? `${files.length} source${files.length === 1 ? '' : 's'}`
+      ? `${files.length} source${files.length === 1 ? '' : 's'} imported`
       : files.length
         ? `${lockedSources + failedSources} need attention`
         : 'Add a source',
@@ -53,7 +55,7 @@ export function FlowStepper({
       ? `${plans.length} plan${plans.length === 1 ? '' : 's'}`
       : plans.length
         ? unassigned.length
-          ? `${unassigned.length} unassigned`
+          ? `${unassigned.length} asset${unassigned.length === 1 ? '' : 's'} to assign`
           : `${invalidPlans} plan${invalidPlans === 1 ? '' : 's'} need review`
         : 'Create a Plan',
     staging: readiness.staging
@@ -95,7 +97,7 @@ export function FlowStepper({
                   variant="importerStepNumber"
                   color={index === active ? 'white' : ready ? 'success120' : 'gray50'}
                 >
-                  {ready ? '✓' : index + 1}
+                  {index + 1}
                 </Text>
                 <Text className="importer-flow-step-label" variant="importerStepLabel">
                   {item.label}

@@ -128,7 +128,7 @@ describe('Asset schema mapping', () => {
     );
   });
 
-  it('lets the user replace the Plain Text fallback with one imported value', async () => {
+  it('keeps all imported Plain Text fields and offers no single-field controls', async () => {
     const onMapField = vi.fn();
     const resolveSourceValue = vi.fn(() => new SensitiveValue('ff_live_9f3a7c2b1e0d'));
     render(
@@ -160,18 +160,18 @@ describe('Asset schema mapping', () => {
     );
 
     expect(screen.getByText('All imported fields')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Use one imported field' }));
-    const picker = screen.getByLabelText('Choose imported field') as HTMLSelectElement;
-    expect(picker.querySelector('option[value="field-key"]')?.textContent).toBe('API_KEY');
-    fireEvent.change(picker, { target: { value: 'field-key' } });
-    expect(onMapField).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'asset-1' }),
-      'secret.text',
-      'field-key',
+    expect(screen.queryByRole('button', { name: 'Use one imported field' })).toBeNull();
+    expect(screen.queryByLabelText('Choose imported field')).toBeNull();
+    expect(resolveSourceValue).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
+    expect((screen.getByLabelText('Plain text value') as HTMLTextAreaElement).value).toBe(
+      'extra:API_KEY: ff_live_9f3a7c2b1e0d\nextra:API_SECRET: ff_live_9f3a7c2b1e0d',
     );
+    expect(onMapField).not.toHaveBeenCalled();
   });
 
-  it('hides source controls for edited Plain Text with one imported field', () => {
+  it('resets edited Plain Text to all imported fields', () => {
+    const onMapField = vi.fn();
     render(
       <AssetReviewQueue
         assets={[
@@ -189,11 +189,19 @@ describe('Asset schema mapping', () => {
           },
         ]}
         onAction={vi.fn()}
+        onMapField={onMapField}
       />,
     );
 
     expect(screen.getByText('Value source')).toBeTruthy();
+    expect(screen.getByText('Modified imported fields')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reset to all imported fields' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to all imported fields' }));
+    expect(onMapField).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'asset-1' }),
+      'secret.text',
+      undefined,
+    );
   });
 
   it('offers restore only for a converted Plain Text asset', () => {
@@ -321,7 +329,7 @@ describe('Asset schema mapping', () => {
       'source:endpoint',
     );
 
-    fireEvent.click(screen.getByLabelText('Remove API key from this Asset'));
+    fireEvent.click(screen.getByLabelText('Exclude API key field from this Asset'));
     expect(onMapField).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'asset-1' }),
       'secret.apiKey',

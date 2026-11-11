@@ -79,7 +79,7 @@ export function PlanCard({
             {onDelete ? (
               <IconAction name="trash" label={`Delete ${plan.name}`} onPress={onDelete} />
             ) : null}
-            {plan.valid || (!selected && plan.assets === 0) || plan.assets > 0 ? (
+            {plan.valid || plan.assets > 0 || !selected ? (
               <Badge
                 tone={overCapacity ? 'danger' : plan.valid ? 'success' : 'warning'}
                 icon={overCapacity || !plan.valid ? 'circle-exclamation' : 'circle-check'}
@@ -126,11 +126,14 @@ export function PlanCard({
               ? `Drop to add to ${plan.name}`
               : dropState === 'over-invalid'
                 ? 'This plan cannot accept it'
-                : plan.assets === 0
-                  ? 'Add at least one Asset to this draft plan.'
-                  : 'Drag an Asset here'}
+                : 'Drag an Asset here'}
           </Text>
         </Box>
+        {plan.assets === 0 && !selected ? (
+          <Text variant="importerPlanBody" color="warning120">
+            Add at least one Asset to this draft plan.
+          </Text>
+        ) : null}
         <PlanAlerts plan={plan} dropState={dropState} showGovernance={selected} />
       </Stack>
     </Box>

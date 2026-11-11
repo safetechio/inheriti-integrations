@@ -30,7 +30,8 @@ export type ImportedVault = {
   warnings?: string[];
 };
 
-export type ImportSourceStatus = 'imported' | 'warning' | 'unlock-required' | 'retrying' | 'failed';
+export type ImportSourceStatus =
+  'imported' | 'warning' | 'unlock-required' | 'unlocking' | 'retrying' | 'failed';
 
 /** In-memory lifecycle record for one selected file. */
 export type ImportSourceRecord = {

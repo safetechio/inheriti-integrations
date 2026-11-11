@@ -10,10 +10,10 @@ export function AssignedAssets({
   onRemove?: (asset: GroupingAsset) => void;
 }) {
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" paddingVertical="s">
       {assets.map((asset) => (
         <Box key={asset.id} flexDirection="row" justifyContent="space-between" alignItems="center">
-          <Text variant="bodyDefault" semibold>
+          <Text variant="bodyRegular" semibold>
             {asset.name}
           </Text>
           {onRemove ? (

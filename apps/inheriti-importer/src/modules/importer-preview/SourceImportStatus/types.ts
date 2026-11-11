@@ -1,4 +1,5 @@
-export type ImportFileStatus = 'imported' | 'warning' | 'unlock-required' | 'retrying' | 'failed';
+export type ImportFileStatus =
+  'imported' | 'warning' | 'unlock-required' | 'unlocking' | 'retrying' | 'failed';
 
 export interface ImportFile {
   id?: string;

@@ -3,6 +3,7 @@ import {
   useGetJoinedOrganizations,
   useGetMyOrganization,
 } from '@modules/organization/infrastructure/importer-api';
+import { preferAccessDenial } from '@modules/_shared/domain/api-status-error';
 
 export interface OrganizationMembership {
   id: string;
@@ -14,6 +15,8 @@ interface UseOrganizationMembershipsResult {
   memberships: OrganizationMembership[];
   loading: boolean;
   isRefetching: boolean;
+  error: Error | null;
+  retry: () => void;
 }
 
 /**
@@ -29,12 +32,16 @@ export default function useOrganizationMemberships(
     data: ownedOrganization,
     loading: ownedLoading,
     isRefetching: ownedRefetching,
+    error: ownedError,
+    refetch: refetchOwned,
   } = useGetMyOrganization({ enabled });
 
   const {
     data: joinedOrganizations,
     loading: joinedLoading,
     isRefetching: joinedRefetching,
+    error: joinedError,
+    refetch: refetchJoined,
   } = useGetJoinedOrganizations({ enabled });
 
   const memberships = useMemo<OrganizationMembership[]>(() => {
@@ -59,5 +66,10 @@ export default function useOrganizationMemberships(
     memberships,
     loading: ownedLoading || joinedLoading,
     isRefetching: ownedRefetching || joinedRefetching,
+    error: preferAccessDenial(ownedError, joinedError),
+    retry: () => {
+      void refetchOwned();
+      void refetchJoined();
+    },
   };
 }

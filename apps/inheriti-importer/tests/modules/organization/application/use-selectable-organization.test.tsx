@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { ApiStatusError } from '@modules/_shared/domain/api-status-error';
 
 const useGetSelectedOrganization = vi.fn();
 const useSelectedOrganizationMemberCapabilities = vi.fn();
@@ -40,7 +41,12 @@ describe('useSelectableOrganization', () => {
   it('waits for organization and staged-item capability', () => {
     stubOrganization({ loading: true });
     const { result } = renderHook(() => useSelectableOrganization());
-    expect(result.current).toEqual({ organizationId: 'org-a', canUse: false, blockedReason: null, loading: true });
+    expect(result.current).toEqual({
+      organizationId: 'org-a',
+      canUse: false,
+      blockedReason: null,
+      loading: true,
+    });
   });
 
   it('blocks organizations still awaiting activation', () => {
@@ -68,7 +74,12 @@ describe('useSelectableOrganization', () => {
   it('permits staging without normal plan creation capability', () => {
     stubOrganization({ canStartPlanCreation: false });
     const { result } = renderHook(() => useSelectableOrganization());
-    expect(result.current).toEqual({ organizationId: 'org-a', canUse: true, blockedReason: null, loading: false });
+    expect(result.current).toEqual({
+      organizationId: 'org-a',
+      canUse: true,
+      blockedReason: null,
+      loading: false,
+    });
   });
 
   it('blocks when the selected organization does not resolve', () => {
@@ -76,5 +87,40 @@ describe('useSelectableOrganization', () => {
     useGetSelectedOrganization.mockReturnValue({ data: undefined, loading: false });
     const { result } = renderHook(() => useSelectableOrganization());
     expect(result.current.canUse).toBe(false);
+  });
+
+  it.each([401, 403, 404])('blocks cached organization access after HTTP %i', (status) => {
+    stubOrganization();
+    useGetSelectedOrganization.mockReturnValue({
+      data: { id: 'org-a' },
+      loading: false,
+      error: new ApiStatusError('denied', status),
+    });
+    const { result } = renderHook(() => useSelectableOrganization());
+    expect(result.current.canUse).toBe(false);
+    expect(result.current.blockedReason).toContain('no longer has access');
+  });
+
+  it.each([401, 403, 404])('blocks cached capabilities after HTTP %i', (status) => {
+    stubOrganization();
+    useSelectedOrganizationMemberCapabilities.mockReturnValue({
+      canAccessStagedItems: true,
+      loading: false,
+      error: new ApiStatusError('denied', status),
+    });
+    const { result } = renderHook(() => useSelectableOrganization());
+    expect(result.current.canUse).toBe(false);
+    expect(result.current.blockedReason).toContain('no longer has access');
+  });
+
+  it('preserves cached access after a transient capability failure', () => {
+    stubOrganization();
+    useSelectedOrganizationMemberCapabilities.mockReturnValue({
+      canAccessStagedItems: true,
+      loading: false,
+      error: new ApiStatusError('unavailable', 500),
+    });
+    const { result } = renderHook(() => useSelectableOrganization());
+    expect(result.current.canUse).toBe(true);
   });
 });

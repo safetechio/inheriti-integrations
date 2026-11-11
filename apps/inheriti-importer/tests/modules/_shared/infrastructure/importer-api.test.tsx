@@ -21,6 +21,8 @@ import {
   useMasterKeySession,
 } from '@modules/organization/infrastructure/importer-api';
 import type { ElectronHttpTransport } from '@shared/infrastructure/transport/electron-http-transport';
+import { ApiStatusError, isAccessDenial } from '@modules/_shared/domain/api-status-error';
+import useOrganizationMemberships from '@modules/organization/application/use-organization-memberships';
 
 vi.mock('@safetech/inheriti-core-sdk/crypto', () => ({
   generateRSAOAEPKeyPair: vi.fn(async () => ({
@@ -77,7 +79,7 @@ function setup(
       </ImporterApiProvider>
     </QueryClientProvider>
   );
-  return { transport, authSession, vault, authProvider, socket, wrapper };
+  return { transport, authSession, vault, authProvider, socket, wrapper, client };
 }
 
 describe('Importer API provider', () => {
@@ -88,6 +90,41 @@ describe('Importer API provider', () => {
   });
 
   afterEach(() => setActiveOrganizationAccount(null));
+
+  it.each([
+    [500, 403, true],
+    [403, 500, true],
+    [500, 500, false],
+  ])(
+    'prioritizes access denial across membership query errors (%i, %i)',
+    async (listStatus, profileStatus, denied) => {
+      let failing = false;
+      const { wrapper, client } = setup((request) => {
+        if (request.path === '/auth/session') return session;
+        if (request.path === '/integrations/v1/importer/organizations') {
+          if (failing) throw new ApiStatusError('list failed', listStatus);
+          return [{ id: 'org-1', name: 'Owned', userId: 'user-1' }];
+        }
+        if (request.path === '/integrations/v1/importer/profile') {
+          if (failing) throw new ApiStatusError('profile failed', profileStatus);
+          return { id: 'user-1' };
+        }
+        return null;
+      });
+      const { result } = renderHook(() => useOrganizationMemberships(), { wrapper });
+      await waitFor(() => expect(result.current.memberships).toHaveLength(1));
+      failing = true;
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['organizations'] });
+      });
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['profile'] });
+      });
+      await waitFor(() => expect(result.current.error).not.toBeNull());
+      expect(result.current.memberships).toHaveLength(1);
+      expect(isAccessDenial(result.current.error)).toBe(denied);
+    },
+  );
 
   it('joins the API tenant room for Organization Key delivery', () => {
     const { socket, wrapper } = setup(() => session);
@@ -115,7 +152,8 @@ describe('Importer API provider', () => {
     const { wrapper } = setup((request) => {
       requests.push(request);
       if (request.path === '/auth/session') return session;
-      if (request.path === '/integrations/v1/importer/profile') return { id: 'owner-1', email: 'me@example.com' };
+      if (request.path === '/integrations/v1/importer/profile')
+        return { id: 'owner-1', email: 'me@example.com' };
       if (request.path === '/integrations/v1/importer/organizations')
         return {
           items: [
@@ -258,11 +296,9 @@ describe('Importer API provider', () => {
 
   it('ignores a confirmation response from an earlier auth epoch', async () => {
     let resolveOld!: (value: typeof session) => void;
-    const oldConfirmation = new Promise<typeof session>(
-      (resolve) => {
-        resolveOld = resolve;
-      },
-    );
+    const oldConfirmation = new Promise<typeof session>((resolve) => {
+      resolveOld = resolve;
+    });
     const { authSession, authProvider, wrapper } = setup(() => null);
     authSession
       .mockImplementationOnce(() => oldConfirmation)

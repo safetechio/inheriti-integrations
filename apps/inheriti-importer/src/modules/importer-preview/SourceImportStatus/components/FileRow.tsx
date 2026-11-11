@@ -9,7 +9,7 @@ import {
   Text,
   theme,
 } from '@main-components';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parserGuidance } from '@modules/import/application/parser-guidance';
 import { labels, statusBadge } from './status';
 import type { ImportFile } from '../types';
@@ -33,16 +33,28 @@ export function FileRow({
 }: FileRowProps) {
   const [password, setPassword] = useState('');
   const [keyFile, setKeyFile] = useState<ArrayBuffer>();
+  const keyFileRef = useRef<ArrayBuffer | undefined>(undefined);
+  const keyReadRevision = useRef(0);
   const [keyFileName, setKeyFileName] = useState('');
   const [showUnlock, setShowUnlock] = useState(initiallyShowUnlock);
   const [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
-    if (file.status === 'unlock-required') return;
+    if (file.status === 'unlock-required' || file.status === 'unlocking') return;
+    keyReadRevision.current += 1;
     setPassword('');
+    if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
+    keyFileRef.current = undefined;
     setKeyFile(undefined);
     setKeyFileName('');
     setShowPassword(false);
   }, [file.status]);
+  useEffect(
+    () => () => {
+      keyReadRevision.current += 1;
+      if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
+    },
+    [],
+  );
   const canRetry = file.status === 'failed';
   return (
     <Card tone="default" className="source-file-card">
@@ -54,7 +66,7 @@ export function FileRow({
       >
         <Icon
           name={
-            file.status === 'unlock-required'
+            file.status === 'unlock-required' || file.status === 'unlocking'
               ? 'lock'
               : file.format === 'KeePass'
                 ? 'database'
@@ -66,14 +78,14 @@ export function FileRow({
         />
         <Box gap={2} style={{ flex: '1 1 220px', minWidth: 0 }}>
           <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
-            <Text
-              variant="importerSourceName"
-              numberOfLines={1}
-              title={file.name}
-              style={{ maxWidth: '25ch' }}
+            <Box
+              ref={(element) => element?.setAttribute('title', file.name)}
+              style={{ maxWidth: '25ch', minWidth: 0 }}
             >
-              {file.name}
-            </Text>
+              <Text variant="importerSourceName" numberOfLines={1}>
+                {file.name}
+              </Text>
+            </Box>
             <Badge tone="primary" variant="metadata">
               {file.format}
             </Badge>
@@ -81,9 +93,11 @@ export function FileRow({
           <Text variant="importerSourceMeta" color="gray">
             {file.status === 'failed' || file.status === 'retrying'
               ? 'Not parsed'
-              : file.status === 'unlock-required'
-                ? 'Locked database'
-                : `${file.entries ?? 0} entr${file.entries === 1 ? 'y' : 'ies'}`}
+              : file.status === 'unlocking'
+                ? 'Unlocking database'
+                : file.status === 'unlock-required'
+                  ? 'Locked database'
+                  : `${file.entries ?? 0} entr${file.entries === 1 ? 'y' : 'ies'}`}
           </Text>
           {file.detail ? (
             <Text variant="bodySmall" color="gray">
@@ -142,12 +156,13 @@ export function FileRow({
               variant="plain"
               color="danger"
               size="sm"
+              disabled={file.status === 'unlocking'}
               onPress={() => onRemove(file)}
             />
           ) : null}
         </Box>
       </Box>
-      {file.status === 'unlock-required' && showUnlock ? (
+      {(file.status === 'unlock-required' || file.status === 'unlocking') && showUnlock ? (
         <Box
           className="source-unlock-panel"
           flexDirection="row"
@@ -162,6 +177,7 @@ export function FileRow({
             <FormTextInput
               label="Master password"
               autoFocus
+              editable={file.status !== 'unlocking'}
               secureTextEntry={!showPassword}
               placeholder="Master password"
               value={password}
@@ -174,15 +190,28 @@ export function FileRow({
             startIcon={<Icon name={showPassword ? 'eye-slash' : 'eye'} size={14} />}
             variant="plain"
             color="gray"
+            disabled={file.status === 'unlocking'}
             onPress={() => setShowPassword((value) => !value)}
           />
           <Box gap="xxs">
             <input
               type="file"
               aria-label="KeePass key file"
+              disabled={file.status === 'unlocking'}
               onChange={async (event) => {
                 const selected = event.target.files?.[0];
-                setKeyFile(selected ? await selected.arrayBuffer() : undefined);
+                const revision = ++keyReadRevision.current;
+                if (keyFileRef.current) new Uint8Array(keyFileRef.current).fill(0);
+                keyFileRef.current = undefined;
+                setKeyFile(undefined);
+                setKeyFileName('');
+                const bytes = selected ? await selected.arrayBuffer() : undefined;
+                if (revision !== keyReadRevision.current) {
+                  if (bytes) new Uint8Array(bytes).fill(0);
+                  return;
+                }
+                keyFileRef.current = bytes;
+                setKeyFile(bytes);
                 setKeyFileName(selected?.name ?? '');
               }}
             />
@@ -194,7 +223,9 @@ export function FileRow({
           </Box>
           <Button
             title="Unlock"
-            disabled={!onUnlock || (password.trim().length === 0 && !keyFile)}
+            disabled={
+              file.status === 'unlocking' || !onUnlock || (password.length === 0 && !keyFile)
+            }
             onPress={() => onUnlock?.(file, password, keyFile)}
           />
         </Box>

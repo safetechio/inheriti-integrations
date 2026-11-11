@@ -15,6 +15,7 @@ export type {
 
 export function AssetReviewQueue({
   assets,
+  sourceFiles,
   selectedId,
   onSelect,
   onAction,
@@ -34,12 +35,17 @@ export function AssetReviewQueue({
   const sourceKey = (asset: (typeof assets)[number]) =>
     asset.sourceId ?? asset.sourceFileName ?? asset.source.split(' · ')[0];
   const sources = [
-    ...new Map(
-      assets.map((asset) => [
-        sourceKey(asset),
-        asset.sourceFileName ?? asset.source.split(' · ')[0],
-      ]),
-    ).entries(),
+    ...new Map([
+      ...(sourceFiles ?? []).map((file) => [file.id ?? file.name, file.name] as const),
+      ...assets
+        .filter(
+          (asset) => !sourceFiles?.some((file) => (file.id ?? file.name) === sourceKey(asset)),
+        )
+        .map(
+          (asset) =>
+            [sourceKey(asset), asset.sourceFileName ?? asset.source.split(' · ')[0]] as const,
+        ),
+    ]).entries(),
   ];
   const reviewed = assets.filter((asset) => ['accepted', 'excluded'].includes(asset.status)).length;
   const counts = {
@@ -83,6 +89,11 @@ export function AssetReviewQueue({
           for (let index = 0; index < parts.length; index++) {
             const key = parts.slice(0, index + 1).join('/');
             if (
+              parts
+                .slice(0, index)
+                .every((_, parentIndex) =>
+                  openFolders.has(parts.slice(0, parentIndex + 1).join('/')),
+                ) &&
               !visible
                 .slice(0, visible.indexOf(asset))
                 .some((prior) => prior.folderPath?.slice(0, index + 1).join('/') === key)
@@ -141,59 +152,6 @@ export function AssetReviewQueue({
   }, [onAction, onSelect, selected, visible]);
   return (
     <Stack gap="m" className="asset-review-surface" style={{ gap: 12 }}>
-      <Box flexDirection="row" alignItems="flex-end" gap="s" className="asset-review-toolbar">
-        <label className="asset-review-source-label">
-          Source
-          <select
-            aria-label="Filter by source"
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-          >
-            <option value="all">All sources</option>
-            {sources.map(([key, name]) => (
-              <option key={key} value={key}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {searchOpen ? (
-          <Box flexDirection="row" alignItems="center" className="asset-review-search">
-            <Icon name="magnifying-glass" size={14} color="gray" />
-            <input
-              autoFocus
-              aria-label="Search assets"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search assets"
-            />
-            {search ? (
-              <button type="button" aria-label="Clear asset search" onClick={() => setSearch('')}>
-                ×
-              </button>
-            ) : null}
-            <button
-              type="button"
-              aria-label="Close asset search"
-              onClick={() => {
-                setSearchOpen(false);
-                setSearch('');
-              }}
-            >
-              Close
-            </button>
-          </Box>
-        ) : (
-          <button
-            type="button"
-            className="asset-review-search-toggle"
-            aria-label="Search assets"
-            onClick={() => setSearchOpen(true)}
-          >
-            <Icon name="magnifying-glass" size={16} color="gray" />
-          </button>
-        )}
-      </Box>
       <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
         <Box flexDirection="row" gap="s" style={{ flexWrap: 'wrap' }}>
           {(
@@ -216,89 +174,154 @@ export function AssetReviewQueue({
           ))}
         </Box>
         {showKeyboardHints ? (
-          <Text
-            variant="bodySmall"
-            color="gray"
-            style={{ fontSize: 12, lineHeight: 16, marginLeft: 'auto' }}
-          >
-            Shortcuts: A accept · X exclude · ↑↓ move
-          </Text>
+          <Box flexDirection="row" alignItems="center" gap="xs" style={{ marginLeft: 'auto' }}>
+            <Text variant="bodySmall" color="gray">
+              Shortcuts:
+            </Text>
+            <Text className="asset-review-shortcut">A</Text>
+            <Text variant="bodySmall" color="gray">
+              accept
+            </Text>
+            <Text className="asset-review-shortcut">X</Text>
+            <Text variant="bodySmall" color="gray">
+              exclude
+            </Text>
+            <Text className="asset-review-shortcut">↑↓</Text>
+            <Text variant="bodySmall" color="gray">
+              move
+            </Text>
+          </Box>
         ) : null}
       </Box>
-      {canShowTree ? (
-        <Box flexDirection="row" gap="s" className="asset-review-view-picker">
-          <FilterChip
-            selected={view === 'list'}
-            onPress={() => setView('list')}
-            accessibilityLabel="List"
-            icon={
-              <Icon
-                name="list"
-                size={16}
-                color={view === 'list' ? theme.colors.primary120 : theme.colors.gray}
-              />
-            }
-          >
-            List
-          </FilterChip>
-          <FilterChip
-            selected={view === 'tree'}
-            onPress={() => setView('tree')}
-            accessibilityLabel="Tree"
-            icon={
-              <Icon
-                name="sitemap"
-                size={16}
-                color={view === 'tree' ? theme.colors.primary120 : theme.colors.gray}
-              />
-            }
-          >
-            Tree
-          </FilterChip>
-        </Box>
-      ) : null}
       <Box
         flexDirection="row"
         gap="m"
         className="asset-review-columns"
         style={{ flexWrap: 'wrap' }}
       >
-        <Stack gap="s" className="asset-review-queue">
-          {!assets.length ? (
-            <NoItemsPlaceholder description="No Assets were detected. Add another source containing value-bearing entries." />
-          ) : !visible.length ? (
-            <NoItemsPlaceholder description="No Assets match this filter." />
-          ) : null}
-          {rows.map((row) =>
-            row.asset ? (
-              <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
-                <AssetRow
-                  asset={row.asset}
-                  selected={row.asset.id === selected?.id}
-                  onSelect={onSelect}
+        <Box className="asset-review-list-pane">
+          <Box flexDirection="row" alignItems="flex-end" gap="s" className="asset-review-toolbar">
+            <label className="asset-review-source-label">
+              Source
+              <select
+                aria-label="Filter by source"
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+              >
+                <option value="all">All sources</option>
+                {sources.map(([key, name]) => (
+                  <option key={key} value={key}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {searchOpen ? (
+              <Box flexDirection="row" alignItems="center" className="asset-review-search">
+                <button
+                  type="button"
+                  aria-label="Close asset search"
+                  onClick={() => setSearchOpen(false)}
+                >
+                  <Icon name="magnifying-glass" size={14} color={theme.colors.gray} />
+                </button>
+                <input
+                  autoFocus
+                  aria-label="Search assets"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search assets"
                 />
+                {search ? (
+                  <button
+                    type="button"
+                    aria-label="Clear asset search"
+                    onClick={() => setSearch('')}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </Box>
             ) : (
               <button
-                key={row.key}
                 type="button"
-                className="asset-review-folder"
-                style={{ paddingLeft: row.depth * 16 + 8 }}
-                onClick={() =>
-                  setOpenFolders((current) => {
-                    const next = new Set(current);
-                    const path = row.key.slice(7);
-                    if (next.has(path)) next.delete(path);
-                    else next.add(path);
-                    return next;
-                  })
+                className="asset-review-search-toggle"
+                aria-label="Search assets"
+                onClick={() => setSearchOpen(true)}
+              >
+                <Icon name="magnifying-glass" size={16} color={theme.colors.gray50} />
+              </button>
+            )}
+          </Box>
+          {canShowTree ? (
+            <Box flexDirection="row" gap="s" className="asset-review-view-picker">
+              <FilterChip
+                selected={view === 'list'}
+                onPress={() => setView('list')}
+                accessibilityLabel="List"
+                icon={
+                  <Icon
+                    name="list"
+                    size={16}
+                    color={view === 'list' ? theme.colors.primary120 : theme.colors.gray}
+                  />
                 }
               >
-                {openFolders.has(row.key.slice(7)) ? '⌄' : '›'} {row.label} ({row.count})
-              </button>
-            ),
-          )}
-        </Stack>
+                List
+              </FilterChip>
+              <FilterChip
+                selected={view === 'tree'}
+                onPress={() => setView('tree')}
+                accessibilityLabel="Tree"
+                icon={
+                  <Icon
+                    name="sitemap"
+                    size={16}
+                    color={view === 'tree' ? theme.colors.primary120 : theme.colors.gray}
+                  />
+                }
+              >
+                Tree
+              </FilterChip>
+            </Box>
+          ) : null}
+          <Stack gap="s" className="asset-review-queue">
+            {!assets.length ? (
+              <NoItemsPlaceholder description="No Assets were detected. Add another source containing value-bearing entries." />
+            ) : !visible.length ? (
+              <NoItemsPlaceholder description="No Assets match this filter." />
+            ) : null}
+            {rows.map((row) =>
+              row.asset ? (
+                <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
+                  <AssetRow
+                    asset={row.asset}
+                    selected={row.asset.id === selected?.id}
+                    onSelect={onSelect}
+                  />
+                </Box>
+              ) : (
+                <button
+                  key={row.key}
+                  type="button"
+                  className="asset-review-folder"
+                  style={{ paddingLeft: row.depth * 16 + 8 }}
+                  onClick={() =>
+                    setOpenFolders((current) => {
+                      const next = new Set(current);
+                      const path = row.key.slice(7);
+                      if (next.has(path)) next.delete(path);
+                      else next.add(path);
+                      return next;
+                    })
+                  }
+                >
+                  {openFolders.has(row.key.slice(7)) ? '⌄' : '›'} {row.label} ({row.count})
+                </button>
+              ),
+            )}
+          </Stack>
+        </Box>
         <Box className="asset-review-inspector">
           <Inspector
             asset={selected}

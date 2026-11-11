@@ -1,13 +1,16 @@
 import { useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { unwrapList, useApiQuery } from '@shared/infrastructure/importer-api/http';
+import { preferAccessDenial } from '@modules/_shared/domain/api-status-error';
 
 let activeAccountKey: string | null = null;
 const preferenceListeners = new Set<() => void>();
 
 function subscribeToSelectedOrganization(listener: () => void) {
   preferenceListeners.add(listener);
-  return () => { preferenceListeners.delete(listener); };
+  return () => {
+    preferenceListeners.delete(listener);
+  };
 }
 
 function notifySelectedOrganization() {
@@ -38,7 +41,10 @@ export function setSelectedOrganizationForActive(accountKey: string, organizatio
 }
 
 export function useGetRawSelectedOrganizationId() {
-  const data = useSyncExternalStore(subscribeToSelectedOrganization, getSelectedOrganizationSnapshot);
+  const data = useSyncExternalStore(
+    subscribeToSelectedOrganization,
+    getSelectedOrganizationSnapshot,
+  );
   return { data, loading: false };
 }
 
@@ -113,6 +119,11 @@ export function useGetMyOrganization(options?: { enabled?: boolean }) {
       (organization) => organization.userId === profile.data?.id,
     ),
     loading: organizations.loading || profile.loading,
+    error: preferAccessDenial(organizations.error, profile.error),
+    refetch: () => {
+      void organizations.refetch();
+      void profile.refetch();
+    },
   };
 }
 
@@ -131,6 +142,11 @@ export function useGetJoinedOrganizations(options?: { enabled?: boolean }) {
       (organization) => organization.userId !== profile.data?.id,
     ),
     loading: organizations.loading || profile.loading,
+    error: preferAccessDenial(organizations.error, profile.error),
+    refetch: () => {
+      void organizations.refetch();
+      void profile.refetch();
+    },
   };
 }
 

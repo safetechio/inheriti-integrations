@@ -15,10 +15,13 @@ export function PlainTextEditor({
   resolveSourceValue?: AssetReviewQueueProps['resolveSourceValue'];
 }) {
   const [revealed, setRevealed] = useState(false);
-  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [value, setValue] = useState('');
-  const previousAssetId = useRef(asset.id);
   const textField = asset.schemaFields?.find((field) => field.key === 'secret.text');
+  const sourceBinding = JSON.stringify([
+    textField?.sourceFieldId,
+    asset.plainTextSources?.map((source) => source.id),
+  ]);
+  const previousBinding = useRef({ assetId: asset.id, sourceBinding });
   const selectedSource = textField?.candidates?.find(
     (candidate) => candidate.id === textField.sourceFieldId,
   );
@@ -28,12 +31,15 @@ export function PlainTextEditor({
   );
 
   useEffect(() => {
-    if (previousAssetId.current === asset.id) return;
-    previousAssetId.current = asset.id;
+    if (
+      previousBinding.current.assetId === asset.id &&
+      previousBinding.current.sourceBinding === sourceBinding
+    )
+      return;
+    previousBinding.current = { assetId: asset.id, sourceBinding };
     setRevealed(false);
-    setSourcePickerOpen(false);
     setValue('');
-  }, [asset.id]);
+  }, [asset.id, sourceBinding]);
 
   useEffect(() => {
     const clearOnHidden = () => {
@@ -77,6 +83,10 @@ export function PlainTextEditor({
         editable={revealed && Boolean(onEdit)}
         error={asset.schemaFields?.find((field) => field.key === 'secret.text')?.validationError}
         onChangeText={(next) => {
+          previousBinding.current = {
+            assetId: asset.id,
+            sourceBinding: JSON.stringify([undefined, undefined]),
+          };
           setValue(next);
           onEdit?.(asset, next);
         }}
@@ -103,49 +113,17 @@ export function PlainTextEditor({
                 ? 'Your edited value will be stored.'
                 : 'Field names and values are combined into the Plain Text secret.'}
           </Text>
-          <Button
-            title={
-              selectedSource || hasEditedValue
-                ? 'Reset to all imported fields'
-                : 'Use one imported field'
-            }
-            variant="outlined"
-            size="sm"
-            onPress={() => {
-              if (selectedSource || hasEditedValue) {
+          {selectedSource || hasEditedValue ? (
+            <Button
+              title="Reset to all imported fields"
+              variant="outlined"
+              size="sm"
+              onPress={() => {
                 setRevealed(false);
                 setValue('');
                 onMapField?.(asset, 'secret.text', undefined);
-                return;
-              }
-              setSourcePickerOpen((current) => !current);
-            }}
-          />
-          {sourcePickerOpen ? (
-            <label className="asset-source-select-wrap">
-              Choose imported field
-              <select
-                className="asset-source-select"
-                aria-label="Choose imported field"
-                defaultValue=""
-                onChange={(event) => {
-                  if (!event.target.value) return;
-                  setRevealed(false);
-                  setSourcePickerOpen(false);
-                  setValue('');
-                  onMapField?.(asset, 'secret.text', event.target.value);
-                }}
-              >
-                <option value="" disabled>
-                  Select a field
-                </option>
-                {textField.candidates.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {candidate.name.replace(/^extra:/i, '')}
-                  </option>
-                ))}
-              </select>
-            </label>
+              }}
+            />
           ) : null}
         </Box>
       ) : null}

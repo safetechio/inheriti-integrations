@@ -29,6 +29,7 @@ export function useApiQuery<T>(
     loading: result.isLoading,
     isRefetching: result.isRefetching,
     error: result.error,
+    refetch: result.refetch,
   };
 }
 

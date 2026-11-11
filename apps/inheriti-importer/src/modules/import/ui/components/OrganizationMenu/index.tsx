@@ -18,7 +18,7 @@ export function OrganizationMenu({
   closeAccountMenu: (returnFocus?: boolean) => void;
 }) {
   const { organization, loading: switching, selectOrganization } = useSelectCurrentOrganization();
-  const { memberships } = useOrganizationMemberships();
+  const { memberships, loading, error, retry } = useOrganizationMemberships();
   const selectedOrganizationName = organization
     ? organizationDisplayName(organization, memberships)
     : 'Choose organisation';
@@ -79,32 +79,48 @@ export function OrganizationMenu({
           <Text variant="bodySmall" color="gray" style={{ padding: 8 }}>
             Organisation
           </Text>
-          {memberships.map((item) => (
-            <Pressable
-              key={item.id}
-              accessibilityRole="menuitem"
-              accessibilityLabel={`Switch to ${organizationDisplayName(item, memberships)}`}
-              {...{ 'aria-selected': item.id === organization?.id }}
-              onPress={() => {
-                closeMenu();
-                void selectOrganization(item.id);
-              }}
-            >
-              <Box
-                flexDirection="row"
-                alignItems="center"
-                gap="s"
-                padding="s"
-                borderRadius="s"
-                backgroundColor={item.id === organization?.id ? 'primary5' : 'white'}
-                style={{ cursor: 'pointer' }}
-              >
-                <Text variant="bodySmall" color="gray120" numberOfLines={1}>
-                  {organizationDisplayName(item, memberships)}
-                </Text>
-              </Box>
+          {error ? (
+            <Pressable accessibilityRole="menuitem" onPress={retry}>
+              <Text variant="bodySmall" color="danger">
+                Could not load organisations. Retry
+              </Text>
             </Pressable>
-          ))}
+          ) : loading ? (
+            <Text variant="bodySmall" color="gray">
+              Loading organisations…
+            </Text>
+          ) : memberships.length === 0 ? (
+            <Text variant="bodySmall" color="gray">
+              No organisations available
+            </Text>
+          ) : (
+            memberships.map((item) => (
+              <Pressable
+                key={item.id}
+                accessibilityRole="menuitem"
+                accessibilityLabel={`Switch to ${organizationDisplayName(item, memberships)}`}
+                {...{ 'aria-selected': item.id === organization?.id }}
+                onPress={() => {
+                  closeMenu();
+                  void selectOrganization(item.id);
+                }}
+              >
+                <Box
+                  flexDirection="row"
+                  alignItems="center"
+                  gap="s"
+                  padding="s"
+                  borderRadius="s"
+                  backgroundColor={item.id === organization?.id ? 'primary5' : 'white'}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <Text variant="bodySmall" color="gray120" numberOfLines={1}>
+                    {organizationDisplayName(item, memberships)}
+                  </Text>
+                </Box>
+              </Pressable>
+            ))
+          )}
         </Box>
       ) : null}
     </Box>

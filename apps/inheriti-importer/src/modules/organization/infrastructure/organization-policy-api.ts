@@ -23,6 +23,7 @@ export function useSelectedOrganizationMemberCapabilities() {
     canManageOrganizationSettings: result.data?.canManageOrganizationSettings ?? false,
     limits: result.data?.limits ?? {},
     loading: result.loading,
+    error: result.error,
   };
 }
 

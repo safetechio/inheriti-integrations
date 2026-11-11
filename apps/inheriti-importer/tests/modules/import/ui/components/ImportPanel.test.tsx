@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { OpenedVaultFile } from '@modules/import/domain/vault';
 
 const openedFile: OpenedVaultFile = {
@@ -43,5 +43,28 @@ describe('ImportPanel', () => {
 
     await waitFor(() => expect(onImport).toHaveBeenCalledTimes(1));
     expect(onImport).toHaveBeenCalledWith([openedFile]);
+  });
+
+  it('keeps file picker and drop import disabled while organisation access is unresolved', async () => {
+    const onImport = vi.fn();
+    const { container, getByText } = render(
+      <ImportPanel
+        busy={false}
+        disabled
+        notice="Checking organisation access…"
+        error={null}
+        onImport={onImport}
+      />,
+    );
+    const dropzone = container.querySelector('.dropzone');
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { files: [new File(['secret'], 'secrets.json')] },
+    });
+    dropzone?.dispatchEvent(dropEvent);
+    fireEvent.click(getByText('Choose files'));
+    expect(getByText('Checking organisation access…')).toBeTruthy();
+    expect(filesFromList).not.toHaveBeenCalled();
+    expect(onImport).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 import { getSelectedOrganizationSnapshot } from '@modules/organization/infrastructure/selected-organization-api';
+import { ApiStatusError } from '@modules/_shared/domain/api-status-error';
 
 /**
  * Renderer-side Business API transport. It forwards every
@@ -61,7 +62,7 @@ export class ElectronHttpTransport {
     if (!request.returnErrorResponse && (response.status < 200 || response.status >= 300)) {
       const body = response.body as { message?: string; error?: string } | null;
       const message = body?.message ?? body?.error ?? 'API request failed';
-      throw new Error(message);
+      throw new ApiStatusError(message, response.status);
     }
 
     return { status: response.status, body: response.body as T };

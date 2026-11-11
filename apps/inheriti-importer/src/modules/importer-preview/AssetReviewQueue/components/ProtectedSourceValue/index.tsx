@@ -5,10 +5,12 @@ import type { SensitiveValue } from '@modules/import/domain/import-model';
 export function ProtectedSourceValue({
   fieldLabel,
   sourceFieldId,
+  missing,
   resolveSourceValue,
 }: {
   fieldLabel: string;
   sourceFieldId?: string;
+  missing?: boolean;
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -21,15 +23,16 @@ export function ProtectedSourceValue({
     return () => document.removeEventListener('visibilitychange', clearOnHidden);
   }, []);
 
-  if (!sourceFieldId)
+  if (!sourceFieldId || missing)
     return (
       <Text variant="importerFieldMono" color="gray">
         —
       </Text>
     );
 
-  const value = revealed ? resolveSourceValue?.(sourceFieldId) : undefined;
-  const displayValue = revealed ? (value?.reveal() ?? 'Value unavailable') : '•••••••';
+  const displayValue = revealed
+    ? (resolveSourceValue?.(sourceFieldId)?.reveal() ?? 'Value unavailable')
+    : '•••••••';
 
   return (
     <Box flexDirection="row" alignItems="center" justifyContent="space-between" gap="s">

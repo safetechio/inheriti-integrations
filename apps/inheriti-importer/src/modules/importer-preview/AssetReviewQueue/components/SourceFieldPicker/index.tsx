@@ -17,9 +17,14 @@ export function SourceFieldPicker({
   useEffect(() => setOpen(false), [field.key, field.sourceFieldId]);
   if (candidates.length === 0)
     return (
-      <Text variant="bodySmall" color="gray">
-        No matching source fields
-      </Text>
+      <Box gap="xxs" className="asset-source-picker">
+        <Text variant="bodySmall" color="gray" style={{ fontSize: 11 }}>
+          Source
+        </Text>
+        <Text variant="bodySmall" semibold>
+          —
+        </Text>
+      </Box>
     );
 
   return (
@@ -37,19 +42,19 @@ export function SourceFieldPicker({
               Source
             </Text>
             <Text variant="bodySmall" semibold>
-              {field.sourceFieldName ? displayName(field.sourceFieldName) : 'Not included'}
+              {field.sourceFieldName ? displayName(field.sourceFieldName) : '—'}
             </Text>
           </Box>
         ) : null}
         <Box flexDirection="row" gap="xs">
           {field.sourceFieldId ? (
             <Button
-              title="Remove mapping"
+              title="Exclude"
               variant="plain"
               color="danger"
               size="sm"
               onPress={() => onChange(undefined)}
-              accessibilityLabel={`Remove ${field.label} from this Asset`}
+              accessibilityLabel={`Exclude ${field.label} field from this Asset`}
             />
           ) : null}
           <Button

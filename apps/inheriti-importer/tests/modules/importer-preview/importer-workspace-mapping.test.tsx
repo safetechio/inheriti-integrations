@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { act, renderHook } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useState } from 'react';
 import { SensitiveValue, type ImportSession } from '@modules/import/domain/import-model';
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
+import { AssetReviewQueue } from '@modules/importer-preview/AssetReviewQueue';
 import { createEmptyWorkspace } from '@modules/plans/domain/workspace-model';
 import { createPlan } from '@modules/plans/domain/workspace-commands';
 import { materialiseAsset } from '@modules/plans/domain/asset-materializer';
@@ -70,6 +71,58 @@ function importSession(): ImportSession {
 }
 
 describe('useImporterWorkspace schema mapping lifecycle', () => {
+  it('refreshes revealed Plain Text after excluding Notes before editing and staging', () => {
+    const session = importSession();
+    session.sources[0]!.kind = 'onepassword';
+    session.fieldsById['field-token'].name = 'extra:private key';
+    session.fieldsById['field-other'].name = 'notes';
+    let latest!: ReturnType<typeof useImporterWorkspace>;
+    function Review() {
+      const [planWorkspace, setPlanWorkspace] = useState(createEmptyWorkspace);
+      const workspace = useImporterWorkspace(session, planWorkspace, setPlanWorkspace);
+      latest = workspace;
+      return (
+        <AssetReviewQueue
+          assets={workspace.assets}
+          onMapField={workspace.mapAssetField}
+          onEditPlainText={workspace.editPlainText}
+          resolveSourceValue={workspace.resolveSourceValue}
+        />
+      );
+    }
+    render(<Review />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
+    expect((screen.getByLabelText('Plain text value') as HTMLTextAreaElement).value).toBe(
+      'first-token',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Exclude Notes or guidelines field from this Asset' }),
+    );
+    expect(screen.getByRole('button', { name: 'Reveal plain text' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
+    const editor = screen.getByLabelText('Plain text value') as HTMLTextAreaElement;
+    expect(editor.value).toContain('notes: second-token');
+    fireEvent.change(editor, { target: { value: `${editor.value}\nReviewed` } });
+    expect((screen.getByLabelText('Plain text value') as HTMLTextAreaElement).value).toContain(
+      'notes: second-token',
+    );
+    const suggestion = latest.suggestions[0]!;
+    const staged = buildStagedAssetInput(
+      materialiseAsset(
+        {
+          id: 'reviewed',
+          type: suggestion.type,
+          name: suggestion.name,
+          fieldBindings: suggestion.fieldBindings,
+        },
+        session,
+      ).asset,
+    );
+    expect(staged.fields).toContainEqual({
+      fieldId: 'secret.text',
+      value: 'private key: first-token\nnotes: second-token\nReviewed',
+    });
+  });
   it('moves native notes between Plain Text metadata and source text in review and assigned drafts', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';

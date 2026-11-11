@@ -42,6 +42,7 @@ export interface ReviewAssetField {
 
 export interface AssetReviewQueueProps {
   assets: ReviewAsset[];
+  sourceFiles?: { id?: string; name: string }[];
   description?: string;
   selectedId?: string;
   onSelect?: (asset: ReviewAsset) => void;

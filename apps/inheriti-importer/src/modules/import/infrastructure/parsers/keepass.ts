@@ -148,5 +148,5 @@ export async function parseKeepass(
   data: ArrayBuffer,
   options: KeepassOptions = {},
 ): Promise<ParseResult> {
-  return new KeepassParser(data, options).parse();
+  return new KeepassParser(data, { ...options, keyFile: options.keyFile?.slice(0) }).parse();
 }

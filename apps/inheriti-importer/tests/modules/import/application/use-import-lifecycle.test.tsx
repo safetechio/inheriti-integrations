@@ -8,10 +8,49 @@ vi.mock('@modules/import/infrastructure/parsers', () => ({
 }));
 
 import { useImportLifecycle } from '@modules/import/application/use-import-lifecycle';
+import { VaultUnlockError } from '@modules/import/domain/vault';
 
 describe('useImportLifecycle', () => {
   beforeEach(() => {
     parseVaultFile.mockReset();
+  });
+
+  it('marks only unlock attempts as unlocking and returns to Locked on wrong credentials', async () => {
+    parseVaultFile.mockRejectedValueOnce(new VaultUnlockError('Synthetic locked vault'));
+    const { result } = renderHook(() => useImportLifecycle());
+    await act(async () => {
+      await result.current.importFiles([{ name: 'vault.kdbx', data: new ArrayBuffer(1) }]);
+    });
+    const sourceId = result.current.state.sources[0].id;
+    expect(result.current.state.sources[0].status).toBe('unlock-required');
+
+    let rejectUnlock!: (reason: Error) => void;
+    parseVaultFile.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectUnlock = reject;
+      }),
+    );
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.unlockSource(sourceId, 'wrong', new ArrayBuffer(2));
+    });
+    expect(result.current.state.sources[0].status).toBe('unlocking');
+    await act(async () => {
+      rejectUnlock(new VaultUnlockError('Synthetic wrong password'));
+      await pending;
+    });
+    expect(result.current.state.sources[0].status).toBe('unlock-required');
+
+    parseVaultFile.mockResolvedValueOnce({
+      kind: 'keepass',
+      name: 'vault',
+      entries: [],
+      warnings: [],
+    });
+    await act(async () => {
+      await result.current.unlockSource(sourceId, 'correct', new ArrayBuffer(2));
+    });
+    expect(result.current.state.sources[0].status).toBe('imported');
   });
 
   it('ignores a parser result that resolves after the import session is purged', async () => {

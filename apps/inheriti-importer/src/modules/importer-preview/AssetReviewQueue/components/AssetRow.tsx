@@ -21,12 +21,20 @@ export function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
       gap="m"
       width="100%"
     >
-      <Box alignItems="flex-start" style={{ minWidth: 0, flex: 1 }}>
-        <Text variant="importerAssetRowTitle" className="asset-review-row-name" title={asset.name}>
+      <Box
+        alignItems="flex-start"
+        style={{ minWidth: 0, flex: 1 }}
+        ref={(element) => element?.setAttribute('title', asset.name)}
+      >
+        <Text variant="importerAssetRowTitle" className="asset-review-row-name">
           {asset.name}
         </Text>
       </Box>
-      <Box title={statusLabel[asset.status]} accessibilityLabel={statusLabel[asset.status]}>
+      <Box
+        className={`asset-review-status is-${statusBadge[asset.status].tone}`}
+        title={statusLabel[asset.status]}
+        accessibilityLabel={statusLabel[asset.status]}
+      >
         <Icon
           name={
             asset.status === 'accepted'

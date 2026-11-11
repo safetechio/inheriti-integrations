@@ -99,7 +99,9 @@ export function ImporterFlow({
   ).length;
   const sourceIssueGroups =
     Number(flow.files.length === 0) +
-    Number(flow.files.some((file) => file.status === 'unlock-required')) +
+    Number(
+      flow.files.some((file) => file.status === 'unlock-required' || file.status === 'unlocking'),
+    ) +
     Number(flow.files.some((file) => file.status === 'failed' || file.status === 'retrying'));
   const planIssueGroups = Number(flow.unassigned.length > 0) + Number(!flow.readiness.plans);
   const assetIssueGroups = Number(!flow.assets.length || undecided > 0);
@@ -163,20 +165,29 @@ export function ImporterFlow({
           locked={flowLocked}
         />
         <Box className="importer-flow-center">
-          <Box className="importer-flow-stage-header" gap="xxs">
-            <Box gap="xxs">
-              <Text variant="importerEyebrow" color="gray">
-                Step {flow.index + 1} of {importerFlowStages.length}
-              </Text>
-              <Text className="stage-headline" variant="importerStageHeadline">
-                {stage === 'staging' && flow.stagingState === 'staged'
-                  ? 'Import staged'
-                  : stageHeadline(stage)}
+          <Box
+            className="importer-flow-stage-header"
+            flexDirection="row"
+            alignItems="flex-start"
+            justifyContent="space-between"
+            flexWrap="wrap"
+            gap="m"
+          >
+            <Box gap="xxs" style={{ flex: '1 1 360px', minWidth: 0 }}>
+              <Box gap="xxs">
+                <Text variant="importerEyebrow" color="gray">
+                  Step {flow.index + 1} of {importerFlowStages.length}
+                </Text>
+                <Text className="stage-headline" variant="importerStageHeadline">
+                  {stage === 'staging' && flow.stagingState === 'staged'
+                    ? 'Import staged'
+                    : stageHeadline(stage)}
+                </Text>
+              </Box>
+              <Text variant="importerFooterNote" color="gray">
+                {stageHelpers[stage]}
               </Text>
             </Box>
-            <Text variant="importerFooterNote" color="gray">
-              {stageHelpers[stage]}
-            </Text>
             {flow.stagingState !== 'staged' ? (
               <CancelImportControl
                 fileCount={flow.files.length}

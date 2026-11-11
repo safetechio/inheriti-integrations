@@ -2,6 +2,7 @@ import {
   useGetSelectedOrganization,
   useSelectedOrganizationMemberCapabilities,
 } from '@modules/organization/infrastructure/importer-api';
+import { isAccessDenial } from '@modules/_shared/domain/api-status-error';
 
 export interface SelectableOrganizationState {
   organizationId?: string;
@@ -10,18 +11,32 @@ export interface SelectableOrganizationState {
   loading: boolean;
 }
 
-const NO_STAGED_ACCESS_MESSAGE = 'You do not have permission to stage imports in this organisation.';
-const ACTIVATION_PENDING_MESSAGE = 'This organisation must finish activation before imports can be staged.';
+const NO_STAGED_ACCESS_MESSAGE =
+  'You do not have permission to stage imports in this organisation.';
+const ACTIVATION_PENDING_MESSAGE =
+  'This organisation must finish activation before imports can be staged.';
 
 export default function useSelectableOrganization(): SelectableOrganizationState {
   const organization = useGetSelectedOrganization();
-  const { canAccessStagedItems, loading: capabilitiesLoading } =
-    useSelectedOrganizationMemberCapabilities();
+  const {
+    canAccessStagedItems,
+    loading: capabilitiesLoading,
+    error: capabilitiesError,
+  } = useSelectedOrganizationMemberCapabilities();
   const organizationId = organization.data?.id;
   const loading = organization.loading || capabilitiesLoading;
 
   if (loading) {
     return { organizationId, canUse: false, blockedReason: null, loading: true };
+  }
+
+  if (isAccessDenial(organization.error, true) || isAccessDenial(capabilitiesError, true)) {
+    return {
+      organizationId,
+      canUse: false,
+      blockedReason: 'This account no longer has access to this organisation.',
+      loading: false,
+    };
   }
 
   if (!organizationId) {

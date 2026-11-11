@@ -19,6 +19,27 @@ const asset: ReviewAsset = {
 };
 
 describe('AssetReviewQueue keyboard shortcuts', () => {
+  it('keeps status tabs above both panes and source controls above the scrolling list', () => {
+    const { container } = render(<AssetReviewQueue assets={[asset]} />);
+    const surface = container.querySelector('.asset-review-surface')!;
+    const columns = container.querySelector('.asset-review-columns')!;
+    const leftPane = container.querySelector('.asset-review-list-pane')!;
+    expect(surface.firstElementChild).not.toBe(columns);
+    expect(surface.lastElementChild).toBe(columns);
+    expect(leftPane.parentElement).toBe(columns);
+    expect(leftPane.firstElementChild?.classList.contains('asset-review-toolbar')).toBe(true);
+    expect(leftPane.lastElementChild?.classList.contains('asset-review-queue')).toBe(true);
+    expect(columns.lastElementChild?.classList.contains('asset-review-inspector')).toBe(true);
+  });
+
+  it('exposes the full asset name as a native hover title', () => {
+    const name = 'Very long synthetic production database credential';
+    const { container } = render(<AssetReviewQueue assets={[{ ...asset, name }]} />);
+    expect(
+      container.querySelector('.asset-review-row-name')?.closest('[title]')?.getAttribute('title'),
+    ).toBe(name);
+  });
+
   it('opens unresolved work by default and explains an empty import', () => {
     const accepted = {
       ...asset,
@@ -66,7 +87,15 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
       status: 'accepted' as const,
     };
     render(<AssetReviewQueue assets={[{ ...asset, sourceFileName: 'prod.kdbx' }, other]} />);
+    const searchIcon = (button: HTMLElement) =>
+      button.querySelector('[data-testid]') as HTMLElement;
+    expect(searchIcon(screen.getByRole('button', { name: 'Search assets' })).style.color).toBe(
+      'rgb(163, 179, 191)',
+    );
     fireEvent.click(screen.getByLabelText('Search assets'));
+    expect(searchIcon(screen.getByRole('button', { name: 'Close asset search' })).style.color).toBe(
+      'rgb(71, 84, 103)',
+    );
     fireEvent.change(screen.getByLabelText('Search assets'), { target: { value: 'Other' } });
     fireEvent.click(screen.getByRole('button', { name: 'Accepted 1' }));
     expect(screen.getByLabelText('Inspect Other token')).toBeTruthy();
@@ -100,9 +129,41 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
     expect(treeIcon.style.color).toBe('rgb(22, 66, 186)');
     expect(listIcon.style.color).toBe('rgb(71, 84, 103)');
     expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
+    expect(screen.queryByText(/Database \(1\)/)).toBeNull();
     fireEvent.click(screen.getByText(/Infrastructure/));
     fireEvent.click(screen.getByText(/Database/));
     expect(screen.getByLabelText('Inspect Production database')).toBeTruthy();
+    fireEvent.click(screen.getByText(/Infrastructure/));
+    expect(screen.queryByText(/Database \(1\)/)).toBeNull();
+  });
+
+  it('lists files with no Assets and keeps a search when its icon closes the field', () => {
+    render(
+      <AssetReviewQueue
+        assets={[{ ...asset, sourceId: 'source-prod', sourceFileName: 'prod.kdbx' }]}
+        sourceFiles={[
+          { id: 'empty-source', name: 'empty.csv' },
+          { id: 'source-prod', name: 'prod.kdbx' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'empty.csv' })).toBeTruthy();
+    expect(screen.getAllByRole('option', { name: 'prod.kdbx' })).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('Filter by source'), {
+      target: { value: 'empty-source' },
+    });
+    expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'all' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search assets' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search assets' }), {
+      target: { value: 'missing' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close asset search' }));
+    expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Search assets' }));
+    expect((screen.getByRole('textbox', { name: 'Search assets' }) as HTMLInputElement).value).toBe(
+      'missing',
+    );
   });
 
   it('disables the decision already made while allowing the opposite decision', () => {

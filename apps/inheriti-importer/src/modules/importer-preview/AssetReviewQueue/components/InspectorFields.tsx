@@ -33,17 +33,21 @@ export function InspectorFields({
       gap="xs"
       className="asset-schema-field-row"
     >
-      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap="s">
+      <Box gap="xs" className="asset-schema-secret-region">
         <Text variant="importerFieldLabel">
           {field.label}
           {field.required ? ' *' : ''}
         </Text>
+        <ProtectedSourceValue
+          fieldLabel={field.label}
+          sourceFieldId={field.sourceFieldId}
+          missing={
+            field.candidates?.find((candidate) => candidate.id === field.sourceFieldId)?.length ===
+            0
+          }
+          resolveSourceValue={resolveSourceValue}
+        />
       </Box>
-      <ProtectedSourceValue
-        fieldLabel={field.label}
-        sourceFieldId={field.sourceFieldId}
-        resolveSourceValue={resolveSourceValue}
-      />
       <SourceFieldPicker
         field={field}
         onChange={(sourceFieldId) => onMapField?.(asset, field.key, sourceFieldId)}

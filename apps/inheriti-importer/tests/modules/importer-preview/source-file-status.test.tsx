@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
+import { SourceImportStatus } from '@modules/importer-preview/SourceImportStatus';
 import type { ImportFile } from '@modules/importer-preview/SourceImportStatus';
 
 afterEach(cleanup);
@@ -30,6 +31,177 @@ describe('source file status', () => {
     fireEvent.click(submit);
 
     await waitFor(() => expect(onUnlock).toHaveBeenCalledWith(source, '', keyBytes));
+  });
+
+  it('shows the full source filename in the native hover title', () => {
+    const name = 'very-long-synthetic-production-database-export.kdbx';
+    render(<FileRow file={{ name, format: 'KeePass', status: 'unlock-required' }} />);
+    expect(screen.getByText(name).closest('[title]')?.getAttribute('title')).toBe(name);
+  });
+
+  it('allows a whitespace-only KeePass password without changing its bytes', () => {
+    const source: ImportFile = { name: 'space.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const onUnlock = vi.fn();
+    render(<FileRow file={source} initiallyShowUnlock onUnlock={onUnlock} />);
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: ' ' } });
+    const submit = screen.getAllByRole('button', { name: 'Unlock' })[1];
+    expect(submit.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(submit);
+    expect(onUnlock).toHaveBeenCalledWith(source, ' ', undefined);
+  });
+
+  it('keeps unlock factors through unlocking and clears them after import', async () => {
+    const source: ImportFile = { name: 'retry.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    const selected = new File(['key'], 'retry.key');
+    Object.defineProperty(selected, 'arrayBuffer', { value: vi.fn().mockResolvedValue(bytes) });
+    const props = { initiallyShowUnlock: true, onUnlock: vi.fn() };
+    const { rerender } = render(<FileRow file={source} {...props} />);
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: 'wrong' } });
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    await screen.findByText('retry.key');
+
+    rerender(<FileRow file={{ ...source, status: 'unlocking' }} {...props} />);
+    expect(new Uint8Array(bytes)).toEqual(new Uint8Array([1, 2, 3, 4]));
+    rerender(<FileRow file={source} {...props} />);
+    expect((screen.getByLabelText('Master password') as HTMLInputElement).value).toBe('wrong');
+    expect(screen.getByText('retry.key')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Master password'), { target: { value: 'correct' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unlock' })[1]);
+    expect(props.onUnlock).toHaveBeenCalledWith(source, 'correct', bytes);
+
+    rerender(<FileRow file={{ ...source, status: 'imported' }} {...props} />);
+    expect(new Uint8Array(bytes)).toEqual(new Uint8Array(4));
+  });
+
+  it('clears replaced and unmounted key file bytes', async () => {
+    const source: ImportFile = {
+      name: 'replace.kdbx',
+      format: 'KeePass',
+      status: 'unlock-required',
+    };
+    const firstBytes = new Uint8Array([1, 2]).buffer;
+    const secondBytes = new Uint8Array([3, 4]).buffer;
+    const first = new File(['first'], 'first.key');
+    const second = new File(['second'], 'second.key');
+    Object.defineProperty(first, 'arrayBuffer', { value: vi.fn().mockResolvedValue(firstBytes) });
+    Object.defineProperty(second, 'arrayBuffer', { value: vi.fn().mockResolvedValue(secondBytes) });
+    const { unmount } = render(<FileRow file={source} initiallyShowUnlock onUnlock={vi.fn()} />);
+    const picker = screen.getByLabelText('KeePass key file');
+    fireEvent.change(picker, { target: { files: [first] } });
+    await screen.findByText('first.key');
+    fireEvent.change(picker, { target: { files: [second] } });
+    await screen.findByText('second.key');
+    expect(new Uint8Array(firstBytes)).toEqual(new Uint8Array(2));
+    unmount();
+    expect(new Uint8Array(secondBytes)).toEqual(new Uint8Array(2));
+  });
+
+  it('keeps the latest key file when an earlier read finishes later', async () => {
+    const source: ImportFile = { name: 'race.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const staleBytes = new Uint8Array([1, 2]).buffer;
+    const currentBytes = new Uint8Array([3, 4]).buffer;
+    let finishFirst!: (bytes: ArrayBuffer) => void;
+    const first = new File(['first'], 'first.key');
+    const second = new File(['second'], 'second.key');
+    Object.defineProperty(first, 'arrayBuffer', {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          finishFirst = resolve;
+        }),
+    });
+    Object.defineProperty(second, 'arrayBuffer', {
+      value: vi.fn().mockResolvedValue(currentBytes),
+    });
+    const onUnlock = vi.fn();
+    render(<FileRow file={source} initiallyShowUnlock onUnlock={onUnlock} />);
+    const picker = screen.getByLabelText('KeePass key file');
+    fireEvent.change(picker, { target: { files: [first] } });
+    fireEvent.change(picker, { target: { files: [second] } });
+    await screen.findByText('second.key');
+    finishFirst(staleBytes);
+    await waitFor(() => expect(new Uint8Array(staleBytes)).toEqual(new Uint8Array(2)));
+    expect(screen.queryByText('first.key')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unlock' })[1]);
+    expect(onUnlock).toHaveBeenCalledWith(source, '', currentBytes);
+  });
+
+  it('wipes key file bytes if reading finishes after unmount', async () => {
+    const source: ImportFile = { name: 'gone.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const bytes = new Uint8Array([5, 6]).buffer;
+    let finishRead!: (bytes: ArrayBuffer) => void;
+    const selected = new File(['key'], 'gone.key');
+    Object.defineProperty(selected, 'arrayBuffer', {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          finishRead = resolve;
+        }),
+    });
+    const onUnlock = vi.fn();
+    const { unmount } = render(<FileRow file={source} initiallyShowUnlock onUnlock={onUnlock} />);
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    unmount();
+    finishRead(bytes);
+    await waitFor(() => expect(new Uint8Array(bytes)).toEqual(new Uint8Array(2)));
+    expect(onUnlock).not.toHaveBeenCalled();
+  });
+
+  it('wipes a pending key file read when the source finishes', async () => {
+    const source: ImportFile = { name: 'done.kdbx', format: 'KeePass', status: 'unlock-required' };
+    const bytes = new Uint8Array([7, 8]).buffer;
+    let finishRead!: (bytes: ArrayBuffer) => void;
+    const selected = new File(['key'], 'done.key');
+    Object.defineProperty(selected, 'arrayBuffer', {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          finishRead = resolve;
+        }),
+    });
+    const props = { initiallyShowUnlock: true, onUnlock: vi.fn() };
+    const { rerender } = render(<FileRow file={source} {...props} />);
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    rerender(<FileRow file={{ ...source, status: 'imported' }} {...props} />);
+    finishRead(bytes);
+    await waitFor(() => expect(new Uint8Array(bytes)).toEqual(new Uint8Array(2)));
+  });
+
+  it('keeps the Locked row and its factors mounted during an unlock attempt', async () => {
+    const source: ImportFile = {
+      id: 'locked',
+      name: 'vault.kdbx',
+      format: 'KeePass',
+      status: 'unlock-required',
+    };
+    const bytes = new Uint8Array([1, 2]).buffer;
+    const selected = new File(['key'], 'vault.key');
+    Object.defineProperty(selected, 'arrayBuffer', { value: vi.fn().mockResolvedValue(bytes) });
+    const onUnlock = vi.fn();
+    const props = { onUnlock };
+    const { rerender } = render(<SourceImportStatus files={[source]} {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Locked 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    const passwordInput = screen.getByLabelText('Master password') as HTMLInputElement;
+    fireEvent.change(passwordInput, { target: { value: 'wrong' } });
+    fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [selected] } });
+    await screen.findByText('vault.key');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unlock' })[1]);
+    expect(onUnlock).toHaveBeenCalledWith(source, 'wrong', bytes);
+
+    rerender(<SourceImportStatus files={[{ ...source, status: 'unlocking' }]} {...props} />);
+    expect(screen.getByRole('button', { name: 'Locked 1' })).toBeTruthy();
+    expect(screen.getByLabelText('Master password')).toBe(passwordInput);
+    expect((passwordInput as HTMLInputElement).value).toBe('wrong');
+    expect(screen.getByText('vault.key')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Unlock' })[0].hasAttribute('disabled')).toBe(
+      true,
+    );
+
+    rerender(<SourceImportStatus files={[source]} {...props} />);
+    expect(screen.getByLabelText('Master password')).toBe(passwordInput);
+    expect(screen.getByText('vault.key')).toBeTruthy();
+    rerender(<SourceImportStatus files={[{ ...source, status: 'imported' }]} {...props} />);
+    expect(screen.getByRole('button', { name: 'Locked 0' })).toBeTruthy();
+    expect(screen.getByText('No sources match this filter.')).toBeTruthy();
   });
 
   it('renders the actual parser failure instead of format-specific fixture text', () => {

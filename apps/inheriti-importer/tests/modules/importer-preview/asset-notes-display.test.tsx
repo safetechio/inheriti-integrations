@@ -6,6 +6,32 @@ import type { ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
 
 afterEach(cleanup);
 
+it('shows a dash for both secret and Source when a field is unmapped', () => {
+  const asset: ReviewAsset = {
+    id: 'unmapped',
+    name: 'Unmapped',
+    type: 'API-KEY',
+    status: 'needs-review',
+    rationale: '',
+    mapped: [],
+    unmapped: [],
+    source: 'import',
+    alternatives: [],
+    schemaFields: [
+      { key: 'secret.apiKey', label: 'API key', candidates: [{ id: 'candidate', name: 'token' }] },
+    ],
+  };
+  const { container } = render(<InspectorFields asset={asset} />);
+  const field = container.querySelector('.asset-schema-field-row');
+  expect(field?.textContent?.match(/—/g)).toHaveLength(2);
+  expect(field?.textContent).toContain('Source');
+  asset.schemaFields![0]!.candidates = [];
+  const { container: withoutCandidates } = render(<InspectorFields asset={asset} />);
+  expect(
+    withoutCandidates.querySelector('.asset-schema-field-row')?.textContent?.match(/—/g),
+  ).toHaveLength(2);
+});
+
 it('separates visible plan notes from protected secret fields', () => {
   const asset: ReviewAsset = {
     id: 'asset-1',
@@ -81,7 +107,7 @@ it('shows fallback notes separately from the plain text secret and allows remapp
   expect(screen.getByText('Notes or guidelines')).toBeTruthy();
   expect(screen.queryByText('secret body')).toBeNull();
   fireEvent.click(
-    screen.getByRole('button', { name: 'Remove Notes or guidelines from this Asset' }),
+    screen.getByRole('button', { name: 'Exclude Notes or guidelines field from this Asset' }),
   );
   expect(mapped).toEqual([['meta.notes', undefined]]);
 });

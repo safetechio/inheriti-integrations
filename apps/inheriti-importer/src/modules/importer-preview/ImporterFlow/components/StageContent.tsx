@@ -65,6 +65,7 @@ export function StageContent({
     return (
       <AssetReviewQueue
         assets={flow.assets}
+        sourceFiles={flow.files}
         description={description}
         selectedId={flow.selectedAssetId}
         onSelect={flow.selectAsset}
