@@ -126,6 +126,12 @@
   overflow: auto;
   padding: var(--importer-stage-padding-block) var(--importer-stage-padding-inline);
 }
+@media (min-width: 1001px) {
+  .importer-flow-scroll.is-asset-review {
+    display: flex;
+    overflow: hidden;
+  }
+}
 .importer-flow-scroll .mw-panel-header {
   padding: 0;
   border-bottom: 0;

@@ -185,7 +185,7 @@ export function ImporterFlow({
               />
             ) : null}
           </Box>
-          <Box className="importer-flow-scroll">
+          <Box className={`importer-flow-scroll${stage === 'assets' ? ' is-asset-review' : ''}`}>
             <StageContent
               stage={stage}
               description={stageDescription}

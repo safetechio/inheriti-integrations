@@ -151,22 +151,23 @@ export function FileRow({
         <Box
           className="source-unlock-panel"
           flexDirection="row"
-          alignItems="center"
+          alignItems="flex-end"
           gap="s"
           style={{ flexWrap: 'wrap' }}
         >
-          <Text variant="bodySmall" color="info120">
+          <Text variant="bodySmall" color="info120" style={{ width: '100%' }}>
             Enter the credentials required by this KeePass file.
           </Text>
-          <FormTextInput
-            label="Master password"
-            autoFocus
-            secureTextEntry={!showPassword}
-            placeholder="Master password"
-            value={password}
-            onChangeText={setPassword}
-            style={{ flex: '1 1 180px', minWidth: 180 }}
-          />
+          <Box style={{ flex: '1 1 180px', minWidth: 180 }}>
+            <FormTextInput
+              label="Master password"
+              autoFocus
+              secureTextEntry={!showPassword}
+              placeholder="Master password"
+              value={password}
+              onChangeText={setPassword}
+            />
+          </Box>
           <Button
             title={showPassword ? 'Hide password' : 'Show password'}
             accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}

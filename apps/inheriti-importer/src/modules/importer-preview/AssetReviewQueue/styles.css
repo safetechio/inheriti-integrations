@@ -4,9 +4,29 @@
 .asset-review-queue {
   flex: 1 1 260px;
   min-width: 0;
-  max-height: min(70vh, 720px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+}
+@media (min-width: 1001px) {
+  .is-asset-review .asset-review-surface {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+  .is-asset-review .asset-review-columns {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+    flex-wrap: nowrap !important;
+  }
+  .is-asset-review .asset-review-queue,
+  .is-asset-review .asset-review-inspector {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 12px 4px 4px !important;
+    scrollbar-gutter: stable;
+  }
+  .is-asset-review .asset-review-inspector {
+    position: static;
+  }
 }
 .asset-review-inspector {
   flex: 2 1 400px;
@@ -52,6 +72,13 @@
   cursor: pointer;
   color: var(--gray);
 }
+.asset-review-search-toggle {
+  display: flex;
+  min-width: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+}
 .asset-review-row-name {
   display: block;
   max-width: 100%;
@@ -86,13 +113,18 @@
 .asset-review-row.is-selected {
   background: var(--importer-color-surface) !important;
   border-color: var(--primary) !important;
-  box-shadow: var(--importer-shadow-focus) !important;
+}
+.asset-review-queue [role='button']:has(> .asset-review-row):focus-visible {
+  box-shadow: none !important;
+}
+.asset-review-queue [role='button']:focus-visible > .asset-review-row {
+  box-shadow: inset 0 0 0 2px var(--primary) !important;
 }
 .asset-inspector-card {
   border-radius: var(--importer-radius-card) !important;
   padding: var(--importer-inspector-padding) !important;
   background: var(--importer-color-surface) !important;
-  box-shadow: var(--importer-shadow-card);
+  box-shadow: none !important;
 }
 .asset-inspector-heading {
   flex: 1;

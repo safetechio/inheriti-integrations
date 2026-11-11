@@ -1,8 +1,7 @@
-import { useContext, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
-import { Box, Text } from '@modules/_shared/ui/components';
+import { Box } from '@modules/_shared/ui/components';
 import { AppHeader } from '../AppHeader';
-import { VersionContext } from '@modules/_shared/ui/components/UpdateStatus/UpdateGate';
 import type { DiscardSummary } from '../DiscardAllControl';
 
 type AppShellProps = {
@@ -12,26 +11,6 @@ type AppShellProps = {
   discardSummary?: DiscardSummary;
   onConfirmDiscardAll?: () => void;
 };
-
-export function AppVersionBar() {
-  const version = useContext(VersionContext);
-  return (
-    <Box
-      backgroundColor="#303437"
-      paddingHorizontal="m"
-      flexDirection="row"
-      alignItems="center"
-      justifyContent="flex-end"
-      style={{ minHeight: 28 }}
-    >
-      {version ? (
-        <Text variant="bodySmall" style={{ color: '#F5F5F5', fontSize: 12 }}>
-          Version {version}
-        </Text>
-      ) : null}
-    </Box>
-  );
-}
 
 export function AppShell({
   dirtyCount,
@@ -43,9 +22,8 @@ export function AppShell({
   return (
     <Box
       className="app"
-      style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr)', minHeight: '100vh' }}
+      style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', minHeight: '100vh' }}
     >
-      <AppVersionBar />
       <Box
         className="titlebar"
         accessibilityRole="header"

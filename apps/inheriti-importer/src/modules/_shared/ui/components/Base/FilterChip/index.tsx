@@ -5,6 +5,8 @@ import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
 
 export interface FilterChipProps {
   children: ReactNode;
+  icon?: ReactNode;
+  accessibilityLabel?: string;
   selected?: boolean;
   disabled?: boolean;
   onPress?: () => void;
@@ -15,6 +17,8 @@ export interface FilterChipProps {
 
 export function FilterChip({
   children,
+  icon,
+  accessibilityLabel,
   selected = false,
   disabled = false,
   onPress,
@@ -29,6 +33,7 @@ export function FilterChip({
       onPress={handlePress}
       disabled={disabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       aria-pressed={selected}
       {...(handlePress ? keyboardActivation(handlePress) : {})}
     >
@@ -57,6 +62,7 @@ export function FilterChip({
             : undefined
         }
       >
+        {icon}
         <Text
           variant={variant === 'tab' ? 'bodyRegular' : 'filterChip'}
           color={selected ? 'primary120' : 'gray'}

@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import { SignInGate } from '@modules/auth/ui/components/SignInGate';
-import { AppShell, AppVersionBar } from '@modules/import/ui/components/AppShell';
+import { AppShell } from '@modules/import/ui/components/AppShell';
 import { ImportPanel } from '@modules/import/ui/components/ImportPanel';
-import { VersionContext } from '@modules/_shared/ui/components/UpdateStatus/UpdateGate';
 import { Box } from '@modules/_shared/ui/components';
 import { ShellFixture } from './shell-fixtures';
 
@@ -36,12 +35,6 @@ export const SavedAccount = () => (
     onCancel={noop}
   />
 );
-export const VersionBar = () => (
-  <VersionContext.Provider value="0.1.16-dev.0">
-    <AppVersionBar />
-  </VersionContext.Provider>
-);
-
 export const SignInChecking = () => (
   <SignInGate
     status="checking"

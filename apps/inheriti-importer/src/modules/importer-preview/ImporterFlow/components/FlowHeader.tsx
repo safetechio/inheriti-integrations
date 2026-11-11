@@ -1,7 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { BaseModal, Box, Button, Icon, Text, theme } from '@main-components';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
-import { AppVersionBar } from '@modules/import/ui/components/AppShell';
 
 export function CancelImportControl({
   fileCount,
@@ -65,18 +64,15 @@ export function CancelImportControl({
 
 export function FlowHeader({ actions }: { actions?: ReactNode }) {
   return (
-    <>
-      <AppVersionBar />
-      <Box
-        className="importer-flow-header titlebar"
-        flexDirection="row"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <BrandLogo />
-        {actions}
-      </Box>
-    </>
+    <Box
+      className="importer-flow-header titlebar"
+      flexDirection="row"
+      justifyContent="space-between"
+      alignItems="center"
+    >
+      <BrandLogo />
+      {actions}
+    </Box>
   );
 }
 

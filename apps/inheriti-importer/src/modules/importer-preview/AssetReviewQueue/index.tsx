@@ -1,4 +1,4 @@
-import { Box, Icon, FilterChip, NoItemsPlaceholder, Stack, Text } from '@main-components';
+import { Box, Icon, FilterChip, NoItemsPlaceholder, Stack, Text, theme } from '@main-components';
 import { useEffect, useState } from 'react';
 import { AssetRow } from './components/AssetRow';
 import { Inspector } from './components/Inspector';
@@ -140,8 +140,8 @@ export function AssetReviewQueue({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onAction, onSelect, selected, visible]);
   return (
-    <Stack gap="m" style={{ gap: 12 }}>
-      <Box flexDirection="row" alignItems="center" gap="s" className="asset-review-toolbar">
+    <Stack gap="m" className="asset-review-surface" style={{ gap: 12 }}>
+      <Box flexDirection="row" alignItems="flex-end" gap="s" className="asset-review-toolbar">
         <label className="asset-review-source-label">
           Source
           <select
@@ -227,13 +227,33 @@ export function AssetReviewQueue({
       </Box>
       {canShowTree ? (
         <Box flexDirection="row" gap="s" className="asset-review-view-picker">
-          <FilterChip selected={view === 'list'} onPress={() => setView('list')}>
-            <Icon name="list" size={16} color="gray" />
-            {'  '}List
+          <FilterChip
+            selected={view === 'list'}
+            onPress={() => setView('list')}
+            accessibilityLabel="List"
+            icon={
+              <Icon
+                name="list"
+                size={16}
+                color={view === 'list' ? theme.colors.primary120 : theme.colors.gray}
+              />
+            }
+          >
+            List
           </FilterChip>
-          <FilterChip selected={view === 'tree'} onPress={() => setView('tree')}>
-            <Icon name="sitemap" size={16} color="gray" />
-            {'  '}Tree
+          <FilterChip
+            selected={view === 'tree'}
+            onPress={() => setView('tree')}
+            accessibilityLabel="Tree"
+            icon={
+              <Icon
+                name="sitemap"
+                size={16}
+                color={view === 'tree' ? theme.colors.primary120 : theme.colors.gray}
+              />
+            }
+          >
+            Tree
           </FilterChip>
         </Box>
       ) : null}

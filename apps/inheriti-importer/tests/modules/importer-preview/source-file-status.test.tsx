@@ -20,6 +20,9 @@ describe('source file status', () => {
     render(<FileRow file={source} initiallyShowUnlock onUnlock={onUnlock} />);
 
     expect(screen.getByText('Master password')).toBeTruthy();
+    const passwordInput = screen.getByLabelText('Master password') as HTMLInputElement;
+    expect(passwordInput.style.flex).toBe('');
+    expect(passwordInput.parentElement?.parentElement?.style.flex).toBe('1 1 180px');
     fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [keyFile] } });
     await screen.findByText('vault.key');
     const submit = screen.getAllByRole('button', { name: 'Unlock' })[1];

@@ -357,6 +357,20 @@ export const WholeImporterFlowAssets = () => (
     checklist={checklist}
   />
 );
+export const WholeImporterFlowAssetsLongList = () => (
+  <ImporterFlow
+    initialStage="assets"
+    files={sourceFiles}
+    assets={Array.from({ length: 20 }, (_, index) => ({
+      ...reviewAssets[0],
+      id: `scroll-example-${index + 1}`,
+      name: `Example asset ${String(index + 1).padStart(2, '0')}`,
+    }))}
+    unassigned={unassigned}
+    plans={plans}
+    checklist={checklist}
+  />
+);
 export const WholeImporterFlowAssetsManualAdvance = () => (
   <ImporterFlow
     initialStage="assets"

@@ -85,9 +85,20 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
       />,
     );
     fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
-    expect(screen.getByLabelText('list')).toBeTruthy();
-    expect(screen.getByLabelText('sitemap')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Tree' }).getAttribute('aria-pressed')).toBe('false');
+    const listIcon = screen
+      .getByRole('button', { name: 'List' })
+      .querySelector('[data-testid]') as HTMLElement;
+    const treeIcon = screen
+      .getByRole('button', { name: 'Tree' })
+      .querySelector('[data-testid]') as HTMLElement;
+    expect(listIcon.style.color).toBe('rgb(22, 66, 186)');
+    expect(treeIcon.style.color).toBe('rgb(71, 84, 103)');
     fireEvent.click(screen.getByText('Tree'));
+    expect(screen.getByRole('button', { name: 'Tree' }).getAttribute('aria-pressed')).toBe('true');
+    expect(treeIcon.style.color).toBe('rgb(22, 66, 186)');
+    expect(listIcon.style.color).toBe('rgb(71, 84, 103)');
     expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
     fireEvent.click(screen.getByText(/Infrastructure/));
     fireEvent.click(screen.getByText(/Database/));

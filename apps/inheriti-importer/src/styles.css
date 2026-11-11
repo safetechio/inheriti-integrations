@@ -110,6 +110,26 @@
   box-shadow: var(--importer-shadow-focus) !important;
 }
 
+@media (forced-colors: none) {
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--gray-50);
+    border-radius: var(--importer-radius-pill);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--gray);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mapping-workspace,
   .complete-step {
