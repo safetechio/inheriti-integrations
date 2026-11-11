@@ -99,11 +99,6 @@ export function OrganizationMenu({
                 backgroundColor={item.id === organization?.id ? 'primary5' : 'white'}
                 style={{ cursor: 'pointer' }}
               >
-                <Icon
-                  name="building"
-                  size={16}
-                  color={item.id === organization?.id ? 'primary' : 'gray'}
-                />
                 <Text variant="bodySmall" color="gray120" numberOfLines={1}>
                   {organizationDisplayName(item, memberships)}
                 </Text>
