@@ -50,7 +50,7 @@
 .source-unlock-reveal {
   position: absolute;
   right: 5px;
-  top: 30px;
+  top: 34px;
 }
 @media (max-width: 640px) {
   .source-file-card {
