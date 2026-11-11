@@ -15,7 +15,7 @@ export default function OrganizationGate({
 }) {
   const queryClient = useQueryClient();
   const authNotice = useAuthState((state) => (state as { notice?: string | null }).notice ?? null);
-  const { memberships, loading, error } = useOrganizationMemberships();
+  const { memberships, loading, isRefetching, error } = useOrganizationMemberships();
   const {
     phase,
     blockedReason,
@@ -38,12 +38,22 @@ export default function OrganizationGate({
     canUse;
 
   useEffect(() => {
-    if (error || loading || phase !== 'idle' || selectedOrganizationId || pendingOrganizationId)
+    if (
+      error ||
+      loading ||
+      isRefetching ||
+      pendingOrganizationId ||
+      phase === 'switching' ||
+      phase === 'checking'
+    )
       return;
-    if (memberships.length === 1) void selectOrganization(memberships[0].id);
+    if (selectedOrganizationId && memberships.some((item) => item.id === selectedOrganizationId))
+      return;
+    if (memberships.length) void selectOrganization(memberships[0].id);
   }, [
     error,
     loading,
+    isRefetching,
     memberships,
     phase,
     selectedOrganizationId,
@@ -52,7 +62,14 @@ export default function OrganizationGate({
   ]);
 
   useEffect(() => {
-    if (error || loading || phase !== 'idle' || !selectedOrganizationId || pendingOrganizationId)
+    if (
+      error ||
+      loading ||
+      phase !== 'idle' ||
+      !selectedOrganizationId ||
+      pendingOrganizationId ||
+      !memberships.some((item) => item.id === selectedOrganizationId)
+    )
       return;
     if (accessOrganizationId === selectedOrganizationId && !accessLoading && canUse) return;
     void selectOrganization(selectedOrganizationId);
@@ -65,6 +82,7 @@ export default function OrganizationGate({
     accessOrganizationId,
     accessLoading,
     canUse,
+    memberships,
     selectOrganization,
   ]);
 

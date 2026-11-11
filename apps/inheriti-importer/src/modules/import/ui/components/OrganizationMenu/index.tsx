@@ -76,21 +76,21 @@ export function OrganizationMenu({
           borderColor="gray10"
           style={{ zIndex: 1000, elevation: 20, boxShadow: '0 12px 28px rgba(16, 24, 40, 0.12)' }}
         >
-          <Text variant="bodySmall" color="gray" style={{ padding: 8 }}>
+          <Text variant="bodySmall" color="gray" style={{ padding: theme.spacing.s }}>
             Organisation
           </Text>
           {error ? (
             <Pressable accessibilityRole="menuitem" onPress={retry}>
-              <Text variant="bodySmall" color="danger">
+              <Text variant="bodySmall" color="danger" style={{ padding: theme.spacing.s }}>
                 Could not load organisations. Retry
               </Text>
             </Pressable>
           ) : loading ? (
-            <Text variant="bodySmall" color="gray">
+            <Text variant="bodySmall" color="gray" style={{ padding: theme.spacing.s }}>
               Loading organisations…
             </Text>
           ) : memberships.length === 0 ? (
-            <Text variant="bodySmall" color="gray">
+            <Text variant="bodySmall" color="gray" style={{ padding: theme.spacing.s }}>
               No organisations available
             </Text>
           ) : (

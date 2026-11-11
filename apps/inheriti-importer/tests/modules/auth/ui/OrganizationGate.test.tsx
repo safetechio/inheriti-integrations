@@ -7,6 +7,7 @@ const { state, selectOrganization, retry } = vi.hoisted(() => ({
   state: {
     memberships: [] as { id: string; name: string; isOwned: boolean }[],
     loading: false,
+    isRefetching: false,
     error: null as Error | null,
     phase: 'idle',
     blockedReason: null as string | null,
@@ -27,7 +28,12 @@ vi.mock('@shared/infrastructure/importer-api', () => ({
   useAuthState: (selector: (state: { notice: null }) => unknown) => selector({ notice: null }),
 }));
 vi.mock('@modules/organization/application/use-organization-memberships', () => ({
-  default: () => ({ memberships: state.memberships, loading: state.loading, error: state.error }),
+  default: () => ({
+    memberships: state.memberships,
+    loading: state.loading,
+    isRefetching: state.isRefetching,
+    error: state.error,
+  }),
 }));
 vi.mock('@modules/organization/application/use-switch-organization-flow', () => ({
   default: () => ({ ...state, selectOrganization }),
@@ -71,6 +77,7 @@ beforeEach(() => {
   Object.assign(state, {
     memberships: [],
     loading: false,
+    isRefetching: false,
     error: null,
     phase: 'idle',
     blockedReason: null,
@@ -141,7 +148,7 @@ describe('OrganizationGate landing', () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
-  it('does not arbitrarily select one of several organisations', () => {
+  it('selects the first available organisation when no selection exists', () => {
     state.memberships = [
       { id: 'org-a', name: 'A', isOwned: true },
       { id: 'org-b', name: 'B', isOwned: false },
@@ -151,7 +158,81 @@ describe('OrganizationGate landing', () => {
     expect(
       view.getByText('Choose an organisation from the menu above to start an import.'),
     ).toBeTruthy();
+    expect(selectOrganization).toHaveBeenCalledWith('org-a');
+  });
+
+  it('preserves a valid selection and a pending manual switch', () => {
+    state.memberships = [
+      { id: 'org-a', name: 'A', isOwned: true },
+      { id: 'org-b', name: 'B', isOwned: false },
+    ];
+    state.selectedOrganizationId = 'org-b';
+    gate();
+    expect(selectOrganization).not.toHaveBeenCalledWith('org-a');
+    cleanup();
+    vi.clearAllMocks();
+    state.selectedOrganizationId = null;
+    state.pendingOrganizationId = 'org-b';
+    state.phase = 'switching';
+    gate();
     expect(selectOrganization).not.toHaveBeenCalled();
+  });
+
+  it('replaces a stale saved selection only after memberships resolve successfully', () => {
+    state.memberships = [{ id: 'org-a', name: 'A', isOwned: true }];
+    state.selectedOrganizationId = 'org-old';
+    state.loading = true;
+    const view = gate();
+    expect(selectOrganization).not.toHaveBeenCalled();
+    state.loading = false;
+    state.error = new ApiStatusError('denied', 403);
+    view.rerender(
+      <OrganizationGate onSignOut={vi.fn()}>
+        <p>Operational importer</p>
+      </OrganizationGate>,
+    );
+    expect(selectOrganization).not.toHaveBeenCalled();
+    state.error = null;
+    view.rerender(
+      <OrganizationGate onSignOut={vi.fn()}>
+        <p>Operational importer</p>
+      </OrganizationGate>,
+    );
+    expect(selectOrganization).toHaveBeenCalledWith('org-a');
+  });
+
+  it('waits for a background refetch before replacing an apparently stale selection', () => {
+    state.memberships = [{ id: 'org-a', name: 'A', isOwned: true }];
+    state.selectedOrganizationId = 'org-b';
+    state.isRefetching = true;
+    const view = gate();
+    expect(selectOrganization).not.toHaveBeenCalledWith('org-a');
+    state.memberships = [
+      { id: 'org-a', name: 'A', isOwned: true },
+      { id: 'org-b', name: 'B', isOwned: false },
+    ];
+    state.isRefetching = false;
+    view.rerender(
+      <OrganizationGate onSignOut={vi.fn()}>
+        <p>Operational importer</p>
+      </OrganizationGate>,
+    );
+    expect(selectOrganization).not.toHaveBeenCalledWith('org-a');
+  });
+
+  it.each([401, 403, 500])('does not replace a saved selection after refetch HTTP %i', (status) => {
+    state.memberships = [{ id: 'org-a', name: 'A', isOwned: true }];
+    state.selectedOrganizationId = 'org-b';
+    state.isRefetching = true;
+    const view = gate();
+    state.isRefetching = false;
+    state.error = new ApiStatusError('failed', status);
+    view.rerender(
+      <OrganizationGate onSignOut={vi.fn()}>
+        <p>Operational importer</p>
+      </OrganizationGate>,
+    );
+    expect(selectOrganization).not.toHaveBeenCalledWith('org-a');
   });
 
   it('auto-selects the only organisation, then mounts the importer only after matching access', () => {

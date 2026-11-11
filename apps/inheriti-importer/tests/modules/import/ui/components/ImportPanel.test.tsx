@@ -64,7 +64,21 @@ describe('ImportPanel', () => {
     dropzone?.dispatchEvent(dropEvent);
     fireEvent.click(getByText('Choose files'));
     expect(getByText('Checking organisation access…')).toBeTruthy();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      'Checking organisation access…',
+    );
+    expect(container.querySelector('.dropzone > div')?.getAttribute('style')).toContain(
+      'opacity: 0.35',
+    );
     expect(filesFromList).not.toHaveBeenCalled();
     expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it('keeps import content fully visible when enabled', () => {
+    const { container } = render(<ImportPanel busy={false} error={null} onImport={vi.fn()} />);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.querySelector('.dropzone > div')?.getAttribute('style')).toContain(
+      'opacity: 1',
+    );
   });
 });
