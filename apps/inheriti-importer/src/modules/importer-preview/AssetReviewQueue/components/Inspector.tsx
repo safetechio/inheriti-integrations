@@ -49,6 +49,15 @@ export function Inspector({
             <Badge tone={statusBadge[asset.status].tone}>{statusLabel[asset.status]}</Badge>
           ) : null}
         </Box>
+        {asset.type !== 'PLAIN-TEXT' && asset.unmapped.length > 0 ? (
+          <Notice
+            compact
+            tone="info"
+            icon="circle-info"
+            title={`${asset.unmapped.length} unmapped ${asset.unmapped.length === 1 ? 'field' : 'fields'} omitted`}
+            description="To include all data, change the asset type to Plain Text."
+          />
+        ) : null}
         <Box gap="xs">
           <Text variant="importerFieldLabel">Asset type</Text>
           <select
@@ -66,15 +75,6 @@ export function Inspector({
             ))}
           </select>
         </Box>
-        {asset.type !== 'PLAIN-TEXT' && asset.unmapped.length > 0 ? (
-          <Notice
-            compact
-            tone="warning"
-            icon="circle-exclamation"
-            title={`${asset.unmapped.length} unmapped ${asset.unmapped.length === 1 ? 'field' : 'fields'} omitted`}
-            description="To include all data, change the asset type to Plain Text."
-          />
-        ) : null}
         <InspectorFields
           asset={asset}
           resolveSourceValue={resolveSourceValue}
