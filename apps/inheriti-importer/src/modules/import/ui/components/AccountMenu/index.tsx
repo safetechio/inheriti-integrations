@@ -102,8 +102,8 @@ export function AccountMenu({
             alignItems="center"
             gap="s"
             borderWidth={1}
-            borderColor="gray30"
-            borderRadius="pill"
+            borderColor="gray120"
+            borderRadius="s"
             paddingHorizontal="m"
             height={40}
           >

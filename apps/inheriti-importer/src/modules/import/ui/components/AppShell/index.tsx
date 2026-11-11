@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
-import { Box } from '@modules/_shared/ui/components';
+import { Box, Text } from '@modules/_shared/ui/components';
 import { AppHeader } from '../AppHeader';
-import { UpdateStatus } from '@modules/_shared/ui/components/UpdateStatus';
+import { VersionContext } from '@modules/_shared/ui/components/UpdateStatus/UpdateGate';
 import type { DiscardSummary } from '../DiscardAllControl';
 
 type AppShellProps = {
@@ -14,15 +14,21 @@ type AppShellProps = {
 };
 
 export function AppVersionBar() {
+  const version = useContext(VersionContext);
   return (
     <Box
-      backgroundColor="gray10"
+      backgroundColor="#303437"
       paddingHorizontal="m"
-      alignItems="flex-end"
-      justifyContent="center"
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="flex-end"
       style={{ minHeight: 28 }}
     >
-      <UpdateStatus />
+      {version ? (
+        <Text variant="bodySmall" style={{ color: '#F5F5F5', fontSize: 12 }}>
+          Version {version}
+        </Text>
+      ) : null}
     </Box>
   );
 }
@@ -40,7 +46,14 @@ export function AppShell({
       style={{ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr)', minHeight: '100vh' }}
     >
       <AppVersionBar />
-      <Box className="titlebar" accessibilityRole="header">
+      <Box
+        className="titlebar"
+        accessibilityRole="header"
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="space-between"
+        flexWrap="wrap"
+      >
         <Box className="brand">
           <BrandLogo className="brand-logo" />
         </Box>

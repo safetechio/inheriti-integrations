@@ -17,7 +17,6 @@
   min-height: 155px;
 }
 
-.plan-asset-filters input,
 .plan-asset-filters select {
   min-width: 0;
   padding: 8px;
@@ -26,8 +25,35 @@
   background: white;
 }
 
-.plan-asset-filters input {
+.plan-asset-filters {
+  flex-wrap: wrap;
+}
+
+.plan-asset-filters select {
   flex: 1;
+}
+
+.plan-asset-search {
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--gray-30);
+  border-radius: 6px;
+}
+
+.plan-asset-search input {
+  min-width: 120px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+
+.plan-asset-search button,
+.plan-asset-search-toggle {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--gray);
 }
 
 .plan-grouping-details {
@@ -35,11 +61,19 @@
 }
 
 .plan-asset-row {
-  padding: 10px var(--importer-section-gap);
+  padding: var(--importer-section-gap) var(--importer-control-padding-inline);
   border: var(--importer-border-width) solid var(--gray-10);
-  border-radius: 10px;
-  background: var(--gray-5);
+  border-radius: var(--importer-radius-input);
+  background: var(--importer-color-surface);
   cursor: grab;
+}
+
+.plan-asset-row-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plan-asset-row.is-dragged {

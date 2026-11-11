@@ -1,4 +1,4 @@
-import { Box, Card, NoItemsPlaceholder, Stack, Text } from '@main-components';
+import { Box, Card, Icon, NoItemsPlaceholder, Stack, Text } from '@main-components';
 import { useMemo, useState } from 'react';
 import { AssetRow } from './AssetRow';
 import type { GroupingAsset, PlanDraft } from '../types';
@@ -18,6 +18,7 @@ export function UnassignedAssets({
   onAssign,
 }: UnassignedAssetsProps) {
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [source, setSource] = useState('all');
   const sources = useMemo(
     () => [...new Set(assets.map((asset) => asset.source ?? 'Unknown source'))].sort(),
@@ -33,13 +34,7 @@ export function UnassignedAssets({
       <Stack gap="s">
         <Text variant="heading3">Unassigned assets</Text>
         {assets.length ? (
-          <Box flexDirection="row" gap="s" className="plan-asset-filters">
-            <input
-              aria-label="Search unassigned assets"
-              placeholder="Search assets"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+          <Box flexDirection="row" alignItems="center" gap="s" className="plan-asset-filters">
             <select
               aria-label="Filter unassigned assets by source"
               value={source}
@@ -52,6 +47,46 @@ export function UnassignedAssets({
                 </option>
               ))}
             </select>
+            {searchOpen ? (
+              <Box flexDirection="row" alignItems="center" className="plan-asset-search">
+                <Icon name="magnifying-glass" size={14} color="gray" />
+                <input
+                  autoFocus
+                  aria-label="Search unassigned assets"
+                  placeholder="Search assets"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    aria-label="Clear unassigned asset search"
+                    onClick={() => setQuery('')}
+                  >
+                    ×
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label="Close unassigned asset search"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setQuery('');
+                  }}
+                >
+                  Close
+                </button>
+              </Box>
+            ) : (
+              <button
+                type="button"
+                className="plan-asset-search-toggle"
+                aria-label="Search unassigned assets"
+                onClick={() => setSearchOpen(true)}
+              >
+                <Icon name="magnifying-glass" size={16} color="gray" />
+              </button>
+            )}
           </Box>
         ) : null}
         {visible.length ? (

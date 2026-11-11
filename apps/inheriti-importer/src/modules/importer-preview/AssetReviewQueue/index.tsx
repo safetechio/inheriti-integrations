@@ -228,10 +228,12 @@ export function AssetReviewQueue({
       {canShowTree ? (
         <Box flexDirection="row" gap="s" className="asset-review-view-picker">
           <FilterChip selected={view === 'list'} onPress={() => setView('list')}>
-            List
+            <Icon name="list" size={16} color="gray" />
+            {'  '}List
           </FilterChip>
           <FilterChip selected={view === 'tree'} onPress={() => setView('tree')}>
-            Tree
+            <Icon name="sitemap" size={16} color="gray" />
+            {'  '}Tree
           </FilterChip>
         </Box>
       ) : null}

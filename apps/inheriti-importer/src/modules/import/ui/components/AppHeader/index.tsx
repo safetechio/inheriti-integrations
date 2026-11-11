@@ -55,7 +55,13 @@ export function AppHeader({
   }, [organizationMenuOpen, accountMenuOpen]);
 
   return (
-    <Box className="app-header-actions" flexDirection="row" alignItems="center" gap="m">
+    <Box
+      className="app-header-actions"
+      flexDirection="row"
+      alignItems="center"
+      gap="m"
+      style={{ marginLeft: 'auto' }}
+    >
       {dirtyCount > 0 ? <Text className="phase-pill">{dirtyCount} edited</Text> : null}
       {discardSummary && onConfirmDiscardAll ? (
         <DiscardAllControl summary={discardSummary} onConfirm={onConfirmDiscardAll} />

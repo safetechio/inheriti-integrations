@@ -73,6 +73,34 @@ describe('PlanGroupingSurface controls', () => {
     expect(assignButtons[1].getAttribute('aria-disabled')).toBe('true');
   });
 
+  it('uses the review-card title and reveals, clears, and closes scoped search', () => {
+    render(
+      <PlanGroupingSurface
+        unassigned={[
+          { ...validAsset, name: 'Production credential', source: 'prod.kdbx' },
+          { ...invalidAsset, source: 'staging.env' },
+        ]}
+        plans={[plan]}
+      />,
+    );
+    const title = screen.getByText('Production credential');
+    expect(title.parentElement?.getAttribute('title')).toBe('Production credential');
+    expect(title.className).toContain('plan-asset-row-name');
+    fireEvent.click(screen.getByRole('button', { name: 'Search unassigned assets' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search unassigned assets' }), {
+      target: { value: 'Broken' },
+    });
+    expect(screen.queryByText('Production credential')).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter unassigned assets by source' }), {
+      target: { value: 'prod.kdbx' },
+    });
+    expect(screen.getByText('No matching assets.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear unassigned asset search' }));
+    expect(screen.getByText('Production credential')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close unassigned asset search' }));
+    expect(screen.queryByRole('textbox', { name: 'Search unassigned assets' })).toBeNull();
+  });
+
   it('disables assignment and plan creation when their callbacks are unavailable', () => {
     render(
       <PlanGroupingSurface unassigned={[validAsset]} plans={[plan]} selectedPlanId={plan.id} />,

@@ -85,6 +85,8 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
       />,
     );
     fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    expect(screen.getByLabelText('list')).toBeTruthy();
+    expect(screen.getByLabelText('sitemap')).toBeTruthy();
     fireEvent.click(screen.getByText('Tree'));
     expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
     fireEvent.click(screen.getByText(/Infrastructure/));

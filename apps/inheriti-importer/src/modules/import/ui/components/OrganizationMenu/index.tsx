@@ -41,8 +41,8 @@ export function OrganizationMenu({
           alignItems="center"
           gap="s"
           borderWidth={1}
-          borderColor="gray30"
-          borderRadius="pill"
+          borderColor="gray120"
+          borderRadius="s"
           paddingHorizontal="m"
           height={40}
           style={{ cursor: switching ? 'wait' : 'pointer', opacity: switching ? 0.7 : 1 }}

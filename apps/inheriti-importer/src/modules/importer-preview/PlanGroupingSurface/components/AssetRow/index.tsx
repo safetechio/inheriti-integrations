@@ -31,8 +31,13 @@ export function AssetRow({
       gap="s"
     >
       <Icon name="grip-dots-vertical" size={12} color={theme.colors.gray50} />
-      <Box gap="xxs" flex={1}>
-        <Text variant="bodySmall" semibold>
+      <Box
+        gap="xxs"
+        flex={1}
+        style={{ minWidth: 0 }}
+        ref={(element) => element?.setAttribute('title', asset.name)}
+      >
+        <Text variant="importerAssetRowTitle" className="plan-asset-row-name" title={asset.name}>
           {asset.name}
         </Text>
         <Text variant="bodySmall" color="gray">

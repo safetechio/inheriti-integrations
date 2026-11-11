@@ -7,6 +7,7 @@ import OrganizationOptionRow from '@modules/organization/ui/components/Organizat
 import { organizationDisplayName } from '@modules/organization/application/organization-display-name';
 import { useAuthState } from '@shared/infrastructure/importer-api';
 import { AppHeader } from '@modules/import/ui/components/AppHeader';
+import { AppVersionBar } from '@modules/import/ui/components/AppShell';
 import { BrandLogo } from '@modules/import/ui/components/BrandLogo';
 import { useEffect, type ReactNode } from 'react';
 
@@ -97,8 +98,16 @@ export default function OrganizationGate({
   if (selectedId && !accessLoading && accessMatchesSelection && canUse) return <>{children}</>;
 
   return (
-    <Box className="app">
-      <Box className="titlebar" accessibilityRole="header">
+    <Box className="app" style={{ gridTemplateRows: 'auto auto minmax(0, 1fr)' }}>
+      <AppVersionBar />
+      <Box
+        className="titlebar"
+        accessibilityRole="header"
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="space-between"
+        flexWrap="wrap"
+      >
         <Box className="brand">
           <BrandLogo className="brand-logo" />
         </Box>

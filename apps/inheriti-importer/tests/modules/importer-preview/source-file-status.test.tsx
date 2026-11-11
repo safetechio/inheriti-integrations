@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
 import type { ImportFile } from '@modules/importer-preview/SourceImportStatus';
@@ -26,7 +26,7 @@ describe('source file status', () => {
     expect(submit.hasAttribute('disabled')).toBe(false);
     fireEvent.click(submit);
 
-    expect(onUnlock).toHaveBeenCalledWith(source, '', keyBytes);
+    await waitFor(() => expect(onUnlock).toHaveBeenCalledWith(source, '', keyBytes));
   });
 
   it('renders the actual parser failure instead of format-specific fixture text', () => {
