@@ -1,5 +1,6 @@
 import { Box, Button, Icon, Text, theme } from '@main-components';
 import type { GroupingAsset } from '../../types';
+import { getAssetTypeDisplayName } from '@modules/_shared/domain/asset-type-display-name';
 
 interface AssetRowProps {
   asset: GroupingAsset;
@@ -38,6 +39,9 @@ export function AssetRow({
       >
         <Text variant="importerAssetRowTitle" className="plan-asset-row-name" title={asset.name}>
           {asset.name}
+        </Text>
+        <Text variant="smallUppercase" color="gray">
+          {getAssetTypeDisplayName(asset.type)}
         </Text>
         {asset.valid === false ? (
           <Text variant="bodySmall" color="danger120">

@@ -19,7 +19,7 @@ export function SourceFieldPicker({
     return (
       <Box gap="xxs" className="asset-source-picker">
         <Text variant="bodySmall" color="gray" style={{ fontSize: 11 }}>
-          Source
+          source
         </Text>
         <Text variant="bodySmall" semibold>
           —
@@ -39,7 +39,7 @@ export function SourceFieldPicker({
         {field.sourceFieldId || !compactWhenUnmapped ? (
           <Box gap="xxs">
             <Text variant="bodySmall" color="gray" style={{ fontSize: 11 }}>
-              Source
+              source
             </Text>
             <Text variant="bodySmall" semibold>
               {field.sourceFieldName ? displayName(field.sourceFieldName) : '—'}

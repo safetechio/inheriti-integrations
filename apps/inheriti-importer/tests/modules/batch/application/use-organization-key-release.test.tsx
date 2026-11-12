@@ -75,6 +75,106 @@ beforeEach(() => {
 });
 
 describe('useOrganizationKeyRelease', () => {
+  it('cancels a vault lookup before it can start a relay, then permits a fresh request', async () => {
+    resetMockMasterKeySession();
+    useVerifyMasterKeyPassphrase.mockReturnValue({ verify: vi.fn() });
+    const vault = makeVault();
+    let finishLookup!: (key: string | null) => void;
+    vault.get.mockResolvedValueOnce(null).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishLookup = resolve;
+        }),
+    );
+    const reconnect = vi.fn().mockResolvedValue(undefined);
+    window.inheriti = { socket: { reconnect } } as typeof window.inheriti;
+    const { result } = renderHook(() =>
+      useOrganizationKeyRelease({ organizationId: 'org-1', identity, vault }),
+    );
+    let first!: Promise<string>;
+    act(() => {
+      first = result.current.acquire('old');
+      first.catch(() => undefined);
+    });
+    act(() => result.current.cancel());
+    await act(async () => finishLookup(null));
+    await expect(first).rejects.toThrow('cancelled');
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(result.current.state.activePlanId).toBeNull();
+    act(() => {
+      void result.current.acquire('new').catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.state.activePlanId).toBe('new'));
+  });
+
+  it('cancels a reconnect before it can register a relay, then permits a fresh request', async () => {
+    resetMockMasterKeySession();
+    useVerifyMasterKeyPassphrase.mockReturnValue({ verify: vi.fn() });
+    const vault = makeVault();
+    let finishReconnect!: () => void;
+    const reconnect = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishReconnect = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    window.inheriti = { socket: { reconnect } } as typeof window.inheriti;
+    const { result } = renderHook(() =>
+      useOrganizationKeyRelease({ organizationId: 'org-1', identity, vault }),
+    );
+    let first!: Promise<string>;
+    act(() => {
+      first = result.current.acquire('old');
+      first.catch(() => undefined);
+    });
+    await waitFor(() => expect(reconnect).toHaveBeenCalledTimes(1));
+    act(() => result.current.cancel());
+    await act(async () => finishReconnect());
+    await expect(first).rejects.toThrow('cancelled');
+    expect(result.current.state.activePlanId).toBeNull();
+    act(() => {
+      void result.current.acquire('new').catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.state.activePlanId).toBe('new'));
+  });
+
+  it('does not persist a delivered key when verification completes after cancellation', async () => {
+    resetMockMasterKeySession();
+    let finishVerify!: (valid: boolean) => void;
+    const verify = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishVerify = resolve;
+        }),
+    );
+    useVerifyMasterKeyPassphrase.mockReturnValue({ verify });
+    decryptRSAOAEP.mockResolvedValue('org-key');
+    computePassphraseVerifier.mockResolvedValue('verifier');
+    const vault = makeVault();
+    const { result } = renderHook(() =>
+      useOrganizationKeyRelease({ organizationId: 'org-1', identity, vault }),
+    );
+    let acquisition!: Promise<string>;
+    act(() => {
+      acquisition = result.current.acquire('old');
+      acquisition.catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.state.activePlanId).toBe('old'));
+    let delivery!: Promise<void> | undefined;
+    act(() => {
+      delivery = latestOptions.onDelivered?.('encrypted', {}) as Promise<void>;
+    });
+    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+    act(() => result.current.cancel());
+    await act(async () => finishVerify(true));
+    await delivery;
+    await expect(acquisition).rejects.toThrow('cancelled');
+    expect(vault.set).not.toHaveBeenCalled();
+  });
+
   it('acquires the key for a Plan via a Plan-bound relay session (passes planId through)', async () => {
     resetMockMasterKeySession();
     useVerifyMasterKeyPassphrase.mockReturnValue({ verify: vi.fn().mockResolvedValue(true) });

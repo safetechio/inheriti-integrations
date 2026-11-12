@@ -6,7 +6,7 @@ import type { ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
 
 afterEach(cleanup);
 
-it('shows a dash for both secret and Source when a field is unmapped', () => {
+it('shows a dash for both secret and source when a field is unmapped', () => {
   const asset: ReviewAsset = {
     id: 'unmapped',
     name: 'Unmapped',
@@ -24,7 +24,7 @@ it('shows a dash for both secret and Source when a field is unmapped', () => {
   const { container } = render(<InspectorFields asset={asset} />);
   const field = container.querySelector('.asset-schema-field-row');
   expect(field?.textContent?.match(/—/g)).toHaveLength(2);
-  expect(field?.textContent).toContain('Source');
+  expect(field?.textContent).toContain('source');
   asset.schemaFields![0]!.candidates = [];
   const { container: withoutCandidates } = render(<InspectorFields asset={asset} />);
   expect(

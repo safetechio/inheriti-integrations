@@ -121,7 +121,7 @@ function AuthenticatedImporter() {
   }, []);
 
   function discardAll() {
-    batchController.cancel();
+    batchController.reset();
     setStagingComplete(false);
     imports.purge();
     workspace.resetReview();

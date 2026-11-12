@@ -1,5 +1,5 @@
 import { Box, Card, Icon, NoItemsPlaceholder, Stack, Text } from '@main-components';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AssetRow } from './AssetRow';
 import type { GroupingAsset, PlanDraft } from '../types';
 import type { usePlanGrouping } from '../hooks/use-plan-grouping';
@@ -24,9 +24,13 @@ export function UnassignedAssets({
     () => [...new Set(assets.map((asset) => asset.source ?? 'Unknown source'))].sort(),
     [assets],
   );
+  const selectedSource = source === 'all' || sources.includes(source) ? source : 'all';
+  useEffect(() => {
+    if (selectedSource !== source) setSource('all');
+  }, [selectedSource, source]);
   const visible = assets.filter(
     (asset) =>
-      (source === 'all' || (asset.source ?? 'Unknown source') === source) &&
+      (selectedSource === 'all' || (asset.source ?? 'Unknown source') === selectedSource) &&
       asset.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
   return (
@@ -37,7 +41,7 @@ export function UnassignedAssets({
           <Box flexDirection="row" alignItems="center" gap="s" className="plan-asset-filters">
             <select
               aria-label="Filter unassigned assets by source"
-              value={source}
+              value={selectedSource}
               onChange={(event) => setSource(event.target.value)}
             >
               <option value="all">All sources</option>

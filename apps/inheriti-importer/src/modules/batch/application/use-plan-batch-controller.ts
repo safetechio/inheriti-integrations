@@ -50,6 +50,7 @@ export interface PlanBatchControllerState {
   retryCreate: (planId: string) => void;
   retryConfigure: (planId: string) => void;
   cancel: () => void;
+  reset: () => void;
 }
 
 export function usePlanBatchController({
@@ -99,6 +100,11 @@ export function usePlanBatchController({
     completionArmed.current = false;
     actions.cancel();
   }, [actions.cancel]);
+  const reset = useCallback(() => {
+    completionArmed.current = false;
+    actions.cancel();
+    batch.reset();
+  }, [actions.cancel, batch.reset]);
   useEffect(() => {
     if (
       !completionArmed.current ||
@@ -138,5 +144,6 @@ export function usePlanBatchController({
     retryCreate: (planId) => run(() => actions.retryCreate(planId)),
     retryConfigure: (planId) => run(() => actions.retryConfigure(planId)),
     cancel,
+    reset,
   };
 }

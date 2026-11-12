@@ -244,6 +244,58 @@ async function executeController(controller: ReturnType<typeof mountController>)
 }
 
 describe('usePlanBatchController', () => {
+  it('does not POST when a pending staged-item lookup resolves after discard', async () => {
+    stubBaseHooks();
+    stubMasterKeySessionAutoDeliver();
+    let resolveLookup!: (value: unknown) => void;
+    apiRequest.mockImplementation((request: { method: string }) => {
+      if (request.method === 'GET')
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      throw new Error('POST after discard');
+    });
+    const controller = mountController({
+      plans: [validPlan('discarded-plan')],
+      session: session(),
+      onSuccess: vi.fn(),
+    });
+    await waitFor(() => expect(controller.current.organizationKey.localKeyAvailable).toBe(true));
+    act(() => controller.current.execute());
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(1));
+    act(() => controller.current.reset());
+    await act(async () => resolveLookup({ status: 400, body: { error: 'staged_item_not_found' } }));
+    expect(apiRequest.mock.calls.filter(([request]) => request.method === 'POST')).toHaveLength(0);
+    expect(controller.current.items).toEqual([]);
+  });
+
+  it('leaves a cancelled staged-item lookup retryable and never marks it complete', async () => {
+    stubBaseHooks();
+    stubMasterKeySessionAutoDeliver();
+    let resolveLookup!: (value: unknown) => void;
+    apiRequest.mockImplementation((request: { method: string }) => {
+      if (request.method === 'GET')
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      throw new Error('POST after cancellation');
+    });
+    const controller = mountController({
+      plans: [validPlan('cancelled-plan')],
+      session: session(),
+      onSuccess: vi.fn(),
+    });
+    await waitFor(() => expect(controller.current.organizationKey.localKeyAvailable).toBe(true));
+    act(() => controller.current.execute());
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(1));
+    act(() => controller.current.cancel());
+    await act(async () => resolveLookup({ status: 400, body: { error: 'staged_item_not_found' } }));
+    await waitFor(() => expect(controller.current.running).toBe(false));
+    expect(controller.current.items[0].status).toBe('CREATED');
+    expect(controller.current.result.complete).toHaveLength(0);
+    expect(apiRequest.mock.calls.filter(([request]) => request.method === 'POST')).toHaveLength(0);
+  });
+
   it('acquires the Organization Key and stages when execute is requested', async () => {
     stubBaseHooks({ localOrganizationKey: null });
     stubMasterKeySessionAutoDeliver();

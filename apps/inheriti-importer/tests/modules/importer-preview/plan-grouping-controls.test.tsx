@@ -86,6 +86,7 @@ describe('PlanGroupingSurface controls', () => {
     const title = screen.getByText('Production credential');
     expect(title.parentElement?.getAttribute('title')).toBe('Production credential');
     expect(title.className).toContain('plan-asset-row-name');
+    expect(title.nextElementSibling?.textContent).toBe('Username and Password');
     fireEvent.click(screen.getByRole('button', { name: 'Search unassigned assets' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Search unassigned assets' }), {
       target: { value: 'Broken' },
@@ -99,6 +100,27 @@ describe('PlanGroupingSurface controls', () => {
     expect(screen.getByText('Production credential')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close unassigned asset search' }));
     expect(screen.queryByRole('textbox', { name: 'Search unassigned assets' })).toBeNull();
+  });
+
+  it('falls back to all sources when the selected source has no unassigned assets left', () => {
+    const sourceA = { ...validAsset, source: 'a.kdbx' };
+    const sourceB = { ...invalidAsset, source: 'b.kdbx' };
+    const { rerender } = render(
+      <PlanGroupingSurface unassigned={[sourceA, sourceB]} plans={[plan]} />,
+    );
+    const filter = screen.getByRole('combobox', {
+      name: 'Filter unassigned assets by source',
+    }) as HTMLSelectElement;
+    fireEvent.change(filter, { target: { value: 'a.kdbx' } });
+    expect(screen.queryByText('Broken credential')).toBeNull();
+    rerender(<PlanGroupingSurface unassigned={[sourceB]} plans={[plan]} />);
+    expect(filter.value).toBe('all');
+    expect(screen.getByText('Broken credential')).toBeTruthy();
+    rerender(<PlanGroupingSurface unassigned={[]} plans={[plan]} />);
+    rerender(<PlanGroupingSurface unassigned={[sourceA, sourceB]} plans={[plan]} />);
+    expect(filter.value).toBe('all');
+    expect(screen.getByText('Credential')).toBeTruthy();
+    expect(screen.getByText('Broken credential')).toBeTruthy();
   });
 
   it('disables assignment and plan creation when their callbacks are unavailable', () => {

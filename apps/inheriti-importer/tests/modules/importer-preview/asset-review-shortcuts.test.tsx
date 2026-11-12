@@ -38,6 +38,9 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
     expect(
       container.querySelector('.asset-review-row-name')?.closest('[title]')?.getAttribute('title'),
     ).toBe(name);
+    expect(container.querySelector('.asset-review-row-name')?.nextElementSibling?.textContent).toBe(
+      'Username and Password',
+    );
   });
 
   it('opens unresolved work by default and explains an empty import', () => {

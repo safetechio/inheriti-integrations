@@ -25,21 +25,26 @@ export function usePlanBatchStaging({
         assertPlanBatchPreflight(item.input, session, { organizationId });
       },
       create: async () => {},
-      configure: async (item: { planId: string; input: PlanBatchInput }) => {
+      configure: async (item: { planId: string; input: PlanBatchInput }, signal: AbortSignal) => {
         if (!organizationId) throw new Error('No organization is selected.');
         if (!currentMemberId) {
           throw new Error('The current organization member could not be determined.');
         }
         const masterKey = await keyRelease.acquire(item.planId);
-        if (await importerToolRepo.isStaged(organizationId, item.planId)) return;
-        await importerToolRepo.stage({
-          id: item.planId,
-          organizationId,
-          memberId: currentMemberId,
-          organizationKeyHex: masterKey,
-          planDraft: item.input.payload as StagedPlanDraft,
-          assets: item.input.assets as MaterialisedAsset[],
-        });
+        if (signal.aborted) return;
+        if (await importerToolRepo.isStaged(organizationId, item.planId, signal)) return;
+        if (signal.aborted) return;
+        await importerToolRepo.stage(
+          {
+            id: item.planId,
+            organizationId,
+            memberId: currentMemberId,
+            organizationKeyHex: masterKey,
+            planDraft: item.input.payload as StagedPlanDraft,
+            assets: item.input.assets as MaterialisedAsset[],
+          },
+          signal,
+        );
       },
     }),
     [session, organizationId, currentMemberId, keyRelease, importerToolRepo],

@@ -55,6 +55,8 @@ export function useOrganizationKeyRelease({
   const [localKeyAvailable, setLocalKeyAvailable] = useState<boolean | undefined>();
   const pendingRef = useRef(new Map<string, Pending>());
   const currentAttemptStartedRef = useRef(false);
+  const generationRef = useRef(0);
+  const cancelledError = () => new Error('Organization Key release was cancelled.');
 
   useEffect(() => {
     setLocalKeyAvailable(undefined);
@@ -89,8 +91,10 @@ export function useOrganizationKeyRelease({
 
   const acquire = useCallback(
     async (planId?: string) => {
+      const generation = generationRef.current;
       if (identity) {
         const storedKey = await vault.get(identity).catch(() => null);
+        if (generation !== generationRef.current) throw cancelledError();
         if (storedKey) {
           setLocalKeyAvailable(true);
           setError(null);
@@ -104,6 +108,7 @@ export function useOrganizationKeyRelease({
       // guaranteed-authenticated handshake before every relay attempt rather
       // than trusting an existing connection to still be good.
       await window.inheriti?.socket?.reconnect().catch(() => {});
+      if (generation !== generationRef.current) throw cancelledError();
       return new Promise<string>((resolve, reject) => {
         const requestId = planId ?? ORGANIZATION_KEY_REQUEST_ID;
         setError(null);
@@ -126,16 +131,22 @@ export function useOrganizationKeyRelease({
     async (encryptedMasterKey: string, privateKey: CryptoKey) => {
       const planId = activePlanId;
       if (!planId || !identity) return;
+      const generation = generationRef.current;
       try {
         const masterKey = await decryptRSAOAEP(encryptedMasterKey, privateKey);
+        if (generation !== generationRef.current) return;
         const verifier = await computePassphraseVerifier(masterKey);
+        if (generation !== generationRef.current) return;
         if (!(await verifyRef.current({ orgId: identity.organizationId, verifier }))) {
           throw new Error('The delivered organization key could not be verified.');
         }
+        if (generation !== generationRef.current) return;
         await vault.set(identity, masterKey);
+        if (generation !== generationRef.current) return;
         setLocalKeyAvailable(true);
         settle(planId, { key: masterKey });
       } catch (caught) {
+        if (generation !== generationRef.current) return;
         settle(planId, {
           error:
             caught instanceof Error
@@ -217,14 +228,16 @@ export function useOrganizationKeyRelease({
   ]);
 
   const cancel = useCallback(() => {
+    generationRef.current++;
     if (!activePlanId) return;
-    settle(activePlanId, { error: new Error('Organization Key release was cancelled.') });
+    settle(activePlanId, { error: cancelledError() });
   }, [activePlanId, settle]);
 
   const simulateLocalRelease = useCallback(
     async (recoveryCode: string) => {
       if (!import.meta.env.DEV) throw new Error('Local release simulation is unavailable.');
       if (!identity || !activePlanId) throw new Error('Start a release request first.');
+      const generation = generationRef.current;
       if (
         masterKeySession.step !== 'ready' ||
         !masterKeySession.sessionId ||
@@ -241,11 +254,15 @@ export function useOrganizationKeyRelease({
       }
 
       const masterKey = await deriveMasterKey(recoveryCode, masterKeySeed.data);
+      if (generation !== generationRef.current) throw cancelledError();
       const verifier = await computePassphraseVerifier(masterKey);
+      if (generation !== generationRef.current) throw cancelledError();
       const valid = await verifyRef.current({ orgId: identity.organizationId, verifier });
+      if (generation !== generationRef.current) throw cancelledError();
       if (!valid) throw new Error('The Recovery code is incorrect.');
 
       const encryptedMasterKey = await encryptRSAOAEP(masterKey, masterKeySession.clientPublicKey);
+      if (generation !== generationRef.current) throw cancelledError();
       const response = await window.inheriti.development.deliverMasterKey({
         organizationId: identity.organizationId,
         sessionId: masterKeySession.sessionId,
@@ -253,7 +270,9 @@ export function useOrganizationKeyRelease({
         encryptedMasterKey,
       });
       if (response.status >= 200 && response.status < 300) {
+        if (generation !== generationRef.current) throw cancelledError();
         await vault.set(identity, masterKey);
+        if (generation !== generationRef.current) throw cancelledError();
         setLocalKeyAvailable(true);
         settle(activePlanId, { key: masterKey });
         return;

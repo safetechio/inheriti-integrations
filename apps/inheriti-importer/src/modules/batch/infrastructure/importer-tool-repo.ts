@@ -44,8 +44,14 @@ function hexToBytes(hex: string): Uint8Array {
   return new Uint8Array(matched.map((byte) => parseInt(byte, 16)));
 }
 
-const toBase64 = (bytes: ArrayBuffer | Uint8Array) =>
-  btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const toBase64 = (bytes: ArrayBuffer | Uint8Array) => {
+  const view = new Uint8Array(bytes);
+  let binary = '';
+  for (let offset = 0; offset < view.length; offset += 8192) {
+    binary += String.fromCharCode(...view.subarray(offset, offset + 8192));
+  }
+  return btoa(binary);
+};
 
 /**
  * `@types/node`'s global `Uint8Array` override makes it generic over
@@ -110,7 +116,8 @@ export async function wrapFieldValue(
  * worth keeping out of an unencrypted draft) leaves into dot-path field ids,
  * matching the same `'secret.password'`-style paths
  * `modules/plans/domain/asset-materializer.ts` already uses when binding
- * source fields. Every leaf value is stringified: the promotion side must
+ * source fields. Array entries use numeric path segments, which the promotion
+ * side's lodash `set` reassembles as arrays. Every leaf value is stringified: the promotion side must
  * parse `meta.isMedia` back to a boolean and leave every other leaf as a
  * string.
  */
@@ -122,7 +129,7 @@ function flattenToFields(
   for (const [key, value] of Object.entries(bag)) {
     if (value === undefined || value === null || value === '') continue;
     const fieldId = `${prefix}.${key}`;
-    if (typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value === 'object') {
       out.push(...flattenToFields(value as Record<string, unknown>, fieldId));
     } else {
       out.push({ fieldId, value: String(value) });
@@ -214,19 +221,24 @@ export class ImporterToolRepo {
   }
 
   /** True if a staged item with this id already exists for this organization. */
-  async isStaged(organizationId: string, id: string): Promise<boolean> {
+  async isStaged(organizationId: string, id: string, signal?: AbortSignal): Promise<boolean> {
     const stagedItemId = this.resolveUuid(this.stagedItemIds, id);
     const response = await this.transport.request<{ error?: string }>({
       method: 'GET',
       path: stagedItemsPath(organizationId, stagedItemId),
       returnErrorResponse: true,
+      signal,
     });
     if (response.status >= 200 && response.status < 300) return true;
     if (response.status === 400 && response.body?.error === 'staged_item_not_found') return false;
     throw new ImporterToolRequestError(response.status, response.body);
   }
 
-  async stage(request: StageBatchItemRequest): Promise<{ id: string; expiresAt: string }> {
+  async stage(
+    request: StageBatchItemRequest,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; expiresAt: string }> {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     if (!request.planDraft.name.trim()) throw new Error('STAGED_PLAN_MISSING_NAME');
     const stagedItemId = this.resolveUuid(this.stagedItemIds, request.id);
     // `planDraft` is built from the same Core create-payload shape, whose
@@ -265,10 +277,12 @@ export class ImporterToolRepo {
       }),
     );
 
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const response = await this.transport.request<{ result?: { id: string; expiresAt: string } }>({
       method: 'POST',
       path: stagedItemsPath(request.organizationId),
       body: { id: stagedItemId, planDraft, assetDrafts, ttlHours: request.ttlHours },
+      signal,
     });
 
     if (response.status < 200 || response.status >= 300 || !response.body?.result) {

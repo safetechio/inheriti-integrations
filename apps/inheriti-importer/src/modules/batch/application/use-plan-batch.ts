@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export type PlanBatchStatus =
   | 'PENDING'
@@ -22,7 +22,7 @@ interface PlanBatchCallbacks<T> {
   validate?: (item: PlanBatchItem<T>) => Promise<void> | void;
   create: (item: PlanBatchItem<T>) => Promise<void>;
   reconcileCreate?: (item: PlanBatchItem<T>) => Promise<boolean>;
-  configure: (item: PlanBatchItem<T>) => Promise<void>;
+  configure: (item: PlanBatchItem<T>, signal: AbortSignal) => Promise<void>;
   onItemChange?: () => void;
 }
 
@@ -74,6 +74,10 @@ async function executeBatch<T>(
   };
   const cancelPending = () => {
     for (const item of items) {
+      if (item.status === 'CONFIGURING') {
+        set(item, 'CREATED');
+        continue;
+      }
       if (!terminal.has(item.status) && item.status !== 'CREATED') set(item, 'CANCELLED');
     }
   };
@@ -115,10 +119,14 @@ async function executeBatch<T>(
       if (signal.aborted) return;
       try {
         set(item, 'CONFIGURING');
-        await callbacks.configure(item);
-        set(item, 'COMPLETE');
+        await callbacks.configure(item, signal);
+        set(item, signal.aborted ? 'CREATED' : 'COMPLETE');
       } catch (error) {
-        set(item, 'FAILED_CONFIGURE', error);
+        set(
+          item,
+          signal.aborted ? 'CREATED' : 'FAILED_CONFIGURE',
+          signal.aborted ? undefined : error,
+        );
       }
     },
   );
@@ -131,6 +139,15 @@ export function usePlanBatch<T>(callbacks: Omit<PlanBatchCallbacks<T>, 'onItemCh
   const [running, setRunning] = useState(false);
   const itemsRef = useRef<PlanBatchItem<T>[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      generationRef.current++;
+      itemsRef.current = [];
+    },
+    [],
+  );
   const commit = useCallback(() => setItems(itemsRef.current.map((item) => ({ ...item }))), []);
   const resolvedCallbacks = useMemo(
     () => ({ ...callbacks, onItemChange: commit }),
@@ -141,23 +158,33 @@ export function usePlanBatch<T>(callbacks: Omit<PlanBatchCallbacks<T>, 'onItemCh
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      const generation = generationRef.current;
       setRunning(true);
       try {
         await executeBatch(
           planIds ? itemsRef.current.filter((item) => planIds.has(item.planId)) : itemsRef.current,
-          resolvedCallbacks,
+          {
+            ...resolvedCallbacks,
+            onItemChange: () => {
+              if (generation === generationRef.current) commit();
+            },
+          },
           controller.signal,
         );
-        return result(itemsRef.current);
+        return generation === generationRef.current ? result(itemsRef.current) : result([]);
       } finally {
-        setRunning(false);
-        commit();
+        if (generation === generationRef.current) {
+          setRunning(false);
+          commit();
+        }
       }
     },
     [commit, resolvedCallbacks],
   );
   const run = useCallback(
     (entries: readonly { planId: string; input: T }[]) => {
+      abortRef.current?.abort();
+      generationRef.current++;
       itemsRef.current = entries.map((entry) => ({
         planId: entry.planId,
         input: entry.input,
@@ -183,5 +210,13 @@ export function usePlanBatch<T>(callbacks: Omit<PlanBatchCallbacks<T>, 'onItemCh
     retryCreate: (planId: string) => retry(planId, ['FAILED_CREATE']),
     retryConfigure: (planId: string) => retry(planId, ['FAILED_CONFIGURE', 'CREATED']),
     cancel: () => abortRef.current?.abort(),
+    reset: () => {
+      abortRef.current?.abort();
+      generationRef.current++;
+      itemsRef.current = [];
+      abortRef.current = null;
+      setRunning(false);
+      setItems([]);
+    },
   };
 }

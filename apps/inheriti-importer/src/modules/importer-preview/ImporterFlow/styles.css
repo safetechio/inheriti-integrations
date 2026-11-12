@@ -126,7 +126,7 @@
   overflow: auto;
   padding: var(--importer-stage-padding-block) var(--importer-stage-padding-inline);
 }
-@media (min-width: 1001px) {
+@media (min-width: 980px) {
   .importer-flow-scroll.is-asset-review {
     display: flex;
     overflow: hidden;

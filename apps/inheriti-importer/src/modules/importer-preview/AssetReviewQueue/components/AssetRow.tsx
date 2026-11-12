@@ -1,6 +1,7 @@
 import { Box, Icon, InteractiveSurface, Text, theme } from '@main-components';
 import { statusBadge, statusLabel } from './status';
 import type { ReviewAsset } from '../types';
+import { getAssetTypeDisplayName } from '@modules/_shared/domain/asset-type-display-name';
 
 type AssetRowProps = {
   asset: ReviewAsset;
@@ -28,6 +29,9 @@ export function AssetRow({ asset, selected, onSelect }: AssetRowProps) {
       >
         <Text variant="importerAssetRowTitle" className="asset-review-row-name">
           {asset.name}
+        </Text>
+        <Text variant="smallUppercase" color="gray">
+          {getAssetTypeDisplayName(asset.type)}
         </Text>
       </Box>
       <Box

@@ -134,7 +134,7 @@ export function PlanCard({
             Add at least one Asset to this draft plan.
           </Text>
         ) : null}
-        <PlanAlerts plan={plan} dropState={dropState} showGovernance={selected} />
+        <PlanAlerts plan={plan} dropState={dropState} showGovernance={selected && plan.assets > 0} />
       </Stack>
     </Box>
   );

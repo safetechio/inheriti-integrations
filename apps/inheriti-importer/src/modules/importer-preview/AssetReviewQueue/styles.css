@@ -12,7 +12,7 @@
   flex: 1 1 auto;
   min-width: 0;
 }
-@media (min-width: 1001px) {
+@media (min-width: 980px) {
   .is-asset-review .asset-review-surface {
     flex: 1 1 auto;
     min-width: 0;
@@ -278,7 +278,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
 }
-@media (max-width: 1000px) {
+@media (max-width: 979px) {
   .asset-review-columns {
     flex-wrap: wrap;
   }

@@ -26,6 +26,19 @@ afterEach(() => {
 });
 
 describe('buildStagedAssetInput', () => {
+  it('emits indexed seed words for lodash set reassembly', () => {
+    const input = buildStagedAssetInput({
+      id: 'seed-1',
+      type: 'SEED-PHRASE',
+      meta: { name: 'Seed' },
+      secret: { words: ['alpha', 'bravo', 'charlie'] },
+    });
+    expect(input.fields).toEqual([
+      { fieldId: 'secret.words.0', value: 'alpha' },
+      { fieldId: 'secret.words.1', value: 'bravo' },
+      { fieldId: 'secret.words.2', value: 'charlie' },
+    ]);
+  });
   it('flattens secret leaves into dot-path field ids, and skips empty/missing meta extras', () => {
     const asset: MaterialisedAsset = {
       id: 'asset-1',
@@ -93,6 +106,35 @@ describe('buildStagedAssetInput', () => {
 });
 
 describe('wrapFieldValue', () => {
+  it('round-trips a 256 KiB secret', async () => {
+    const context = {
+      schemaVersion: 2,
+      organizationId: 'org',
+      memberId: 'member',
+      stagedItemId: 'item',
+      assetId: 'asset',
+      fieldId: 'secret.value',
+    };
+    const plaintext = 'a'.repeat(256 * 1024);
+    const wrapped = await wrapFieldValue(plaintext, ORG_KEY_HEX, context);
+    const key = await crypto.subtle.importKey(
+      'raw',
+      Uint8Array.from(Buffer.from(ORG_KEY_HEX, 'hex')),
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt'],
+    );
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: Uint8Array.from(atob(wrapped.iv), (c) => c.charCodeAt(0)),
+        additionalData: new TextEncoder().encode(JSON.stringify(context)),
+      },
+      key,
+      Uint8Array.from(atob(wrapped.ciphertext), (c) => c.charCodeAt(0)),
+    );
+    expect(new TextDecoder().decode(decrypted)).toBe(plaintext);
+  });
   it('produces a non-plaintext AES-GCM-256 envelope that round-trips under the same key/context', async () => {
     const context = {
       schemaVersion: 2,
@@ -170,9 +212,11 @@ describe('ImporterToolRepo', () => {
     });
 
     expect(result).toEqual({ id: sentBody.id, expiresAt: '2026-01-01T00:00:00.000Z' });
-    expect(transport.request).toHaveBeenCalledWith(expect.objectContaining({
-      path: '/integrations/v1/organizations/org-1/importer-tool/staged-items',
-    }));
+    expect(transport.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/integrations/v1/organizations/org-1/importer-tool/staged-items',
+      }),
+    );
     expect(sentBody.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );

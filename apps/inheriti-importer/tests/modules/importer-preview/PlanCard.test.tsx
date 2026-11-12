@@ -5,7 +5,14 @@ import { PlanCard } from '@modules/importer-preview/PlanGroupingSurface/componen
 afterEach(cleanup);
 
 it('shows empty draft review only after selection moves away', () => {
-  const plan = { id: 'draft', name: 'Draft', assets: 0, capacity: '10', valid: false };
+  const plan = {
+    id: 'draft',
+    name: 'Draft',
+    assets: 0,
+    capacity: '10',
+    valid: false,
+    governanceHint: 'Add at least one Asset.',
+  };
   const props = {
     plan,
     selected: true,
@@ -18,10 +25,12 @@ it('shows empty draft review only after selection moves away', () => {
   const { rerender, container } = render(<PlanCard {...props} />);
   expect(screen.queryByText('Needs review')).toBeNull();
   expect(screen.queryByText('Add at least one Asset to this draft plan.')).toBeNull();
+  expect(screen.queryByText('Provisional governance: Add at least one Asset.')).toBeNull();
 
   rerender(<PlanCard {...props} selected={false} />);
   expect(screen.getByText('Needs review')).toBeTruthy();
   const helper = screen.getByText('Add at least one Asset to this draft plan.');
   expect(helper.closest('.plan-drop-zone')).toBeNull();
   expect(container.querySelector('.plan-drop-zone')?.textContent).toBe('Drag an Asset here');
+  expect(screen.queryByText('Provisional governance: Add at least one Asset.')).toBeNull();
 });
