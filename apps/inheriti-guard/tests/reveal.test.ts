@@ -305,6 +305,195 @@ describe('Chrome reveal controller', () => {
     expect([...values.keys()]).toEqual([]);
   });
 
+  it.each([
+    ['email only', 'mail@example.test', '', 'mail@example.test', 'filled'],
+    ['username only', '', 'account-name', 'account-name', 'filled'],
+    ['both', 'mail@example.test', 'account-name', 'mail@example.test', 'filled'],
+    ['neither', '', '', undefined, 'invalid-value'],
+  ])('uses the nonempty identifier from legacy metadata: %s', async (_case, email, username, expected, code) => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]);
+    if (expected !== undefined) executeScript.mockResolvedValueOnce([{ result: 'filled' }]);
+    const emailMapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    const emailBatch: AccessBatch = { identity: batch.identity, mappings: [emailMapping] };
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const consumeFields = vi.fn(async (requests, destination) => destination(requests.map(({ selector }: { selector: string }) => ({
+      selector, value: selector === 'prod-db.email' ? email : username,
+    }))));
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+
+    await expect(controller.fillBatch(emailBatch)).resolves.toEqual([
+      { selector: 'prod-db.email', targetId: 'target-user', code },
+    ]);
+    expect(consumeFields.mock.calls.map((call) => call[0].map(({ selector }: { selector: string }) => selector)))
+      .toEqual(email ? [['prod-db.email']] : [['prod-db.email'], ['prod-db.username']]);
+    if (!email) expect(consumeFields.mock.calls[1]![0]).toEqual([
+      { selector: 'prod-db.username', options: { action: 'AUTOFILL_FIELD', origin: 'https://db.example.test' } },
+    ]);
+    expect(executeScript).toHaveBeenCalledTimes(expected === undefined ? 1 : 2);
+    if (expected !== undefined) {
+      const calls = executeScript.mock.calls as unknown as Array<[{ args: string[] }]>;
+      expect(calls[1]![0].args[3]).toBe(expected);
+    }
+  });
+
+  it('does not request an alternate identifier for an explicit two-field asset', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'filled' }]);
+    const narrowPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['email', 'username', 'password'] }] };
+    const mapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    const consumeFields = vi.fn(async (_requests, destination) => destination([{ selector: 'prod-db.email', value: 'mail@example.test' }]));
+    const instance = core({ getPlan: vi.fn(async () => narrowPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [mapping] })).resolves.toEqual([
+      { selector: 'prod-db.email', targetId: 'target-user', code: 'filled' },
+    ]);
+    expect(consumeFields.mock.calls[0]![0].map(({ selector }: { selector: string }) => selector))
+      .toEqual(['prod-db.email']);
+  });
+
+  it('uses an email value when a legacy username field is empty', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'filled' }]);
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const consumeFields = vi.fn(async (requests, destination) => destination(requests.map(({ selector }: { selector: string }) => ({
+      selector, value: selector === 'prod-db.username' ? '' : 'mail@example.test',
+    }))));
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const usernameMapping = { ...batch.mappings[0]!,
+      protectedField: { ...batch.mappings[0]!.protectedField, assetType: 'USER-PSWD' } };
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [usernameMapping] })).resolves.toEqual([
+      { selector: 'prod-db.username', targetId: 'target-user', code: 'filled' },
+    ]);
+    expect(consumeFields.mock.calls.map((call) => call[0].map(({ selector }: { selector: string }) => selector)))
+      .toEqual([['prod-db.username'], ['prod-db.email']]);
+    const calls = executeScript.mock.calls as unknown as Array<[{ args: string[] }]>;
+    expect(calls[1]![0].args[3]).toBe('mail@example.test');
+  });
+
+  it('audits a blank legacy identifier before filling its alternate and password', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'ready' }])
+      .mockResolvedValueOnce([{ result: 'filled' }]).mockResolvedValueOnce([{ result: 'filled' }]);
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const audits: string[] = [];
+    const consumeFields = vi.fn(async (requests, destination) => {
+      const selector = requests[0]!.selector;
+      try {
+        await destination([{ selector, value: selector === 'prod-db.email' ? ''
+          : selector === 'prod-db.username' ? 'account-name' : 'secret' }]);
+        audits.push(`${selector}:SUCCEEDED`);
+      } catch (error) {
+        audits.push(`${selector}:FAILED`);
+        throw error;
+      }
+    });
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const emailMapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    const passwordMapping = { ...batch.mappings[1]!, protectedField: {
+      ...batch.mappings[1]!.protectedField, assetType: 'USER-PSWD' } };
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [emailMapping, passwordMapping] }))
+      .resolves.toEqual([
+        { selector: 'prod-db.email', targetId: 'target-user', code: 'filled' },
+        { selector: 'prod-db.password', targetId: 'target-password', code: 'filled' },
+      ]);
+    expect(audits).toEqual(['prod-db.email:FAILED', 'prod-db.username:SUCCEEDED', 'prod-db.password:SUCCEEDED']);
+    expect(consumeFields.mock.calls.map((call) => call[0].map(({ selector }: { selector: string }) => selector)))
+      .toEqual([['prod-db.email'], ['prod-db.username'], ['prod-db.password']]);
+  });
+
+  it('does not try a legacy alternate after the primary page write fails', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'form-changed' }]);
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const mapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    const consumeFields = vi.fn(async (requests, destination) => destination([
+      { selector: requests[0]!.selector, value: 'mail@example.test' },
+    ]));
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [mapping] })).resolves.toEqual([
+      { selector: 'prod-db.email', targetId: 'target-user', code: 'form-changed' },
+    ]);
+    expect(consumeFields).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not try a legacy alternate when the primary action is denied', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]);
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const mapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    const consumeFields = vi.fn(async () => { throw Object.assign(new Error('denied'), { code: 'action_origin_denied' }); });
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    const controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [mapping] })).resolves.toEqual([
+      { selector: 'prod-db.email', targetId: 'target-user', code: 'authorization-denied' },
+    ]);
+    expect(consumeFields).toHaveBeenCalledTimes(1);
+    expect(executeScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not try a legacy alternate after the batch is canceled', async () => {
+    executeScript.mockResolvedValueOnce([{ result: 'ready' }]);
+    const legacyPlan = { assets: [{ ...plan.assets[0]!, type: 'USER-PSWD',
+      fieldNames: ['appOrWebsite', 'ipSource', 'email', 'username', 'password'] }] };
+    const mapping = { protectedField: { ...batch.mappings[0]!.protectedField,
+      assetType: 'USER-PSWD', fieldName: 'email' as const, selector: 'prod-db.email' },
+    pageTarget: { ...batch.mappings[0]!.pageTarget, semantic: 'email' as const, label: 'Email' },
+    source: 'MANUAL' as const };
+    let controller!: ChromeRevealController;
+    const consumeFields = vi.fn(async (requests, destination) => {
+      try { await destination([{ selector: requests[0]!.selector, value: '' }]); }
+      catch (error) { controller.cancelActiveBatch(); throw error; }
+    });
+    const instance = core({ getPlan: vi.fn(async () => legacyPlan),
+      withReveal: vi.fn(async (_planId, _options, work) => work({
+        session: { id: 'reveal-1', expiresAt: '2030-01-01T00:00:00.000Z' }, consumeFields,
+      })) });
+    controller = new ChromeRevealController(async () => asCore(instance), storage);
+    await expect(controller.fillBatch({ identity: batch.identity, mappings: [mapping] })).resolves.toEqual([
+      { selector: 'prod-db.email', targetId: 'target-user', code: 'canceled' },
+    ]);
+    expect(consumeFields).toHaveBeenCalledTimes(1);
+    expect(executeScript).toHaveBeenCalledTimes(1);
+  });
+
   it('does not open a reveal when any target fails preflight', async () => {
     executeScript.mockResolvedValueOnce([{ result: 'ready' }]).mockResolvedValueOnce([{ result: 'form-changed' }]);
     const instance = core();

@@ -17,6 +17,7 @@ export interface ProtectedFieldRef {
   readonly fieldName: ProtectedFieldSemantic;
   readonly selector: string;
   readonly matchesOrigin: boolean;
+  readonly fieldNamesInferred?: boolean;
 }
 
 export interface PageFieldTarget {

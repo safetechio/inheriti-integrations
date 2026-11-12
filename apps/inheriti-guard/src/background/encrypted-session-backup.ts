@@ -6,6 +6,10 @@ const STORE = 'keys';
 const KEY = 'operator-profiles';
 const AAD = new TextEncoder().encode(BACKUP_KEY);
 
+export class InvalidOperatorSessionBackupError extends Error {
+  public constructor() { super('invalid_operator_session_backup'); }
+}
+
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
@@ -47,10 +51,15 @@ export class EncryptedOperatorSessionBackup implements OperatorSessionBackup {
       || !Array.isArray(value.iv) || !Array.isArray(value.ciphertext)
       || value.iv.length !== 12 || !value.iv.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
       || !value.ciphertext.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255))
-      throw new Error('invalid_operator_session_backup');
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(value.iv), additionalData: AAD },
-      await encryptionKey(), new Uint8Array(value.ciphertext));
-    return JSON.parse(new TextDecoder().decode(plain)) as Awaited<ReturnType<OperatorSessionBackup['load']>>;
+      throw new InvalidOperatorSessionBackupError();
+    const key = await encryptionKey();
+    try {
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(value.iv), additionalData: AAD },
+        key, new Uint8Array(value.ciphertext));
+      return JSON.parse(new TextDecoder().decode(plain)) as Awaited<ReturnType<OperatorSessionBackup['load']>>;
+    } catch {
+      throw new InvalidOperatorSessionBackupError();
+    }
   }
 
   public async save(registry: Parameters<OperatorSessionBackup['save']>[0]): Promise<void> {

@@ -1,7 +1,8 @@
 import { custodianShareCopy } from '@safetech/inheriti-elements-core/browser';
+import { groupCredentialCandidates, hasCredentialFieldOverride, preferredCredentialCandidate } from './candidate-groups.js';
 type Semantic = 'username' | 'email' | 'password';
 interface FieldMetadata { targetId: string; origin: string; navigationId: string; semantic: Semantic; label: string }
-interface ProtectedField { assetName: string; fieldName: Semantic; matchesOrigin: boolean; planId: string; selector: string }
+interface ProtectedField { assetId: string; assetName: string; fieldName: Semantic; matchesOrigin: boolean; planId: string; selector: string }
 interface Mapping { protectedField: ProtectedField; pageTarget: FieldMetadata }
 interface Candidate { planName: string; assetFieldNames: readonly Semantic[];
   suggestion: { confidence: string; reason: string; mapping: Mapping } }
@@ -47,6 +48,10 @@ strong{font-weight:500}
 .item.selected{border-color:#2962ff;background:#f8fbff}
 .item:focus-visible{outline:2px solid #2962ff;outline-offset:-3px}
 .item.pending{opacity:.72}
+.credential-option{border:1px solid #eaecf0;border-radius:8px;overflow:hidden}
+.credential-option .item{border:0;border-radius:0}
+.field-picker{display:flex;align-items:center;gap:8px;padding:0 12px 10px;color:#535862;font-size:12px}
+.field-picker select{flex:1;min-width:0;padding:5px;border:1px solid #d0d5dd;border-radius:6px;background:#fff;color:#101828;font:inherit}
 .item-body{display:flex;min-width:0;flex:1;flex-direction:column}
 .item-body strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-body span{margin-top:2px;color:#717680;font-size:12px;font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -255,14 +260,18 @@ function renderChooser(popover: HTMLElement, candidates: readonly Candidate[], t
     .find((mapping) => mapping.pageTarget.targetId === target.targetId)?.protectedField;
 
   const paintList = (pending?: Candidate): void => {
-    const visible = matching(candidates, query);
+    const visible = groupCredentialCandidates(matching(candidates, query));
     const selected = chosenHere();
     if (visible.length === 0) { list.replaceChildren(status('No plan or asset matches that filter.')); return; }
-    list.replaceChildren(...visible.map((candidate) => option(candidate, {
-      selected: candidate.suggestion.mapping.protectedField.planId === selected?.planId
-        && candidate.suggestion.mapping.protectedField.selector === selected.selector,
-      pending: sameCandidate(candidate, pending),
-      onPick: () => { void choose(candidate); },
+    list.replaceChildren(...visible.map((group) => option(group, {
+      selected: group.some((candidate) => candidate.suggestion.mapping.protectedField.planId === selected?.planId
+        && candidate.suggestion.mapping.protectedField.selector === selected.selector),
+      pending: group.some((candidate) => sameCandidate(candidate, pending)),
+      preferred: preferredCredentialCandidate(group,
+        group.find((candidate) => candidate.suggestion.mapping.protectedField.planId === selected?.planId
+          && candidate.suggestion.mapping.protectedField.selector === selected.selector)?.suggestion.mapping.protectedField.selector,
+        group.find((candidate) => sameCandidate(candidate, pending))?.suggestion.mapping.protectedField.selector)!,
+      onPick: (candidate) => { void choose(candidate); },
     })));
     list.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
   };
@@ -337,7 +346,9 @@ function sameCandidate(candidate: Candidate, other?: Candidate): boolean {
     && other.suggestion.mapping.pageTarget.targetId === candidate.suggestion.mapping.pageTarget.targetId;
 }
 
-function option(candidate: Candidate, state: { selected: boolean; pending: boolean; onPick: () => void }): HTMLButtonElement {
+function option(candidates: readonly Candidate[], state: { selected: boolean; pending: boolean;
+  preferred: Candidate; onPick: (candidate: Candidate) => void }): HTMLElement {
+  const candidate = candidates[0]!;
   const field = candidate.suggestion.mapping.protectedField;
   const button = element('button', `item${state.selected ? ' selected' : ''}${state.pending ? ' pending' : ''}`);
   button.type = 'button';
@@ -347,8 +358,22 @@ function option(candidate: Candidate, state: { selected: boolean; pending: boole
   body.append(element('strong', '', field.assetName),
     element('span', '', `${candidate.planName} · ${contents}${field.matchesOrigin ? ' · Exact origin' : ''}`));
   button.append(body, element('span', 'tick', state.selected ? '✓' : state.pending ? '…' : ''));
-  button.addEventListener('click', state.onPick);
-  return button;
+  let chosen = state.preferred;
+  button.addEventListener('click', () => state.onPick(chosen));
+  if (!hasCredentialFieldOverride(candidates)) return button;
+  const row = element('div', 'credential-option');
+  const picker = element('label', 'field-picker', 'Use field');
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', `Use field from ${field.assetName}`);
+  for (const choice of candidates) select.append(element('option', '', titleCase(choice.suggestion.mapping.protectedField.fieldName)));
+  select.selectedIndex = candidates.indexOf(chosen);
+  select.addEventListener('change', () => {
+    chosen = candidates[select.selectedIndex]!;
+    state.onPick(chosen);
+  });
+  picker.append(select);
+  row.append(button, picker);
+  return row;
 }
 
 function titleCase(value: string): string { return `${value[0]?.toUpperCase() ?? ''}${value.slice(1)}`; }
@@ -605,11 +630,16 @@ function register(input: HTMLInputElement): FieldMetadata {
 
 function semanticOf(input: HTMLInputElement): Semantic | undefined {
   const autocomplete = input.autocomplete.toLowerCase().split(/\s+/).at(-1);
-  if (autocomplete === 'username') return 'username'; if (autocomplete === 'email') return 'email';
-  if (autocomplete === 'current-password' || autocomplete === 'new-password' || input.type === 'password') return 'password';
-  if (input.type === 'email') return 'email'; if (input.type !== 'text') return undefined;
-  const hint = `${input.getAttribute('aria-label') ?? ''} ${input.name} ${input.id} ${input.placeholder}`.toLowerCase();
-  return /e-?mail/.test(hint) ? 'email' : /user|login|account/.test(hint) ? 'username' : undefined;
+  if (input.type === 'password') return 'password';
+  if (input.type === 'email') return 'email';
+  if (input.type !== 'text' && input.type !== 'tel' && input.type !== 'search') return undefined;
+  if (autocomplete === 'current-password' || autocomplete === 'new-password') return 'password';
+  const hint = input.type === 'text'
+    ? `${input.getAttribute('aria-label') ?? ''} ${input.name} ${input.id} ${input.placeholder} ${Array.from(input.labels ?? []).map((label) => label.textContent ?? '').join(' ')}`.toLowerCase() : '';
+  if (/e-?mail|correo(?:\s+electr[oó]nico)?/u.test(hint) || autocomplete === 'email') return 'email';
+  if (autocomplete === 'username') return 'username';
+  if (input.type !== 'text') return undefined;
+  return /user|login|account/u.test(hint) ? 'username' : undefined;
 }
 function compatible(input: HTMLInputElement): boolean {
   if (semanticOf(input) === undefined || input.disabled || input.readOnly || input.hidden) return false;

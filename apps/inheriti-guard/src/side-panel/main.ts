@@ -87,6 +87,7 @@ const CONFIGURATION_CODES = new Set(['configuration_missing', 'master_key_salt_r
 let panelGeneration: number | undefined;
 let contextRevision = 0;
 let reconfirming = false;
+let retrySessionCheck = false;
 let visibleAccounts: readonly AccountSummary[] = [];
 
 document.documentElement.style.setProperty('--primary', inheritiGuardBrand.colors.primary);
@@ -256,6 +257,16 @@ const refreshKeyStatus = createKeyStatusRefresh(send,
 
 function renderPanel(state: PanelState): void {
   if (state.generation !== undefined) panelGeneration = state.generation;
+  if (state.kind === 'LOADING') {
+    appMain.dataset.authenticated = 'pending';
+    planAccessPanel.dataset.authenticated = 'pending';
+    planAccessPanel.dataset.organization = 'selected';
+    required('session-skeleton').hidden = false;
+    planAccessPanel.setAttribute('aria-busy', 'true');
+    authStatus.textContent = 'Checking session';
+    accessHeaderStatus.textContent = 'Plan Access: checking session';
+    return;
+  }
   accountFeedback.hidden = true;
   accountStatus.textContent = '';
   required('session-skeleton').hidden = true;
@@ -318,18 +329,23 @@ function renderAuthenticationState(state: PanelState, accountCount: number): voi
   const hasActiveAccount = state.accounts?.some((account) => account.active && !account.needsSignIn) === true;
   const needsOrganization = state.kind === 'SELECT_ORGANIZATION' && hasActiveAccount;
   const signedIn = hasActiveAccount && (state.kind === 'LOADING' || state.kind === 'EMPTY' || state.kind === 'PLANS' || needsOrganization);
-  const chooseSavedAccount = !signedIn && accountCount > 0 && state.kind !== 'SIGNING_IN' && state.kind !== 'LOADING';
+  retrySessionCheck = state.kind === 'ERROR' && state.code !== 'operator_reauthentication_required'
+    && state.code !== 'sign_in_failed' && state.code !== 'login_cancelled' && !CONFIGURATION_CODES.has(state.code);
+  const chooseSavedAccount = !signedIn && !retrySessionCheck && accountCount > 0 && state.kind !== 'SIGNING_IN';
   appMain.dataset.authenticated = String(signedIn);
   planAccessPanel.dataset.authenticated = String(signedIn);
   authStatus.textContent = state.kind === 'SIGNING_IN' ? 'Signing in' : state.kind === 'ERROR' ? 'Needs attention' : signedIn ? 'Signed in' : 'Signed out';
   accessHeaderStatus.textContent = `Plan Access: ${state.kind === 'SIGNING_IN' ? 'signing in' : state.kind === 'ERROR' ? 'needs attention' : signedIn ? 'signed in' : 'signed out'}`;
   signIn.hidden = signedIn;
   signIn.disabled = state.kind === 'SIGNING_IN';
-  signedOutTitle.textContent = chooseSavedAccount ? 'Choose an account' : 'Sign in to continue';
-  signedOutDescription.textContent = chooseSavedAccount ? 'Select a saved account to continue.'
-    : 'Connect your account before viewing plans, inspecting fields, or enabling site autofill.';
+  signedOutTitle.textContent = retrySessionCheck ? 'Could not check your session'
+    : chooseSavedAccount ? 'Choose an account' : 'Sign in to continue';
+  signedOutDescription.textContent = retrySessionCheck ? 'Your saved session was not changed. Retry to check Plan Access.'
+    : chooseSavedAccount ? 'Select a saved account to continue.'
+      : 'Connect your account before viewing plans, inspecting fields, or enabling site autofill.';
   savedAccountList.hidden = !chooseSavedAccount;
-  signIn.textContent = state.kind === 'SIGNING_IN' ? 'Signing in…' : chooseSavedAccount ? 'Add another account' : 'Sign in';
+  signIn.textContent = state.kind === 'SIGNING_IN' ? 'Signing in…' : retrySessionCheck ? 'Retry'
+    : chooseSavedAccount ? 'Add another account' : 'Sign in';
   accountArea.hidden = !signedIn;
   signOut.hidden = !signedIn || accountCount !== 1;
   signOutAll.hidden = !signedIn || accountCount <= 1;
@@ -456,7 +472,11 @@ async function requestState(type: 'sign-in' | 'sign-out' | 'load-plans' | 'forge
 }
 
 planFilter.addEventListener('input', applyFilter);
-signIn.addEventListener('click', () => { renderPanel({ kind: 'SIGNING_IN' }); void requestState('sign-in'); });
+signIn.addEventListener('click', () => {
+  if (retrySessionCheck) { renderPanel({ kind: 'LOADING' }); void requestState('load-plans'); return; }
+  renderPanel({ kind: 'SIGNING_IN' });
+  void requestState('sign-in');
+});
 addAccount.addEventListener('click', () => { void addAnotherAccount(); });
 async function addAnotherAccount(): Promise<void> {
   const startedRevision = contextRevision;
@@ -485,11 +505,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (accessDialog.open) accessDialog.close();
     if (assetsDialog.open) assetsDialog.close();
     renderPanel({ kind: 'LOADING' });
-    planAccessPanel.dataset.authenticated = 'pending';
-    required('session-skeleton').hidden = false;
     authStatus.textContent = 'Updating account';
     accessHeaderStatus.textContent = 'Plan Access: updating account';
-    planAccessPanel.setAttribute('aria-busy', 'true');
     void reconfirmAccountContext();
   }
   if (Object.keys(changes).some((key) => key.startsWith(MASTER_KEY_CACHE_PREFIX))) void refreshKeyStatus();

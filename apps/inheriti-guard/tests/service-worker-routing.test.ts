@@ -3,6 +3,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const listeners: Record<string, ((...args: any[]) => any) | undefined> = {};
 const panelBehaviors: chrome.sidePanel.PanelBehavior[] = [];
 const storageAccessLevels: chrome.storage.AccessLevel[] = [];
+let missingAccessLevelResponse: unknown;
+let missingAccessLevelPanelBehavior: chrome.sidePanel.PanelBehavior | undefined;
 const fillBatch = vi.fn(async (_batch: unknown, _initiator?: string) => [{ selector: 'login.username', targetId: 'target-auto', code: 'filled' }]);
 const fillField = vi.fn(async () => ({ kind: 'DONE', message: 'Filled.' }));
 const clearSession = vi.fn(async () => { mockProfiles = mockProfiles.filter((profile) => !profile.active); mockGeneration += 1; });
@@ -54,7 +56,7 @@ const discovered = [
 ];
 let workspaceFields = discovered;
 let overlayFields = discovered;
-let planFieldNames: Array<'username' | 'email' | 'password'> = ['username'];
+let planFieldNames: string[] = ['username'];
 
 vi.mock('../src/background/reveal.js', () => ({
   ChromeRevealController: class {
@@ -156,8 +158,7 @@ vi.mock('../src/background/auth.js', () => ({ signIn: signInMock, chooseAnotherS
 
 beforeAll(async () => {
   Object.assign(globalThis, { chrome: {
-    storage: { session: storageArea({}), local: { ...storageArea(localValues),
-      setAccessLevel: async ({ accessLevel }: { accessLevel: chrome.storage.AccessLevel }) => { storageAccessLevels.push(accessLevel); } } },
+    storage: { session: storageArea({}), local: storageArea(localValues) },
     tabs: {
       query: vi.fn(async () => [{ id: 7, windowId: 2, url: 'https://example.test/login' }]),
       sendMessage: vi.fn(async (_tabId: number, message: { type?: string }) => message.type === 'inheriti-overlay-discover-targets'
@@ -202,6 +203,11 @@ beforeAll(async () => {
     identity: { getRedirectURL: () => 'https://extension.test/oauth' },
   } });
   await import('../src/background/service-worker/main.js');
+  missingAccessLevelResponse = await request({ type: 'get-active-context' });
+  missingAccessLevelPanelBehavior = panelBehaviors[0];
+  vi.resetModules();
+  chrome.storage.local.setAccessLevel = async ({ accessLevel }: { accessLevel: chrome.storage.AccessLevel }) => { storageAccessLevels.push(accessLevel); };
+  await import('../src/background/service-worker/main.js');
 });
 
 beforeEach(() => {
@@ -234,7 +240,9 @@ function overlayRequest(message: unknown, sender: Record<string, unknown> = {
 
 describe('service worker access routing', () => {
   it('lets Chrome toggle the panel and verifies active tab context when the panel requests it', async () => {
-    expect(panelBehaviors).toEqual([{ openPanelOnActionClick: true }]);
+    expect(missingAccessLevelPanelBehavior).toEqual({ openPanelOnActionClick: true });
+    expect(missingAccessLevelResponse).toEqual({ ok: true, context: { origin: 'https://example.test' } });
+    expect(panelBehaviors).toEqual([{ openPanelOnActionClick: true }, { openPanelOnActionClick: true }]);
     expect(storageAccessLevels).toEqual(['TRUSTED_CONTEXTS']);
     expect(await request({ type: 'get-active-context' })).toEqual({ ok: true, context: { origin: 'https://example.test' } });
     (chrome.tabs.query as unknown as { mockResolvedValueOnce(value: unknown): void })
@@ -915,6 +923,22 @@ describe('service worker access routing', () => {
     expect(selected.batch.mappings.map((mapping: any) => [mapping.protectedField.fieldName, mapping.pageTarget.targetId]))
       .toEqual([['email', 'target-email'], ['password', 'target-password']]);
     expect(fillBatch).not.toHaveBeenCalled();
+  });
+
+  it('does not offer a field selector for a legacy asset with a schema-inferred field list', async () => {
+    await request({ type: 'discard-access-workspace' });
+    planFieldNames = ['appOrWebsite', 'ipSource', 'email', 'username', 'password'];
+    overlayFields = [{ targetId: 'target-email', origin: 'https://example.test', navigationId: 'nav-1',
+      semantic: 'email', label: 'Email', autocomplete: 'email', inputType: 'email', name: 'email', elementId: 'email' }];
+    const target = { targetId: 'target-email', tabId: 7, frameId: 0, origin: 'https://example.test',
+      navigationId: 'nav-1', semantic: 'email', label: 'Email' };
+    const legacy = await overlayRequest({ type: 'overlay-load-candidates', target });
+    expect(legacy.candidates.filter((one: any) => one.planName === 'Exact plan')
+      .map((one: any) => one.suggestion.mapping.protectedField.fieldName)).toEqual(['email']);
+    planFieldNames = ['email', 'username', 'password'];
+    const explicit = await overlayRequest({ type: 'overlay-load-candidates', target });
+    expect(explicit.candidates.filter((one: any) => one.planName === 'Exact plan')
+      .map((one: any) => one.suggestion.mapping.protectedField.fieldName)).toEqual(['email', 'username']);
   });
 
   it('allocates a shared login target once when an asset has username and email fields', async () => {

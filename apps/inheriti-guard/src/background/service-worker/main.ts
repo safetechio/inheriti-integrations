@@ -17,7 +17,9 @@ import { createAccessRuntime } from './access.js';
 import { GuardController } from '../guard/controller.js';
 
 const pendingContext = new PendingTabContextStore();
-void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => undefined);
+if (typeof chrome.storage.local.setAccessLevel === 'function') {
+  void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => undefined);
+}
 const sessions = new SessionStorageOperatorSessionStore(chrome.storage.session,
   new EncryptedOperatorSessionBackup(chrome.storage.local));
 let keyOwner: 'Application' | 'Organisation' = 'Application';

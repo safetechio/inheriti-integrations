@@ -3,6 +3,7 @@ import { MASTER_KEY_CACHE_PREFIX } from '../shared/stored-configuration.js';
 import { operatorSessionIdentity } from './session-key-vault.js';
 import type { ChromeConfiguration } from '../shared/configuration.js';
 import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/browser';
+import { InvalidOperatorSessionBackupError } from './encrypted-session-backup.js';
 
 const LEGACY_SESSION_KEY = 'inheriti.operatorSession';
 const PROFILES_KEY = 'inheriti.operatorProfiles';
@@ -120,18 +121,24 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
     const stored = await this.area.get([LEGACY_SESSION_KEY, PROFILES_KEY, ACTIVE_KEY, GENERATION_KEY]);
     if (stored[LEGACY_SESSION_KEY] !== undefined) await this.area.remove(LEGACY_SESSION_KEY);
     if (stored[PROFILES_KEY] === undefined && stored[GENERATION_KEY] === undefined && this.backup) {
-      try {
-        const restored = await this.backup.load();
-        if (restored) {
-          if (!Array.isArray(restored.profiles) || !Number.isSafeInteger(restored.generation)
-            || restored.generation < 0) throw new Error('invalid_operator_session_backup');
-          await this.area.set({ [PROFILES_KEY]: JSON.stringify(restored.profiles),
-            [GENERATION_KEY]: restored.generation });
-          if (restored.active !== undefined) await this.area.set({ [ACTIVE_KEY]: restored.active });
-          return this.read();
-        }
-      } catch {
+      let restored: Awaited<ReturnType<OperatorSessionBackup['load']>>;
+      try { restored = await this.backup.load(); }
+      catch (error) {
+        if (!(error instanceof InvalidOperatorSessionBackupError)) throw error;
         await this.backup.clear();
+        return { profiles: [], generation: 0 };
+      }
+      if (restored) {
+        if (!Array.isArray(restored.profiles) || !Number.isSafeInteger(restored.generation)
+          || restored.generation < 0) {
+          await this.backup.clear();
+          return { profiles: [], generation: 0 };
+        }
+        const values: Record<string, unknown> = { [PROFILES_KEY]: JSON.stringify(restored.profiles),
+          [GENERATION_KEY]: restored.generation };
+        if (restored.active !== undefined) values[ACTIVE_KEY] = restored.active;
+        await this.area.set(values);
+        return this.read();
       }
     }
     const generation = stored[GENERATION_KEY];
@@ -160,6 +167,8 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
       if (new Set(profiles.map(({ id }) => id)).size !== profiles.length
         || (active !== undefined && (typeof active !== 'string' || !profiles.some(({ id, session }) => id === active && session !== undefined))))
         throw new Error('invalid_operator_profiles');
+      if (this.context === undefined) return { profiles, generation: empty.generation,
+        ...(active === undefined ? {} : { active }) };
       let discardedLegacyBusiness = false;
       let migratedLegacyBusiness = false;
       for (const profile of profiles) {
@@ -190,7 +199,9 @@ export class SessionStorageOperatorSessionStore implements OperatorSessionStore 
         return next;
       }
       return { profiles, generation: empty.generation, ...(active === undefined ? {} : { active }) };
-    } catch {
+    } catch (error) {
+      if (!(error instanceof SyntaxError) && !(error instanceof Error
+        && ['invalid_operator_profiles', 'invalid_operator_profile', 'invalid_operator_session'].includes(error.message))) throw error;
       await this.area.remove([PROFILES_KEY, ACTIVE_KEY]);
       await this.area.set({ [GENERATION_KEY]: empty.generation + 1 });
       await this.clearKeys();

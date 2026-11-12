@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EncryptedOperatorSessionBackup } from '../src/background/encrypted-session-backup.js';
-import type { OperatorSessionBackup } from '../src/background/session-store.js';
+import { EncryptedOperatorSessionBackup, InvalidOperatorSessionBackupError } from '../src/background/encrypted-session-backup.js';
+import { SessionStorageOperatorSessionStore, type OperatorSessionBackup } from '../src/background/session-store.js';
 
 const records = new Map<string, unknown>();
 const local = new Map<string, unknown>();
@@ -57,8 +57,9 @@ describe('encrypted operator session backup', () => {
 
     const value = [...local.values()][0] as { iv: number[]; ciphertext: number[] };
     value.ciphertext[0] = value.ciphertext[0]! ^ 1;
-    await expect(new EncryptedOperatorSessionBackup(area).load()).rejects.toThrow();
-    await backup.clear();
+    await expect(new EncryptedOperatorSessionBackup(area).load()).rejects.toBeInstanceOf(InvalidOperatorSessionBackupError);
+    const sessionArea = { get: async () => ({}), set: async () => undefined, remove: async () => undefined } as unknown as chrome.storage.StorageArea;
+    expect(await new SessionStorageOperatorSessionStore(sessionArea, backup).load()).toBeUndefined();
     expect(await backup.load()).toBeUndefined();
   });
 });
