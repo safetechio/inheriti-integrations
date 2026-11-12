@@ -149,8 +149,9 @@ export function FileRow({
           {file.status === 'warning' ? (
             <Button
               title="View warnings"
-              startIcon={<Icon name="circle-info" size={11} />}
+              startIcon={<Icon name="circle-info" size={11} color={theme.colors.gray} />}
               variant="outlined"
+              color="gray"
               size="sm"
               minHeight={theme.importer.controls.sourceActionHeight}
               paddingHorizontal={theme.importer.spacing.sectionGap}
@@ -165,6 +166,7 @@ export function FileRow({
                 <Button
                   title="Unlock"
                   variant="outlined"
+                  color="gray"
                   size="sm"
                   minHeight={theme.importer.controls.sourceActionHeight}
                   paddingHorizontal={theme.importer.spacing.sectionGap}

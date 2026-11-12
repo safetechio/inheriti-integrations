@@ -4,9 +4,13 @@ import type { ChecklistItem } from '../types';
 export function ChecklistRows({
   items,
   secureAction,
+  secureHeaderAction,
+  planProgress = false,
 }: {
   items: ChecklistItem[];
   secureAction?: ReactNode;
+  secureHeaderAction?: ReactNode;
+  planProgress?: boolean;
 }) {
   return (
     <>
@@ -15,9 +19,9 @@ export function ChecklistRows({
           key={item.label}
           className={`staging-checklist-row ${
             item.error ? 'has-error' : item.complete ? 'is-complete' : 'needs-fix'
-          }`}
+          } ${item.label === 'Secure staging' && planProgress ? 'is-staging' : ''}`}
           flexDirection="row"
-          alignItems="center"
+          alignItems={item.label === 'Secure staging' && planProgress ? 'flex-start' : 'center'}
           gap="m"
         >
           <Box className="staging-check-mark">
@@ -31,18 +35,23 @@ export function ChecklistRows({
                       ? 'hourglass'
                       : 'spinner'
               }
-              size={12}
+              size={item.loading && planProgress ? 24 : item.complete ? 14 : 12}
               color={
                 item.error
                   ? theme.colors.danger120
                   : item.complete
                     ? theme.colors.success120
-                    : theme.colors.gray50
+                    : item.loading && planProgress
+                      ? theme.colors.primary
+                      : theme.colors.gray50
               }
             />
           </Box>
           <Box flex={1} gap="xxs">
-            <Text variant="importerChecklistLabel">{item.label}</Text>
+            <Box flexDirection="row" justifyContent="space-between" alignItems="flex-start" gap="s">
+              <Text variant="importerChecklistLabel">{item.label}</Text>
+              {item.label === 'Secure staging' ? secureHeaderAction : null}
+            </Box>
             <Text variant="importerChecklistDetail" color="gray">
               {item.detail}
             </Text>
@@ -51,7 +60,7 @@ export function ChecklistRows({
                 {item.error}
               </Text>
             ) : null}
-            {item.loading ? (
+            {item.loading && !(planProgress && item.label === 'Secure staging') ? (
               <Box
                 accessibilityRole="progressbar"
                 accessibilityLabel={`${item.label} in progress`}

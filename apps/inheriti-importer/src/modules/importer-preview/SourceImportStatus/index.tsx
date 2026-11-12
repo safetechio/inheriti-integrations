@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, FilterChip, Icon, NoItemsPlaceholder, Stack } from '@main-components';
+import { Box, Button, FilterChip, Icon, NoItemsPlaceholder, Stack, theme } from '@main-components';
 import { FileRow } from './components/FileRow';
 import type { SourceImportStatusProps } from './types';
 import './styles.css';
@@ -56,8 +56,9 @@ export function SourceImportStatus({
         </Box>
         <Button
           title="Add files"
-          startIcon={<Icon name="plus" size={12} />}
+          startIcon={<Icon name="plus" size={12} color={theme.colors.gray} />}
           variant="outlined"
+          color="gray"
           disabled={!onAddFiles}
           onPress={() => onAddFiles?.()}
         />

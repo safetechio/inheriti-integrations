@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BaseModal, Box, Button, Icon, PanelHeader, Stack } from '@main-components';
+import { BaseModal, Box, Button, Icon, PanelHeader, Stack, theme } from '@main-components';
 import { UnassignedAssets } from './components/UnassignedAssets';
 import { PlanDraftList } from './components/PlanDraftList';
 import { usePlanGrouping } from './hooks/use-plan-grouping';
@@ -51,8 +51,9 @@ export function PlanGroupingSurface({
             actions={
               <Button
                 title="New plan"
-                startIcon={<Icon name="plus" size={12} />}
+                startIcon={<Icon name="plus" size={12} color={theme.colors.gray} />}
                 variant="outlined"
+                color="gray"
                 disabled={!onCreatePlan}
                 onPress={() => onCreatePlan?.()}
               />

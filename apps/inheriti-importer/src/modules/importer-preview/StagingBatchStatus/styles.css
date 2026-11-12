@@ -1,0 +1,45 @@
+.staging-batch-standalone {
+  padding: var(--importer-card-padding);
+  border: 1px solid var(--gray-30);
+  border-radius: var(--importer-radius-input);
+}
+.staging-batch-embedded {
+  margin-top: 20px;
+  max-width: 460px;
+}
+.staging-plan-track {
+  position: relative;
+}
+.staging-plan-fill {
+  position: relative;
+  background: var(--success);
+}
+.staging-plan-fill.is-active {
+  min-width: min(100px, 100%);
+  animation: staging-active-pulse 1.4s ease-in-out infinite;
+}
+.staging-plan-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.staging-plan-fill .staging-plan-label {
+  -webkit-text-stroke: 0.5px #064b22;
+  paint-order: stroke fill;
+}
+@keyframes staging-active-pulse {
+  50% {
+    filter: brightness(0.85);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .staging-plan-fill.is-active {
+    animation: none;
+  }
+}

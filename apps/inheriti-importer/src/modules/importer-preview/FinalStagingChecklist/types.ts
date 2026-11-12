@@ -34,4 +34,6 @@ export interface FinalStagingChecklistProps {
   showActions?: boolean;
   blockerCount?: number;
   progress?: ReactNode;
+  secureHeaderAction?: ReactNode;
+  planProgress?: boolean;
 }

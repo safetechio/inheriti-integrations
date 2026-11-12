@@ -61,14 +61,14 @@ function resolveSurface(variant: ButtonVariant, color: ButtonColor, disabled: bo
     return {
       backgroundColor: 'white',
       borderColor: disabled ? token(color, '10') : token(color, '30'),
-      labelColor: disabled ? token(color, '30') : token(color, '120'),
+      labelColor: disabled ? token(color, '30') : color === 'gray' ? 'gray' : token(color, '120'),
     };
   }
 
   return {
     backgroundColor: 'white',
     borderColor: 'white',
-    labelColor: disabled ? token(color, '30') : token(color, '120'),
+    labelColor: disabled ? token(color, '30') : color === 'gray' ? 'gray' : token(color, '120'),
   };
 }
 

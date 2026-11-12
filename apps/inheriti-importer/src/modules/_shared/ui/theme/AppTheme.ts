@@ -395,7 +395,7 @@ export const theme = {
     },
     importerChecklistLabel: {
       fontFamily: 'AppFont',
-      fontSize: 15,
+      fontSize: 22,
       lineHeight: 1.3,
       fontWeight: '600',
       letterSpacing: undefined,
@@ -403,7 +403,7 @@ export const theme = {
     },
     importerChecklistDetail: {
       fontFamily: 'AppFont',
-      fontSize: 14,
+      fontSize: 16,
       lineHeight: 1.35,
       fontWeight: '400',
       letterSpacing: undefined,

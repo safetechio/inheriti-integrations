@@ -16,6 +16,8 @@ export function FinalStagingChecklist({
   onStartAgain,
   showActions = true,
   progress,
+  secureHeaderAction,
+  planProgress = false,
 }: FinalStagingChecklistProps) {
   if (state === 'staged')
     return <StagingSuccess description={description} onStartAgain={onStartAgain} />;
@@ -26,6 +28,8 @@ export function FinalStagingChecklist({
       <Stack gap="m" className="staging-checklist-list">
         <ChecklistRows
           items={items.slice(-2)}
+          secureHeaderAction={secureHeaderAction}
+          planProgress={planProgress}
           secureAction={
             <>
               {progress}

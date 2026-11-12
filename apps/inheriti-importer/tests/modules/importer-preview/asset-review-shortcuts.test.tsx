@@ -125,19 +125,68 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
     const treeIcon = screen
       .getByRole('button', { name: 'Tree' })
       .querySelector('[data-testid]') as HTMLElement;
-    expect(listIcon.style.color).toBe('rgb(22, 66, 186)');
+    expect(listIcon.style.color).toBe('rgb(71, 84, 103)');
     expect(treeIcon.style.color).toBe('rgb(71, 84, 103)');
-    fireEvent.click(screen.getByText('Tree'));
+    expect(screen.queryByText('Tree')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tree' }));
     expect(screen.getByRole('button', { name: 'Tree' }).getAttribute('aria-pressed')).toBe('true');
-    expect(treeIcon.style.color).toBe('rgb(22, 66, 186)');
+    expect(treeIcon.style.color).toBe('rgb(71, 84, 103)');
     expect(listIcon.style.color).toBe('rgb(71, 84, 103)');
     expect(screen.queryByLabelText('Inspect Production database')).toBeNull();
-    expect(screen.queryByText(/Database \(1\)/)).toBeNull();
-    fireEvent.click(screen.getByText(/Infrastructure/));
-    fireEvent.click(screen.getByText(/Database/));
+    expect(screen.queryByRole('button', { name: 'Database (1)' })).toBeNull();
+    const parent = screen.getByRole('button', { name: 'Infrastructure (1)' });
+    expect(parent.getAttribute('aria-expanded')).toBe('false');
+    expect(parent.textContent).toContain('1 asset');
+    fireEvent.click(parent);
+    expect(parent.getAttribute('aria-expanded')).toBe('true');
+    const child = screen.getByRole('button', { name: 'Database (1)' });
+    expect(child.textContent).toContain('1 asset');
+    fireEvent.click(child);
     expect(screen.getByLabelText('Inspect Production database')).toBeTruthy();
-    fireEvent.click(screen.getByText(/Infrastructure/));
-    expect(screen.queryByText(/Database \(1\)/)).toBeNull();
+    fireEvent.click(parent);
+    expect(screen.queryByRole('button', { name: 'Database (1)' })).toBeNull();
+  });
+
+  it('counts descendants, keeps root assets visible, and hides the picker for flat sources', () => {
+    render(
+      <AssetReviewQueue
+        assets={[
+          { ...asset, id: 'root', name: 'Root asset', sourceFileName: 'prod.kdbx' },
+          {
+            ...asset,
+            id: 'nested-1',
+            name: 'Nested one',
+            sourceFileName: 'prod.kdbx',
+            folderPath: ['Team', 'Subfolder'],
+          },
+          {
+            ...asset,
+            id: 'nested-2',
+            name: 'Nested two',
+            sourceFileName: 'prod.kdbx',
+            folderPath: ['Team'],
+          },
+          {
+            ...asset,
+            id: 'flat',
+            name: 'Flat asset',
+            source: 'flat.csv',
+            sourceFileName: 'flat.csv',
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Tree' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tree' }));
+    expect(screen.getByLabelText('Inspect Root asset')).toBeTruthy();
+    const team = screen.getByRole('button', { name: 'Team (2)' });
+    expect(team.textContent).toContain('2 assets');
+    fireEvent.click(team);
+    expect(screen.getByRole('button', { name: 'Subfolder (1)' }).textContent).toContain('1 asset');
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'flat.csv' } });
+    expect(screen.queryByRole('button', { name: 'Tree' })).toBeNull();
+    expect(screen.getByLabelText('Inspect Flat asset')).toBeTruthy();
   });
 
   it('lists files with no Assets and keeps a search when its icon closes the field', () => {

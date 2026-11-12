@@ -23,7 +23,7 @@ export function StageActions({
           disabled={!canStage || !onRetry}
         />
       ) : null}
-      {!failed && state !== 'staged' ? (
+      {!failed && state !== 'staged' && state !== 'encrypting' ? (
         <Button
           title={state === 'encrypting' ? 'Staging…' : 'Encrypt & stage'}
           startIcon={<Icon name="shield" size={12} color={theme.colors.white} />}

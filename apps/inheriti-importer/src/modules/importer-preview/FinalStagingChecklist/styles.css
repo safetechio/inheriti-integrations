@@ -2,7 +2,7 @@
   gap: 16px;
 }
 .staging-checklist-row {
-  padding: var(--importer-row-padding-block) var(--importer-card-padding);
+  padding: 20px var(--importer-card-padding);
   border: var(--importer-border-width) solid var(--gray-10);
   border-radius: var(--importer-radius-input);
   background: var(--importer-color-surface);
@@ -15,10 +15,22 @@
   border-color: var(--danger-30);
   background: var(--danger-5);
 }
+.staging-checklist-row.is-staging {
+  border-color: var(--primary);
+  border-radius: 16px;
+  background: var(--importer-color-surface);
+}
+.staging-checklist-row.is-staging.needs-fix .staging-check-mark {
+  border: 0;
+  background: transparent;
+}
+.staging-checklist-row.is-staging > div:nth-child(2) {
+  gap: 6px;
+}
 .staging-check-mark {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--gray-30);

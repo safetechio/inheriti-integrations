@@ -35,10 +35,11 @@ export function FlowActions({
           <Icon
             name="chevron-left"
             size={11}
-            color={canGoBack ? theme.colors.primary120 : theme.colors.gray50}
+            color={canGoBack ? theme.colors.gray : theme.colors.gray50}
           />
         }
         variant="outlined"
+        color="gray"
         size="sm"
         minHeight={theme.importer.controls.footerSecondaryHeight}
         paddingHorizontal={theme.importer.spacing.sectionGap}

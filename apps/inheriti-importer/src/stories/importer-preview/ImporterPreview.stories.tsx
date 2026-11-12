@@ -5,6 +5,8 @@ import { AssetReviewQueue } from '@modules/importer-preview/AssetReviewQueue';
 import { PlanGroupingSurface } from '@modules/importer-preview/PlanGroupingSurface';
 import { FinalStagingChecklist } from '@modules/importer-preview/FinalStagingChecklist';
 import { ImporterFlow } from '@modules/importer-preview/ImporterFlow';
+import { AppHeader } from '@modules/import/ui/components/AppHeader';
+import { ShellFixture } from './shell-fixtures';
 import { PlanCard } from '@modules/importer-preview/PlanGroupingSurface/components/PlanCard';
 import { SensitiveValue } from '@modules/import/domain/import-model';
 import type { ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
@@ -504,6 +506,34 @@ export const WholeImporterFlowEncrypting = () => (
     plans={validPlans}
     checklist={checklist}
   />
+);
+export const WholeImporterFlowStagingProgress = () => (
+  <ShellFixture>
+    <ImporterFlow
+      headerActions={<AppHeader dirtyCount={0} />}
+      initialStage="staging"
+      stagingState="encrypting"
+      organizationKeyLoaded
+      files={readyFiles}
+      assets={reviewedAssets}
+      unassigned={[]}
+      plans={[
+        { ...validPlans[0], name: 'Plan 1' },
+        { ...validPlans[0], id: 'plan-second', name: 'Plan 2' },
+      ]}
+      checklist={checklist}
+      stagingBatch={{
+        items: [
+          { planId: validPlans[0].id, status: 'COMPLETE' },
+          { planId: 'plan-second', status: 'CONFIGURING' },
+        ],
+        running: true,
+        onRetryCreate: noop,
+        onRetryConfigure: noop,
+        onCancel: noop,
+      }}
+    />
+  </ShellFixture>
 );
 export const WholeImporterFlowStaged = () => (
   <ImporterFlow

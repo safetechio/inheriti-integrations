@@ -1,11 +1,85 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StagingBatchStatus } from '@modules/importer-preview/StagingBatchStatus';
+import { FinalStagingChecklist } from '@modules/importer-preview/FinalStagingChecklist';
+import { Button } from '@main-components';
 import { parserGuidance } from '@modules/import/application/parser-guidance';
 
 afterEach(cleanup);
 
 describe('StagingBatchStatus', () => {
+  it('keeps failed, cancelled and not staged outcomes visible in embedded bars', () => {
+    const onRetryConfigure = vi.fn();
+    render(
+      <StagingBatchStatus
+        embedded
+        items={[
+          { planId: 'a', status: 'FAILED_CONFIGURE' },
+          { planId: 'b', status: 'CANCELLED' },
+          { planId: 'c', status: 'CREATED' },
+        ]}
+        plans={[
+          { id: 'a', name: 'Alpha' },
+          { id: 'b', name: 'Beta' },
+          { id: 'c', name: 'Gamma' },
+        ]}
+        running={false}
+        onRetryCreate={vi.fn()}
+        onRetryConfigure={onRetryConfigure}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Alpha · Staging failed')).toBeTruthy();
+    expect(screen.getByText('Beta · Cancelled')).toBeTruthy();
+    expect(screen.getByText('Gamma · Not staged')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Retry staging' })[0]!);
+    expect(onRetryConfigure).toHaveBeenCalledWith('a');
+  });
+  it('places the running batch directly in the active card with one header cancel action', () => {
+    const onCancel = vi.fn();
+    render(
+      <FinalStagingChecklist
+        state="encrypting"
+        items={[
+          { label: 'Load Organisation Key', detail: 'Key securely loaded.', complete: true },
+          { label: 'Secure staging', detail: 'Encrypting data.', complete: false, loading: true },
+        ]}
+        planProgress
+        secureHeaderAction={<Button title="Cancel staging" onPress={onCancel} />}
+        progress={
+          <StagingBatchStatus
+            embedded
+            items={[
+              { planId: 'a', status: 'COMPLETE' },
+              { planId: 'b', status: 'CONFIGURING' },
+            ]}
+            plans={[
+              { id: 'a', name: 'Alpha' },
+              { id: 'b', name: 'Beta' },
+            ]}
+            running
+            onRetryCreate={vi.fn()}
+            onRetryConfigure={vi.fn()}
+            onCancel={onCancel}
+          />
+        }
+      />,
+    );
+    expect(screen.getAllByRole('button', { name: 'Cancel staging' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Staging…' })).toBeNull();
+    expect(
+      screen.getByRole('progressbar', { name: 'Alpha: Staged' }).getAttribute('aria-valuenow'),
+    ).toBe('100');
+    expect(
+      screen.getByRole('progressbar', { name: 'Beta: Staging' }).getAttribute('aria-valuenow'),
+    ).toBeNull();
+    expect(screen.getByRole('progressbar', { name: 'Beta: Staging' }).getAttribute('title')).toBe(
+      'Beta: Staging',
+    );
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel staging' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
   it('hides the redundant batch summary after every Plan is staged', () => {
     const { container } = render(
       <StagingBatchStatus

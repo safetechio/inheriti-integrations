@@ -50,6 +50,8 @@
 }
 .asset-review-source-label {
   display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 4px;
   color: var(--gray);
   font-size: 12px;
@@ -62,6 +64,9 @@
   border-radius: var(--importer-radius-control);
   background-color: var(--importer-color-surface);
   color: inherit;
+}
+.asset-review-source-label select {
+  width: 100%;
 }
 .asset-review-search {
   gap: 6px;
@@ -82,6 +87,33 @@
   background: transparent;
   cursor: pointer;
   color: var(--gray);
+}
+.asset-review-view-picker {
+  align-self: flex-end;
+  overflow: hidden;
+  border: 1px solid var(--gray-30, #d0d5dd);
+  border-radius: var(--importer-radius-control);
+}
+.asset-review-view-picker button {
+  display: flex;
+  width: 36px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.asset-review-view-picker button + button {
+  border-left: 1px solid var(--gray-30, #d0d5dd);
+}
+.asset-review-view-picker button[aria-pressed='true'] {
+  background: var(--gray-10, #eaecf0);
+}
+.asset-review-view-picker button:focus-visible,
+.asset-review-folder:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .asset-review-shortcut {
   padding: 1px 5px;
@@ -116,6 +148,9 @@
   min-height: 36px;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--importer-radius-control);
+  background: var(--importer-color-surface);
 }
 .asset-review-row-name {
   display: block;
@@ -135,6 +170,28 @@
   text-align: left;
   cursor: pointer;
   font-weight: 600;
+  border-bottom: 1px solid var(--gray-10, #eaecf0);
+  color: var(--importer-color-text, #101828);
+}
+.asset-review-folder-chevron {
+  width: 14px;
+  flex: none;
+  color: var(--gray-50, #a3b3bf);
+  font-size: 20px;
+  line-height: 1;
+}
+.asset-review-folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asset-review-folder-count {
+  margin-left: auto;
+  flex: none;
+  color: var(--gray-50, #a3b3bf);
+  font-size: 12px;
+  font-weight: 400;
 }
 .asset-type-select {
   width: min(100%, 320px);

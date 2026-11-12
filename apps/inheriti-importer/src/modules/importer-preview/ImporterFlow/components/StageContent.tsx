@@ -3,7 +3,7 @@ import { FinalStagingChecklist, type ChecklistItem } from '../../FinalStagingChe
 import { PlanGroupingSurface, type PlanDraft } from '../../PlanGroupingSurface';
 import { SourceImportStatus } from '../../SourceImportStatus';
 import { StagingBatchStatus, type StagingBatchStatusProps } from '../../StagingBatchStatus';
-import { Stack } from '@main-components';
+import { Button, Stack } from '@main-components';
 import type { ImporterFlowReadiness } from '../application/flow-readiness';
 import { type ImporterFlowStage, useImporterFlow } from '../hooks/use-importer-flow';
 
@@ -98,6 +98,7 @@ export function StageContent({
       ? 'The Organization Key has not been claimed yet. Claim it on your SafeKey device, then retry the release.'
       : organizationKeyError;
   const encryptionReady = ['encrypted', 'staged'].includes(flow.stagingState);
+  const batchRunning = Boolean(stagingBatch?.running && stagingBatch.items.length);
   const items = checklist.map((item) => {
     if (item.label === 'Imported sources reviewed')
       return {
@@ -196,6 +197,18 @@ export function StageContent({
         onStage={flow.markStaged}
         onStartAgain={flow.startAgain}
         showActions={true}
+        planProgress={batchRunning}
+        secureHeaderAction={
+          batchRunning ? (
+            <Button
+              title="Cancel staging"
+              variant="outlined"
+              color="gray"
+              size="sm"
+              onPress={() => stagingBatch?.onCancel()}
+            />
+          ) : null
+        }
         blockerCount={blockerCount}
         progress={
           stagingBatch ? (
@@ -206,6 +219,7 @@ export function StageContent({
               onRetryCreate={stagingBatch.onRetryCreate}
               onRetryConfigure={stagingBatch.onRetryConfigure}
               onCancel={stagingBatch.onCancel}
+              embedded
             />
           ) : null
         }

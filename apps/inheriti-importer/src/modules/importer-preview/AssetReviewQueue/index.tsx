@@ -254,35 +254,27 @@ export function AssetReviewQueue({
             )}
           </Box>
           {canShowTree ? (
-            <Box flexDirection="row" gap="s" className="asset-review-view-picker">
-              <FilterChip
-                selected={view === 'list'}
-                onPress={() => setView('list')}
-                accessibilityLabel="List"
-                icon={
+            <Box
+              flexDirection="row"
+              className="asset-review-view-picker"
+              role="group"
+              aria-label="Asset view"
+            >
+              {(['list', 'tree'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-label={option === 'list' ? 'List' : 'Tree'}
+                  aria-pressed={view === option}
+                  onClick={() => setView(option)}
+                >
                   <Icon
-                    name="list"
+                    name={option === 'list' ? 'list' : 'sitemap'}
                     size={16}
-                    color={view === 'list' ? theme.colors.primary120 : theme.colors.gray}
+                    color={theme.colors.gray}
                   />
-                }
-              >
-                List
-              </FilterChip>
-              <FilterChip
-                selected={view === 'tree'}
-                onPress={() => setView('tree')}
-                accessibilityLabel="Tree"
-                icon={
-                  <Icon
-                    name="sitemap"
-                    size={16}
-                    color={view === 'tree' ? theme.colors.primary120 : theme.colors.gray}
-                  />
-                }
-              >
-                Tree
-              </FilterChip>
+                </button>
+              ))}
             </Box>
           ) : null}
           <Stack gap="s" className="asset-review-queue">
@@ -293,7 +285,7 @@ export function AssetReviewQueue({
             ) : null}
             {rows.map((row) =>
               row.asset ? (
-                <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
+                <Box key={row.key} style={{ paddingLeft: row.depth ? row.depth * 16 + 14 : 0 }}>
                   <AssetRow
                     asset={row.asset}
                     selected={row.asset.id === selected?.id}
@@ -306,6 +298,8 @@ export function AssetReviewQueue({
                   type="button"
                   className="asset-review-folder"
                   style={{ paddingLeft: row.depth * 16 + 8 }}
+                  aria-label={`${row.label} (${row.count})`}
+                  aria-expanded={openFolders.has(row.key.slice(7))}
                   onClick={() =>
                     setOpenFolders((current) => {
                       const next = new Set(current);
@@ -316,7 +310,16 @@ export function AssetReviewQueue({
                     })
                   }
                 >
-                  {openFolders.has(row.key.slice(7)) ? '⌄' : '›'} {row.label} ({row.count})
+                  <Text className="asset-review-folder-chevron" color="gray50" aria-hidden="true">
+                    {openFolders.has(row.key.slice(7)) ? '⌄' : '›'}
+                  </Text>
+                  <Icon name="folder" type="font-awesome-6" size={18} color={theme.colors.gray} />
+                  <Text className="asset-review-folder-name" color="gray120" semibold>
+                    {row.label}
+                  </Text>
+                  <Text className="asset-review-folder-count" color="gray50">
+                    {row.count} {row.count === 1 ? 'asset' : 'assets'}
+                  </Text>
                 </button>
               ),
             )}
