@@ -39,6 +39,7 @@ export function isFieldSelector(selector: string): boolean {
 }
 
 export function assertPlaintextDestination(terminal: Terminal, allowed: boolean): void {
+  if (process.env.GITHUB_ACTIONS === 'true') throw Object.assign(new Error('Plaintext resolution is unavailable in GitHub Actions. Use secrets exec or plans use.'), { code: 'plaintext_github_actions_rejected' });
   if (allowed !== true) throw Object.assign(new Error('Plaintext output requires --allow-plaintext-output.'), { code: 'plaintext_acknowledgment_required' });
   if (terminal.stdoutIsTTY !== false) throw Object.assign(new Error('Plaintext output requires non-terminal stdout.'), { code: 'plaintext_terminal_rejected' });
 }

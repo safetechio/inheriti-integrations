@@ -32,6 +32,41 @@ function context(value = 'fixture-secret-never-print'): { core: Record<string, u
 }
 
 describe('plans use', () => {
+  it('rejects inherited child output in GitHub Actions before authentication', async () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    const input = context();
+    const getAccessToken = vi.fn();
+    const getPlan = vi.fn();
+    input.core.getAccessToken = getAccessToken;
+    input.core.getPlan = getPlan;
+    const output = terminal();
+    try {
+      await expect(usePlan(input as never, output, 'plan-1', {
+        output: 'inherit',
+        envs: [{ name: 'SECRET', selector: 'service.token' }], tempFiles: [], sockets: [], fds: [],
+        command: [process.execPath, '-e', 'process.exit(0)'],
+      })).rejects.toMatchObject({ code: 'use_plan_invalid' });
+      expect(getAccessToken).not.toHaveBeenCalled();
+      expect(getPlan).not.toHaveBeenCalled();
+      expect(output.lines).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps child output suppressed in GitHub Actions without printing a secret', async () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    const output = terminal();
+    try {
+      await usePlan(context() as never, output, 'plan-1', {
+        stdin: 'service.token', envs: [], tempFiles: [], sockets: [], fds: [],
+        command: [process.execPath, '-e', "process.stdin.on('data', value => console.log(value.toString()));process.stdin.resume()"],
+      });
+      expect(output.lines.join('\n')).not.toContain('fixture-secret-never-print');
+      expect(output.lines.some((line) => line.startsWith('::add-mask::'))).toBe(false);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('forwards automation context and rejects operator context before reveal', async () => {
     const input = context();
     const options = {

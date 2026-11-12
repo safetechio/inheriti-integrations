@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { messageFor, run } from '../src/main.js';
 import type { Terminal } from '../src/output.js';
 
@@ -18,6 +18,7 @@ function output(stdoutIsTTY = false): Terminal & { lines: string[]; errors: stri
 }
 
 beforeEach(() => {
+  vi.stubEnv('GITHUB_ACTIONS', 'false');
   vi.clearAllMocks();
   configure.mockReturnValue({ business: false });
   makeContext.mockReturnValue({});
@@ -26,6 +27,7 @@ beforeEach(() => {
   use.mockResolvedValue(0);
   resolveField.mockResolvedValue(0);
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('secret command options', () => {
   it('requires an explicit complete automation opt-in and preserves human child arguments', async () => {

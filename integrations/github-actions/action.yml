@@ -18,7 +18,7 @@ inputs:
     description: Trusted command string to run on the GitHub runner
     required: true
   output:
-    description: Child output policy (suppress or inherit)
+    description: Child output policy (suppress only; inherit is rejected by the CLI in GitHub Actions)
     default: suppress
     required: false
   reason:

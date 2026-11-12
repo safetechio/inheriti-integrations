@@ -26,8 +26,8 @@ platform wrapper -> inheriti secrets exec -> Client SDK -> Business Integrations
 
 The wrapper never receives or stores plaintext itself. The CLI opens the normal reveal flow (master
 key, DMS, authentication, moderation, custodian and expiry), authorizes each requested field, and
-injects it only into the child process environment. Child output is inherited only when the caller
-explicitly requests `--output inherit`.
+injects it only into the child process environment. Outside GitHub Actions, child output is inherited
+only when the caller explicitly requests `--output inherit`.
 
 ## Common command
 
@@ -38,13 +38,13 @@ inheriti secrets exec production \
 ```
 
 Use `secrets resolve PLAN_ID --field ASSET.FIELD --allow-plaintext-output` only with a trusted
-nonterminal receiver, such as the Ansible lookup wrapper. Terminal stdout is rejected even when
+nonterminal receiver outside GitHub Actions, such as the Ansible lookup wrapper. Terminal stdout is rejected even when
 stdin is piped. Pipes and redirected files can still retain plaintext; never send it to a log.
 
 All platform wrappers suppress child stdout and stderr by default. Set
 `INHERITI_SECRETS_OUTPUT=inherit` explicitly only when you accept that child logs may expose
-credentials. The GitHub Action independently defaults its `output` input to `suppress`; choose
-`output: inherit` explicitly for inherited logs. Output suppression preserves child failures and
+credentials. The GitHub Action requires `output: suppress` and rejects `output: inherit`.
+Output suppression preserves child failures and
 does not prevent the recipient from writing files or sending credentials elsewhere.
 
 ## Integrations

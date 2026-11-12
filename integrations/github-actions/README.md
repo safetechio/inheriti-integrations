@@ -20,8 +20,8 @@ For example, a deployment workflow can set `reason: Deploy production service`,
 variables to the CLI; GitHub commit, workflow, and run URL are read from GitHub's standard
 environment by the CLI. Do not put secrets in these inputs.
 
-Child output defaults to `suppress`. Set `output: inherit` explicitly only when you accept that
-child logs may expose credentials. Suppression preserves command failures and does not control
+Child output is `suppress` in GitHub Actions; the CLI rejects `output: inherit` before loading a plan
+because child logs may expose credentials. Suppression preserves command failures and does not control
 recipient retention. Pin the tested Action revision and exact CLI version together when that pair
 is published. See the [delivery policy](../README.md#delivery-and-retention).
 

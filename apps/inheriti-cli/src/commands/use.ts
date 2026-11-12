@@ -78,6 +78,9 @@ export async function usePlan(
 }
 
 function validateUseOptions(options: UsePlanOptions): void {
+  if (process.env.GITHUB_ACTIONS === 'true' && options.output === 'inherit') {
+    throw new UsePlanInvalid('Inherited child output is unavailable in GitHub Actions. Use --output suppress.');
+  }
   if (options.command.length === 0 || !options.command[0]?.trim()) throw new UsePlanInvalid('Pass an executable after --.');
   if (options.stdin === undefined && options.envs.length === 0 && options.tempFiles.length === 0
     && options.sockets.length === 0 && options.fds.length === 0) {

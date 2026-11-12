@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolvePlanField, revealPlan } from '../src/commands/reveal.js';
 import { messageFor } from '../src/main.js';
 import type { Terminal } from '../src/output.js';
@@ -25,6 +25,9 @@ function consuming(value: unknown) {
       destination(fields.map(({ selector }) => ({ selector, value }))),
   };
 }
+
+beforeEach(() => vi.stubEnv('GITHUB_ACTIONS', 'false'));
+afterEach(() => vi.unstubAllEnvs());
 
 describe('plans reveal', () => {
   beforeEach(() => writeClipboard.mockClear());
@@ -566,6 +569,16 @@ describe('reveal mode', () => {
 });
 
 describe('plaintext destination guard', () => {
+  it('rejects GitHub Actions before authentication', async () => {
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    const getAccessToken = vi.fn();
+    try {
+      await expect(resolvePlanField(context({ getAccessToken }), terminal(false), 'plan-1', 'asset.password', { allowPlaintextOutput: true }))
+        .rejects.toMatchObject({ code: 'plaintext_github_actions_rejected' });
+      expect(getAccessToken).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it.each([[true, true, true], [false, true, true], [true, undefined, true], [false, undefined, true], [false, false, false]])
     ('rejects before auth (interactive %s, stdout %s, acknowledged %s)', async (interactive, stdoutIsTTY, allowed) => {
       const getAccessToken = vi.fn();

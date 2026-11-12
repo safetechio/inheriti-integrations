@@ -212,7 +212,7 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
       `deletion. A socket trusts the local account, not the identity of its first peer. Sockets and ` +
       `descriptors are unsupported on Windows. Child stdout and stderr are suppressed because a ` +
       `generic executable could echo its credential; only Inheriti metadata/status is returned. ` +
-      `--output inherit explicitly exposes child logs, which may contain credentials. Approve the ` +
+      `--output inherit explicitly exposes child logs, which may contain credentials, and is unavailable in GitHub Actions. Approve the ` +
       `exact command before an agent runs it.`,
     secrets: `Usage: inheriti secrets <exec|resolve|publish>\n\nDirect Inheriti runtime delivery uses exec and the same ` +
       `reveal and use flows as plans commands. Publish is an optional one-time cloud-store copy. Inheriti® Business commands accept --organization ID to select an ` +
@@ -220,11 +220,11 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     'secrets exec': `Usage: inheriti secrets exec [PLAN_ID] [--env NAME=ASSET.FIELD ...] [--automation] [--reason TEXT] [--commit SHA] [--workflow REF] [--pipeline URL] [--target TEXT] [--image TEXT] [--version TEXT] [--output inherit] -- ` +
       `EXECUTABLE [ARGUMENT ...]\n\nRun a child process with reveal-authorized environment variables. ` +
       `The reveal flow, approvals and field auditing are unchanged. Output is suppressed by default; ` +
-      `--output inherit keeps the child's logs visible and may expose credentials. Context flags require --automation and must precede --. GitHub automation can supply commit, workflow, and pipeline context from its allowlisted environment.`,
+      `--output inherit keeps the child's logs visible and may expose credentials; it is unavailable in GitHub Actions. Context flags require --automation and must precede --. GitHub automation can supply commit, workflow, and pipeline context from its allowlisted environment.`,
     'secrets resolve': `Usage: inheriti secrets resolve [PLAN_ID] --field ASSET.FIELD ` +
       `--allow-plaintext-output\n\nResolve one field through the full reveal flow and write only its ` +
       `value to stdout for a trusted wrapper. Do not use this command in a terminal or redirect its ` +
-      `output to logs.`,
+      `output to logs. This command is unavailable in GitHub Actions.`,
     'plans abort': `Usage: inheriti plans abort PLAN_ID\n\nAbandon the current access request for this operator. The next reveal starts a new access flow.`,
     setup: `Usage: inheriti setup [--yes|--no-completion] [--shell bash|zsh|fish]\n\nOffer to enable shell ` +
       `autocomplete, with Yes selected by default. --yes installs without prompting; --no-completion ` +
