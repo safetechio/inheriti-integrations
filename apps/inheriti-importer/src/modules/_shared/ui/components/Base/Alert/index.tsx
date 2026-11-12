@@ -9,10 +9,10 @@ const TONE_TOKENS: Record<
   AlertTone,
   { background: keyof Theme['colors']; border: keyof Theme['colors']; text: keyof Theme['colors'] }
 > = {
-  danger: { background: 'danger10', border: 'danger30', text: 'danger120' },
-  warning: { background: 'warning10', border: 'warning30', text: 'warning200' },
-  info: { background: 'info10', border: 'info30', text: 'info120' },
-  success: { background: 'success10', border: 'success30', text: 'success120' },
+  danger: { background: 'danger5', border: 'danger30', text: 'danger120' },
+  warning: { background: 'warning5', border: 'warning30', text: 'warning200' },
+  info: { background: 'info5', border: 'info30', text: 'info120' },
+  success: { background: 'success5', border: 'success30', text: 'success120' },
 };
 
 export function Alert({
@@ -33,9 +33,9 @@ export function Alert({
   return (
     <Box
       accessibilityRole="alert"
-      padding="s"
+      padding={uiTheme.importer.spacing.sectionGap}
       borderWidth={1}
-      borderRadius={uiTheme.radii.s}
+      borderRadius={uiTheme.importer.borders.inputRadius}
       backgroundColor={tokens.background}
       borderColor={tokens.border}
     >

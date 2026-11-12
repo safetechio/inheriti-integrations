@@ -130,10 +130,27 @@
   }
 }
 
+.importer-icon-spinner {
+  animation: importer-icon-spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes importer-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .importer-icon-spinner,
+  [role='progressbar'] > div:has(> svg),
   .mapping-workspace,
   .complete-step {
     animation: none;
+  }
+
+  .mapping-workspace,
+  .complete-step {
     transform: none;
   }
 }

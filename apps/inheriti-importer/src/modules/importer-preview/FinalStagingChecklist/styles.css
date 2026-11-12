@@ -9,7 +9,7 @@
 }
 .staging-checklist-row.needs-fix {
   border-color: var(--gray-30);
-  background: var(--gray-5);
+  background: var(--importer-color-surface);
 }
 .staging-checklist-row.has-error {
   border-color: var(--danger-30);

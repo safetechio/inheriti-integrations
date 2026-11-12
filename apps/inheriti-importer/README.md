@@ -54,6 +54,8 @@ yarn dev:stg
 yarn dev:prod
 ```
 
+For a searchable catalog of synthetic Importer states inside an Electron window, run `corepack pnpm visual:catalog` from this app directory. See [visual catalog](docs/visual-catalog.md) for scope and controls.
+
 To build an installer for the current operating system:
 
 ```bash

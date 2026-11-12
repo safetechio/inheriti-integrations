@@ -46,5 +46,6 @@ contextBridge.exposeInMainWorld('inheriti', {
   updates: {
     check: () => ipcRenderer.invoke('update:check'),
     install: (id) => ipcRenderer.invoke('update:install', id),
+    reopen: () => ipcRenderer.invoke('update:reopen'),
   },
 });

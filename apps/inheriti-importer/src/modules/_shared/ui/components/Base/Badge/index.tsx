@@ -14,6 +14,7 @@ type BadgeProps = Omit<BoxProps, 'children'> & {
   size?: BadgeSize;
   icon?: string;
   iconSize?: number;
+  iconSpin?: boolean;
   uppercase?: boolean;
   emphasis?: BadgeEmphasis;
 };
@@ -45,6 +46,7 @@ export function Badge({
   size = 'md',
   icon,
   iconSize,
+  iconSpin = false,
   uppercase = false,
   emphasis = 'default',
   style,
@@ -104,6 +106,7 @@ export function Badge({
         <Icon
           name={icon}
           size={iconSize ?? dimensions.iconSize}
+          spin={iconSpin}
           color={theme.colors[foregroundColor]}
         />
       ) : null}

@@ -66,6 +66,8 @@
   border-radius: var(--importer-radius-input);
   background: var(--importer-color-surface);
   cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .plan-asset-row-name {
@@ -113,20 +115,20 @@
 .plan-drop-zone {
   padding: 8px var(--importer-section-gap);
   border: var(--importer-border-width) solid var(--primary-30);
-  border-radius: 10px;
-  background: var(--primary-10);
+  border-radius: var(--importer-radius-input);
+  background: var(--primary-5);
   text-align: center;
 }
 
 .over-valid .plan-drop-zone {
   border-color: var(--success);
-  background: var(--success-10);
+  background: var(--success-5);
   color: var(--success-120);
 }
 
 .over-invalid .plan-drop-zone {
   border-color: var(--warning);
-  background: var(--warning-10);
+  background: var(--warning-5);
   color: var(--warning-200);
 }
 

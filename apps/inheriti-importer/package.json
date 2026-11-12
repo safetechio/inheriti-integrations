@@ -15,6 +15,7 @@
     "dev:prod": "node scripts/dev-environment.mjs prod",
     "dev:web": "vite",
     "review:local": "node scripts/review-local.mjs",
+    "visual:catalog": "node scripts/visual-catalog.mjs",
     "ladle": "ladle serve",
     "ladle:build": "ladle build",
     "build": "node scripts/build-environment.mjs dev",

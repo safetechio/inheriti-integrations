@@ -22,18 +22,18 @@ const toneTokens: Record<
     foregroundColor: keyof Theme['colors'];
   }
 > = {
-  info: { backgroundColor: 'info10', borderColor: 'info30', foregroundColor: 'info120' },
+  info: { backgroundColor: 'info5', borderColor: 'info30', foregroundColor: 'info120' },
   success: {
-    backgroundColor: 'success10',
+    backgroundColor: 'success5',
     borderColor: 'success30',
     foregroundColor: 'success120',
   },
   warning: {
-    backgroundColor: 'warning10',
+    backgroundColor: 'warning5',
     borderColor: 'warning30',
     foregroundColor: 'warning200',
   },
-  danger: { backgroundColor: 'danger10', borderColor: 'danger30', foregroundColor: 'danger120' },
+  danger: { backgroundColor: 'danger5', borderColor: 'danger30', foregroundColor: 'danger120' },
   neutral: { backgroundColor: 'gray5', borderColor: 'gray10', foregroundColor: 'gray' },
 };
 
@@ -48,27 +48,36 @@ export function Notice({
   ...props
 }: NoticeProps) {
   const tokens = toneTokens[tone];
+  const titleVariant = compact ? 'importerNoticeTitle' : 'importerStagingTitle';
+  const titleTypography = theme.textVariants[titleVariant];
+  const titleLineHeight = titleTypography.fontSize * titleTypography.lineHeight;
   return (
     <Box
       {...props}
       flexDirection="row"
-      alignItems={compact ? 'flex-start' : 'center'}
+      alignItems="flex-start"
       gap={compact ? 's' : 'm'}
       padding={compact ? theme.importer.spacing.sectionGap : theme.importer.spacing.cardPadding}
       borderWidth={1}
-      borderRadius={compact ? 'm' : 'l'}
+      borderRadius={theme.importer.borders.inputRadius}
       borderColor={tokens.borderColor}
       backgroundColor={tokens.backgroundColor}
       style={style}
     >
       {icon ? (
-        <Icon name={icon} size={iconSize} color={theme.colors[tokens.foregroundColor]} />
+        <Box
+          className="notice-icon"
+          width={iconSize}
+          height={titleLineHeight}
+          flexShrink={0}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Icon name={icon} size={iconSize} color={theme.colors[tokens.foregroundColor]} />
+        </Box>
       ) : null}
       <Box flex={1} gap="xxs">
-        <Text
-          variant={compact ? 'importerNoticeTitle' : 'importerStagingTitle'}
-          color={tokens.foregroundColor}
-        >
+        <Text variant={titleVariant} className="notice-title" color={tokens.foregroundColor}>
           {title}
         </Text>
         {description ? (

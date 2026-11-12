@@ -9,6 +9,7 @@ const { bearerApiFetch } = require('./api-transport.cjs');
 
 const channel = process.env.INHERITI_ENV || 'dev';
 const version = app.isPackaged ? app.getVersion() : `${app.getVersion()}-${channel}.0`;
+let verifiedInstallerOpened = false;
 
 function platformName() {
   return `${process.platform}-${process.arch}`;
@@ -109,6 +110,7 @@ async function availableUpdate(runtime) {
 }
 
 async function installUpdate(id, runtime) {
+  verifiedInstallerOpened = false;
   if (!app.isPackaged) throw new Error('Updates require an installed Importer');
   const capture = runtime.capture();
   const response = await request(runtime, 'GET', '/integrations/v1/internal-builds');
@@ -184,6 +186,7 @@ async function installUpdate(id, runtime) {
     }
     const error = await shell.openPath(destination);
     if (error) throw new Error(error);
+    verifiedInstallerOpened = true;
     return { installed: false, openedInstaller: true };
   } catch (error) {
     await fs.rm(directory, { recursive: true, force: true });
@@ -191,4 +194,19 @@ async function installUpdate(id, runtime) {
   }
 }
 
-module.exports = { availableUpdate, installUpdate, newer, replaceAppImage, runWindowsInstaller };
+function reopenUpdate() {
+  if (!app.isPackaged || process.platform !== 'darwin' || !verifiedInstallerOpened)
+    throw new Error('A verified installer must be opened before reopening Importer');
+  app.relaunch({ execPath: process.execPath, args: [] });
+  app.quit();
+  return { relaunching: true };
+}
+
+module.exports = {
+  availableUpdate,
+  installUpdate,
+  reopenUpdate,
+  newer,
+  replaceAppImage,
+  runWindowsInstaller,
+};

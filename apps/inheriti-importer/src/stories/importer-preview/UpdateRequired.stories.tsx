@@ -22,4 +22,6 @@ export const CheckFailed = () => (
     onRetry={noop}
   />
 );
-export const Finishing = () => <UpdateRequiredScreen phase="finishing" version="0.1.17-dev.0" />;
+export const Finishing = () => (
+  <UpdateRequiredScreen phase="finishing" version="0.1.17-dev.0" onReopen={noop} />
+);

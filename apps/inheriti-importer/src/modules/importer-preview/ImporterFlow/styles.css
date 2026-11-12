@@ -211,22 +211,3 @@
     flex-direction: column;
   }
 }
-.staging-indeterminate-bar {
-  animation: staging-indeterminate 1.4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .staging-indeterminate-bar {
-    animation: none;
-    transform: none;
-  }
-}
-
-@keyframes staging-indeterminate {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(320%);
-  }
-}

@@ -1,5 +1,5 @@
 import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Box, Text, theme } from '@modules/_shared/ui/components';
+import { Box, Icon, Text, theme } from '@modules/_shared/ui/components';
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { ModalPortal } from '@modules/_shared/ui/components/Base/Portal';
 
@@ -15,13 +15,20 @@ export function UpdateRequiredScreen({
   message,
   onRetry,
   onInstall,
+  onReopen,
+  reopening = false,
+  reopenError,
 }: {
   phase: UpdatePhase;
   version?: string;
   message?: string;
   onRetry?: () => void;
   onInstall?: () => void;
+  onReopen?: () => void;
+  reopening?: boolean;
+  reopenError?: string;
 }) {
+  const busy = phase === 'checking' || phase === 'installing';
   const title =
     phase === 'checking'
       ? 'Checking for updates'
@@ -38,7 +45,7 @@ export function UpdateRequiredScreen({
         : phase === 'installing'
           ? 'Downloading and verifying the update. Keep Importer open.'
           : phase === 'finishing'
-            ? 'Finish the installation and reopen Importer to continue.'
+            ? 'Finish installing the update from the opened installer, then reopen Importer.'
             : message || 'The update could not be completed. Retry to continue.';
   return (
     <ModalPortal visible>
@@ -63,9 +70,12 @@ export function UpdateRequiredScreen({
           gap="m"
           style={{ width: '100%', maxWidth: 480, boxShadow: '0 16px 48px rgba(0,0,0,.16)' }}
         >
-          <Text variant="heading2" color="gray120">
-            {title}
-          </Text>
+          <Box flexDirection="row" alignItems="center" gap="m">
+            {busy ? <Icon name="spinner" size={20} spin label="Update in progress" /> : null}
+            <Text variant="heading2" color="gray120">
+              {title}
+            </Text>
+          </Box>
           <Text variant="bodyRegular" color="gray">
             {detail}
           </Text>
@@ -73,6 +83,19 @@ export function UpdateRequiredScreen({
             <Button title="Install and relaunch" onPress={onInstall} />
           ) : null}
           {phase === 'error' && onRetry ? <Button title="Retry update" onPress={onRetry} /> : null}
+          {phase === 'finishing' && reopenError ? (
+            <Text variant="bodyRegular" color="danger120">
+              {reopenError}
+            </Text>
+          ) : null}
+          {phase === 'finishing' && onReopen ? (
+            <Button
+              title={reopening ? 'Reopening Importer…' : 'Reopen Importer'}
+              onPress={onReopen}
+              disabled={reopening}
+              loading={reopening}
+            />
+          ) : null}
         </Box>
       </Box>
     </ModalPortal>
@@ -91,6 +114,8 @@ export function UpdateGate({
   const [version, setVersion] = useState('');
   const [message, setMessage] = useState('');
   const [ready, setReady] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenError, setReopenError] = useState('');
   const requestRevision = useRef(0);
 
   async function check() {
@@ -131,11 +156,26 @@ export function UpdateGate({
       const result = await updates.install(update.id);
       if (revision !== requestRevision.current) return;
       if (!result.installed && !result.openedInstaller) throw new Error('Installation unavailable');
+      setReopenError('');
       setPhase('finishing');
     } catch {
       if (revision !== requestRevision.current) return;
       setMessage('Could not install or verify the update. Retry to continue.');
       setPhase('error');
+    }
+  }
+
+  async function reopen() {
+    if (!updates || reopening) return;
+    const revision = requestRevision.current;
+    setReopening(true);
+    setReopenError('');
+    try {
+      await updates.reopen();
+    } catch {
+      if (revision !== requestRevision.current) return;
+      setReopenError('Could not reopen Importer. Finish installing the update, then try again.');
+      setReopening(false);
     }
   }
 
@@ -147,6 +187,9 @@ export function UpdateGate({
       message={message}
       onInstall={() => void install()}
       onRetry={() => (update ? void install() : void check())}
+      onReopen={phase === 'finishing' ? () => void reopen() : undefined}
+      reopening={reopening}
+      reopenError={reopenError}
     />
   );
 }

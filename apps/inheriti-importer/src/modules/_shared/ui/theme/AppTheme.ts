@@ -21,6 +21,7 @@ export const theme = {
     warning: '#F0BF2A',
     warning120: '#DD9509',
     warning200: '#9A3700',
+    info5: '#F5FAFF',
     info10: '#E5F2FF',
     info30: '#B3D9FF',
     info50: '#80BFFF',
@@ -395,7 +396,7 @@ export const theme = {
     },
     importerChecklistLabel: {
       fontFamily: 'AppFont',
-      fontSize: 22,
+      fontSize: 18,
       lineHeight: 1.3,
       fontWeight: '600',
       letterSpacing: undefined,

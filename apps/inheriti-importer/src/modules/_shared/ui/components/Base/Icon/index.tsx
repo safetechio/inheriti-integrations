@@ -1,6 +1,7 @@
 import { Text } from 'react-native-web';
 import fa6Selection from '@assets/fonts/fa6/selection.json';
 import { theme } from '@modules/_shared/ui/theme/AppTheme';
+import { Box } from '@modules/_shared/ui/components/Primitives';
 
 type Fa6Selection = { icons: Array<{ properties: { name: string; code: number } }> };
 
@@ -18,6 +19,7 @@ export function Icon({
   numberSize,
   color = theme.colors.primary120,
   label,
+  spin = false,
   type = 'font-awesome-6',
 }: {
   name?: string;
@@ -25,17 +27,32 @@ export function Icon({
   numberSize?: number;
   color?: string;
   label?: string;
+  spin?: boolean;
   type?: 'font-awesome-6';
 }) {
   const glyph = FA6_GLYPHS[name ?? 'cube'] ?? FALLBACK_GLYPH;
   const resolvedSize = numberSize ?? (typeof size === 'number' ? size : 18);
-  return (
+  const glyphElement = (
     <Text
       accessibilityLabel={label ?? name ?? 'Icon'}
+      selectable={false}
       testID={type}
       style={{ fontFamily: 'FA6', color, fontSize: resolvedSize, lineHeight: resolvedSize }}
     >
       {glyph}
     </Text>
+  );
+  return spin ? (
+    <Box
+      className="importer-icon-spinner"
+      width={resolvedSize}
+      height={resolvedSize}
+      alignItems="center"
+      justifyContent="center"
+    >
+      {glyphElement}
+    </Box>
+  ) : (
+    glyphElement
   );
 }

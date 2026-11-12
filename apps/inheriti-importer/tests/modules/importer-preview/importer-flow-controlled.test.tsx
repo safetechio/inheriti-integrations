@@ -345,8 +345,8 @@ describe('ImporterFlow controlled mode', () => {
     );
     expect(screen.getByText('Waiting for SafeKey Mobile to release the key.')).toBeTruthy();
     expect(
-      screen.getByRole('progressbar', { name: 'Load Organisation Key in progress' }),
-    ).toBeTruthy();
+      screen.queryByRole('progressbar', { name: 'Load Organisation Key in progress' }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
     expect(onCancelStage).toHaveBeenCalledTimes(1);
 

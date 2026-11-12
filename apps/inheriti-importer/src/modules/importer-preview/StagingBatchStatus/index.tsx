@@ -72,13 +72,13 @@ export function StagingBatchStatus({
                   height={22}
                   className={`staging-plan-fill ${plan.outcome === 'Staging' ? 'is-active' : ''}`}
                 >
-                  <Text variant="bodyRegular" color="white" className="staging-plan-label">
+                  <Text variant="bodySmall" color="white" className="staging-plan-label">
                     {embedded ? plan.name : `${plan.name} · ${plan.outcome}`}
                   </Text>
                 </Box>
               ) : null}
               {plan.outcome !== 'Staged' && plan.outcome !== 'Staging' ? (
-                <Text variant="bodyRegular" color="gray120" className="staging-plan-label">
+                <Text variant="bodySmall" color="gray120" className="staging-plan-label">
                   {plan.name} · {plan.outcome}
                 </Text>
               ) : null}

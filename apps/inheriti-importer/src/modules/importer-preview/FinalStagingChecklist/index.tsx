@@ -28,22 +28,20 @@ export function FinalStagingChecklist({
       <Stack gap="m" className="staging-checklist-list">
         <ChecklistRows
           items={items.slice(-2)}
-          secureHeaderAction={secureHeaderAction}
-          planProgress={planProgress}
-          secureAction={
-            <>
-              {progress}
-              {showActions ? (
-                <StageActions
-                  failed={failed}
-                  canStage={canStage}
-                  state={state}
-                  onStage={onStage}
-                  onRetry={onRetry}
-                />
-              ) : null}
-            </>
+          secureHeaderAction={
+            secureHeaderAction ??
+            (showActions ? (
+              <StageActions
+                failed={failed}
+                canStage={canStage}
+                state={state}
+                onStage={onStage}
+                onRetry={onRetry}
+              />
+            ) : null)
           }
+          planProgress={planProgress}
+          secureAction={progress}
         />
       </Stack>
     </Stack>

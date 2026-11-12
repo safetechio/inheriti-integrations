@@ -140,7 +140,11 @@ export function FileRow({
           style={{ flexWrap: 'wrap' }}
         >
           {!locked ? (
-            <Badge tone={statusBadge[file.status].tone} icon={statusBadge[file.status].icon}>
+            <Badge
+              tone={statusBadge[file.status].tone}
+              icon={statusBadge[file.status].icon}
+              iconSpin={file.status === 'retrying'}
+            >
               {file.status === 'warning'
                 ? `${file.warnings ?? 0} warning${file.warnings === 1 ? '' : 's'}`
                 : labels[file.status]}
@@ -249,6 +253,7 @@ export function FileRow({
                     />
                     <Button
                       title="Unlock"
+                      loading={file.status === 'unlocking'}
                       disabled={
                         file.status === 'unlocking' ||
                         !onUnlock ||

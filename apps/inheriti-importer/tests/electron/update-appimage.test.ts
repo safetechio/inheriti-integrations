@@ -12,6 +12,7 @@ const originalLoad = Module._load;
 const updatesPath = path.resolve(process.cwd(), 'electron/lib/updates.cjs');
 const originalAppImage = process.env.APPIMAGE;
 const originalEnvironment = process.env.INHERITI_ENV;
+const originalPlatform = process.platform;
 
 type Runtime = {
   capture: () => { subject: string; generation: number };
@@ -53,6 +54,45 @@ afterEach(() => {
   if (originalEnvironment === undefined) delete process.env.INHERITI_ENV;
   else process.env.INHERITI_ENV = originalEnvironment;
   vi.unstubAllGlobals();
+  Object.defineProperty(process, 'platform', { value: originalPlatform });
+});
+
+it('allows reopening only after a packaged, verified macOS installer handoff', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  process.env.INHERITI_ENV = 'dev';
+  const unpackaged = loadUpdates(false);
+  expect(() => unpackaged.updates.reopenUpdate()).toThrow('verified installer');
+  const harness = loadUpdates(true);
+  expect(() => harness.updates.reopenUpdate()).toThrow('verified installer');
+  const payload = 'verified-dmg';
+  const item = {
+    id: 'build-mac',
+    integration: 'importer',
+    platform: `darwin-${process.arch}`,
+    version: '0.1.2-dev.0',
+    fileName: 'Importer.dmg',
+    size: payload.length,
+    checksum: createHash('sha256').update(payload).digest('hex'),
+  };
+  harness.bearerApiFetch
+    .mockResolvedValueOnce({ status: 200, body: { result: { items: [item] } } })
+    .mockResolvedValueOnce({ status: 201, body: { url: 'https://storage.inheriti.test/update' } });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      const response = new Response(payload);
+      Object.defineProperty(response, 'url', { value: 'https://storage.inheriti.test/update' });
+      return response;
+    }),
+  );
+  expect(await harness.updates.installUpdate(item.id, runtime())).toEqual({
+    installed: false,
+    openedInstaller: true,
+  });
+  expect(harness.shell.openPath).toHaveBeenCalledOnce();
+  expect(harness.updates.reopenUpdate()).toEqual({ relaunching: true });
+  expect(harness.app.relaunch).toHaveBeenCalledWith({ execPath: process.execPath, args: [] });
+  expect(harness.app.quit).toHaveBeenCalledOnce();
 });
 
 it('rejects a corrupt catalog download before opening or replacing it', async () => {

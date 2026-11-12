@@ -15,6 +15,7 @@ interface InheritiDesktop {
       error?: string;
     }>;
     install: (id: string) => Promise<{ installed: boolean; openedInstaller?: boolean }>;
+    reopen: () => Promise<{ relaunching: boolean }>;
   };
   api: {
     request: (request: {

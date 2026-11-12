@@ -28,7 +28,7 @@ export function AssetRow({
       flexDirection="row"
       justifyContent="space-between"
       alignItems="center"
-      gap="s"
+      gap="m"
     >
       <Icon name="grip-dots-vertical" size={12} color={theme.colors.gray50} />
       <Box
@@ -37,14 +37,19 @@ export function AssetRow({
         style={{ minWidth: 0 }}
         ref={(element) => element?.setAttribute('title', asset.name)}
       >
-        <Text variant="importerAssetRowTitle" className="plan-asset-row-name" title={asset.name}>
+        <Text
+          selectable={false}
+          variant="importerAssetRowTitle"
+          className="plan-asset-row-name"
+          title={asset.name}
+        >
           {asset.name}
         </Text>
-        <Text variant="smallUppercase" color="gray">
+        <Text selectable={false} variant="smallUppercase" color="gray">
           {getAssetTypeDisplayName(asset.type)}
         </Text>
         {asset.valid === false ? (
-          <Text variant="bodySmall" color="danger120">
+          <Text selectable={false} variant="bodySmall" color="danger120">
             Invalid Asset binding
           </Text>
         ) : null}
