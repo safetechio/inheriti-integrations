@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 const manifest = JSON.parse(await readFile(new URL('../packages/core/package.json', import.meta.url)));
 for (const [name, version] of [
   ['@safetech/inheriti-client-sdk', '1.17.33'],
-  ['@safetech/inheriti-core-sdk', '4.0.42'],
+  ['@safetech/inheriti-core-sdk', '4.0.43'],
 ]) {
   if (manifest.dependencies?.[name] !== version) {
     throw new Error(`${name} must be the exact registry version ${version}`);

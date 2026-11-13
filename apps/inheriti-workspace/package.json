@@ -7,7 +7,7 @@
     "@safetech/inheriti-client-sdk": "1.17.33"
   },
   "devDependencies": {
-    "@safetech/inheriti-core-sdk": "4.0.42"
+    "@safetech/inheriti-core-sdk": "4.0.43"
   },
   "scripts": {
     "test": "cargo test --offline --manifest-path src-tauri/Cargo.toml",

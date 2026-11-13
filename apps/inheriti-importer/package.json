@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@safetech/inheriti-core-sdk": "4.0.42",
+    "@safetech/inheriti-core-sdk": "4.0.43",
     "@safetech/inheriti-elements-core": "workspace:*",
     "@safetech/safekey-sdk": "1.0.1",
     "@tanstack/react-query": "^5.90.20",
