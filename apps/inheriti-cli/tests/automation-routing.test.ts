@@ -34,20 +34,20 @@ beforeEach(() => {
   usePlan.mockResolvedValue(0);
 });
 
-describe('automation feature flag', () => {
-  it('enables CLI plan creation in every build while preserving automation policy', () => {
+describe('automation routing without a deployment feature flag', () => {
+  it('keeps only the plan creation policy in CLI feature flags', () => {
     expect(CLI_FEATURE_FLAGS).toEqual({
-      local: { automation: true, planCreation: true },
-      dev: { automation: true, planCreation: true },
-      stg: { automation: false, planCreation: true },
-      prod: { automation: false, planCreation: true },
+      local: { planCreation: true },
+      dev: { planCreation: true },
+      stg: { planCreation: true },
+      prod: { planCreation: true },
     });
   });
 
   it.each([
     [['secrets', 'exec', 'plan-1', '--automation', '--', 'fixture']],
     [['secrets', 'exec', 'plan-1', '--env', 'TOKEN=asset.field', '--', 'fixture']],
-  ])('rejects automation when the build has no enabled deployment flag: %j', async (args: string[]) => {
+  ])('requires automation configuration even in an unbound build: %j', async (args: string[]) => {
     const output = terminal();
     const environment = args.includes('--automation')
       ? {}

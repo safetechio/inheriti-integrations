@@ -43,24 +43,24 @@ describe('automation deployment routing', () => {
     expect(withAutomationSecrets).toHaveBeenCalledWith('https://business.example/api', automationEnvironment, expect.any(Function));
   }, 15_000);
 
-  it.each(['stg', 'prod'] as const)('rejects explicit exec automation in %s', async (deployment) => {
+  it.each(['stg', 'prod'] as const)('routes explicit exec automation in %s', async (deployment) => {
     const { result, output, withAutomationSecrets } = await runInDeployment(
       deployment,
-      ['secrets', 'exec', 'plan-1', '--automation', '--', 'fixture'],
+      ['secrets', 'exec', 'plan-1', '--automation', '--', 'fixture'], automationEnvironment,
     );
-    expect(result).toBe(1);
-    expect(output.errors).toHaveLength(1);
-    expect(withAutomationSecrets).not.toHaveBeenCalled();
+    expect(result).toBe(0);
+    expect(output.errors).toHaveLength(0);
+    expect(withAutomationSecrets).toHaveBeenCalledOnce();
   }, 15_000);
 
-  it.each(['stg', 'prod'] as const)('rejects explicit resolve automation in %s', async (deployment) => {
+  it.each(['stg', 'prod'] as const)('routes explicit resolve automation in %s', async (deployment) => {
     const { result, output, withAutomationSecrets } = await runInDeployment(
       deployment,
-      ['secrets', 'resolve', 'plan-1', '--automation', '--field', 'asset.field', '--allow-plaintext-output'],
+      ['secrets', 'resolve', 'plan-1', '--automation', '--field', 'asset.field', '--allow-plaintext-output'], automationEnvironment,
     );
-    expect(result).toBe(1);
-    expect(output.errors).toHaveLength(1);
-    expect(withAutomationSecrets).not.toHaveBeenCalled();
+    expect(result).toBe(0);
+    expect(output.errors).toHaveLength(0);
+    expect(withAutomationSecrets).toHaveBeenCalledOnce();
   }, 15_000);
 
   it.each(['dev', 'stg', 'prod'] as const)('requires explicit automation when environment requests it in %s', async (deployment) => {

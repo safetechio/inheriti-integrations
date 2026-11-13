@@ -33,14 +33,31 @@ it('routes management with selected human organisation and nonsecret arguments',
   expect(manage).toHaveBeenCalledWith(expect.objectContaining({ organization: { id: 'org-1', name: 'Acme' } }), expect.anything(), expect.anything(), expect.any(AbortSignal), ['create', '--name', 'CI']);
 }, 15_000);
 
-it('routes management and setup in dev, rejects stg and prod', async () => {
-  expect((await run('dev', ['automations', 'create'])).code).toBe(0);
+it.each(['local', 'dev', 'stg', 'prod'] as const)('routes management and publication in %s', async deployment => {
+  expect((await run(deployment, ['automations', 'create'])).code).toBe(0);
   expect(manage).toHaveBeenCalledOnce();
+  expect((await run(deployment, ['secrets', 'publish', 'aws', '--plan', 'plan-1'])).code).toBe(0);
+  expect(publish).toHaveBeenCalledOnce();
   vi.clearAllMocks();
-  expect((await run('stg', ['automations', 'create'])).code).toBe(1);
-  expect((await run('prod', ['automations', 'create'])).code).toBe(1);
   expect((await run('local', ['automations', 'setup'])).code).toBe(0);
   expect(manage).not.toHaveBeenCalled();
+});
+
+it.each(['local', 'dev', 'stg', 'prod'] as const)('shows automation help and completion in %s', async deployment => {
+  const help = await run(deployment, ['--help'], false);
+  expect(help.code).toBe(0);
+  expect(help.output.write).toHaveBeenCalledWith(expect.stringContaining('automations list'));
+  expect(help.output.write).toHaveBeenCalledWith(expect.stringContaining('secrets publish aws|google'));
+
+  vi.resetModules();
+  vi.doMock('../src/configuration.js', async original => ({ ...(await original<object>()), BUILD_DEPLOYMENT: deployment }));
+  const { completeWords } = await import('../src/commands/completion.js');
+  const output = terminal(false);
+  await completeWords(context() as never, output, [''], {});
+  expect(output.write).toHaveBeenCalledWith(expect.stringContaining('automations\t'));
+  output.write.mockClear();
+  await completeWords(context() as never, output, ['secrets', ''], {});
+  expect(output.write).toHaveBeenCalledWith(expect.stringContaining('publish\t'));
 });
 
 it('shows the complete AWS inspection error in the terminal', async () => {

@@ -5,7 +5,6 @@ vi.mock('../src/configuration.js', async original => ({
   ...(await original<object>()), BUILD_DEPLOYMENT: 'dev',
   resolveConfiguration: () => ({ business: true, apiUrl: 'https://business.example/integrations/' }),
 }));
-vi.mock('../src/feature-flags.js', () => ({ CLI_FEATURE_FLAGS: { dev: { automation: true } } }));
 vi.mock('../src/automation-secrets.js', async original => ({
   ...(await original<object>()), automationConfigurationComplete: () => true, withAutomationSecrets,
 }));

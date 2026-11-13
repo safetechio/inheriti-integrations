@@ -24,7 +24,7 @@ inheriti organizations use
 inheriti automations list
 ```
 
-Select the organization in the terminal. If `automations list` says you cannot manage automation, stop here and ask an organization settings manager to create the connection. To grant access, you must also be able to edit the protected plan. The Business API checks both permissions again when you save. These commands are available in the local build; the UI hides setup sections when the member lacks the required permission.
+Select the organization in the terminal. If `automations list` says you cannot manage automation, stop here and ask an organization settings manager to create the connection. To grant access, you must also be able to edit the protected plan. The Business API checks both permissions again when you save. These commands are available in local, dev, stg, and prod CLI builds; the UI hides setup sections when the member lacks the required permission.
 
 No provider API key, private key, password, or identity token belongs in CLI arguments or an agent conversation. The only setup window asks for a short-lived identity proof.
 

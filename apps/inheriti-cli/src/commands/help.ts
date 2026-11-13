@@ -11,7 +11,6 @@ export function usage(environmentVariables: Readonly<Record<string, string | und
              standalone plans. For Inheriti® Business set business: true and deployment to
              local, dev or stg; prod requires a production build.
              Environment defaults to TEST. Existing environment overrides still work.`;
-  const automationEnabled = Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation);
   const planCreationEnabled = Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation);
   const protectedEnabled = Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]);
   return `${terminalWordmark({ noColor: noColorFromEnvironment(environmentVariables) })}
@@ -22,13 +21,13 @@ inheriti <command>
   logout             Sign out and clear the local session
   organizations list List Inheriti® Business organisations and the selected one
   organizations use [id] Select an Inheriti® Business organisation
-  ${automationEnabled ? 'automations list   List safe connection metadata' : ''}
-  ${automationEnabled ? 'automations grants PLAN_ID List safe grant metadata for one plan' : ''}
-  ${automationEnabled ? 'automations status  Show setup and execution progress' : ''}
-  ${automationEnabled ? 'automations create|verify|trust|disable|usage|runtime Manage connections and runtime guidance' : ''}
-  ${automationEnabled ? 'automations pair start|redeem|aws|google Verify a workload without copying its proof' : ''}
-  ${automationEnabled ? 'secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)' : ''}
-  ${automationEnabled ? 'automations grant create|activate|member|revoke Manage a plan grant' : ''}
+  automations list   List safe connection metadata
+  automations grants PLAN_ID List safe grant metadata for one plan
+  automations status  Show setup and execution progress
+  automations create|verify|trust|disable|usage|runtime Manage connections and runtime guidance
+  automations pair start|redeem|aws|google Verify a workload without copying its proof
+  secrets publish aws|google Copy approved plan fields to cloud secret stores (optional)
+  automations grant create|activate|member|revoke Manage a plan grant
   plans list [--limit n] [--all] [--cursor c] [--organization id]
                      List plans in the selected context
   ${planCreationEnabled ? 'plans create [--title NAME] [--description TEXT] [--asset TYPE ...]\n                     Prefill the desktop assistant with plan metadata and likely asset types' : ''}
@@ -74,15 +73,13 @@ export function commandUsage(topic: readonly string[], environmentVariables: Rea
     return 'Usage: inheriti plans <list|show|logs|reveal|download|use|abort>';
   if (command === 'plans download' && !Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]))
     return 'Usage: inheriti plans download [PLAN_ID] --asset CODE_OR_ID --output PATH\n\nAuthorize and save one media asset to a new file with owner-only permissions. Existing files are never overwritten.';
-  if (command === 'secrets' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
-    return 'Usage: inheriti secrets <exec|resolve>\n\nRun reveal-authorized secret delivery.';
   const details: Readonly<Record<string, string>> = {
     skill: `Usage: inheriti skill install [--target codex|claude|all | --directory ABSOLUTE_PATH]\n\nChoose where to install the bundled agent skill. A terminal offers a selector; scripts must specify a target or directory.`,
     login: `Usage: inheriti login\n\nSign in using the system browser. Requires an interactive terminal.`,
     logout: `Usage: inheriti logout\n\nSign out and clear the locally stored operator session. This does not delete plans or plan data.`,
     organizations: `Usage: inheriti organizations <list|use [ID]>\n\nList eligible Inheriti® Business organisations or select one for this account.`,
     automations: `Usage: inheriti automations <list|grants PLAN_ID|status|create|verify|trust|disable|usage|runtime install-instructions|runtime install ec2|runtime image|setup|pair|grant ` +
-      `create|activate|member|revoke>\n\nManage Inheriti® Business automation connections and grants locally. ` +
+      `create|activate|member|revoke>\n\nManage Inheriti® Business automation connections and grants. ` +
       `Run inheriti help automations create, usage or grant for flags. Requires sign-in and a selected ` +
       `Organisation.`,
     'automations status': `Usage: inheriti automations status [--organization ID] [--plan ID] [--connection ID] [--job ID] [--watch] [--json]\n\nRead setup and recent execution progress for any automation provider. A terminal can select a missing plan or connection; scripts must pass both. --job narrows to one known attempt. --watch polls every five seconds until Ctrl+C; combined with --json it emits one JSON object per line. It never starts an action or verifies the external provider run.`,

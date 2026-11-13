@@ -80,10 +80,10 @@ describe('help', () => {
     await expect(run(['plans', 'logs', '--help'], {}, terminal)).resolves.toBe(0);
     expect(terminal.lines.join('\n')).toContain('[--limit N] [--offset N]');
   });
-  it('hides automation help in an unbound build', async () => {
+  it('shows automation help in an unbound build', async () => {
     const terminal = recordingTerminal(false);
-    await expect(run(['help', 'automations', 'create'], {}, terminal)).resolves.toBe(1);
-    expect(terminal.errors).toEqual(['This feature is unavailable.']);
+    await expect(run(['help', 'automations', 'create'], {}, terminal)).resolves.toBe(0);
+    expect(terminal.lines.join('\n')).toContain('automations create');
   });
   it('explains reveal security and interaction behavior without configuration or sign-in', async () => {
     const terminal = recordingTerminal(true);

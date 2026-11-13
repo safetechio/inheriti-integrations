@@ -53,10 +53,8 @@ export async function run(
   if (command === '--help') { terminal.write(usage(environmentVariables)); return 0; }
   const topic = helpTopic(argv);
   if (topic) {
-    if ((topic[0] === 'automations' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) ||
-        (topic[0] === 'plans' && topic[1] === 'create' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation)) ||
-        (topic[0] === 'plans' && topic[1] === 'open' && !Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT])) ||
-        (topic[0] === 'secrets' && topic[1] === 'publish' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))) {
+    if ((topic[0] === 'plans' && topic[1] === 'create' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation)) ||
+        (topic[0] === 'plans' && topic[1] === 'open' && !Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]))) {
       terminal.writeError('This feature is unavailable.'); return 1;
     }
     terminal.write(commandUsage(topic, environmentVariables)); return 0;
@@ -86,16 +84,10 @@ export async function run(
       return 1;
     }
     const secretDelivery = command === 'secrets' && (rest[0] === 'exec' || rest[0] === 'resolve');
-    if (command === 'automations' && (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation))
-      throw new Error('automation_disabled');
     const separator = rest.indexOf('--');
     const markerIndex = secretDelivery ? rest.slice(0, separator < 0 ? undefined : separator).indexOf('--automation') : -1;
     const automation = markerIndex >= 0;
     automationSecretDelivery = secretDelivery && automation;
-    if (secretDelivery && (automation || automationSecretsRequested(environmentVariables)) &&
-        (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation)) {
-      throw new Error('automation_disabled');
-    }
     if (automation) rest.splice(markerIndex, 1);
     if (secretDelivery && (automation || automationSecretsRequested(environmentVariables))) {
       if (!automation || !automationConfigurationComplete(environmentVariables))
@@ -214,7 +206,6 @@ export async function run(
       finally { unregister(); }
     }
     if (command === 'secrets' && rest[0] === 'publish') {
-      if (!BUILD_DEPLOYMENT || !CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].automation) throw new Error('automation_disabled');
       if (rest[1] !== 'aws' && rest[1] !== 'google') { terminal.writeError(commandUsage(['secrets', 'publish'], environmentVariables)); return 1; }
       if (!configuration.business) { terminal.writeError(MESSAGES.business_context_required!); return 1; }
       const organization = await selectedOrganization(context, configuration, defaultConfigurationPath(environmentVariables), terminal);

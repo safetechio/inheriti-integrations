@@ -115,7 +115,6 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   integration_tester_required: 'You are not an integration tester. Contact developer support.',
   operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',
-  automation_disabled: 'Automation is unavailable.',
   automation_aws_publication_outcome_unknown: 'AWS publication was interrupted. An in-flight write may have completed; inspect target versions before retrying.',
   automation_aws_publication_value_invalid: 'A selected plan field could not be serialized for AWS publication.',
   google_secret_project_invalid: 'Enter the exact Google Cloud project ID.',
