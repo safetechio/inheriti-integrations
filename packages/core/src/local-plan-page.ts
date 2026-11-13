@@ -7,6 +7,7 @@ import { quickPlanAssetCatalog } from './quick-plan.js';
 import { assetName, fieldLabels, fieldName, assetIconCodePoints, localPlanAssetLimit } from './asset-metadata.js';
 import type { LocalPlanCreationPhase } from './local-plan-browser.js';
 import { renderPlanCreationVisual, planCreationVisualStyles, planCreationVisualScript } from './plan-creation-visual/index.js';
+import { localPlanSessionScript } from './local-plan-session.js';
 
 export type LocalPlanPageOptions = {
   path: string;
@@ -22,7 +23,7 @@ export type LocalPlanPageOptions = {
   fieldValuesByAsset?: readonly Readonly<Record<string, string>>[];
   hasPreviousInput?: boolean;
   editableInput?: string;
-  originalInputs?: readonly string[];
+  sessionExpiresAt?: number;
   context?: string;
   teams?: readonly { id: string; name: string }[];
   candidateAssetTypes?: readonly string[];
@@ -112,6 +113,8 @@ const style = `
   .result-icon.pending, .result-icon.neutral { color: var(--primary); }
   .result-icon.error { color: var(--danger); }
   .result-card p { color: var(--gray-text); }
+  .result-card > [role=progressbar], .result-card > [role=img] { width: min(100%, 340px); min-width: 0; }
+  .result-brand { display: block; width: 180px; max-width: 100%; height: auto; }
   .fa-icon { display: inline-block; width: 1.2em; font-family: FontAwesome6, sans-serif; font-style: normal; font-weight: 900; text-align: center; }
   html.native-linux-fonts { font-weight: 300; font-synthesis: none; }
   html.native-linux-fonts :is(input, select, textarea) { font-weight: 300; }
@@ -227,7 +230,7 @@ const style = `
   .icon-button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   button[aria-busy=true] { opacity: .85; }
   button[aria-busy=true]::after { content: ''; display: inline-block; width: 16px; height: 16px; margin-left: 8px; vertical-align: -3px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
-  .icon-button[aria-busy=true] svg { visibility: hidden; }
+  .icon-button[aria-busy=true] :is(svg, .fa-icon) { visibility: hidden; }
   .icon-button[aria-busy=true]::after { position: absolute; margin: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { button[aria-busy=true]::after { animation: none; } }
@@ -239,18 +242,19 @@ const style = `
   :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .status { color: #a12b1d; }
   .status[role=status] { color: var(--gray-text); }
+  .session-notice { position: sticky; top: 16px; z-index: 10; display: grid; gap: 8px; padding: 16px; border: 1px solid #fedf89; border-radius: var(--radius-s); background: #fffaeb; color: #7a2e0e; }
+  .session-notice button { justify-self: start; }
   .review-notes { display: grid; gap: var(--space-s); padding: var(--space-m); border: 1px solid #eaecf0; border-radius: var(--radius-s); background: #f9fafb; }
   .review-notes ul { padding-left: 20px; }
   .follow-up { display: grid; gap: 4px; padding: var(--space-m); border-left: 3px solid var(--primary); border-radius: 0 var(--radius-s) var(--radius-s) 0; background: #f9fbff; }
   .follow-up strong { font-size: 16px; }
-  .original-input pre { max-height: 240px; overflow: auto; margin: var(--space-s) 0 0; padding: var(--space-m); border: 1px solid #eaecf0; border-radius: var(--radius-s); background: #f9fafb; white-space: pre-wrap; overflow-wrap: anywhere; }
   [role=alert] { color: #a12b1d; }
   details { min-width: 0; }
   summary { color: var(--primary-dark); cursor: pointer; list-style: none; }
   summary::-webkit-details-marker { display: none; }
   summary::marker { content: ''; }
-  .original-input > summary, .change-dialog details > summary { display: inline-flex; align-items: center; gap: 6px; }
-  .original-input > summary .fa-icon, .change-dialog details > summary .fa-icon { font-size: 12px; }
+  .change-dialog details > summary { display: inline-flex; align-items: center; gap: 6px; }
+  .change-dialog details > summary .fa-icon { font-size: 12px; }
   details code { display: block; margin-top: var(--space-s); padding: 8px; overflow-wrap: anywhere; white-space: pre-wrap; border-radius: 4px; background: #f9fafb; }
   @media (max-width: 600px) { body { padding: var(--space-m); } .panel, .change-dialog { padding: var(--space-m); } .steps { padding: var(--space-m); gap: var(--space-s); } .steps li { white-space: normal; } .review-heading { display: grid; } .asset-card-header { gap: var(--space-s); } .asset-card-icon { flex-basis: 34px; width: 34px; height: 34px; } }
 `;
@@ -343,7 +347,6 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
           ${(options.teams ?? []).map((team) => `<option value="${escape(team.id)}" ${options.selectedTeamId === team.id ? 'selected' : ''}>${escape(team.name)}</option>`).join('')}
         </select>
       </div>
-      ${!draft && options.originalInputs?.length ? `<details class="original-input"><summary>${icon('eye')} View previous input</summary>${options.originalInputs.map((input) => `<pre>${escape(input)}</pre>`).join('')}</details>` : ''}
       <div class="section-heading"><h3 data-asset-count>Data · 1 asset</h3><button class="button-secondary section-add" type="button" ${draft ? 'data-add-review-asset' : 'data-add-asset'}>${icon('plus')} Add asset</button></div>
       <div class="asset-list" ${draft ? 'data-review-assets data-base-count="1"' : 'data-manual-assets'}><details class="asset-card" data-asset-index="0" open><summary class="asset-card-header"><span class="asset-card-icon">${assetIcon(reviewAsset.type)}</span><span class="asset-card-title"><strong>${escape(reviewAsset.name || 'New asset')}</strong><small>${escape(assetName(reviewAsset.type))}</small></span><span class="asset-card-actions">${assetMagic(0, reviewAsset.type)}<button class="asset-action" type="button" data-remove-asset aria-label="Remove asset" title="Remove asset">${icon('xmark')}</button></span><span class="asset-chevron">${icon('chevron')}</span></summary>
         <div class="asset-card-body"><div class="field"><label for="name">Asset name</label><input id="name" name="name" maxlength="200" required value="${escape(reviewAsset.name)}"></div>${draft ? `<div class="field"><label for="assetType">Asset type</label><div class="asset-type-controls"><select id="assetType" name="assetType" form="asset-type-form">${quickPlanAssetCatalog.map(({ id }) => `<option value="${escape(id)}" ${id === reviewAsset.type ? 'selected' : ''}>${escape(assetName(id))}</option>`).join('')}</select><button class="button-secondary icon-button" type="submit" form="asset-type-form" aria-label="Fill fields for selected asset type" title="Fill fields for selected asset type" ${busy ? 'disabled' : ''}>${icon('sparkles')}</button></div></div>` : `<div class="field"><label for="type-0">Asset type</label><select id="type-0" name="type:0" data-manual-type>${quickPlanAssetCatalog.map(({ id }) => `<option value="${escape(id)}" ${id === reviewAsset.type ? 'selected' : ''}>${escape(assetName(id))}</option>`).join('')}</select></div>`}<div class="protected-section">${protectedDataHeading()}<div class="protected-fields"><div data-manual-fields>${reviewAsset.fields.map((field) => reviewField(field, reviewAsset.type, `field:${field}`, draft && field in draft.asset.fields ? options.fieldValues[field] : undefined)).join('')}</div>
@@ -361,7 +364,6 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       ${clarification ? '' : '<p class="helper">Paste or describe the values you want to protect. Review the suggested assets in the next step.</p>'}
     </div>
     ${clarification && !choose ? `<div class="follow-up"><strong>${clarification.questions.length === 1 ? escape(clarification.questions[0]!) : 'A few details are needed'}</strong>${clarification.questions.length > 1 ? `<ul>${clarification.questions.map((question) => `<li>${escape(question)}</li>`).join('')}</ul>` : ''}<p class="helper">Add only the missing detail.</p></div>` : ''}
-    ${clarification && options.originalInputs?.length ? `<details class="original-input"><summary>${icon('eye')} Previous input saved · View</summary>${options.originalInputs.map((input) => `<pre>${escape(input)}</pre>`).join('')}</details>` : ''}
     <form id="compose-form" method="post" enctype="multipart/form-data" action="${path}">
       <input type="hidden" name="csrf" value="${csrf}">
       <input type="hidden" name="action" value="infer">
@@ -389,7 +391,8 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
   <style>${options.fontUrl ? `@font-face { font-family: AppFont; src: url('${options.fontUrl}') format('truetype'); font-weight: 200 800; font-display: swap; }` : ''}${options.iconFontUrl ? `@font-face { font-family: FontAwesome6; src: url('${options.iconFontUrl}') format('truetype'); font-weight: 900; font-display: block; }` : ''}${style}${planCreationVisualStyles}</style>
 </head>
 <body>
-<main>
+<main${options.sessionExpiresAt ? ` data-session-expires-at="${options.sessionExpiresAt}"` : ''}>
+  ${options.sessionExpiresAt ? '<aside class="session-notice" data-session-notice hidden><p data-session-message role="status"></p><button type="button" data-continue-session>Continue session</button><p data-session-error role="alert"></p></aside>' : ''}
   <header class="page-header">
     <p class="eyebrow">Inheriti® Business</p>
     <h1>Create plan</h1>
@@ -409,6 +412,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
 </main>
 <script nonce="${options.scriptNonce}">
   ${planCreationVisualScript}
+  ${localPlanSessionScript}
   let pending;
   const assetCatalog = ${JSON.stringify(quickPlanAssetCatalog.map(({ id, fields, iconName }) => ({ id, fields, name: assetName(id), icon: assetIconCodePoints[iconName] ?? icons.file })))};
   const fieldLabels = ${JSON.stringify(fieldLabels)};
@@ -442,7 +446,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
     message.setCustomValidity(message.value.trim() || file?.files?.length ? '' : 'Enter a message or select a text file.');
   };
   let activeMagicCard;
-  const busy = (value) => document.querySelectorAll('form:not(.cancel-form) button[type="submit"], [data-open-change], [data-add-asset], [data-add-review-asset], [data-remove-asset], [data-open-asset-magic], [data-suggest-asset]').forEach((button) => { button.disabled = value; });
+  const busy = (value) => document.querySelectorAll('form:not(.cancel-form) button[type="submit"], [data-open-change], [data-add-asset], [data-add-review-asset], [data-remove-asset], [data-open-asset-magic], [data-suggest-asset], #assetType').forEach((button) => { button.disabled = value; });
   const showFieldPanel = (row, kind) => {
     row.querySelectorAll('[data-toggle-field]').forEach((toggle) => { toggle.setAttribute('aria-expanded', String(toggle.dataset.toggleField === kind)); });
     row.querySelectorAll('[data-field-panel]').forEach((panel) => { panel.hidden = panel.dataset.fieldPanel !== kind; });
@@ -459,8 +463,11 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
     button.disabled = true; button.setAttribute('aria-busy', 'true'); status.textContent = '';
     try {
       const response = await fetch('${path}', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      const expiresAt = response.headers.get('X-Session-Expires-At');
+      if (expiresAt) document.querySelector('main').dataset.sessionExpiresAt = expiresAt;
       if (!response.ok) throw new Error('Suggestion unavailable');
       const suggestion = await response.json();
+      if (suggestion.expiresAt) document.querySelector('main').dataset.sessionExpiresAt = String(suggestion.expiresAt);
       for (const [field, value] of Object.entries(suggestion.fields)) {
         const input = [...card.querySelectorAll('textarea[name^="field:"]')].find((item) => item.name.endsWith(':' + field));
         if (input && typeof value === 'string') {
@@ -490,6 +497,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
   document.addEventListener('change', event => {
     validate();
     if (event.target?.matches('[data-manual-type]')) updateManualCard(event.target.closest('.asset-card'), Number(event.target.name.split(':')[1]));
+    if (event.target?.matches('#assetType') && !pending) event.target.form.requestSubmit(document.querySelector('button[form="asset-type-form"]'));
   });
   document.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
@@ -553,6 +561,12 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
     const form = event.target;
     const body = new FormData(form);
     const action = event.submitter?.hasAttribute('data-manual') ? 'review' : body.get('action');
+    const changingCard = action === 'choose' ? document.querySelector('#assetType')?.closest('.asset-card') : undefined;
+    const changingInputs = changingCard ? [...changingCard.querySelectorAll('textarea:not(:disabled)')] : [];
+    if (changingCard) body.set('assetType', changingCard.querySelector('#assetType').value);
+    if (changingCard) for (const input of changingCard.querySelectorAll('textarea[name^="field:"]')) {
+      body.set(input.name, input.value || input.closest('.asset-field')?.querySelector('code')?.textContent || '');
+    }
     if (action === 'review') body.set('action', 'review');
     if (pending && action !== 'cancel') return;
     if (action === 'cancel') pending?.abort();
@@ -577,7 +591,8 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       button.setAttribute('aria-busy', 'true');
     }
     if (action !== 'cancel') busy(true);
-    const originalMain = action === 'create' ? document.querySelector('main')?.cloneNode(true) : undefined;
+    changingInputs.forEach(input => { input.disabled = true; });
+    const originalMain = action === 'create' ? document.querySelector('main') : undefined;
     let polling = true;
     let pollInFlight = false;
     const progressTimer = action === 'create' ? setInterval(async () => {
@@ -600,8 +615,18 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       const response = await fetch(form.getAttribute('action'), { method: 'POST', body: action === 'infer' || action === 'review' || action === 'revise' ? body : new URLSearchParams(body), credentials: 'same-origin', signal: controller.signal });
       polling = false;
       const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('main');
+      if (originalMain && next?.dataset.sessionExpiresAt) originalMain.dataset.sessionExpiresAt = next.dataset.sessionExpiresAt;
       if (!next) throw new Error('Invalid response');
       if (action !== 'cancel' && pending !== controller) return;
+      if (next.dataset.sessionExpiresAt && document.querySelector('main[data-session-expires-at]')) document.querySelector('main').dataset.sessionExpiresAt = next.dataset.sessionExpiresAt;
+      if (changingCard) {
+        const updated = next.querySelector('.asset-card');
+        if (!response.ok || !updated) throw new Error('Asset type update failed');
+        for (const selector of ['.protected-section', '.asset-card-title small', '.asset-card-icon', '[data-asset-type]']) {
+          changingCard.querySelector(selector)?.replaceWith(document.importNode(updated.querySelector(selector), true));
+        }
+        return;
+      }
       if (response.status === 504 && (action === 'infer' || action === 'revise')) {
         const notice = document.createElement('p'); notice.className = 'status'; notice.setAttribute('role', 'alert');
         notice.textContent = next.querySelector('[role="alert"]')?.textContent || 'Suggestion timed out. Try again or set up the assets manually.';
@@ -616,6 +641,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
           return;
         }
         if (originalMain) { window.resetPlanCreationVisual(); document.querySelector('main')?.replaceWith(originalMain); }
+        if (button) button.textContent = 'Retry create plan';
         const notice = document.createElement('p'); notice.className = 'status'; notice.setAttribute('role', 'alert');
         notice.textContent = next.querySelector('[role="alert"]')?.textContent || 'Plan creation failed. Review and retry.';
         document.querySelector('main')?.prepend(notice); return;
@@ -631,7 +657,9 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       } else if (document.getElementById('compose-heading')) document.getElementById('message')?.focus();
     } catch (error) {
       polling = false;
+      if (changingCard) changingCard.querySelector('#assetType').value = changingCard.querySelector('[data-asset-type]').value;
       if (originalMain) { window.resetPlanCreationVisual(); document.querySelector('main')?.replaceWith(originalMain); }
+      if (action === 'create' && button) button.textContent = 'Retry create plan';
       if (error.name !== 'AbortError' || controller.signal.reason === 'suggestion_timeout') {
         document.querySelector('main > .status')?.remove();
         const notice = document.createElement('p');
@@ -649,6 +677,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
       if (suggestionTimer) clearTimeout(suggestionTimer);
       if (pending === controller) pending = undefined;
       if (button?.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); }
+      changingInputs.forEach(input => { if (input.isConnected) input.disabled = false; });
       if (action !== 'cancel' && !pending) {
         busy(false);
         const assetList = document.querySelector('[data-review-assets], [data-manual-assets]');
@@ -657,6 +686,7 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
           assetList.closest('form').querySelector('button[type="submit"]:not([form])').disabled = assetList.children.length === 0;
           document.querySelector('[data-add-review-asset], [data-add-asset]').disabled = assetList.children.length >= ${localPlanAssetLimit};
         }
+        window.updateLocalPlanSession();
       }
     }
   });
@@ -667,27 +697,27 @@ export function renderLocalPlanPage(options: LocalPlanPageOptions, message = '',
 </html>`;
 }
 
-export function renderLocalPlanCreationProgressPage(phase: LocalPlanCreationPhase = 'securing', fontUrl?: string, observedPhases?: readonly LocalPlanCreationPhase[]): string {
+export function renderLocalPlanCreationProgressPage(phase: LocalPlanCreationPhase = 'securing', fontUrl?: string, observedPhases?: readonly LocalPlanCreationPhase[], logoUrl?: string): string {
   const messages: Record<LocalPlanCreationPhase, string> = {
     'preparing-key': 'Accessing your Organisation Key', 'awaiting-key': 'Open SafeKey Mobile → Pending actions and tap Release.',
     securing: 'Securing your plan', creating_plan: 'Save plan', encrypting: 'Encrypt plan data',
     generating_shares: 'Generate shares', preflighting: 'Check share destinations',
     distributing: 'Distribute validator shares', configuring: 'Distribute encrypted data shares', verifying: 'Verify protection',
   };
-  return renderLocalPlanStatusPage('Creating your plan', messages[phase], 'pending', fontUrl, phase, undefined, observedPhases);
+  return renderLocalPlanStatusPage('Creating your plan', messages[phase], 'pending', fontUrl, phase, undefined, observedPhases, undefined, logoUrl);
 }
 
-export function renderLocalPlanResultPage(created: unknown, fontUrl?: string, phase: LocalPlanCreationPhase = 'verifying', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }): string {
+export function renderLocalPlanResultPage(created: unknown, fontUrl?: string, phase: LocalPlanCreationPhase = 'verifying', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }, logoUrl?: string): string {
   const value = created && typeof created === 'object' ? created as Record<string, unknown> : {};
   const status = value.status === 'READY' || value.status === 'PENDING' ? value.status : null;
   const heading = status === 'READY' ? 'Plan created' : status === 'PENDING' ? 'Plan pending' : 'Plan creation completed';
   const description = status === 'PENDING' ? 'Creation is still processing. Check the plan status in Inheriti® Business.'
     : status === 'READY' && completion ? 'Select Continue or close this window to return to your terminal.'
       : 'You can close this window and return to your workflow.';
-  return renderLocalPlanStatusPage(heading, description, status === 'PENDING' ? 'pending' : status === 'READY' ? 'success' : 'neutral', fontUrl, phase, status ?? undefined, observedPhases, completion);
+  return renderLocalPlanStatusPage(heading, description, status === 'PENDING' ? 'pending' : status === 'READY' ? 'success' : 'neutral', fontUrl, phase, status ?? undefined, observedPhases, completion, logoUrl);
 }
 
-function renderLocalPlanStatusPage(heading: string, description: string, kind: 'success' | 'pending' | 'neutral' | 'error', fontUrl?: string, phase?: LocalPlanCreationPhase, result?: 'READY' | 'PENDING' | 'FAILED' | 'CANCELED', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }): string {
+function renderLocalPlanStatusPage(heading: string, description: string, kind: 'success' | 'pending' | 'neutral' | 'error', fontUrl?: string, phase?: LocalPlanCreationPhase, result?: 'READY' | 'PENDING' | 'FAILED' | 'CANCELED', observedPhases?: readonly LocalPlanCreationPhase[], completion?: { path: string; csrf: string }, logoUrl?: string): string {
   const symbols = { success: '&#10003;', pending: '&#9719;', neutral: '&#10003;', error: '!' };
   return `<!doctype html>
 <html lang="en">
@@ -700,6 +730,7 @@ function renderLocalPlanStatusPage(heading: string, description: string, kind: '
 </head>
 <body>
   <main class="result-main"${kind === 'error' ? ' data-terminal-status' : ''}><section class="panel result-card" role="status">
+    ${logoUrl ? `<img class="result-brand" src="${escape(logoUrl)}" width="360" height="121" alt="Inheriti Business">` : ''}
     ${phase ? `<div role="${heading === 'Creating your plan' ? 'progressbar' : 'img'}" aria-label="${heading === 'Creating your plan' ? 'Creating plan' : heading}">${renderPlanCreationVisual(phase, result, observedPhases)}</div>` : `<span class="result-icon ${kind}" aria-hidden="true">${symbols[kind]}</span>`}
     <h1>${heading}</h1>
     <p>${description}</p>
@@ -713,6 +744,6 @@ export function renderLocalPlanCanceledPage(fontUrl?: string): string {
   return renderLocalPlanStatusPage('Session canceled', 'You can close this window and return to your workflow.', 'neutral', fontUrl);
 }
 
-export function renderLocalPlanCreationFailedPage(fontUrl?: string, phase?: LocalPlanCreationPhase, observedPhases?: readonly LocalPlanCreationPhase[]): string {
-  return renderLocalPlanStatusPage('Plan creation failed', 'You can close this window and return to your workflow.', 'error', fontUrl, phase, 'FAILED', observedPhases);
+export function renderLocalPlanCreationFailedPage(fontUrl?: string, phase?: LocalPlanCreationPhase, observedPhases?: readonly LocalPlanCreationPhase[], logoUrl?: string): string {
+  return renderLocalPlanStatusPage('Plan creation failed', 'You can close this window and return to your workflow.', 'error', fontUrl, phase, 'FAILED', observedPhases, undefined, logoUrl);
 }

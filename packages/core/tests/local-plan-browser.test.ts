@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { request } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { runLocalPlanBrowser, type LocalPlanCreationPhase } from '../src/local-plan-browser.js';
 import { renderLocalPlanCreationFailedPage } from '../src/local-plan-page.js';
 import { localPlanQuestions } from '../src/local-plan-draft.js';
@@ -54,6 +55,35 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       expect((await fetch(`${url}/font-icons.ttf`)).status).toBe(404);
       expect((await fetch(url)).status).toBe(200);
     } finally { signal.abort(); await expect(result).rejects.toThrow('local_plan_canceled'); }
+  });
+  it('serves the CLI Business logo to the creation progress page', async () => {
+    const logoFile = new URL('../../../apps/inheriti-cli/src/assets/inheriti-business-logo.png', import.meta.url);
+    let url = '';
+    let complete!: (value: { id: string }) => void;
+    const signal = new AbortController();
+    const result = runLocalPlanBrowser({ model, logoFile, signal: signal.signal,
+      create: async () => new Promise((resolve) => { complete = resolve; }), open: (value) => { url = value; } });
+    void result.catch(() => {});
+    while (!url) await new Promise((resolve) => setTimeout(resolve, 1));
+    const headers = { Origin: new URL(url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    try {
+      const logoUrl = `${url}/inheriti-business-logo.png`;
+      const response = await fetch(logoUrl);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('image/png');
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(await readFile(logoFile));
+      const initial = await (await fetch(url)).text();
+      const reviewed = await (await fetch(url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+      const creating = fetch(url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Safe%20plan&name=Account') });
+      while (!complete) await new Promise((resolve) => setTimeout(resolve, 1));
+      const progress = await fetch(`${url}/progress`);
+      expect(progress.headers.get('content-security-policy')).toContain("img-src 'self'");
+      expect(await progress.text()).toContain('inheriti-business-logo.png');
+      complete({ id: 'created' });
+      expect((await creating).status).toBe(200);
+      await expect(result).resolves.toEqual({ id: 'created' });
+    } finally { signal.abort(); }
   });
   it('shows hints in review and saves the reviewed description', async () => {
     let url = '';
@@ -156,8 +186,8 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       const html = await response.text();
       expect(html).toContain('Add one detail');
       expect(html).toContain('Add only the missing detail.');
-      expect(html).toContain('Previous input saved · View');
-      expect(html).toContain('Use a password');
+      expect(html).not.toContain('Previous input saved · View');
+      expect(html).not.toContain('Use a password');
       expect(html).toContain('Your answer');
       expect(html).toContain('Set up manually');
       expect(html).not.toContain('Message 1');
@@ -179,12 +209,12 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       const initial = await (await fetch(url)).text();
       expect(initial).toContain('Set up manually');
       const described = await (await fetch(url, { method: 'POST', headers, body: form(initial, 'infer', '&message=password%3A%20%22synthetic-original%22') })).text();
-      expect(described).toContain('Previous input saved · View');
+      expect(described).not.toContain('Previous input saved · View');
       const reviewed = await (await fetch(url, { method: 'POST', headers, body: form(described, 'review') })).text();
       expect(reviewed).toContain('Review plan');
       expect(reviewed).toContain('value="USER-PSWD" selected');
-      expect(reviewed).toContain('View previous input');
-      expect(reviewed).toContain('password: &quot;synthetic-original&quot;');
+      expect(reviewed).not.toContain('View previous input');
+      expect(reviewed).not.toContain('password: &quot;synthetic-original&quot;');
       expect(reviewed).not.toContain('Message 1');
       const createdResponse = await fetch(url, { method: 'POST', headers, body: form(reviewed, 'create', '&title=Test&name=Account&field%3Apassword=synthetic-new') });
       expect(createdResponse.status).toBe(200);
@@ -272,7 +302,7 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       expect(reviewed).toContain('Review plan');
       expect(reviewed).toContain('value="PLAIN-TEXT" selected');
       expect(reviewed).toContain('value="Recovery"');
-      expect(reviewed).toContain('View previous input');
+      expect(reviewed).not.toContain('View previous input');
       expect(reviewed).not.toContain("I couldn&#39;t tell what you want to protect yet.");
       expect(calls).toBe(2);
     } finally { signal.abort(); await expect(result).rejects.toThrow('local_plan_canceled'); }
@@ -645,6 +675,89 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
       expect(created?.asset.secret).toEqual({ text: 'synthetic-new' });
     } finally { signal.abort(); }
   });
+  it('uses the currently edited field when switching type, not the original message', async () => {
+    const passwordField = quickPlanAssetCatalog.find(({ id }) => id === 'USER-PSWD')!.fields[0]!;
+    let url = '';
+    let created: { asset: { secret: Record<string, string> } } | undefined;
+    const signal = new AbortController();
+    const result = runLocalPlanBrowser({
+      model: { infer: async ({ sources }) => {
+        const source = sources[0]!;
+        if (source.kind === 'fields') return {
+          title: 'Edited plan', asset: { type: 'USER-PSWD', name: 'Account', fields: { [passwordField]: { sourceId: source.id, key: 'text' } } }, questions: [], unassignedSources: [],
+        };
+        return model.infer({ sources });
+      } },
+      create: async (input) => { created = input as typeof created; return { id: 'created' }; },
+      open: (value) => { url = value; }, signal: signal.signal,
+    });
+    void result.catch(() => {});
+    while (!url) await new Promise((resolve) => setTimeout(resolve, 1));
+    const headers = { Origin: new URL(url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    try {
+      const initial = await (await fetch(url)).text();
+      const reviewed = await (await fetch(url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+      const switched = await fetch(url, { method: 'POST', headers,
+        body: form(reviewed, 'choose', '&assetType=USER-PSWD&field%3Atext=synthetic-new') });
+      expect(switched.status).toBe(200);
+      const changed = await switched.text();
+      expect(changed).toContain('synthetic-new');
+      expect(changed).not.toContain('>secret</code>');
+      expect((await fetch(url, { method: 'POST', headers,
+        body: form(changed, 'create', '&title=Edited%20plan&name=Account') })).status).toBe(200);
+      await expect(result).resolves.toEqual({ id: 'created' });
+      expect(created?.asset.secret[passwordField]).toBe('synthetic-new');
+    } finally { signal.abort(); }
+  });
+  it('creates added assets after a type switch falls back to manual review', async () => {
+    let url = '';
+    let created: { assets: { type: string; secret: Record<string, string> }[] } | undefined;
+    const signal = new AbortController();
+    const result = runLocalPlanBrowser({
+      model: { infer: async ({ sources }) => sources[0]?.kind === 'fields'
+        ? { questions: [localPlanQuestions[3]], unassignedSources: [] }
+        : model.infer({ sources }) },
+      create: async (input) => { created = input as typeof created; return { id: 'created' }; },
+      open: (value) => { url = value; }, signal: signal.signal,
+    });
+    void result.catch(() => {});
+    while (!url) await new Promise((resolve) => setTimeout(resolve, 1));
+    const headers = { Origin: new URL(url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    try {
+      const initial = await (await fetch(url)).text();
+      const reviewed = await (await fetch(url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+      const changed = await fetch(url, { method: 'POST', headers,
+        body: form(reviewed, 'choose', '&assetType=USER-PSWD&field%3Atext=synthetic-current') });
+      expect(changed.status).toBe(200);
+      const page = await changed.text();
+      expect(page).toContain('Review plan');
+      const passwordField = quickPlanAssetCatalog.find(({ id }) => id === 'USER-PSWD')!.fields[0]!;
+      const submit = form(page, 'create', `&title=Example&name=Account&field%3A${encodeURIComponent(passwordField)}=first-value&additionalAssetCount=1&type%3A1=PLAIN-TEXT&name%3A1=Note&field%3A1%3Atext=second-value`);
+      expect((await fetch(url, { method: 'POST', headers, body: submit })).status).toBe(200);
+      await expect(result).resolves.toEqual({ id: 'created' });
+      expect(created?.assets).toHaveLength(2);
+      expect(created?.assets[0]?.secret[passwordField]).toBe('first-value');
+      expect(created?.assets[1]?.secret.text).toBe('second-value');
+    } finally { signal.abort(); }
+  });
+  it('allows consecutive type changes when the current asset has no value yet', async () => {
+    const session = await start();
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    try {
+      const initial = await (await fetch(session.url)).text();
+      const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+      const first = await fetch(session.url, { method: 'POST', headers,
+        body: form(reviewed, 'choose', '&assetType=USER-PSWD&field%3Atext=') });
+      expect(first.status).toBe(200);
+      const firstPage = await first.text();
+      expect(firstPage).toContain('USER-PSWD');
+      const passwordField = quickPlanAssetCatalog.find(({ id }) => id === 'USER-PSWD')!.fields[0]!;
+      const second = await fetch(session.url, { method: 'POST', headers,
+        body: form(firstPage, 'choose', `&assetType=PLAIN-TEXT&field%3A${encodeURIComponent(passwordField)}=`) });
+      expect(second.status).toBe(200);
+      expect(await second.text()).toContain('Plain text');
+    } finally { session.signal.abort(); await expect(session.result).rejects.toThrow('local_plan_canceled'); }
+  });
   it('suggests separate plain-text assets for distinct unmapped file entries', async () => {
     let url = '';
     let calls = 0;
@@ -796,6 +909,46 @@ const form = (html: string, action: string, extra = '') => `csrf=${/name="csrf" 
     expect((await fetch(session.url, { method: 'POST', headers, body: form(retryPage, 'create', '&title=Safe%20plan&name=Account') })).status).toBe(200);
     await expect(session.result).resolves.toEqual({ id: 'created' });
     expect(inputs).toEqual(['corrected', 'corrected']);
+  });
+  it('suspends an idle editor and resumes only with the session CSRF token', async () => {
+    const session = await start(undefined, false, 120);
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    let settled = false;
+    void session.result.finally(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(settled).toBe(false);
+    expect((await fetch(session.url)).status).toBe(200);
+    const creation = form(reviewed, 'create', '&title=Safe%20plan&name=Account');
+    expect((await fetch(session.url, { method: 'POST', headers, body: creation })).status).toBe(410);
+    expect((await fetch(session.url, { method: 'POST', headers, body: 'csrf=wrong&action=keep-alive' })).status).toBe(403);
+    const resumed = await fetch(session.url, { method: 'POST', headers, body: form(reviewed, 'keep-alive') });
+    expect(resumed.status).toBe(200);
+    expect((await resumed.json()).expiresAt).toBeGreaterThan(Date.now());
+    expect((await fetch(session.url, { method: 'POST', headers, body: creation })).status).toBe(200);
+    await expect(session.result).resolves.toEqual({ id: 'created' });
+  });
+  it('does not expire while creating or discard a retry after creation fails', async () => {
+    let attempts = 0;
+    const session = await start(async () => {
+      attempts++;
+      if (attempts === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        throw new Error('creation failed');
+      }
+      return { id: 'created' };
+    }, false, 100);
+    const headers = { Origin: new URL(session.url).origin, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const initial = await (await fetch(session.url)).text();
+    const reviewed = await (await fetch(session.url, { method: 'POST', headers, body: form(initial, 'infer', '&message=use%20secret') })).text();
+    const creation = form(reviewed, 'create', '&title=Safe%20plan&name=Account');
+    const failed = await fetch(session.url, { method: 'POST', headers, body: creation });
+    expect(failed.status).toBe(500);
+    expect((await failed.text())).toContain('Review and retry');
+    expect((await fetch(session.url, { method: 'POST', headers, body: creation })).status).toBe(200);
+    await expect(session.result).resolves.toEqual({ id: 'created' });
+    expect(attempts).toBe(2);
   });
   it('keeps failed or oversized input out of later inference', async () => {
     let url = '';

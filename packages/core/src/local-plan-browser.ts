@@ -6,7 +6,7 @@ import type { Socket } from 'node:net';
 import type { QuickPlanInput } from '@safetech/inheriti-client-sdk/node-base';
 import { renderLocalPlanCanceledPage, renderLocalPlanCreationFailedPage, renderLocalPlanCreationProgressPage, renderLocalPlanPage, renderLocalPlanResultPage } from './local-plan-page.js';
 import { LocalPlanAssistant, localPlanSuggestionTimeoutMs } from './local-plan-assistant.js';
-import { LocalPlanDraftValue } from './local-plan-draft.js';
+import { LocalPlanDraftValue, localPlanFieldMaxLength } from './local-plan-draft.js';
 import { LocalPlanSource, LocalPlanSources, localPlanInputLimits } from './local-plan-source.js';
 import { quickPlanAssetCatalog } from './quick-plan.js';
 import { localPlanAssetLimit } from './asset-metadata.js';
@@ -25,6 +25,7 @@ type BrowserOptions<T> = {
   context?: string;
   teams?: readonly { id: string; name: string }[];
   fontFile?: URL;
+  logoFile?: URL;
   hints?: LocalPlanHints;
 };
 
@@ -50,6 +51,9 @@ type BrowserState<T> = {
   completed?: { value: T };
   inference: AbortController;
   finish: (value?: T, error?: Error) => void;
+  touch: () => void;
+  expiresAt: number;
+  expired: boolean;
 };
 
 /** The returned value comes from create; source text and the capability URL remain in this process. */
@@ -65,7 +69,7 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
     selectedTeamId: options.teams?.find((team) => team.name.trim().toLowerCase() === 'all members')?.id ?? '', selectedAssetType: '',
     hints,
     busy: false, creating: false, creationPhase: 'securing', creationPhases: [], interruptedDuringCreate: false, done: false,
-    inference: new AbortController(), finish: () => {},
+    inference: new AbortController(), finish: () => {}, touch: () => {}, expiresAt: 0, expired: false,
   };
   const sockets = new Set<Socket>();
   const result = new Promise<T>((resolve, reject) => {
@@ -87,9 +91,16 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     state.port = (server.address() as { port: number }).port;
+    const idleTimeoutMs = options.timeoutMs ?? 1_800_000;
+    state.expiresAt = Date.now() + idleTimeoutMs;
+    const timer = setTimeout(() => {
+      if (state.completed) return;
+      if (state.busy || state.creating) { state.touch(); return; }
+      state.expired = true;
+    }, idleTimeoutMs);
+    state.touch = () => { state.expiresAt = Date.now() + idleTimeoutMs; state.expired = false; timer.refresh(); };
     if (options.signal?.aborted) abort();
     else options.open(`http://127.0.0.1:${state.port}${state.path}`);
-    const timer = setTimeout(() => { if (state.completed) return; if (state.creating) state.interruptedDuringCreate = true; else state.finish(undefined, new Error('local_plan_expired')); }, options.timeoutMs ?? 300_000);
     try { return await result; } finally { clearTimeout(timer); }
   } finally {
     options.signal?.removeEventListener('abort', abort);
@@ -105,15 +116,13 @@ export async function runLocalPlanBrowser<T>(options: BrowserOptions<T>): Promis
 function renderPage<T>(state: BrowserState<T>, options: BrowserOptions<T>, message = '', error = false, messageValue?: string) {
   return renderLocalPlanPage({
     path: state.path, csrf: state.csrf, scriptNonce: state.scriptNonce, draft: state.draft, reviewAsset: state.reviewAsset, clarification: state.clarification,
-    busy: state.busy, selectedTeamId: state.selectedTeamId,
+    busy: state.busy, selectedTeamId: state.selectedTeamId, sessionExpiresAt: state.expiresAt,
     candidateAssetTypes: new LocalPlanSources(state.sources).assetCandidates(), selectedAssetType: state.selectedAssetType,
     hints: { ...state.hints,
       title: new LocalPlanSources(state.sources).explicitName('plan') ?? state.hints.title,
       description: new LocalPlanSources(state.sources).explicitDescription() ?? state.hints.description },
     hasPreviousInput: state.sources.length > 0,
     ...(state.sources.length === 1 && state.sources[0]?.kind === 'message' ? { editableInput: state.sources[0].text } : {}),
-    originalInputs: state.clarification || state.reviewAsset && !state.draft ? state.sources.map((source) => source.kind === 'message'
-      ? source.text : Object.entries(source.fields).map(([key, value]) => `${key}: ${value}`).join('\n')) : [],
     ...(options.fontFile ? { fontUrl: `${state.path}/font-app.ttf`, iconFontUrl: `${state.path}/font-icons.ttf` } : {}),
     messageValue: messageValue ?? '',
     fieldValues: state.draft ? Object.fromEntries(Object.entries(state.draft.asset.fields).map(([field, ref]) => {
@@ -156,7 +165,7 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('Referrer-Policy', 'same-origin');
   response.setHeader('X-Content-Type-Options', 'nosniff');
-  response.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${state.scriptNonce}'; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
+  response.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${state.scriptNonce}'; connect-src 'self'; font-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
   if (request.headers.host !== `127.0.0.1:${state.port}`) { response.writeHead(403).end(); return; }
   if (options.fontFile && request.url === `${state.path}/font-app.ttf` && request.method === 'GET') {
     try { const font = await readFile(options.fontFile); response.writeHead(200, { 'Content-Type': 'font/ttf' }).end(font); }
@@ -168,14 +177,19 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
     catch { response.writeHead(404).end(); }
     return;
   }
+  if (options.logoFile && request.url === `${state.path}/inheriti-business-logo.png` && request.method === 'GET') {
+    try { const logo = await readFile(options.logoFile); response.writeHead(200, { 'Content-Type': 'image/png' }).end(logo); }
+    catch { response.writeHead(404).end(); }
+    return;
+  }
   if (request.url === `${state.path}/progress` && request.method === 'GET' && state.creating && !state.done) {
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationProgressPage(state.creationPhase, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhases));
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationProgressPage(state.creationPhase, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhases, options.logoFile ? `${state.path}/inheriti-business-logo.png` : undefined));
     return;
   }
   if (request.url !== state.path) { response.writeHead(404).end(); return; }
   if (state.done) { response.writeHead(410).end(); return; }
   if (request.method === 'GET') { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(state.completed
-    ? renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, { path: state.path, csrf: state.csrf })
+    ? renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, { path: state.path, csrf: state.csrf }, options.logoFile ? `${state.path}/inheriti-business-logo.png` : undefined)
     : renderPage(state, options)); return; }
   if (request.method !== 'POST') { response.writeHead(405).end(); return; }
   if (request.headers.origin !== `http://127.0.0.1:${state.port}`) { response.writeHead(403).end(); return; }
@@ -200,7 +214,7 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
     if (state.completed) {
       if (action !== 'continue') { response.writeHead(409).end(); return; }
       response.once('finish', () => state.finish(state.completed!.value));
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(state.completed.value, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, undefined, options.logoFile ? `${state.path}/inheriti-business-logo.png` : undefined));
       return;
     }
     if (action === 'cancel' && !state.creating) {
@@ -208,7 +222,13 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCanceledPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined));
       return;
     }
+    if (state.expired && action !== 'keep-alive') { response.writeHead(410).end(); return; }
     if (state.busy || state.creating) { response.writeHead(409).end(); return; }
+    state.touch();
+    if (action === 'keep-alive') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ expiresAt: state.expiresAt }));
+      return;
+    }
     if (action === 'restart') {
       state.sources = [];
       state.draft = null;
@@ -230,30 +250,51 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
           ? LocalPlanDraftValue.from({ title: 'Asset preview', asset: { type, name: 'Plain text', fields: { text: { sourceId: source.id, start: 0, end: value.length } } }, questions: [], unassignedSources: [] }, [source]).draft
           : await suggestWithinTimeout(state, [source], null, type);
         if (!('asset' in suggestion) || (suggestion as LocalPlanDraft).assets || (suggestion as LocalPlanDraft).asset.type !== type) {
+          state.touch();
+          response.setHeader('X-Session-Expires-At', String(state.expiresAt));
           response.writeHead(422, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Add a labeled value for this asset.' }));
           return;
         }
         const assetSuggestion = suggestion as LocalPlanDraft;
         const fields = Object.fromEntries(Object.entries(assetSuggestion.asset.fields).map(([field, ref]) => [field,
           'start' in ref ? value.slice(ref.start, ref.end) : '']));
-        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ name: assetSuggestion.asset.name, fields }));
+        state.touch();
+        response.setHeader('X-Session-Expires-At', String(state.expiresAt));
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ name: assetSuggestion.asset.name, fields, expiresAt: state.expiresAt }));
       } finally { state.busy = false; }
       return;
     }
-    if (action === 'choose' && state.sources.length > 0 && (state.draft || state.reviewAsset || state.clarification)) {
+    if (action === 'choose' && (state.draft || state.reviewAsset || state.clarification)) {
       const choice = data.get('assetType') ?? '';
       const definition = quickPlanAssetCatalog.find(({ id }) => id === choice);
       if (!definition) throw new Error('Invalid asset selection');
+      const currentType = state.draft?.asset.type ?? state.reviewAsset?.type;
+      const currentDefinition = quickPlanAssetCatalog.find(({ id }) => id === currentType);
+      const fieldInputs = [...data].filter(([key]) => key.startsWith('field:'));
+      const fields: Record<string, string> = {};
+      const seenFields = new Set<string>();
+      for (const [key, value] of fieldInputs) {
+        const field = key.slice('field:'.length);
+        if (!currentDefinition?.fields.includes(field) || seenFields.has(field) || value.length > (localPlanFieldMaxLength(field, currentType!) ?? localPlanInputLimits.message)) throw new Error('Invalid asset field');
+        seenFields.add(field);
+        if (value.trim()) fields[field] = value;
+      }
+      const sources: LocalSource[] = fieldInputs.length
+        ? Object.keys(fields).length ? [{ id: randomBytes(8).toString('hex'), kind: 'fields', fields }] : []
+        : state.sources;
+      new LocalPlanSources(sources);
       state.busy = true;
       ownsLock = true;
-      try { const suggestion = await suggestWithinTimeout(state, state.sources, state.draft, choice);
+      try { const suggestion = sources.length ? await suggestWithinTimeout(state, sources, fieldInputs.length ? null : state.draft, choice) : null;
         if (!state.done) {
           const title = (state.draft?.title ?? state.reviewAsset?.title ?? new LocalPlanSources(state.sources).explicitName('plan') ?? state.hints.title) || 'New plan';
           const name = state.draft?.asset.name ?? state.reviewAsset?.name ?? title;
+          const suggestedDraft = suggestion && 'asset' in suggestion ? suggestion as LocalPlanDraft : null;
           state.selectedAssetType = choice;
-          state.draft = 'asset' in suggestion ? suggestion : null;
-          state.reviewAsset = 'asset' in suggestion ? null : { type: choice, title, name, fields: definition.fields };
-          state.clarification = 'asset' in suggestion ? null : suggestion;
+          state.sources = sources;
+          state.draft = suggestedDraft;
+          state.reviewAsset = suggestedDraft ? null : { type: choice, title, name, fields: definition.fields };
+          state.clarification = suggestion && !('asset' in suggestion) ? suggestion : null;
         }
       } finally { state.busy = false; }
       if (state.done) { response.writeHead(410).end(); return; }
@@ -333,7 +374,7 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
       const currentAssets = manualCount
         ? Array.from({ length: manualCount }, (_, index) => ({ type: data.get(`type:${index}`) ?? '', name: '', fields: {} }))
         : [...(baseAssets.length ? baseAssets : [{ type: state.reviewAsset!.type, name: state.reviewAsset!.name, fields: {} }]),
-          ...Array.from({ length: additionalCount }, (_, offset) => ({ type: data.get(`type:${baseAssets.length + offset}`) ?? '', name: '', fields: {} }))];
+          ...Array.from({ length: additionalCount }, (_, offset) => ({ type: data.get(`type:${(baseAssets.length || 1) + offset}`) ?? '', name: '', fields: {} }))];
       const assets = currentAssets.flatMap((asset, index) => {
         if (data.has(`remove:${index}`)) return [];
         const definition = quickPlanAssetCatalog.find(({ id }) => id === asset.type);
@@ -391,17 +432,23 @@ async function handleRequest<T>(request: IncomingMessage, response: ServerRespon
         state.hints = { title: '', description: '', assetTypes: [] };
         state.creating = false;
       } else response.once('finish', () => state.finish(created));
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, awaitAcknowledgment ? { path: state.path, csrf: state.csrf } : undefined));
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanResultPage(created, options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, awaitAcknowledgment ? { path: state.path, csrf: state.csrf } : undefined, options.logoFile ? `${state.path}/inheriti-business-logo.png` : undefined));
       return;
     }
     response.writeHead(400).end();
   } catch (error) {
-    if (ownsLock) state.busy = false;
+    if (ownsLock) {
+      state.busy = false;
+      if (!state.done) {
+        state.touch();
+        response.setHeader('X-Session-Expires-At', String(state.expiresAt));
+      }
+    }
     if (state.done) return;
     if (ownsLock && state.creating) {
       state.creating = false;
       if (state.interruptedDuringCreate) {
-        response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationFailedPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases));
+        response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderLocalPlanCreationFailedPage(options.fontFile ? `${state.path}/font-app.ttf` : undefined, state.creationPhase, state.creationPhases, options.logoFile ? `${state.path}/inheriti-business-logo.png` : undefined));
         state.finish(undefined, error instanceof Error ? error : new Error('local_plan_creation_failed'));
       } else {
         response.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }).end(renderPage(state, options, 'Plan creation failed. Review and retry.', true));

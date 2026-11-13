@@ -60,7 +60,7 @@ export async function createPlan(context: CliContext, configuration: CliConfigur
       model,
       signal: sessionSignal,
       waitForContinue: true,
-      ...(fontFile ? { fontFile } : {}),
+      ...(fontFile ? { fontFile, logoFile: new URL('./inheriti-business-logo.png', fontFile) } : {}),
       context: context.organization.name,
       ...(hints ? { hints } : {}),
       teams,

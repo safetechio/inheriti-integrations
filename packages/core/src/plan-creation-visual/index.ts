@@ -53,9 +53,9 @@ export function renderPlanCreationVisual(phase: LocalPlanCreationPhase, result?:
 }
 
 export const planCreationVisualStyles = `
-.plan-mosaic{--m-blue:#2962ff;--m-green:#22c55e;--m-danger:#dc3545;--m-arc:#cbe7ff;--m-faint:#a3b3bf;display:flex;justify-content:center;align-items:center;width:100%;height:100%}
-.plan-mosaic-stage{position:relative;width:min(100%,420px);aspect-ratio:1;transform:scale(1.04)}
-.plan-mosaic svg.mscene{width:100%;height:100%;overflow:visible}
+.plan-mosaic{--m-blue:#2962ff;--m-green:#22c55e;--m-danger:#dc3545;--m-arc:#cbe7ff;--m-faint:#a3b3bf;display:flex;justify-content:center;align-items:center;width:100%}
+.plan-mosaic-stage{position:relative;width:100%;max-width:420px;aspect-ratio:1;min-height:0}
+.plan-mosaic svg.mscene{position:absolute;inset:0;display:block;width:100%;height:100%;overflow:visible}
 .plan-mosaic .mtile{transition:transform .7s cubic-bezier(.22,1,.36,1)}
 .plan-mosaic .mtile>path{stroke:#fff;stroke-width:2.4;stroke-linejoin:round}
 .plan-mosaic .pblue{transition:opacity .6s ease}.plan-mosaic .colored .pblue{opacity:0}
