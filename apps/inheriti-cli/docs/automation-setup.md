@@ -152,7 +152,7 @@ inheriti automations create --name 'Custom deployment runner' --provider PORTABL
   --environment "$RUNNER_ENV"
 ```
 
-This command reads only the public key. Its PEM content is an argument, so use this only with a public key file; never substitute a private key file. The local TEST E2E created and verified a Custom runner connection with a fresh signed assertion.
+This command reads only the public key. Shell command substitution removes its final newline; the CLI restores that newline and validates the canonical Ed25519 PEM before sending it to Business. Its PEM content is an argument, so use this only with a public key file; never substitute a private key file. The local TEST E2E created and verified a Custom runner connection with a fresh signed assertion.
 
 ## 3. Verify identity, then grant plan access
 

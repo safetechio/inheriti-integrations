@@ -83,7 +83,7 @@ Verify AWS identity in that same subprocess context as above. For candidate IDs 
 
 ## Portable runner
 
-`--provider PORTABLE` binds a key ID, **public** key, subject, and environment to a runner configured separately. Ask for missing non-secret public-key metadata only. Keep its private key in that workload, never an agent prompt or CLI argument. Pair from the workload, activate a grant, then use `automations setup` to print or save the launcher. The CLI does not provision the runner.
+`--provider PORTABLE` binds a key ID, **public** key, subject, and environment to a runner configured separately. Ask for missing non-secret public-key metadata only. Shell command substitution strips a PEM file's final newline; the CLI restores it and validates the canonical Ed25519 public key before creating or changing trust. If an older CLI reports a generic request failure, check this newline before retrying. Keep the private key in the workload, never an agent prompt or CLI argument. Pair from the workload, activate a grant, then use `automations setup` to print or save the launcher. The CLI does not provision the runner.
 
 ## Image and installation preparation
 

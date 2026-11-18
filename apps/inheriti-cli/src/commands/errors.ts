@@ -127,6 +127,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_setup_authentication_required: 'Sign in again to manage automation.',
   automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
   automation_setup_request_failed: 'Inheriti® Business did not accept this automation request. Check your access and entries.',
+  automation_portable_public_key_invalid: 'Portable --public-key must be a canonical Ed25519 PEM public key. Pass only the public key, including its BEGIN/END lines.',
   automation_connection_verification_required: 'Inheriti® Business cannot activate this grant until its connection is verified. Run the appropriate `inheriti automations pair` command, then retry. See `inheriti help automations pair`.',
   automation_grant_already_exists: 'Inheriti® Business already has a grant for this plan and connection. Run `inheriti automations grants PLAN_ID` to check its ID and status. If pending, verify the connection and activate the existing grant.',
   automation_grant_already_active: 'This grant is already active in Inheriti® Business. No activation is needed.',

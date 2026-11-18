@@ -1,3 +1,4 @@
+import { createPublicKey } from 'node:crypto';
 import {
   applyCloudRunAutomation,
   applyCloudRunServiceAutomation,
@@ -115,8 +116,17 @@ class PortableProvider extends CliAutomationProvider {
 
   trust(options: Options): AutomationTrust | undefined {
     if (!options['--key-id'] || !options['--public-key'] || !options['--subject'] || !options['--environment']) return;
+    const publicKey = options['--public-key'].endsWith('\n') ? options['--public-key'] : `${options['--public-key']}\n`;
+    try {
+      const key = createPublicKey(publicKey);
+      if (key.asymmetricKeyType !== 'ed25519' || key.export({ type: 'spki', format: 'pem' }) !== publicKey) {
+        throw new Error('Invalid public key');
+      }
+    } catch {
+      throw new Error('automation_portable_public_key_invalid');
+    }
     return { method: 'PORTABLE_SIGNED_ASSERTION', keyId: options['--key-id'],
-      publicKey: options['--public-key'], runnerSubject: options['--subject'],
+      publicKey, runnerSubject: options['--subject'],
       environment: options['--environment'] };
   }
 }

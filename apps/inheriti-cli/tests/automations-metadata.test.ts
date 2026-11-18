@@ -28,6 +28,7 @@ vi.mock('@safetech/inheriti-elements-core/node-base', async original => ({
 }));
 
 import { automationManage, automationMetadata, automationRuntimeInstructions, automationRuntimeInstallEc2 } from '../src/commands/automations.js';
+import { messageFor } from '../src/commands/errors.js';
 
 const terminal = (interactive = true) => ({ interactive, stdoutIsTTY: interactive, columns: 80, write: vi.fn(), writeError: vi.fn() });
 const context = { organization: { id: 'org-1', name: 'Acme' }, core: { getAccessToken: vi.fn(async () => 'human-token') } };
@@ -409,13 +410,19 @@ it('appends the connection ID once to a Google audience base with trailing slash
   expect(output.write.mock.calls.flat()).toContain('Expected audience: https://example.com/workload/connection-google');
 });
 
-it('accepts a multiline Portable PEM public key without changing its newlines', async () => {
+it('restores a Portable PEM final newline and rejects invalid public keys locally', async () => {
   const publicKey = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }).toString();
   const output = terminal(false);
   expect(await automationManage(context as never, configuration as never, output, new AbortController().signal,
-    ['create', '--id', 'portable-1', '--name', 'Runner', '--provider', 'PORTABLE', '--deployment-environment', 'TEST', '--key-id', 'key-1', '--public-key', publicKey, '--subject', 'runner-1', '--environment', 'test'])).toBe(0);
+    ['create', '--id', 'portable-1', '--name', 'Runner', '--provider', 'PORTABLE', '--deployment-environment', 'TEST', '--key-id', 'key-1', '--public-key', publicKey.slice(0, -1), '--subject', 'runner-1', '--environment', 'test'])).toBe(0);
   expect(createConnection).toHaveBeenCalledWith(expect.objectContaining({ trust: expect.objectContaining({ publicKey }) }));
   expect(output.write.mock.calls.flat().join('\n')).not.toContain(publicKey);
+  const calls = createConnection.mock.calls.length;
+  await expect(automationManage(context as never, configuration as never, output, new AbortController().signal,
+    ['create', '--name', 'Runner', '--provider', 'PORTABLE', '--deployment-environment', 'TEST', '--key-id', 'key-1', '--public-key', 'invalid', '--subject', 'runner-1', '--environment', 'test']))
+    .rejects.toThrow('automation_portable_public_key_invalid');
+  expect(createConnection).toHaveBeenCalledTimes(calls);
+  expect(messageFor(new Error('automation_portable_public_key_invalid'), true, 'create')).toContain('canonical Ed25519 PEM');
   expect(await automationManage(context as never, configuration as never, output, new AbortController().signal,
     ['create', '--name', 'Runner', '--provider', 'PORTABLE', '--deployment-environment', 'TEST', '--key-id', 'key-1', '--public-key', '--subject', 'runner-1', '--environment', 'test'])).toBe(1);
 });
