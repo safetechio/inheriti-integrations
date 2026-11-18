@@ -141,7 +141,7 @@ export async function automationSetup(
   const operations = createAutomationSetupOperations({
     apiUrl: configuration.apiUrl,
     organizationId: context.organization!.id,
-    getBearerToken: () => context.core.getAccessToken(),
+    environment: configuration.environment, getBearerToken: () => context.core.getAccessToken(),
   });
   const grants = await operations.listGrants(options['--plan']);
   const eligibleIds = new Set(grants.filter(grant => grant.status === 'ACTIVE').map(grant => grant.connectionId));

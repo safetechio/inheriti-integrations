@@ -14,7 +14,7 @@ describe('automation setup', () => {
   });
   it('uses only a verified release to print copyable GitHub workflow', async () => {
     const release = { actionRepository: 'safetechio/inheriti-integrations', actionRef: 'a'.repeat(40), cliVersion: '1.2.3' };
-    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: release })) });
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: release })) });
     expect(await operations.getVerifiedGithubRelease()).toEqual(release);
     const yaml = githubAutomationWorkflow({ release, environment: 'production', planId: id, connectionId: id, selector: 'account.password' });
     expect(yaml).toContain(`uses: safetechio/inheriti-integrations/integrations/github-actions@${'a'.repeat(40)}`);
@@ -39,10 +39,10 @@ describe('automation setup', () => {
     expect(paired).not.toContain('secret value');
     const devRelease = { ...release, cliVersion: '0.0.14-dev.0' };
     expect(githubAutomationWorkflow({ release: devRelease, environment: 'test', planId: id, connectionId: id, selector: 'account.password' })).toContain('cli-version: "0.0.14-dev.0"');
-    await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: devRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(devRelease);
+    await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: devRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(devRelease);
     const stgRelease = { ...release, cliVersion: '0.0.14-stg.0' };
     expect(githubAutomationWorkflow({ release: stgRelease, environment: 'staging', planId: id, connectionId: id, selector: 'account.password' })).toContain('cli-version: "0.0.14-stg.0"');
-    await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: stgRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(stgRelease);
+    await expect(createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: stgRelease })) }).getVerifiedGithubRelease()).resolves.toEqual(stgRelease);
     for (const cliVersion of ['0.0.14-dev.01', '0.0.14-stg.01', '0.0.14-stg.0;echo secret', '0.0.14-dev.0;echo secret', 'latest', '0.0.14-stg']) {
       expect(() => githubAutomationWorkflow({ release: { ...release, cliVersion }, environment: 'test', planId: id, connectionId: id, selector: 'account.password' })).toThrow('Invalid GitHub workflow input');
     }
@@ -53,7 +53,7 @@ describe('automation setup', () => {
       expect(() => githubAutomationWorkflow({ release, environment: 'production', planId: id, connectionId: id, selector })).toThrow('Invalid GitHub workflow input');
     }
     for (const status of [400, 404]) {
-      const unavailable = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response('{}', { status }) });
+      const unavailable = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response('{}', { status }) });
       await expect(unavailable.getVerifiedGithubRelease()).rejects.toThrow('automation_verified_release_unavailable');
       await expect(unavailable.listConnections()).rejects.toThrow(status === 400 ? 'automation_setup_request_failed' : 'automation_setup_permission_denied');
     }
@@ -64,7 +64,7 @@ describe('automation setup', () => {
       calls.push({ url: String(url), init });
       return new Response(JSON.stringify({ ok: true, result: [] }), { status: 200 });
     }) as typeof fetch;
-    const operations = createAutomationSetupOperations({ apiUrl: 'http://business.localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl });
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://business.localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl });
     await operations.createConnection({ id, name: 'CI', provider: 'GITHUB', environment: 'TEST', trust: { method: 'GITHUB_ACTIONS_OIDC', repositoryName: 'owner/repo', environment: 'test', workflow: 'publish.yml' } });
     await operations.verifyConnection(id, 'secret proof');
     await operations.createGrant(id, { id, connectionId: id, responsibleMemberId: id });
@@ -81,7 +81,7 @@ describe('automation setup', () => {
 
   it('preserves only actionable grant errors from the matching Business request', async () => {
     const setup = (body: unknown) => createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/',
-      organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => Response.json(body, { status: 400 }) });
+      organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => Response.json(body, { status: 400 }) });
     await expect(setup({ error: 'automation_connection_verification_required' }).activateGrant(id, id))
       .rejects.toThrow('automation_connection_verification_required');
     await expect(setup({ error: 'automation_grant_already_exists' }).createGrant(id, { id, connectionId: id, responsibleMemberId: id }))
@@ -108,7 +108,7 @@ describe('automation setup', () => {
       return Response.json({ ok: true, result: pairing });
     }) as typeof fetch;
     const operations = createAutomationSetupOperations({ apiUrl: 'https://business.example/integrations/', organizationId: org,
-      getBearerToken: async () => 'jwt', fetchImpl });
+      environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl });
     expect(await operations.startPairing(id, 'd38f2da2-94c3-4718-8ebd-6ba5e0375a0c')).toEqual(pairing);
     expect(new URL(calls[0]!.url).pathname).toBe(`/integrations/v1/automation-connections/${id}/identity-pairings`);
     expect(calls[0]!.init.method).toBe('POST');
@@ -119,19 +119,19 @@ describe('automation setup', () => {
   });
 
   it('fails closed on malformed Business envelopes', async () => {
-    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: false, result: [] })) });
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: false, result: [] })) });
     await expect(operations.listConnections()).rejects.toThrow('Invalid Business API response');
   });
 
   it('rejects connections whose provider and trust method disagree', async () => {
     const connection = { id, name: 'CI', provider: 'GITHUB', status: 'VERIFIED', trust: { method: 'AWS_IAM_ROLE', roleArn: 'arn:aws:iam::123456789012:role/CI' } };
-    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: [connection] })) });
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async () => new Response(JSON.stringify({ ok: true, result: [connection] })) });
     await expect(operations.listConnections()).rejects.toThrow('Invalid Business API response');
   });
 
   it('loads every page of eligible members for the responsible picker', async () => {
     const calls: string[] = [];
-    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'jwt', fetchImpl: async (url) => {
+    const operations = createAutomationSetupOperations({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'jwt', fetchImpl: async (url) => {
       calls.push(String(url));
       const id = calls.length === 1 ? 'member-a' : 'member-b';
       return new Response(JSON.stringify({ ok: true, result: { items: [{ id, status: 'ACTIVE' }], total: 2 } }));

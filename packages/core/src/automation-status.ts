@@ -53,7 +53,7 @@ export function parseAutomationStatus(value: unknown, planId: string, connection
     setup: { status: value.setup.status as AutomationStatusSnapshot['setup']['status'], steps, nextAction: action(value.setup.nextAction, setupActions) },
     executions: { items, hasMore: value.executions.hasMore as boolean } };
 }
-export function createAutomationStatusReader(options: { apiUrl: string; organizationId: string; getBearerToken: () => Promise<string | undefined>; fetchImpl?: typeof fetch }) {
+export function createAutomationStatusReader(options: { apiUrl: string; organizationId: string; environment: 'TEST' | 'LIVE'; getBearerToken: () => Promise<string | undefined>; fetchImpl?: typeof fetch }) {
   const transport = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   return async (planId: string, connectionId: string, jobId?: string, signal?: AbortSignal): Promise<AutomationStatusSnapshot> => {
     if (![planId, connectionId, ...(jobId ? [jobId] : [])].every(id => uuid.test(id))) throw new Error('Invalid automation status ID');
@@ -64,7 +64,7 @@ export function createAutomationStatusReader(options: { apiUrl: string; organiza
     const url = new URL(`v1/plans/${encodeURIComponent(planId)}/automation-status`, options.apiUrl);
     url.searchParams.set('connectionId', connectionId);
     if (jobId) url.searchParams.set('jobId', jobId);
-    const response = await transport(url, { headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': 'TEST' }, ...(signal ? { signal } : {}) });
+    const response = await transport(url, { headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': options.environment }, ...(signal ? { signal } : {}) });
     if (!response.ok) throw new Error(response.status === 401 ? 'automation_status_authentication_required' : response.status === 403 || response.status === 404 ? 'automation_status_permission_denied' : 'automation_status_request_failed');
     const body: unknown = await response.json().catch(() => undefined);
     if (!record(body) || body.ok !== true) throw new Error('Invalid automation status response');

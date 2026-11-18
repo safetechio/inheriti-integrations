@@ -39,12 +39,12 @@ export async function automationStatus(context: CliContext, configuration: CliCo
   }
   if (['--plan', '--connection', '--job'].some(key => options[key] && !uuid.test(options[key]!))) { terminal.writeError('Plan, connection and job must be UUIDs.'); return 1; }
   if (!(await context.core.getAccessToken())) { terminal.writeError('Sign in before checking automation status.'); return 1; }
-  const operations = createAutomationSetupOperations({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id, getBearerToken: () => context.core.getAccessToken() });
+  const operations = createAutomationSetupOperations({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id, environment: configuration.environment, getBearerToken: () => context.core.getAccessToken() });
   const planId = options['--plan'] ?? (terminal.interactive ? await promptSelect('Plan', (await operations.listPlans()).map(item => ({ value: item.id, description: item.name ?? item.title ?? item.id })), signal) : undefined);
   if (!planId) { terminal.writeError('A plan is required. Use --plan ID.'); return 1; }
   const connectionId = options['--connection'] ?? (terminal.interactive ? await promptSelect('Connection', operationalConnections(await operations.listConnections()).map(item => ({ value: item.id, description: connectionChoice(item).name })), signal) : undefined);
   if (!connectionId) { terminal.writeError('A connection is required. Use --connection ID.'); return 1; }
-  const read = createAutomationStatusReader({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id, getBearerToken: () => context.core.getAccessToken() });
+  const read = createAutomationStatusReader({ apiUrl: configuration.apiUrl, organizationId: context.organization!.id, environment: configuration.environment, getBearerToken: () => context.core.getAccessToken() });
   do {
     let snapshot: AutomationStatusSnapshot;
     try { snapshot = await read(planId, connectionId, options['--job'], signal); }

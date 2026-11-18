@@ -11,7 +11,7 @@ const snapshot = { observedAt: '2026-11-04T12:00:00.000Z', provider: 'GITHUB', c
 
 it('reads a scoped status and exposes only safe fields', async () => {
   const fetchImpl = vi.fn(async (_url: URL, _init: RequestInit) => new Response(JSON.stringify({ ok: true, result: { ...snapshot, secret: 'NEVER_PRINT' } })));
-  const read = createAutomationStatusReader({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'token', fetchImpl: fetchImpl as never });
+  const read = createAutomationStatusReader({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'token', fetchImpl: fetchImpl as never });
   const value = await read(plan, connection, job);
   expect(JSON.stringify(value)).not.toContain('NEVER_PRINT');
   expect(fetchImpl).toHaveBeenCalledOnce();
@@ -23,7 +23,7 @@ it('reads a scoped status and exposes only safe fields', async () => {
 
 it('passes cancellation to HTTP and avoids a request after early cancellation', async () => {
   const fetchImpl = vi.fn(async (_url: URL, _init: RequestInit) => new Response(JSON.stringify({ ok: true, result: snapshot })));
-  const read = createAutomationStatusReader({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, getBearerToken: async () => 'token', fetchImpl: fetchImpl as never });
+  const read = createAutomationStatusReader({ apiUrl: 'http://localhost:3400/integrations/', organizationId: org, environment: 'TEST', getBearerToken: async () => 'token', fetchImpl: fetchImpl as never });
   const controller = new AbortController();
   await read(plan, connection, undefined, controller.signal);
   expect(fetchImpl.mock.calls[0]?.[1].signal).toBe(controller.signal);

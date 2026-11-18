@@ -214,6 +214,7 @@ export async function startAutomationSetup(this: MetadataTools, connectionId: st
     const operations = createAutomationSetupOperations({
       apiUrl: this.config!.apiUrl,
       organizationId: selected.organizationId,
+      environment: this.config!.environment,
       getBearerToken: () => selected.core.getAccessToken(),
     });
     const result = await runLocalAutomationProofBrowser({

@@ -462,7 +462,7 @@ export class MetadataTools {
     this.localAutomation();
     const selected = await this.selected(); if (!('organizationId' in selected)) return selected;
     return { organizationId: selected.organizationId, operations: createAutomationSetupOperations({ apiUrl: this.config!.apiUrl,
-      organizationId: selected.organizationId, getBearerToken: () => selected.core.getAccessToken() }) };
+      organizationId: selected.organizationId, environment: this.config!.environment, getBearerToken: () => selected.core.getAccessToken() }) };
   }
   async listAutomationConnections() { return listAutomationConnections.call(this); }
   async getAutomationRuntimeInstallInstructions() { return getAutomationRuntimeInstallInstructions.call(this); }

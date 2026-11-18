@@ -264,7 +264,7 @@ export async function automationManage(
   const operations = createAutomationSetupOperations({
     apiUrl: configuration.apiUrl,
     organizationId: context.organization!.id,
-    getBearerToken: () => context.core.getAccessToken(),
+    environment: configuration.environment, getBearerToken: () => context.core.getAccessToken(),
   });
   if (pair) {
     if (Object.keys(options).some(key => key !== '--connection')) {
@@ -500,7 +500,7 @@ export async function automationMetadata(
   const operations = createAutomationSetupOperations({
     apiUrl: configuration.apiUrl,
     organizationId: context.organization!.id,
-    getBearerToken: () => context.core.getAccessToken(),
+    environment: configuration.environment, getBearerToken: () => context.core.getAccessToken(),
   });
   if (planId) {
     const grants = all ? await operations.listGrants(planId) : operationalGrants(await operations.listGrants(planId), await operations.listConnections());

@@ -84,7 +84,7 @@ export async function githubAutomationSetup(
   }
   const run = dependencies.run ?? gh;
   const operations = dependencies.operations ?? createAutomationSetupOperations({ apiUrl: configuration.apiUrl,
-    organizationId: context.organization!.id, getBearerToken: () => context.core.getAccessToken() });
+    organizationId: context.organization!.id, environment: configuration.environment, getBearerToken: () => context.core.getAccessToken() });
   try {
     terminal.write('Checking GitHub CLI, access and repository…');
     await preflight(run);
@@ -99,11 +99,11 @@ export async function githubAutomationSetup(
     if (!resolveAutomationFieldMappings(selectedPlan.assets, { onlyFields: [field], mappings: [] }).length)
       throw new Error('Selected field is not available in the plan.');
     const connectionId = options.connection ?? await select('Which GitHub connection?', operationalConnections(await operations.listConnections())
-      .filter(item => item.provider === 'GITHUB' && ['PENDING_VERIFICATION', 'VERIFIED'].includes(item.status))
+      .filter(item => item.provider === 'GITHUB' && item.environment === configuration.environment && ['PENDING_VERIFICATION', 'VERIFIED'].includes(item.status))
       .map(item => ({ value: item.id, description: connectionChoice(item).name })));
     if (!connectionId) throw new Error('GitHub connection required.');
     const selected = await operations.getConnection(connectionId);
-    if (selected.provider !== 'GITHUB' || selected.environment !== 'TEST' ||
+    if (selected.provider !== 'GITHUB' || selected.environment !== configuration.environment ||
         selected.trust.method !== 'GITHUB_ACTIONS_OIDC' || !['PENDING_VERIFICATION', 'VERIFIED'].includes(selected.status))
       throw new Error('Selected GitHub connection is not pending or verified.');
     const { repository: repositoryName, path, branch } = githubAutomationWorkflowLocation(selected.trust.repositoryName, selected.trust.workflow);
@@ -217,7 +217,7 @@ export async function githubAutomationCreate(
       !environment.trim() || /[\r\n]/.test(environment)) { terminal.writeError(createUsage); return 1; }
   const run = dependencies.run ?? gh;
   const operations = dependencies.operations ?? createAutomationSetupOperations({ apiUrl: configuration.apiUrl,
-    organizationId: context.organization!.id, getBearerToken: () => context.core.getAccessToken() });
+    organizationId: context.organization!.id, environment: configuration.environment, getBearerToken: () => context.core.getAccessToken() });
   try {
     await preflight(run);
     if (!(await context.core.getAccessToken())) throw new Error('Sign in before creating automation.');
@@ -235,18 +235,18 @@ export async function githubAutomationCreate(
     if (!branchPattern.test(branch) || branch.includes('..')) throw new Error('Invalid repository default branch.');
     const trust = { method: 'GITHUB_ACTIONS_OIDC' as const, repositoryName: name, environment,
       workflow: `${name}/.github/workflows/${filename}@refs/heads/${branch}` };
-    const matches = (await operations.listConnections()).filter(item => item.provider === 'GITHUB' && item.environment === 'TEST' &&
+    const matches = (await operations.listConnections()).filter(item => item.provider === 'GITHUB' && item.environment === configuration.environment &&
       item.trust.method === 'GITHUB_ACTIONS_OIDC' && item.trust.repositoryName === name && item.trust.environment === environment && item.trust.workflow === trust.workflow);
     const active = matches.filter(item => ['PENDING_VERIFICATION', 'VERIFIED'].includes(item.status));
     if (active.length > 1) throw new Error('Multiple active matching GitHub connections; select one explicitly for setup.');
     const disabledIds = matches.filter(item => !active.includes(item)).map(item => item.id).sort();
     const id = active[0]?.id ?? connectionIdFor(configuration.apiUrl, context.organization!.id,
-      disabledIds.length ? { trust, disabledIds } : trust);
+      { trust, environment: configuration.environment, ...(disabledIds.length ? { disabledIds } : {}) });
     if (!active.length) {
-      try { await operations.createConnection({ id, name: `${name} Inheriti`, provider: 'GITHUB', environment: 'TEST', trust }); }
+      try { await operations.createConnection({ id, name: `${name} Inheriti`, provider: 'GITHUB', environment: configuration.environment, trust }); }
       catch (error) {
         const current = await operations.getConnection(id).catch(() => undefined);
-        if (!current || current.provider !== 'GITHUB' || current.environment !== 'TEST' ||
+        if (!current || current.provider !== 'GITHUB' || current.environment !== configuration.environment ||
             current.trust.method !== 'GITHUB_ACTIONS_OIDC' || current.trust.repositoryName !== name ||
             current.trust.environment !== environment || current.trust.workflow !== trust.workflow ||
             !['PENDING_VERIFICATION', 'VERIFIED'].includes(current.status)) throw error;

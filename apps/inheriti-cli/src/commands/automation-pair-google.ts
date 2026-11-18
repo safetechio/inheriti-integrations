@@ -25,7 +25,7 @@ export async function pairGoogleAutomationWorkload(
   if (!(await context.core.getAccessToken())) { terminal.writeError('Sign in before pairing automation.'); return 1; }
   const operations = createAutomationSetupOperations({
     apiUrl: configuration.apiUrl, organizationId: context.organization!.id,
-    getBearerToken: () => context.core.getAccessToken(),
+    environment: configuration.environment, getBearerToken: () => context.core.getAccessToken(),
   });
   const connection = await operations.getConnection(options['--connection']);
   if (connection.provider !== 'GOOGLE_CLOUD' || connection.trust.method !== 'GOOGLE_CLOUD_SERVICE_ACCOUNT_OIDC' ||

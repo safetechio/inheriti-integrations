@@ -25,7 +25,7 @@ export async function pairAwsAutomationService(
   if (!(await context.core.getAccessToken())) { terminal.writeError('Sign in before pairing automation.'); return 1; }
   const operations = createAutomationSetupOperations({
     apiUrl: configuration.apiUrl, organizationId: context.organization!.id,
-    getBearerToken: () => context.core.getAccessToken(),
+    environment: configuration.environment, getBearerToken: () => context.core.getAccessToken(),
   });
   const connection = await operations.getConnection(options['--connection']);
   if (connection.provider !== 'AWS' || connection.trust.method !== 'AWS_IAM_ROLE' || connection.status === 'DISABLED') {

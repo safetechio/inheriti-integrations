@@ -49,6 +49,7 @@ export type AutomationSetupOperations = {
 export function createAutomationSetupOperations(options: {
   apiUrl: string;
   organizationId: string;
+  environment: 'TEST' | 'LIVE';
   getBearerToken: () => Promise<string | undefined>;
   fetchImpl?: typeof fetch;
 }): AutomationSetupOperations {
@@ -56,11 +57,11 @@ export function createAutomationSetupOperations(options: {
   const connections = `${base}/automation-connections`;
   const grants = (planId: string) => `${base}/plans/${encodeURIComponent(planId)}/automation-grants`;
   const transport = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const plansPort = new HttpPlanEditPort(options.apiUrl, 'TEST', async () => (await options.getBearerToken()) ?? null, transport);
+  const plansPort = new HttpPlanEditPort(options.apiUrl, options.environment, async () => (await options.getBearerToken()) ?? null, transport);
   const request = async (url: string, method = 'GET', body?: unknown): Promise<unknown> => {
     const token = await options.getBearerToken();
     if (!token) throw new Error('Authentication required');
-    const response = await transport(url, { method, headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': 'TEST', ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const response = await transport(url, { method, headers: { Authorization: `Bearer ${token}`, 'x-organization-id': options.organizationId, 'x-elements-environment': options.environment, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) {
       const grantAction = method === 'POST' && /\/automation-grants(?:\/[^/]+\/activate)?$/u.test(url);
       const detail: unknown = response.status === 400 && grantAction
