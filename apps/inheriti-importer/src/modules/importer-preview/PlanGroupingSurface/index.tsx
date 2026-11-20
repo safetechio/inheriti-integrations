@@ -5,13 +5,12 @@ import { PlanDraftList } from './components/PlanDraftList';
 import { usePlanGrouping } from './hooks/use-plan-grouping';
 import { PlanMetadataModal, type PlanMetadataValues } from './components/PlanMetadataModal';
 import { BulkSelectionBar } from './components/BulkSelectionBar';
-import { AssetSelectionToolbar } from './components/AssetSelectionToolbar';
+import { AssetSelectionToolbar, folderTarget } from './components/AssetSelectionToolbar';
 import { OrganizationFolderTree } from './components/OrganizationFolderTree';
 import { PlanAssetsModal } from './components/PlanAssetsModal';
 import { PlanAvatar } from './components/OrganizationFolderTree/components/PlanAvatar';
 import { useAssetSelection } from './hooks/use-asset-selection';
 import { canCreatePlanAtDestination } from '@modules/organization/domain/plan-folder';
-import { folderPathLabel } from './hooks/folder-path';
 import type { FolderWorkspaceProps, PlanGroupingSurfaceProps, PlanRevealRequest } from './types';
 import './styles.css';
 
@@ -186,24 +185,12 @@ export function PlanGroupingSurface({
               <AssetSelectionToolbar
                 assets={selection.assets}
                 plans={plans}
-                targetId={targetId}
                 onTarget={setTargetId}
                 onClear={selection.clear}
                 onMove={assignMany}
-                createDestination={createPlansFromAssets ? {
-                  label: folderPathLabel(folders.folders, targetFolderId, folders.scope),
-                  value: targetFolderId ?? '',
-                  options: [
-                    { value: '', label: 'Your organisation' },
-                    ...folders.folders.filter((folder) => folder.scope === folders.scope).map((folder) => ({
-                      value: folder.id,
-                      label: folderPathLabel(folders.folders, folder.id, folders.scope),
-                    })),
-                  ],
-                  onChange: (value) => chooseDestination(value || null),
-                  blockedReason: canCreatePlanAtDestination(targetFolderId, folders.scope, folders.folders)
-                    ? undefined : 'Set folder permissions before creating plans here.',
-                } : undefined}
+                createDestination={createPlansFromAssets
+                  ? folderTarget(folders, targetFolderId, chooseDestination)
+                  : undefined}
                 onUnassign={
                   selectedAssigned.length && onUnassignMany
                     ? () => {

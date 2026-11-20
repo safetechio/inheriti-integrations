@@ -1,15 +1,38 @@
 import { useRef, useState } from 'react';
 import { Box, Button, Text, Tooltip } from '@main-components';
-import type { GroupingAsset, PlanDraft } from '../../types';
+import { canCreatePlanAtDestination } from '@modules/organization/domain/plan-folder';
+import { folderPathLabel } from '../../hooks/folder-path';
+import type { FolderWorkspaceProps, GroupingAsset, PlanDraft } from '../../types';
 import { PlanTargetPopover } from './components/PlanTargetPopover';
 import { FolderTargetPopover, type FolderTarget } from './components/FolderTargetPopover';
 import './styles.css';
 
-export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove, onUnassign, onCreate, createDestination }: {
+export function folderTarget(
+  { folders, scope }: FolderWorkspaceProps,
+  folderId: string | null,
+  chooseFolder: (folderId: string | null) => void,
+): FolderTarget {
+  return {
+    label: folderPathLabel(folders, folderId, scope),
+    value: folderId ?? '',
+    options: [
+      { value: '', label: 'Your organisation' },
+      ...folders.filter((folder) => folder.scope === scope).map((folder) => ({
+        value: folder.id,
+        label: folderPathLabel(folders, folder.id, scope),
+      })),
+    ],
+    onChange: (value) => chooseFolder(value || null),
+    blockedReason: canCreatePlanAtDestination(folderId, scope, folders)
+      ? undefined : 'Set folder permissions before creating plans here.',
+  };
+}
+
+export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove, onUnassign, onCreate, createDestination, moveLabel = 'Assign to plan' }: {
   assets: GroupingAsset[];
   plans: PlanDraft[];
-  targetId: string;
-  onTarget: (id: string) => void;
+  onTarget?: (id: string) => void;
+  moveLabel?: string;
   onClear: () => void;
   onMove?: (assets: GroupingAsset[], plan: PlanDraft) => void;
   onUnassign?: (assets: GroupingAsset[]) => void;
@@ -30,14 +53,14 @@ export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove
         {onCreate ? <Tooltip content={createDestination?.blockedReason}>
           <Button title="New plan" size="sm" minHeight={34} variant="outlined" color="gray" onPress={onCreate} disabled={Boolean(createDestination?.blockedReason) || assets.some((asset) => asset.valid === false)} />
         </Tooltip> : null}
-        <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>Assign to plan</button>
+        <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{moveLabel}</button>
         <Box className="asset-selection-clear"><Button title="Clear" size="sm" minHeight={34} variant="plain" onPress={onClear} /></Box>
         {onUnassign ? <Button title="Unassign selected" size="sm" minHeight={34} variant="plain" onPress={() => onUnassign(assets)} /> : null}
       </Box>
     </Box>
     {open && anchor.current ? <PlanTargetPopover anchor={anchor.current} assets={assets} plans={plans} onDismiss={() => setOpen(false)} onChoose={(plan) => {
       const additions = assets.filter((asset) => !plan.assignedAssets?.some((assigned) => assigned.id === asset.id));
-      onTarget(plan.id);
+      onTarget?.(plan.id);
       onMove?.(additions, plan);
       setOpen(false);
     }} /> : null}

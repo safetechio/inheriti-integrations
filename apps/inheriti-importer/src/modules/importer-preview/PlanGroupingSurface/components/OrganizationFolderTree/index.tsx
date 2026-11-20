@@ -15,7 +15,7 @@ import { MovePlansModal } from './components/MovePlansModal';
 import { moveRoots, validFolderDestination } from './hooks/folder-drag-move';
 import { PlanAssetTreeRow } from './components/PlanAssetTreeRow';
 import { AssetActionsMenu } from './components/AssetActionsMenu';
-import { AssetSelectionToolbar } from '../AssetSelectionToolbar';
+import { AssetSelectionToolbar, folderTarget } from '../AssetSelectionToolbar';
 import type { useAssetSelection } from '../../hooks/use-asset-selection';
 import { folderPath, folderPathLabel } from '../../hooks/folder-path';
 import { canCreatePlanAtDestination } from '@modules/organization/domain/plan-folder';
@@ -220,14 +220,15 @@ export function OrganizationFolderTree({
   });
   const destinationReady = (folderId: string | null) =>
     canCreatePlanAtDestination(folderId, workspace.scope, workspace.folders);
-  const canDropAssets = (folderId: string | null) => Boolean(destinationReady(folderId) && dragAssets.length && dragAssets.every((asset) => asset.valid !== false) && onCreatePlansFromAssets);
+  const canCreateFromAssets = (assets: GroupingAsset[], folderId: string | null) =>
+    Boolean(onCreatePlansFromAssets && destinationReady(folderId) && assets.length && assets.every((asset) => asset.valid !== false));
   const plansBeingDragged = () => draggedPlanIds.map((id) => plans.find((plan) => plan.id === id));
   const canDropPlans = (folderId: string | null) => draggedPlanIds.length > 0 &&
     plansBeingDragged().every((plan) => plan && (plan.sharingModel === 'PRIVATE' ? 'PERSONAL' : 'SHARED') === workspace.scope) &&
     plansBeingDragged().some((plan) => plan?.folderId !== folderId) && destinationReady(folderId) &&
     Boolean(onMovePlans || (draggedPlanIds.length === 1 && onMovePlan));
   const hoverContent = (event: DragEvent, folderId: string | null) => {
-    const valid = draggedPlanIds.length || event.dataTransfer?.types?.includes('text/plan-id') ? canDropPlans(folderId) : canDropAssets(folderId);
+    const valid = draggedPlanIds.length || event.dataTransfer?.types?.includes('text/plan-id') ? canDropPlans(folderId) : canCreateFromAssets(dragAssets, folderId);
     setDropId(folderId); setDropValid(valid);
     if (valid) event.preventDefault();
     else if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
@@ -351,17 +352,17 @@ export function OrganizationFolderTree({
         }}
       />
     ) : null;
+  const createFromAssets = (assets: GroupingAsset[], folderId: string | null) => {
+    if (!canCreateFromAssets(assets, folderId)) return;
+    onCreatePlansFromAssets?.(assets, {
+      name: assets.length === 1 ? assets[0]!.name : `${assets.length} imported assets`,
+      folderId,
+      scope: workspace.scope,
+    });
+    if (folderId) setExpanded((current) => [...new Set([...current, folderId])]);
+  };
   const drop = (folderId: string | null) => {
-    const accepted = canDropAssets(folderId);
-    if (accepted && onCreatePlansFromAssets) {
-      onCreatePlansFromAssets(dragAssets, {
-        name:
-          dragAssets.length === 1 ? dragAssets[0]!.name : `${dragAssets.length} imported assets`,
-        folderId,
-        scope: workspace.scope,
-      });
-      if (folderId) setExpanded((current) => [...new Set([...current, folderId])]);
-    }
+    createFromAssets(dragAssets, folderId);
     setDropId(undefined);
   };
   const countLocalDrafts = (folderIds: string[]) => {
@@ -661,7 +662,21 @@ export function OrganizationFolderTree({
       {toolbar ? <Box className="folder-tree-footer">{toolbar}</Box> : null}
       {selectedPlanIds.length ? <Box className="folder-tree-selection" flexDirection="row" alignItems="center" gap="s"><Text variant="bodySmall">{selectedPlanIds.length} {selectedPlanIds.length === 1 ? 'plan' : 'plans'} selected</Text><Button title="Move to folder" size="sm" disabled={!onMovePlans || !visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => setMoveSelectedIds(selectedPlanIds)} /><Button title="Clear selection" size="sm" variant="plain" onPress={() => setSelectedPlanIds([])} />{onDeletePlans ? <Button title="Delete selected" size="sm" color="danger" variant="plain" disabled={!visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => onDeletePlans(visiblePlans.filter((plan) => selectedPlanIds.includes(plan.id)))} /> : null}</Box> : null}
       {selectedFolderIds.length ? <Box className="folder-tree-selection"><FolderSelectionToolbar folders={visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id))} workspace={workspace} localDraftCount={countLocalDrafts(selectedFolderIds)} onClear={() => setSelectedFolderIds([])} /></Box> : null}
-      {assetSelection?.pane === 'organization' && assetSelection.assets.length ? <AssetSelectionToolbar assets={assetSelection.assets} plans={visiblePlans} targetId="" onTarget={() => {}} onClear={assetSelection.clear} onMove={onAssignMany} onUnassign={onUnassignMany ? (assets) => { onUnassignMany(assets); assetSelection?.clear(); } : undefined} /> : null}
+      {assetSelection?.pane === 'organization' && assetSelection.assets.length ? (
+        <AssetSelectionToolbar
+          assets={assetSelection.assets}
+          plans={visiblePlans}
+          onClear={assetSelection.clear}
+          onMove={onAssignMany}
+          moveLabel="Move to plan"
+          createDestination={onCreatePlansFromAssets ? folderTarget(workspace, targetFolderId, chooseTarget) : undefined}
+          onCreate={onCreatePlansFromAssets ? () => createFromAssets(assetSelection.assets, targetFolderId) : undefined}
+          onUnassign={onUnassignMany ? (assets) => {
+            onUnassignMany(assets);
+            assetSelection.clear();
+          } : undefined}
+        />
+      ) : null}
       {folderMove ? <FolderMoveModal folder={folderMove.folders[0]!} folders={folderMove.folders} workspace={workspace} initialParentId={folderMove.destination} onDismiss={() => setFolderMove(undefined)} /> : null}
       {moveSelectedIds ? <MovePlansModal planIds={moveSelectedIds} plans={plans} workspace={workspace} initialFolderId={targetFolderId} canMove={Boolean(onMovePlans)} onDismiss={() => setMoveSelectedIds(undefined)} onConfirm={(selected, folderId) => { movePlans(selected, folderId); setMoveSelectedIds(undefined); }} /> : null}
     </Box>

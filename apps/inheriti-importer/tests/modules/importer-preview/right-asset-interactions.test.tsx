@@ -61,6 +61,93 @@ function openSource() {
 afterEach(cleanup);
 
 describe('assigned asset interactions', () => {
+  it('chooses a nested destination and creates a draft from the entire right selection', () => {
+    const create = vi.fn(() => ['created']);
+    const finance = folders.folders[0]!;
+    renderSurface({
+      onCreatePlansFromAssets: create,
+      folders: {
+        ...folders,
+        folders: [
+          finance,
+          { ...finance, id: 'payments', name: 'Payments', parentId: finance.id },
+          { ...finance, id: 'personal', name: 'Personal', scope: 'PERSONAL' },
+        ],
+      },
+    });
+    openSource();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create in: Your organisation' }));
+    expect(screen.queryByRole('option', { name: 'Personal' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Choose a folder' }), { target: { value: 'payments' } });
+    fireEvent.click(screen.getByRole('option', { name: 'Finance / Payments' }));
+    expect(screen.getByRole('button', { name: 'Create in: Finance / Payments' })).toBeTruthy();
+    expect(screen.getByText('2 selected')).toBeTruthy();
+    expect(create).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New plan', exact: true }));
+    expect(create).toHaveBeenCalledExactlyOnceWith([credential, note], {
+      name: '2 imported assets', folderId: 'payments', scope: 'SHARED',
+    });
+    expect(screen.queryByText('2 selected')).toBeNull();
+  });
+
+  it('keeps destination selection usable when folder permissions block creation', () => {
+    const create = vi.fn(() => ['created']);
+    renderSurface({
+      onCreatePlansFromAssets: create,
+      folders: {
+        ...folders,
+        folders: [...folders.folders, { ...folders.folders[0]!, id: 'blocked', name: 'Needs permissions', parentId: 'folder', effectivePolicy: null }],
+      },
+    });
+    openSource();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create in: Your organisation' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Finance / Needs permissions' }));
+    const createButton = screen.getByRole('button', { name: 'New plan', exact: true });
+    expect(createButton.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(createButton);
+    expect(create).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create in: Finance / Needs permissions' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Your organisation' }));
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New plan', exact: true }));
+    expect(create).toHaveBeenCalledExactlyOnceWith([credential], {
+      name: 'Credential', folderId: null, scope: 'SHARED',
+    });
+  });
+
+  it('offers search-hidden plans in the right toolbar and moves the whole selection', () => {
+    const onAssignMany = vi.fn();
+    renderSurface({
+      onAssignMany,
+      plans: [
+        plan('source', 'Source', [credential, note]),
+        plan('target', 'Target'),
+        plan('full', 'Full', [], 10),
+        { ...plan('private', 'Private'), sharingModel: 'PRIVATE' },
+      ],
+    });
+    openSource();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search folders or plans' }), { target: { value: 'Source' } });
+    expect(screen.queryByText('Target')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to plan' }));
+    expect(screen.queryByRole('button', { name: /Private.*available/ })).toBeNull();
+    const full = screen.getByRole<HTMLButtonElement>('button', { name: /Full.*available/ });
+    expect(full.disabled).toBe(true);
+    fireEvent.click(full);
+    expect(onAssignMany).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Target.*available/ }));
+    expect(onAssignMany).toHaveBeenCalledExactlyOnceWith([credential, note], expect.objectContaining({ id: 'target' }));
+    expect(screen.queryByText('2 selected')).toBeNull();
+  });
+
   it('moves the whole right-side selection in one callback and unassigns it from the asset menu', () => {
     const onAssignMany = vi.fn();
     const onUnassignMany = vi.fn();
@@ -69,7 +156,7 @@ describe('assigned asset interactions', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Note' }));
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Credential' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Move to plan' }));
+    fireEvent.click(within(screen.getByRole('button', { name: 'Unassign', exact: true }).parentElement!).getByRole('button', { name: 'Move to plan' }));
     fireEvent.click(screen.getByRole('button', { name: /Target.*available/ }));
     expect(onAssignMany).toHaveBeenCalledWith(
       [credential, note],
@@ -92,7 +179,7 @@ describe('assigned asset interactions', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Note' }), { ctrlKey: true });
     fireEvent.click(screen.getByRole('button', { name: 'Actions for Credential' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Move to plan' }));
+    fireEvent.click(within(screen.getByRole('button', { name: 'Unassign', exact: true }).parentElement!).getByRole('button', { name: 'Move to plan' }));
     expect(
       (screen.getByRole('button', { name: /Full.*available/ }) as HTMLButtonElement).disabled,
     ).toBe(true);
