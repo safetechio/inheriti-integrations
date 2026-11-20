@@ -1,66 +1,10 @@
-import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
-  request,
   toRecord,
   unwrapList,
   useApiQuery,
   whereQuery,
 } from '@shared/infrastructure/importer-api/http';
-import { useRuntime } from '@shared/infrastructure/importer-api/runtime';
 import { useGetSelectedOrganizationId } from './selected-organization-api';
-
-export function useFindActiveOrganizationPlanCategoriesByCriteria(
-  _filter?: unknown,
-  _pagination?: unknown,
-  _sort?: unknown,
-  options?: { enabled?: boolean },
-) {
-  const id = useGetSelectedOrganizationId();
-  const result = useApiQuery<
-    Array<{ id: string; name: string }> | { items?: Array<{ id: string; name: string }> }
-  >(
-    ['categories', id],
-    id && options?.enabled !== false
-      ? `/integrations/v1/organizations/${encodeURIComponent(id)}/plan-categories`
-      : null,
-    whereQuery([{ field: 'status', operator: '==', value: 'ACTIVE' }]),
-  );
-  return { ...result, data: result.data ? toRecord(unwrapList(result.data)) : undefined };
-}
-
-export function useSaveOrganizationPlanCategory() {
-  const { transport } = useRuntime();
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
-  return {
-    loading,
-    save: async (category: {
-      id: string;
-      organizationId: string;
-      name: string;
-      status: string;
-      createdAt: Date;
-    }) => {
-      setLoading(true);
-      try {
-        const saved = await request<void>(
-          transport,
-          'POST',
-          `/integrations/v1/organizations/${encodeURIComponent(category.organizationId)}/plan-categories`,
-          {
-            id: category.id,
-            name: category.name,
-          },
-        );
-        await queryClient.invalidateQueries({ queryKey: ['categories', category.organizationId] });
-        return saved;
-      } finally {
-        setLoading(false);
-      }
-    },
-  };
-}
 
 export function useFindSelectedOrganizationPlanCreationTeamsByCriteria(
   _filter?: unknown,

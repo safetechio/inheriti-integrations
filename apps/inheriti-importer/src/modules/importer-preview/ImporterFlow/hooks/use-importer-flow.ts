@@ -34,15 +34,34 @@ export type ImporterFlowCallbacks = {
   onRemoveSource?: (file: ImportFile) => void;
   onSelectAsset?: (asset: ReviewAsset) => void;
   onReviewAsset?: (action: string, asset: ReviewAsset) => void;
+  onAcceptAllEligible?: () => number;
+  onUndoAcceptAll?: () => void;
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
   onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;
   onEditPlainText?: (asset: ReviewAsset, value: string) => void;
   onAssignAsset?: (asset: GroupingAsset, plan: PlanDraft) => void;
   onUnassignAsset?: (asset: GroupingAsset, plan: PlanDraft) => void;
-  onCreatePlan?: () => string | void;
+  onAssignAssets?: (assets: GroupingAsset[], plan: PlanDraft) => void;
+  onUnassignAssets?: (assets: GroupingAsset[]) => void;
+  onAutoGroupUnassigned?: (preserveStructure: boolean) => string | void;
+  canUndoPlans?: boolean;
+  canRedoPlans?: boolean;
+  onUndoPlans?: () => void;
+  onRedoPlans?: () => void;
+  onCreatePlan?: (options?: {
+    name?: string;
+    folderId?: string | null;
+    scope?: 'SHARED' | 'PERSONAL';
+  }) => string | void;
+  onCreatePlansFromAssets?: (
+    assets: GroupingAsset[],
+    options: { name: string; folderId: string | null; scope: 'SHARED' | 'PERSONAL' },
+  ) => string[];
   onEnsureFirstPlan?: () => void;
   onDeletePlan?: (plan: PlanDraft) => void;
+  onDeletePlans?: (plans: PlanDraft[]) => void;
   onUpdatePlan?: (plan: PlanDraft, values: PlanMetadataValues) => void;
+  onMovePlans?: (plans: PlanDraft[], folderId: string | null, scope: 'SHARED' | 'PERSONAL') => void;
   onStage?: () => void;
   onRetryStage?: () => void;
   onCancel?: () => void;
@@ -144,6 +163,8 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
         autoAdvance: initial.autoAdvance ?? true,
       });
     },
+    acceptAllEligible: controlled?.callbacks.onAcceptAllEligible,
+    undoAcceptAll: controlled?.callbacks.onUndoAcceptAll,
     resolveSourceValue: controlled?.callbacks.resolveSourceValue,
     mapField: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => {
       controlled?.callbacks.onMapField?.(asset, targetField, sourceFieldId);
@@ -167,14 +188,62 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
       stagingRevision.current += 1;
       dispatch({ type: 'unassign-asset', asset, plan });
     },
-    createPlan: () => {
+    assignAssets: isControlled
+      ? controlled?.callbacks.onAssignAssets
+      : (assets: GroupingAsset[], plan: PlanDraft) => {
+          stagingRevision.current += 1;
+          dispatch({ type: 'assign-assets', assets, plan });
+        },
+    unassignAssets: isControlled
+      ? controlled?.callbacks.onUnassignAssets
+      : (assets: GroupingAsset[]) => {
+          stagingRevision.current += 1;
+          dispatch({ type: 'unassign-assets', assets });
+        },
+    canUndoPlans: controlled?.callbacks.canUndoPlans ?? false,
+    autoGroupUnassigned: controlled?.callbacks.onAutoGroupUnassigned,
+    canRedoPlans: controlled?.callbacks.canRedoPlans ?? false,
+    undoPlans: controlled?.callbacks.onUndoPlans,
+    redoPlans: controlled?.callbacks.onRedoPlans,
+    createPlan: (options?: {
+      name?: string;
+      folderId?: string | null;
+      scope?: 'SHARED' | 'PERSONAL';
+    }) => {
       if (isControlled) {
-        return controlled?.callbacks.onCreatePlan?.();
+        return controlled?.callbacks.onCreatePlan?.(options);
       }
       const id = `plan-${Math.max(0, ...plans.map((plan) => Number(plan.id.match(/^plan-(\d+)$/)?.[1] ?? 0))) + 1}`;
       stagingRevision.current += 1;
-      dispatch({ type: 'create-plan', id });
+      dispatch({ type: 'create-plan', id, options });
       return id;
+    },
+    createPlansFromAssets: (
+      selected: GroupingAsset[],
+      options: { name: string; folderId: string | null; scope: 'SHARED' | 'PERSONAL' },
+    ) => {
+      if (isControlled)
+        return controlled?.callbacks.onCreatePlansFromAssets?.(selected, options) ?? [];
+      if (
+        !options.name.trim() ||
+        !selected.length ||
+        selected.some(
+          (asset) =>
+            !asset.valid ||
+            ![...unassigned, ...plans.flatMap((plan) => plan.assignedAssets ?? [])].some(
+              (item) => item.id === asset.id,
+            ),
+        )
+      )
+        return [];
+      const ids = Array.from({ length: Math.ceil(selected.length / 10) }, () =>
+        crypto.randomUUID(),
+      );
+      const action = { type: 'create-plans-from-assets' as const, assets: selected, ids, options };
+      if (flowReducer(state, action) === state) return [];
+      stagingRevision.current += 1;
+      dispatch(action);
+      return ids;
     },
     ensureFirstPlan: () => {
       if (plans.length) return;
@@ -185,7 +254,20 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
       if (isControlled) controlled?.callbacks.onDeletePlan?.(plan);
       else dispatch({ type: 'delete-plan', id: plan.id });
     },
-    updatePlan: isControlled ? controlled?.callbacks.onUpdatePlan : undefined,
+    deletePlans: (selected: PlanDraft[]) => {
+      if (isControlled) controlled?.callbacks.onDeletePlans?.(selected);
+      else dispatch({ type: 'delete-plans', ids: selected.map((plan) => plan.id) });
+    },
+    updatePlan: isControlled
+      ? controlled?.callbacks.onUpdatePlan
+      : (plan: PlanDraft, values: PlanMetadataValues) => {
+          stagingRevision.current += 1;
+          dispatch({ type: 'update-plan', id: plan.id, values });
+        },
+    movePlans: isControlled
+      ? controlled?.callbacks.onMovePlans
+      : (selected: PlanDraft[], folderId: string | null, scope: 'SHARED' | 'PERSONAL') =>
+          dispatch({ type: 'move-plans', ids: selected.map((plan) => plan.id), folderId, scope }),
     markStaged: () => {
       if (!readiness.staging) return;
       if (isControlled) {

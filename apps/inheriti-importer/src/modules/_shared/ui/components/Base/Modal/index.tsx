@@ -1,13 +1,15 @@
-import type { ReactNode } from 'react';
+import { cloneElement, isValidElement, type ComponentProps, type ReactNode } from 'react';
 import { Box, Pressable, ScrollView, Text } from '@modules/_shared/ui/components/Primitives';
 import { Icon } from '@modules/_shared/ui/components/Base/Icon';
 import { ModalPortal } from '@modules/_shared/ui/components/Base/Portal';
 import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
+import { theme } from '@modules/_shared/ui/theme/AppTheme';
 
 /** Shared header/body/footer modal shell — reuses the panel's spacing classes. */
 export function BaseModal({
   visible,
   title,
+  titleIcon,
   description,
   onDismiss,
   footer,
@@ -16,6 +18,7 @@ export function BaseModal({
 }: {
   visible: boolean;
   title: string;
+  titleIcon?: ReactNode;
   description?: string;
   onDismiss: () => void;
   footer?: ReactNode;
@@ -53,13 +56,30 @@ export function BaseModal({
             alignItems="flex-start"
             gap="m"
           >
-            <Box gap="xs" flex={1}>
-              <Text variant="heading3">{title}</Text>
-              {description ? (
-                <Text variant="bodySmall" color="gray">
-                  {description}
-                </Text>
-              ) : null}
+            <Box flexDirection="row" alignItems="center" gap="s" flex={1} style={{ minWidth: 0 }}>
+              {isValidElement<ComponentProps<typeof Icon>>(titleIcon) && titleIcon.type === Icon ? (
+                <Box
+                  width={theme.spacing.xxl}
+                  height={theme.spacing.xxl}
+                  borderRadius="pill"
+                  backgroundColor="primary4"
+                  borderColor="primary10"
+                  borderWidth={1}
+                  alignItems="center"
+                  justifyContent="center"
+                  style={{ flexShrink: 0 }}
+                >
+                  {cloneElement(titleIcon, { color: theme.colors.primary })}
+                </Box>
+              ) : titleIcon}
+              <Box gap="xs" flex={1} style={{ minWidth: 0 }}>
+                <Text variant="heading3">{title}</Text>
+                {description ? (
+                  <Text variant="bodySmall" color="gray">
+                    {description}
+                  </Text>
+                ) : null}
+              </Box>
             </Box>
             <Pressable
               onPress={onDismiss}

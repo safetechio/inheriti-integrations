@@ -1,8 +1,18 @@
-import { Box, Icon, FilterChip, NoItemsPlaceholder, Stack, Text, theme } from '@main-components';
+import {
+  Box,
+  Button,
+  Icon,
+  FilterChip,
+  NoItemsPlaceholder,
+  Stack,
+  Text,
+  theme,
+} from '@main-components';
 import { useEffect, useState } from 'react';
 import { AssetRow } from './components/AssetRow';
 import { Inspector } from './components/Inspector';
 import { hasIncludedSchemaField, type AssetReviewQueueProps } from './types';
+import { AssetViewPicker } from '../AssetViewPicker';
 import './styles.css';
 
 export type {
@@ -19,6 +29,8 @@ export function AssetReviewQueue({
   selectedId,
   onSelect,
   onAction,
+  onAcceptAllEligible,
+  onUndoAcceptAll,
   showKeyboardHints = true,
   resolveSourceValue,
   onMapField,
@@ -32,6 +44,7 @@ export function AssetReviewQueue({
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'tree'>('list');
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
+  const [batchAccepted, setBatchAccepted] = useState<number | null>(null);
   const sourceKey = (asset: (typeof assets)[number]) =>
     asset.sourceId ?? asset.sourceFileName ?? asset.source.split(' · ')[0];
   const sources = [
@@ -53,6 +66,13 @@ export function AssetReviewQueue({
     review: assets.length - reviewed,
     accepted: assets.filter((asset) => asset.status === 'accepted').length,
     excluded: assets.filter((asset) => asset.status === 'excluded').length,
+  };
+  const eligibleCount = assets.filter(
+    (asset) => !['accepted', 'excluded'].includes(asset.status) && hasIncludedSchemaField(asset),
+  ).length;
+  const acceptAll = () => {
+    const accepted = onAcceptAllEligible?.() ?? 0;
+    if (accepted) setBatchAccepted(accepted);
   };
   const visible = assets.filter(
     (asset) =>
@@ -123,13 +143,34 @@ export function AssetReviewQueue({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!selected || !onAction) return;
-      if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.repeat)
-        return;
       const target = event.target;
       if (
         target instanceof Element &&
-        target.matches("input, textarea, select, [contenteditable='true']")
+        (target.closest("input, textarea, select, [contenteditable='true']") ||
+          target.closest('[role="textbox"]'))
+      )
+        return;
+      if (
+        event.key.toLowerCase() === 'a' &&
+        event.shiftKey &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.isComposing &&
+        !event.repeat &&
+        onAcceptAllEligible
+      ) {
+        event.preventDefault();
+        acceptAll();
+        return;
+      }
+      if (!selected || !onAction) return;
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.isComposing ||
+        event.repeat
       )
         return;
       if (
@@ -149,7 +190,7 @@ export function AssetReviewQueue({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onAction, onSelect, selected, visible]);
+  }, [onAction, onSelect, selected, visible, onAcceptAllEligible]);
   return (
     <Stack gap="m" className="asset-review-surface" style={{ gap: 12 }}>
       <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
@@ -173,11 +214,34 @@ export function AssetReviewQueue({
             </FilterChip>
           ))}
         </Box>
+        {onAcceptAllEligible ? (
+          <Box
+            ref={(element) =>
+              element?.setAttribute(
+                'title',
+                'Accept all pending eligible assets across sources and filters (Ctrl/Cmd+Shift+A)',
+              )
+            }
+          >
+            <Button
+              title={`Accept all eligible (${eligibleCount})`}
+              accessibilityLabel={`Accept all eligible (${eligibleCount}) across all sources and filters. Shortcut: Ctrl or Command Shift A`}
+              size="sm"
+              variant="outlined"
+              disabled={!eligibleCount}
+              onPress={acceptAll}
+            />
+          </Box>
+        ) : null}
         {showKeyboardHints ? (
-          <Box flexDirection="row" alignItems="center" gap="xs" style={{ marginLeft: 'auto' }}>
+          <Box flexDirection="row" flexWrap="wrap" alignItems="center" gap="xs" style={{ marginLeft: 'auto' }}>
             <Text variant="bodySmall" color="gray">
               Shortcuts:
             </Text>
+            {onAcceptAllEligible ? <>
+              <Text className="asset-review-shortcut">Ctrl/Cmd+Shift+A</Text>
+              <Text variant="bodySmall" color="gray">accept all</Text>
+            </> : null}
             <Text className="asset-review-shortcut">A</Text>
             <Text variant="bodySmall" color="gray">
               accept
@@ -193,6 +257,24 @@ export function AssetReviewQueue({
           </Box>
         ) : null}
       </Box>
+      {batchAccepted !== null ? (
+        <Box flexDirection="row" alignItems="center" gap="s" role="status">
+          <Text>
+            {batchAccepted} accepted · {counts.review} require review
+          </Text>
+          {onUndoAcceptAll ? (
+            <Button
+              title="Undo"
+              size="sm"
+              variant="outlined"
+              onPress={() => {
+                onUndoAcceptAll();
+                setBatchAccepted(null);
+              }}
+            />
+          ) : null}
+        </Box>
+      ) : null}
       <Box
         flexDirection="row"
         gap="m"
@@ -253,30 +335,7 @@ export function AssetReviewQueue({
               </button>
             )}
           </Box>
-          {canShowTree ? (
-            <Box
-              flexDirection="row"
-              className="asset-review-view-picker"
-              role="group"
-              aria-label="Asset view"
-            >
-              {(['list', 'tree'] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-label={option === 'list' ? 'List' : 'Tree'}
-                  aria-pressed={view === option}
-                  onClick={() => setView(option)}
-                >
-                  <Icon
-                    name={option === 'list' ? 'list' : 'sitemap'}
-                    size={16}
-                    color={theme.colors.gray}
-                  />
-                </button>
-              ))}
-            </Box>
-          ) : null}
+          {canShowTree ? <AssetViewPicker view={view} onChange={setView} /> : null}
           <Stack gap="s" className="asset-review-queue">
             {!assets.length ? (
               <NoItemsPlaceholder description="No Assets were detected. Add another source containing value-bearing entries." />

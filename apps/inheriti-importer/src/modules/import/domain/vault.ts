@@ -15,6 +15,8 @@ export type VaultEntry = {
   url: string;
   notes: string;
   group: string;
+  /** Exact source folder segments, when the parser provides them. */
+  groupPath?: string[];
   tags: string[];
   extraFields: ExtraField[];
   category: string;
@@ -93,6 +95,7 @@ export function createEmptyEntry(partial: Partial<VaultEntry> = {}): VaultEntry 
     url: partial.url ?? '',
     notes: partial.notes ?? '',
     group: partial.group ?? '',
+    ...(partial.groupPath ? { groupPath: [...partial.groupPath] } : {}),
     tags: partial.tags ?? [],
     extraFields: partial.extraFields ?? [],
     category: partial.category ?? '',
@@ -103,6 +106,7 @@ export function createEmptyEntry(partial: Partial<VaultEntry> = {}): VaultEntry 
 export function cloneEntry(entry: VaultEntry): VaultEntry {
   return {
     ...entry,
+    ...(entry.groupPath ? { groupPath: [...entry.groupPath] } : {}),
     tags: [...entry.tags],
     extraFields: entry.extraFields.map((field) => ({ ...field })),
   };
@@ -116,6 +120,7 @@ export function entriesEqual(a: VaultEntry, b: VaultEntry): boolean {
     a.url === b.url &&
     a.notes === b.notes &&
     a.group === b.group &&
+    JSON.stringify(a.groupPath) === JSON.stringify(b.groupPath) &&
     a.category === b.category &&
     a.team === b.team &&
     a.tags.join('\u0000') === b.tags.join('\u0000') &&

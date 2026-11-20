@@ -178,6 +178,7 @@ export interface StageBatchItemRequest {
 }
 
 export interface StagedPlanDraft {
+  folderId?: string | null;
   name: string;
   description?: string;
   [key: string]: unknown;

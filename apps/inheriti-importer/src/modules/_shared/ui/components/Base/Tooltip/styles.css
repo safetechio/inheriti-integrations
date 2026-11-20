@@ -1,0 +1,18 @@
+.importer-tooltip-anchor { display: inline-flex; }
+.importer-tooltip-anchor:has(button:disabled) > * { pointer-events: none; }
+.importer-tooltip {
+  position: fixed;
+  z-index: 10000;
+  transform: translate(-50%, -100%);
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+  color: #374151;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.importer-tooltip-below { transform: translate(-50%, 0); }

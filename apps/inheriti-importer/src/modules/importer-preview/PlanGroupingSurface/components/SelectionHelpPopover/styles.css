@@ -1,0 +1,5 @@
+.selection-help-trigger { border: 0; background: transparent; padding: 4px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.selection-help-trigger:focus-visible { outline: 2px solid #2f5fe8; border-radius: 4px; }
+.selection-help-popover { width: min(312px, calc(100vw - 16px)); max-height: min(380px, calc(100vh - 16px)); overflow: auto; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 7px; border: 1px solid #d5dce6; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #0002; }
+.selection-help-group { flex-shrink: 0; padding: 8px; gap: 4px; }
+.selection-help-number { width: 20px; height: 20px; align-items: center; justify-content: center; }

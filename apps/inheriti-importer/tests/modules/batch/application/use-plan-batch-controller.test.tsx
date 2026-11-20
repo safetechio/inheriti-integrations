@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 const useFindSelectedOrganizationPlanCreationTeamsByCriteria = vi.fn();
-const useFindActiveOrganizationPlanCategoriesByCriteria = vi.fn();
 const useFindActiveOrganizationMembersByCriteria = vi.fn();
 const useGetCurrentMember = vi.fn();
 const useGetMasterKeyConfigurationStatus = vi.fn();
@@ -35,8 +34,6 @@ vi.mock('@modules/organization/infrastructure/importer-api', async () => {
     ...actual,
     useFindSelectedOrganizationPlanCreationTeamsByCriteria: (...args: unknown[]) =>
       useFindSelectedOrganizationPlanCreationTeamsByCriteria(...args),
-    useFindActiveOrganizationPlanCategoriesByCriteria: (...args: unknown[]) =>
-      useFindActiveOrganizationPlanCategoriesByCriteria(...args),
     useFindActiveOrganizationMembersByCriteria: (...args: unknown[]) =>
       useFindActiveOrganizationMembersByCriteria(...args),
     useGetCurrentMember: (...args: unknown[]) => useGetCurrentMember(...args),
@@ -131,7 +128,6 @@ function stubBaseHooks(
   useGetCurrentMember.mockReturnValue({ member: { id: 'member-1' } });
   usePlanCreationOrgPolicy.mockReturnValue(policy());
   useFindSelectedOrganizationPlanCreationTeamsByCriteria.mockReturnValue({ data: {} });
-  useFindActiveOrganizationPlanCategoriesByCriteria.mockReturnValue({ data: {} });
   useFindActiveOrganizationMembersByCriteria.mockReturnValue({ data: {} });
   useGetMasterKeyConfigurationStatus.mockReturnValue({
     data: overrides.organizationKeyReady ?? true,

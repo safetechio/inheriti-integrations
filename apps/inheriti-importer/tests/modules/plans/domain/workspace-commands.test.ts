@@ -8,6 +8,7 @@ import {
   moveAsset,
   removeAsset,
   removePlan,
+  removePlans,
   renamePlan,
   updatePlanMetadata,
   reorderPlans,
@@ -27,6 +28,39 @@ describe('workspace commands', () => {
     expect(createPlan(s1, { clientId: 'p1', name: 'again' })).toBe(s1);
   });
 
+  it('sets destination and scope only when provided', () => {
+    const personal = createPlan(createEmptyWorkspace(), {
+      clientId: 'p',
+      name: 'Personal',
+      folderId: 'f',
+      scope: 'PERSONAL',
+    });
+    expect(personal.plansByClientId.p).toMatchObject({
+      folderId: 'f',
+      governance: { sharingModel: 'PRIVATE' },
+    });
+    const renamed = updatePlanMetadata(personal, { clientId: 'p', name: 'Renamed' });
+    expect(renamed.plansByClientId.p).toMatchObject({
+      folderId: 'f',
+      governance: { sharingModel: 'PRIVATE' },
+    });
+    expect(renamed.plansByClientId.p?.governance).toBe(personal.plansByClientId.p?.governance);
+    const shared = updatePlanMetadata(renamed, { clientId: 'p', name: 'Renamed', scope: 'SHARED' });
+    expect(shared.plansByClientId.p?.governance.sharingModel).toBe('SHARED');
+    expect(
+      updatePlanMetadata(shared, { clientId: 'p', name: 'Renamed', scope: 'PERSONAL' })
+        .plansByClientId.p?.governance.sharingModel,
+    ).toBe('PRIVATE');
+    expect(
+      updatePlanMetadata(renamed, { clientId: 'p', name: 'Renamed', folderId: null })
+        .plansByClientId.p?.folderId,
+    ).toBeNull();
+    expect(
+      createPlan(createEmptyWorkspace(), { clientId: 's', name: 'Shared', scope: 'SHARED' })
+        .plansByClientId.s?.governance.sharingModel,
+    ).toBe('SHARED');
+  });
+
   it('renamePlan / removePlan', () => {
     let s = createPlan(createEmptyWorkspace(), { clientId: 'p1', name: 'One' });
     s = renamePlan(s, { clientId: 'p1', name: 'Renamed' });
@@ -34,6 +68,21 @@ describe('workspace commands', () => {
     s = removePlan(s, { clientId: 'p1' });
     expect(s.planOrder).toEqual([]);
     expect(s.plansByClientId.p1).toBeUndefined();
+  });
+
+  it('removes selected plans atomically and keeps invalid selections unchanged', () => {
+    let state = createEmptyWorkspace();
+    for (const id of ['a', 'b', 'c', 'd']) state = createPlan(state, { clientId: id, name: id });
+    const removed = removePlans(state, { clientIds: ['b', 'd'] });
+    expect(removed.planOrder).toEqual(['a', 'c']);
+    expect(Object.keys(removed.plansByClientId)).toEqual(['a', 'c']);
+    expect(removed.revision).toBe(state.revision + 1);
+    const cleared = removePlans(state, { clientIds: ['a', 'b', 'c', 'd'] });
+    expect(cleared.planOrder).toEqual([]);
+    expect(cleared.plansByClientId).toEqual({});
+    expect(cleared.revision).toBe(state.revision + 1);
+    for (const clientIds of [[], ['b', 'b'], ['b', 'unknown']])
+      expect(removePlans(state, { clientIds })).toBe(state);
   });
 
   it('updatePlanMetadata trims metadata and preserves the rest of the draft', () => {

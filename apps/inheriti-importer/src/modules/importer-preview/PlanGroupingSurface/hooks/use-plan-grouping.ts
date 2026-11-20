@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { DropState, GroupingAsset, PlanDraft } from '../types';
 import { hasPlanCapacity } from '../capacity';
 
@@ -6,10 +6,20 @@ export function usePlanGrouping() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<Record<string, DropState>>({});
   const startDrag = (id: string) => setDraggedId(id);
-  const endDrag = () => {
+  const endDrag = useCallback(() => {
     setDraggedId(null);
     setDropState({});
-  };
+  }, []);
+  useEffect(() => {
+    window.addEventListener('drop', endDrag);
+    window.addEventListener('dragend', endDrag);
+    window.addEventListener('blur', endDrag);
+    return () => {
+      window.removeEventListener('drop', endDrag);
+      window.removeEventListener('dragend', endDrag);
+      window.removeEventListener('blur', endDrag);
+    };
+  }, [endDrag]);
   const assign = (
     asset: GroupingAsset,
     plan: PlanDraft,

@@ -5,12 +5,14 @@ import { useTheme } from '@modules/_shared/ui/theme/AppTheme';
 interface NoItemsPlaceholderProps {
   description: string;
   iconName?: string;
+  title?: string;
 }
 
 /** Empty-state placeholder shared by Importer screens. */
 export function NoItemsPlaceholder({
   description,
   iconName = 'box-archive',
+  title,
 }: NoItemsPlaceholderProps) {
   const uiTheme = useTheme();
 
@@ -28,6 +30,7 @@ export function NoItemsPlaceholder({
       >
         <Icon name={iconName} size={20} color={uiTheme.colors.gray} label="No items" />
       </Box>
+      {title ? <Text variant="bodyRegular" semibold align="center">{title}</Text> : null}
       <Text variant="bodySmall" color="gray" align="center" style={{ maxWidth: 360 }}>
         {description}
       </Text>

@@ -169,7 +169,10 @@ describe('projectImporterWorkspace', () => {
         id: 'entry-1:PLAIN-TEXT',
         name: 'Stripe',
         type: 'PLAIN-TEXT',
+        iconName: 'text',
         source: '.env',
+        sourceId: 'source-1',
+        folderPath: [],
         valid: true,
       },
     ]);

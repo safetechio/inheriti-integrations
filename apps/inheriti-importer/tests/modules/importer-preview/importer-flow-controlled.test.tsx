@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ImporterFlow } from '@modules/importer-preview/ImporterFlow';
@@ -103,6 +104,47 @@ describe('ImporterFlow controlled mode', () => {
     expect(screen.queryByText('Add at least one Asset to this draft plan.')).toBeNull();
   });
 
+  it.each(['controlled', 'uncontrolled'])(
+    'keeps the %s grouping step empty after deleting its initial draft and revisiting',
+    (mode) => {
+      const ensureFirstPlan = vi.fn();
+      function Flow() {
+        const [plans, setPlans] = useState<PlanDraft[]>([]);
+        return (
+          <ImporterFlow
+            initialStage="plans"
+            files={[file]}
+            assets={[asset]}
+            unassigned={[]}
+            plans={plans}
+            checklist={checklist}
+            callbacks={mode === 'controlled' ? {
+              onEnsureFirstPlan: () => {
+                ensureFirstPlan();
+                setPlans([{ ...plan, name: 'Plan 1', assets: 0, valid: false }]);
+              },
+              onDeletePlan: () => setPlans([]),
+            } : undefined}
+          />
+        );
+      }
+
+      render(<Flow />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Plan 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete plan' }));
+
+      const expectEmpty = () => {
+        expect(screen.queryByRole('button', { name: 'Select Plan 1' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Continue' }).getAttribute('aria-disabled')).toBe('true');
+      };
+      expectEmpty();
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+      fireEvent.click(screen.getByRole('button', { name: /Create plans/ }));
+      expectEmpty();
+      if (mode === 'controlled') expect(ensureFirstPlan).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('keeps an empty plan warning after returning from Assets', () => {
     const first = { ...plan, id: 'empty-a', name: 'Empty A', assets: 0, valid: false };
     const second = { ...plan, id: 'empty-b', name: 'Empty B', assets: 0, valid: false };
@@ -123,6 +165,9 @@ describe('ImporterFlow controlled mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     fireEvent.click(screen.getByRole('button', { name: /Create plans/ }));
     expect(screen.getByText('Add at least one Asset to this draft plan.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continue' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
   });
 
   it('preserves the selected row when a structured id changes to plain text', () => {

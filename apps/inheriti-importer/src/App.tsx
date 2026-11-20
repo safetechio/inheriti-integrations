@@ -22,6 +22,11 @@ import {
   createHistory,
   pushHistory,
   replaceHistory,
+  resetHistory,
+  canUndo,
+  canRedo,
+  undo,
+  redo,
 } from '@modules/plans/domain/workspace-history';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
@@ -32,6 +37,7 @@ import { useAuthProvider } from '@shared/infrastructure/importer-api';
 import type { ElectronAuthProvider } from '@modules/auth/infrastructure/electron-auth-provider';
 import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
 import type { ImporterWorkspaceAction } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-types';
+import { useImporterFolders } from '@modules/organization/application/use-importer-folders';
 
 const stagingChecklist: ChecklistItem[] = [
   {
@@ -72,6 +78,7 @@ export function App() {
 }
 
 function AuthenticatedImporter() {
+  const folders = useImporterFolders();
   const authProvider = useAuthProvider() as ElectronAuthProvider;
   const imports = useImportLifecycle();
   const [workspaceHistory, setWorkspaceHistory] = useState(() =>
@@ -109,6 +116,8 @@ function AuthenticatedImporter() {
     planWorkspace,
     setPlanWorkspace,
     replacePlanWorkspace,
+    // Review state is separate; old plan snapshots must not restore excluded or remapped assets.
+    () => setWorkspaceHistory(resetHistory),
   );
   const batchController = usePlanBatchController({
     plans: listPlanDrafts(planWorkspace),
@@ -191,6 +200,7 @@ function AuthenticatedImporter() {
     ) : (
       <>
         <ImporterFlow
+          folders={folders}
           headerActions={
             <AppHeader
               dirtyCount={0}
@@ -222,15 +232,31 @@ function AuthenticatedImporter() {
             onViewWarnings: setWarningFile,
             onRemoveSource: removeSource,
             onReviewAsset: reviewAsset,
+            onAcceptAllEligible: workspace.acceptAllEligible,
+            onUndoAcceptAll: workspace.undoAcceptAll,
             resolveSourceValue: workspace.resolveSourceValue,
             onMapField: workspace.mapAssetField,
             onEditPlainText: workspace.editPlainText,
             onAssignAsset: workspace.assignAsset,
             onUnassignAsset: workspace.unassignAsset,
+            onAssignAssets: workspace.assignAssets,
+            onUnassignAssets: workspace.unassignAssets,
+            onAutoGroupUnassigned: workspace.autoGroupUnassigned,
+            canUndoPlans: canUndo(workspaceHistory) && !batchController.running,
+            canRedoPlans: canRedo(workspaceHistory) && !batchController.running,
+            onUndoPlans: () => {
+              if (!batchController.running) setWorkspaceHistory(undo);
+            },
+            onRedoPlans: () => {
+              if (!batchController.running) setWorkspaceHistory(redo);
+            },
             onCreatePlan: workspace.createPlan,
+            onCreatePlansFromAssets: workspace.createPlansFromAssets,
             onEnsureFirstPlan: workspace.ensureFirstPlan,
             onDeletePlan: workspace.deletePlan,
+            onDeletePlans: workspace.deletePlans,
             onUpdatePlan: workspace.updatePlanMetadata,
+            onMovePlans: workspace.movePlansToFolder,
             onCancel: discardAll,
             onRequestOrganizationKey: batchController.requestOrganizationKey,
             onCancelStage: batchController.cancelOrganizationKeyRequest,

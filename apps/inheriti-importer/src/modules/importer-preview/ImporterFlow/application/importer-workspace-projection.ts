@@ -3,7 +3,12 @@ import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import { validatePlanForExecution } from '@modules/plans/domain/workspace-validation';
-import type { AssetReviewStatus } from '../../AssetReviewQueue/types';
+import { getPlanAssetIconName } from '@modules/plans/domain/asset-metadata';
+import {
+  hasIncludedSchemaField,
+  type AssetReviewStatus,
+  type ReviewAsset,
+} from '../../AssetReviewQueue/types';
 import type { GroupingAsset, PlanDraft as PreviewPlanDraft } from '../../PlanGroupingSurface';
 import { projectAssets, reviewStatus } from './importer-workspace-review-projection';
 import type {
@@ -22,6 +27,14 @@ import {
   convertToCanonicalType,
 } from './importer-workspace-suggestions';
 import type { AssetTypeOverrides } from './importer-workspace-types';
+
+function sourceLocation(session: ImportSession, fromNodeId: string) {
+  const node = session.nodesById[fromNodeId];
+  return {
+    sourceId: node?.sourceId,
+    folderPath: node?.path ?? [],
+  };
+}
 
 // Apply review edits before building the visible asset rows.
 export function projectSuggestions(
@@ -112,6 +125,7 @@ function projectUnassigned(
   suggestions: SuggestedAsset[],
   workspace: WorkspaceState,
   decisions: Record<string, AssetReviewStatus>,
+  reviews: ReviewAsset[],
 ): GroupingAsset[] {
   return suggestions
     .filter(
@@ -125,10 +139,17 @@ function projectUnassigned(
       id: statusKey(suggestion),
       name: suggestion.name,
       type: suggestion.type,
+      iconName: getPlanAssetIconName(suggestion.type),
       source: session.sources.find(
         (item) => item.id === session.nodesById[suggestion.fromNodeId]?.sourceId,
       )?.fileName,
-      valid: true,
+      ...sourceLocation(session, suggestion.fromNodeId),
+      valid: reviews.some(
+        (asset) =>
+          asset.id === statusKey(suggestion) &&
+          asset.status === 'accepted' &&
+          hasIncludedSchemaField(asset),
+      ),
     }));
 }
 
@@ -145,6 +166,11 @@ function projectPlans(
       id: plan.clientId,
       name: plan.name,
       description: plan.description,
+      folderId: plan.folderId,
+      sharingModel: plan.governance.sharingModel,
+      sourceGroup: plan.sourceGroup,
+      sourceName: session.sources.find((source) => source.id === plan.sourceGroup?.sourceId)
+        ?.fileName,
       assets: plan.assets.length,
       capacity: `${plan.assets.length} / 10 Assets`,
       valid: validation.valid,
@@ -156,12 +182,14 @@ function projectPlans(
           id: suggestion ? statusKey(suggestion) : asset.id,
           name: asset.name,
           type: asset.type,
+          iconName: getPlanAssetIconName(asset.type),
           source: suggestion
             ? session.sources.find(
                 (item) => item.id === session.nodesById[suggestion.fromNodeId]?.sourceId,
               )?.fileName
             : undefined,
           valid: !invalidAssetIds.has(asset.id),
+          ...(suggestion ? sourceLocation(session, suggestion.fromNodeId) : {}),
         };
       }),
       governanceHint: validation.issues[0]?.message,
@@ -196,7 +224,7 @@ export function projectImporterWorkspace(
     plainTextAssetIds,
     typeOverrides,
   );
-  const unassigned = projectUnassigned(session, suggestions, workspace, decisions);
+  const unassigned = projectUnassigned(session, suggestions, workspace, decisions, assets);
   const plans = projectPlans(session, workspace, suggestions);
   return { suggestions, assets, unassigned, plans };
 }

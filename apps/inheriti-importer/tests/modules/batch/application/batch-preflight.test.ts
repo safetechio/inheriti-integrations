@@ -54,6 +54,17 @@ function inputFor(plan: PlanDraft) {
 }
 
 describe('assertPlanBatchPreflight', () => {
+  it('omits deprecated plan categories from the create payload', () => {
+    expect(inputFor(draftWithAsset()).payload).not.toHaveProperty('categoryId');
+  });
+
+  it('passes folder destination and privacy from the draft into staging', () => {
+    const plan = draftWithAsset();
+    plan.folderId = 'folder-1';
+    plan.governance.sharingModel = 'PRIVATE';
+    expect(inputFor(plan).payload).toMatchObject({ folderId: 'folder-1', privacyMode: 'PRIVATE' });
+  });
+
   it('passes a fully valid Plan against a permissive organization', () => {
     expect(() =>
       assertPlanBatchPreflight(inputFor(draftWithAsset()), session(), baseContext()),
@@ -84,7 +95,6 @@ describe('assertPlanBatchPreflight', () => {
     plan.governance.authenticationMethodIds = [];
     plan.governance.sharingModel = 'PRIVATE';
     plan.teamIds = ['team-not-yet-resolved'];
-    plan.categoryId = 'category-to-be-resolved-in-business';
     expect(() => assertPlanBatchPreflight(inputFor(plan), session(), baseContext())).not.toThrow();
   });
 

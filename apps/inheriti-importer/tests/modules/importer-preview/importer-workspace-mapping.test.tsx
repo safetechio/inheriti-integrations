@@ -19,6 +19,8 @@ import {
   pushHistory,
   replaceHistory,
   canUndo,
+  resetHistory,
+  undo,
 } from '@modules/plans/domain/workspace-history';
 
 function importSession(): ImportSession {
@@ -71,6 +73,87 @@ function importSession(): ImportSession {
 }
 
 describe('useImporterWorkspace schema mapping lifecycle', () => {
+  it('accepts eligible pending assets in one decision update and restores them with Undo', () => {
+    const session = importSession();
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(createEmptyWorkspace);
+      return useImporterWorkspace(session, workspace, setWorkspace);
+    });
+    const eligible = result.current.assets.filter((asset) => hasIncludedSchemaField(asset));
+    expect(eligible.length).toBeGreaterThan(0);
+    act(() => expect(result.current.acceptAllEligible()).toBe(eligible.length));
+    expect(result.current.assets.filter((asset) => asset.status === 'accepted')).toHaveLength(
+      eligible.length,
+    );
+    act(() => result.current.undoAcceptAll());
+    expect(result.current.assets.filter((asset) => asset.status === 'accepted')).toHaveLength(0);
+  });
+
+  it('preserves a later individual decision while undoing the rest of a bulk review', () => {
+    const session = importSession();
+    session.rootNodeIds.push('entry-2');
+    session.nodesById['entry-2'] = {
+      ...session.nodesById['entry-1']!,
+      id: 'entry-2',
+      name: 'Other',
+      fieldIds: ['field-token-2', 'field-other-2'],
+    };
+    session.fieldsById['field-token-2'] = {
+      ...session.fieldsById['field-token']!,
+      id: 'field-token-2',
+      parentNodeId: 'entry-2',
+    };
+    session.fieldsById['field-other-2'] = {
+      ...session.fieldsById['field-other']!,
+      id: 'field-other-2',
+      parentNodeId: 'entry-2',
+    };
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(createEmptyWorkspace);
+      return useImporterWorkspace(session, workspace, setWorkspace);
+    });
+    const eligible = result.current.assets.filter(hasIncludedSchemaField);
+    expect(eligible.length).toBe(2);
+    act(() => result.current.acceptAllEligible());
+    act(() => result.current.reviewAsset('exclude', result.current.assets[0]!));
+    act(() => result.current.reviewAsset('accept', result.current.assets[0]!));
+    act(() => result.current.undoAcceptAll());
+    expect(result.current.assets[0]?.status).toBe('accepted');
+    expect(result.current.assets[1]?.status).not.toBe('accepted');
+  });
+
+  it('clears plan history after excluding an assigned asset so Undo cannot restore it', () => {
+    const session = importSession();
+    const initial = createPlan(createEmptyWorkspace(), { clientId: 'plan-1', name: 'Plan' });
+    const { result } = renderHook(() => {
+      const [history, setHistory] = useState(createHistory(initial));
+      const setWorkspace = (next: typeof initial | ((current: typeof initial) => typeof initial)) =>
+        setHistory((current) =>
+          pushHistory(current, typeof next === 'function' ? next(current.present) : next),
+        );
+      return {
+        history,
+        setHistory,
+        importer: useImporterWorkspace(session, history.present, setWorkspace, undefined, () =>
+          setHistory((current) => resetHistory(current)),
+        ),
+      };
+    });
+    act(() => result.current.importer.reviewAsset('accept', result.current.importer.assets[0]!));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned[0]!,
+        result.current.importer.plans[0]!,
+      ),
+    );
+    expect(canUndo(result.current.history)).toBe(true);
+    act(() => result.current.importer.reviewAsset('exclude', result.current.importer.assets[0]!));
+    expect(result.current.importer.assets[0]?.status).toBe('excluded');
+    expect(result.current.history.present.plansByClientId['plan-1']?.assets).toHaveLength(0);
+    expect(canUndo(result.current.history)).toBe(false);
+    act(() => result.current.setHistory(undo));
+    expect(result.current.history.present.plansByClientId['plan-1']?.assets).toHaveLength(0);
+  });
   it('refreshes revealed Plain Text after excluding Notes before editing and staging', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';

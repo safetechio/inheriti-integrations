@@ -1,0 +1,7 @@
+.folder-plan-asset-row { min-height: 56px; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--gray-10); cursor: default; }
+.folder-plan-asset-row:hover { background: var(--primary-5); }
+.folder-plan-asset-icon { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 6px; background: var(--gray-5); }
+.folder-plan-asset-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400 !important; }
+.folder-plan-asset-type { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder-plan-asset-details { gap: 4px; }
+.folder-plan-asset-row.is-selected { background: var(--primary-5); }

@@ -85,13 +85,13 @@ describe('importer preview state', () => {
     expect(next.unassigned).toEqual([asset]);
   });
 
-  it('protects the default first Plan from deletion', () => {
+  it('deletes the last Plan and returns its assets to Unassigned', () => {
     const asset = { id: 'asset-1', name: 'Credential', type: 'USER-PSWD' };
     const current = state({ plans: [{ ...plan(1), assignedAssets: [asset] }] });
     const next = flowReducer(current, { type: 'delete-plan', id: 'plan-1' });
 
-    expect(next.plans).toEqual(current.plans);
-    expect(next.unassigned).toEqual([]);
+    expect(next.plans).toEqual([]);
+    expect(next.unassigned).toEqual([asset]);
   });
 
   it('uses mutable plan usage so an over-capacity draft can recover', () => {

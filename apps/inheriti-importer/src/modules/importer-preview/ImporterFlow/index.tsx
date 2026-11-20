@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Box, Text } from '@main-components';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Box, ProgressBar, Text } from '@main-components';
 import type { ReviewAsset } from '../AssetReviewQueue';
 import type { ChecklistItem, StagingState } from '../FinalStagingChecklist';
 import type { GroupingAsset, PlanDraft } from '../PlanGroupingSurface';
+import type { FolderWorkspaceProps } from '../PlanGroupingSurface/types';
 import type { ImportFile } from '../SourceImportStatus';
 import type { StagingBatchStatusProps } from '../StagingBatchStatus';
 import type { ImporterFlowReadiness } from './application/flow-readiness';
@@ -22,6 +23,7 @@ import {
 import './styles.css';
 
 export type ImporterFlowProps = {
+  folders?: FolderWorkspaceProps;
   headerActions?: ReactNode;
   files: ImportFile[];
   assets: ReviewAsset[];
@@ -42,6 +44,7 @@ export type ImporterFlowProps = {
 };
 
 export function ImporterFlow({
+  folders,
   headerActions,
   files,
   assets,
@@ -77,8 +80,14 @@ export function ImporterFlow({
   const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>(plans[0]?.id);
   const [localReleaseSimulatorVisible, setLocalReleaseSimulatorVisible] = useState(false);
   const stage = flow.stage;
+  const assignedCount = flow.plans.reduce((sum, plan) => sum + plan.assets, 0);
+  const assignmentTotal = flow.unassigned.length + assignedCount;
+  const assignmentPercent = Math.round((100 * assignedCount) / Math.max(1, assignmentTotal));
+  const visitedPlans = useRef(false);
   useEffect(() => {
-    if (stage === 'plans' && flow.plans.length === 0) flow.ensureFirstPlan();
+    if (stage !== 'plans' || visitedPlans.current) return;
+    visitedPlans.current = true;
+    if (flow.plans.length === 0) flow.ensureFirstPlan();
   }, [stage, flow.plans.length, flow.ensureFirstPlan]);
   const flowLocked = ['releasing', 'encrypting', 'retry', 'failed-stage', 'staged'].includes(
     flow.stagingState,
@@ -150,7 +159,7 @@ export function ImporterFlow({
   }
 
   return (
-    <Box className="importer-flow-page">
+    <Box className={`importer-flow-page${stage === 'plans' ? ' is-plan-grouping' : ''}`}>
       <FlowHeader actions={headerActions} />
       <Box className="importer-flow-workspace">
         <FlowStepper
@@ -196,22 +205,49 @@ export function ImporterFlow({
               />
             ) : null}
           </Box>
-          <Box className={`importer-flow-scroll${stage === 'assets' ? ' is-asset-review' : ''}`}>
+          {stage === 'plans' ? (
+            <Box className="importer-assignment-progress" gap="xs">
+              <Box flexDirection="row" justifyContent="space-between">
+                <Text variant="bodySmall" color="gray">
+                  {assignedCount} of {assignmentTotal} assets assigned
+                </Text>
+                <Text variant="bodySmall" color="gray">
+                  {assignmentPercent}%
+                </Text>
+              </Box>
+              <ProgressBar
+                value={assignedCount}
+                max={assignmentTotal}
+                tone="primary"
+                label="Asset assignment progress"
+              />
+            </Box>
+          ) : null}
+          <Box
+            className={`importer-flow-scroll${stage === 'assets' ? ' is-asset-review' : stage === 'plans' ? ' is-plan-grouping' : ''}`}
+          >
             <StageContent
+              folders={folders}
               stage={stage}
               description={stageDescription}
               checklist={checklist}
               flow={flow}
               selectedPlanId={selectedPlanId}
               onSelectPlan={setSelectedPlanId}
-              onCreatePlan={() => {
-                const id = flow.createPlan();
+              onCreatePlan={(options) => {
+                const id = flow.createPlan(options);
                 if (id) setSelectedPlanId(id);
+                return id;
               }}
               onDeletePlan={(plan) => {
                 flow.deletePlan(plan);
                 if (selectedPlanId === plan.id)
                   setSelectedPlanId(flow.plans.find((item) => item.id !== plan.id)?.id);
+              }}
+              onDeletePlans={(selected) => {
+                flow.deletePlans(selected);
+                if (selected.some((plan) => plan.id === selectedPlanId))
+                  setSelectedPlanId(flow.plans.find((plan) => !selected.some((item) => item.id === plan.id))?.id);
               }}
               showKeyboardHints={showKeyboardHints}
               onAddFiles={flow.onAddFiles}
@@ -232,6 +268,11 @@ export function ImporterFlow({
             onNext={flow.goNext}
             showComplete={stage !== 'staging'}
             nextLabel={nextAction[stage]}
+            summary={
+              stage === 'plans'
+                ? `${flow.plans.length} draft ${flow.plans.length === 1 ? 'plan' : 'plans'} · ${flow.unassigned.length} ${flow.unassigned.length === 1 ? 'asset' : 'assets'} still unassigned`
+                : undefined
+            }
           />
         </Box>
       </Box>
@@ -264,7 +305,8 @@ const stageDescriptions = {
 const stageHelpers = {
   sources: 'Add or remove sources from the list below.',
   assets: 'Review each asset’s assigned type and data, then accept or exclude it from the import.',
-  plans: 'Drag an asset onto a plan or select a plan, then click Assign on an asset.',
+  plans:
+    'Drag assets or source folders onto your organisation’s folders to create plans, or onto a draft plan to add them.',
   staging: 'Secure your draft plans and data for transmission to Inheriti® Business.',
 };
 

@@ -5,8 +5,8 @@ import {
 } from './selected-organization-api';
 
 type Capabilities = {
+  canManagePlanFolders?: boolean;
   canAccessStagedItems?: boolean;
-  canCreatePlanCategories?: boolean;
   canManageOrganizationSettings?: boolean;
   limits?: { maxTeamsPerPlan?: number };
 };
@@ -18,8 +18,8 @@ export function useSelectedOrganizationMemberCapabilities() {
     id ? `/integrations/v1/organizations/${encodeURIComponent(id)}/member-capabilities` : null,
   );
   return {
+    canManagePlanFolders: result.data?.canManagePlanFolders ?? false,
     canAccessStagedItems: result.data?.canAccessStagedItems ?? false,
-    canCreatePlanCategories: result.data?.canCreatePlanCategories ?? false,
     canManageOrganizationSettings: result.data?.canManageOrganizationSettings ?? false,
     limits: result.data?.limits ?? {},
     loading: result.loading,

@@ -47,6 +47,8 @@ export interface AssetReviewQueueProps {
   selectedId?: string;
   onSelect?: (asset: ReviewAsset) => void;
   onAction?: (action: string, asset: ReviewAsset) => void;
+  onAcceptAllEligible?: () => number;
+  onUndoAcceptAll?: () => void;
   showKeyboardHints?: boolean;
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
   onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;

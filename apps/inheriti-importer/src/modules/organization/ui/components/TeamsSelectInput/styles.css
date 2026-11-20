@@ -1,0 +1,19 @@
+.teams-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.teams-select-option + .teams-select-option {
+  border-top: 1px solid var(--gray-10);
+}
+
+.teams-select-option:hover,
+.teams-select-option:focus-within,
+.teams-select-option:has(:checked) {
+  background: var(--primary-5);
+}

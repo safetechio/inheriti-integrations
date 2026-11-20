@@ -6,7 +6,6 @@ import {
 } from '@shared/infrastructure/importer-api';
 import {
   useFindSelectedOrganizationPlanCreationTeamsByCriteria,
-  useFindActiveOrganizationPlanCategoriesByCriteria,
   useFindActiveOrganizationMembersByCriteria,
   useGetCurrentMember,
   useGetMasterKeyConfigurationStatus,
@@ -24,12 +23,6 @@ export function usePlanBatchContext() {
   const { member: currentMember } = useGetCurrentMember();
   const policy = usePlanCreationOrgPolicy();
   const { data: planCreationTeams } = useFindSelectedOrganizationPlanCreationTeamsByCriteria(
-    undefined,
-    undefined,
-    undefined,
-    { enabled: Boolean(organizationId) },
-  );
-  const { data: planCategories } = useFindActiveOrganizationPlanCategoriesByCriteria(
     undefined,
     undefined,
     undefined,
@@ -60,7 +53,6 @@ export function usePlanBatchContext() {
     currentMember,
     policy,
     planCreationTeams,
-    planCategories,
     organizationMembers,
     organizationKeyReady,
     organizationKeyLoading,

@@ -19,9 +19,14 @@ function retainedPlan(
   plan: PlanDraft,
   nodeIds: Set<string>,
   fieldIds: Set<string>,
+  sourceId: string,
 ): PlanDraft | null {
   const assets = plan.assets.filter((asset) => !belongsToSource(asset, nodeIds, fieldIds));
   if (plan.assets.length > 0 && assets.length === 0) return null;
+  if (plan.sourceGroup?.sourceId === sourceId) {
+    const { sourceGroup: _removed, ...rest } = plan;
+    return { ...rest, assets };
+  }
   return { ...plan, assets };
 }
 
@@ -47,7 +52,7 @@ export function removeSourceFromWorkspace(
   const { fieldIds, nodeIds } = sourceIds(session, sourceId);
   const plansByClientId = Object.fromEntries(
     Object.entries(workspace.plansByClientId).flatMap(([id, plan]) => {
-      const retained = retainedPlan(plan, nodeIds, fieldIds);
+      const retained = retainedPlan(plan, nodeIds, fieldIds, sourceId);
       return retained ? [[id, retained]] : [];
     }),
   );
@@ -56,7 +61,9 @@ export function removeSourceFromWorkspace(
   const changed =
     planOrder.length !== workspace.planOrder.length ||
     workspace.planOrder.some(
-      (id) => plansByClientId[id]?.assets.length !== workspace.plansByClientId[id]?.assets.length,
+      (id) =>
+        plansByClientId[id]?.assets.length !== workspace.plansByClientId[id]?.assets.length ||
+        plansByClientId[id]?.sourceGroup !== workspace.plansByClientId[id]?.sourceGroup,
     ) ||
     ignoredSourceFieldIds.length !== workspace.ignoredSourceFieldIds.length;
 

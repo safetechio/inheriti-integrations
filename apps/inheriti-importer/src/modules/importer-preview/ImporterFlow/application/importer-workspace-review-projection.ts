@@ -70,7 +70,7 @@ export function projectAssets(
     const node = session.nodesById[suggestion.fromNodeId];
     const sourceFileName =
       session.sources.find((source) => source.id === node?.sourceId)?.fileName ?? 'Imported source';
-    const folderPath = node?.path.flatMap((segment) => segment.split(' / ').filter(Boolean)) ?? [];
+    const folderPath = node?.path ?? [];
     const fields = suggestionFields(session, suggestion);
     const mappedIds = mappedFieldIds(suggestion);
     const mapped = fields.filter((field) => mappedIds.has(field.id)).map((field) => field.name);

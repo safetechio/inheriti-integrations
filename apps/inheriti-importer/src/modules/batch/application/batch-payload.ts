@@ -26,6 +26,7 @@ export function buildPlanBatchInput(params: {
     type: plan.type,
     name: plan.name,
     description: plan.description,
+    folderId: plan.folderId,
     sharingModel: plan.governance.sharingModel,
     teamIds: plan.teamIds,
     memberId: creatorMemberId,
@@ -37,7 +38,6 @@ export function buildPlanBatchInput(params: {
     authenticationMethodIds: plan.governance.authenticationMethodIds,
     authenticationMode: plan.governance.authenticationMode,
     approvalMode: plan.governance.approvalMode ?? approvalModeFallback,
-    categoryId: plan.categoryId,
     assets: materialised.assets,
   });
   // `buildSharedPlanCreatePayload`'s return type has no index signature;

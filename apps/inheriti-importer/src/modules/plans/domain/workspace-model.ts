@@ -46,10 +46,14 @@ export interface GovernanceDraft {
 
 export interface PlanDraft {
   clientId: string;
+  folderId?: string | null;
+  /** Marks the untouched initial plan created automatically for the empty workspace. */
+  placeholder?: true;
+  /** Local grouping hint; never sent as a Business folder destination. */
+  sourceGroup?: { sourceId: string; path: string[] };
   type: PlanDraftType;
   name: string;
   description?: string;
-  categoryId: string | null;
   teamIds: string[];
   assets: AssetDraft[];
   governance: GovernanceDraft;
@@ -81,14 +85,22 @@ export function defaultGovernance(): GovernanceDraft {
   };
 }
 
-export function makePlanDraft(clientId: string, name: string): PlanDraft {
+export function makePlanDraft(
+  clientId: string,
+  name: string,
+  folderId?: string | null,
+  scope?: 'SHARED' | 'PERSONAL',
+): PlanDraft {
   return {
     clientId,
     type: 'BACKUP',
     name,
-    categoryId: null,
+    folderId,
     teamIds: [],
     assets: [],
-    governance: defaultGovernance(),
+    governance: {
+      ...defaultGovernance(),
+      sharingModel: scope === 'PERSONAL' ? 'PRIVATE' : 'SHARED',
+    },
   };
 }

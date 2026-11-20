@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { type ImportSession } from '@modules/import/domain/import-model';
 import { resolveSourceValue } from '@modules/mapping/application/suggestion-engine';
 import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
@@ -19,6 +19,7 @@ import { createReviewActions } from './importer-workspace-review';
 import { createMappingActions } from './importer-workspace-mapping';
 import { createPlanActions } from './importer-workspace-plans';
 import { createSourceActions } from './importer-workspace-source';
+import { hasIncludedSchemaField } from '../../AssetReviewQueue/types';
 
 export interface ImporterWorkspaceContext {
   session: ImportSession;
@@ -45,8 +46,10 @@ export function useImporterWorkspace(
   workspace: WorkspaceState,
   setWorkspace: WorkspaceSetter,
   replaceWorkspace?: WorkspaceReplacer,
+  onReviewChange?: () => void,
 ) {
   const [decisions, setDecisions] = useState<Record<string, AssetReviewStatus>>({});
+  const lastBatch = useRef<Record<string, AssetReviewStatus | undefined> | null>(null);
   const [mappingOverrides, setMappingOverrides] = useState<MappingOverrides>({});
   const [plainTextOverrides, setPlainTextOverrides] = useState<PlainTextOverrides>({});
   const [plainTextAssetIds, setPlainTextAssetIds] = useState<Set<string>>(new Set());
@@ -95,12 +98,77 @@ export function useImporterWorkspace(
     byId: (id) => projection.suggestions.find((suggestion) => statusKey(suggestion) === id),
   };
 
+  const sourceActions = createSourceActions(context);
+  const reviewActions = createReviewActions(context);
+  const mappingActions = createMappingActions(context);
+  const invalidateBatchAsset = (id: string) => {
+    if (lastBatch.current) delete lastBatch.current[id];
+  };
   return {
     ...projection,
-    ...createReviewActions(context),
-    ...createMappingActions(context),
+    ...reviewActions,
+    ...mappingActions,
     ...createPlanActions(context),
-    ...createSourceActions(context),
+    ...sourceActions,
+    reviewAsset: (...args: Parameters<typeof reviewActions.reviewAsset>) => {
+      invalidateBatchAsset(args[1].id);
+      reviewActions.reviewAsset(...args);
+      onReviewChange?.();
+    },
+    mapAssetField: (...args: Parameters<typeof mappingActions.mapAssetField>) => {
+      invalidateBatchAsset(args[0].id);
+      mappingActions.mapAssetField(...args);
+      onReviewChange?.();
+    },
+    editPlainText: (...args: Parameters<typeof mappingActions.editPlainText>) => {
+      invalidateBatchAsset(args[0].id);
+      mappingActions.editPlainText(...args);
+      onReviewChange?.();
+    },
+    resetReview: () => {
+      lastBatch.current = null;
+      sourceActions.resetReview();
+      onReviewChange?.();
+    },
+    removeSource: (sourceId: string) => {
+      lastBatch.current = null;
+      sourceActions.removeSource(sourceId);
+    },
+    acceptAllEligible: () => {
+      const eligible = projection.assets.filter(
+        (asset) =>
+          !['accepted', 'excluded'].includes(asset.status) && hasIncludedSchemaField(asset),
+      );
+      if (!eligible.length) return 0;
+      lastBatch.current = Object.fromEntries(
+        eligible.map((asset) => [asset.id, decisions[asset.id]]),
+      );
+      setDecisions((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          eligible
+            .filter((asset) => !['accepted', 'excluded'].includes(current[asset.id] ?? ''))
+            .map((asset) => [asset.id, 'accepted']),
+        ),
+      }));
+      onReviewChange?.();
+      return eligible.length;
+    },
+    undoAcceptAll: () => {
+      const previous = lastBatch.current;
+      if (!previous) return;
+      lastBatch.current = null;
+      setDecisions((current) => {
+        const next = { ...current };
+        for (const [id, status] of Object.entries(previous)) {
+          if (next[id] !== 'accepted') continue;
+          if (status) next[id] = status;
+          else delete next[id];
+        }
+        return next;
+      });
+      onReviewChange?.();
+    },
     resolveSourceValue: (sourceFieldId: string) => resolveSourceValue(session, sourceFieldId),
   };
 }

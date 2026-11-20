@@ -1,0 +1,8 @@
+.folder-plan-name-button { display: inline-flex; min-width: 0; max-width: min(45%, 320px); width: fit-content; cursor: pointer; }
+.folder-plan-name-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+.folder-plan-name-button .folder-tree-name { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-plan-name-button:hover .folder-tree-name { color: var(--primary) !important; }
+.folder-plan-name-editor { flex: 1; min-width: 0; max-width: 320px; }
+.folder-plan-name-editor input { min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--gray-10); border-radius: 4px; padding: 4px 8px; font: inherit; }
+.folder-plan-name-editor input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.folder-plan-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }

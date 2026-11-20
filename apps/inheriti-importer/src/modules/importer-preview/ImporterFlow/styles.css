@@ -139,6 +139,23 @@
 .importer-flow-content {
   display: block;
 }
+.importer-flow-page.is-plan-grouping .importer-flow-stepper {
+  flex-basis: 230px;
+  background: var(--importer-color-surface);
+}
+.importer-flow-scroll.is-plan-grouping {
+  display: flex;
+  overflow: hidden;
+}
+.importer-assignment-progress {
+  flex: 0 0 auto;
+  padding: var(--importer-stage-padding-block) var(--importer-stage-padding-inline) 0;
+}
+.importer-flow-scroll.is-plan-grouping > .plan-grouping-surface {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
 .importer-flow-main {
   display: block;
   min-width: 0;

@@ -3,6 +3,7 @@ interface Input {
   type: 'BACKUP' | 'BUSINESS_CONTINUITY';
   name: string;
   description?: string;
+  folderId?: string | null;
   sharingModel: 'SHARED' | 'PRIVATE';
   teamIds?: string[];
   memberId?: string;
@@ -14,7 +15,6 @@ interface Input {
   authenticationMode?: 'EXCLUSIVE' | 'ALL_REQUIRED';
   approvalMode?: 'THRESHOLD' | 'UNANIMOUS';
   authenticationMethodIds?: string[];
-  categoryId?: string | null;
   assets?: unknown[];
 }
 
@@ -42,6 +42,7 @@ export function buildPlanCreatePayload(input: Input) {
     type: input.type,
     name: input.name,
     description: input.description,
+    folderId: input.folderId,
     privacyMode: privatePlan ? ('PRIVATE' as const) : ('PUBLIC' as const),
     moderators: moderated ? moderatorIds.map((id) => ({ id })) : undefined,
     minimumApprovals,
@@ -59,6 +60,5 @@ export function buildPlanCreatePayload(input: Input) {
       },
     },
     assets: input.assets ?? [],
-    categoryId: input.categoryId ?? null,
   };
 }

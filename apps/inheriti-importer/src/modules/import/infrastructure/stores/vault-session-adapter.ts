@@ -24,6 +24,15 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
 
   for (const stored of state.entries) {
     const entry = stored.current;
+    const sourceKind = state.vaults.find((vault) => vault.id === entry.sourceId)?.kind;
+    // shortcut: old KeePass entries lack exact segments, remove this split after legacy state is retired.
+    const path = entry.groupPath
+      ? [...entry.groupPath]
+      : entry.group
+        ? sourceKind === 'keepass'
+          ? entry.group.split(' / ')
+          : [entry.group]
+        : [];
     const fields = [
       ['username', entry.username],
       ['password', entry.password],
@@ -40,7 +49,7 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
       parentNodeId: null,
       kind: 'entry',
       name: entry.title || 'Untitled entry',
-      path: entry.group ? [entry.group] : [],
+      path,
       childNodeIds: [],
       fieldIds,
     };

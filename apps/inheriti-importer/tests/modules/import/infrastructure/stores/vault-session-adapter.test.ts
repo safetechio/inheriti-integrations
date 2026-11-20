@@ -85,4 +85,43 @@ describe('importSessionFromVaultState', () => {
 
     expect(session.sources[0]?.warnings).toEqual(['Skipped line 4.']);
   });
+
+  it('uses exact paths, legacy KeePass delimiters, and opaque non-KeePass groups', () => {
+    const base = {
+      id: 'entry',
+      sourceId: 'vault-1',
+      title: 'Credential',
+      username: '',
+      password: 'secret',
+      url: '',
+      notes: '',
+      group: 'A / B',
+      tags: [],
+      extraFields: [],
+      category: '',
+      team: '',
+    };
+    const vault = {
+      id: 'vault-1',
+      name: 'Vault',
+      kind: 'keepass' as const,
+      fileName: 'vault',
+      importedAt: '',
+    };
+    const run = (kind: 'keepass' | 'onepassword', groupPath?: string[]) =>
+      importSessionFromVaultState({
+        ...initialVaultState,
+        vaults: [{ ...vault, kind }],
+        entries: [
+          {
+            original: { ...base, ...(groupPath ? { groupPath } : {}) },
+            current: { ...base, ...(groupPath ? { groupPath } : {}) },
+          },
+        ],
+      }).nodesById.entry.path;
+    expect(run('keepass', ['A / B'])).toEqual(['A / B']);
+    expect(run('keepass', ['A', 'B'])).toEqual(['A', 'B']);
+    expect(run('keepass')).toEqual(['A', 'B']);
+    expect(run('onepassword')).toEqual(['A / B']);
+  });
 });

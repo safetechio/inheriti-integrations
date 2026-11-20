@@ -1,0 +1,20 @@
+.importer-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(90deg, transparent, var(--gray-5, #f9fafb), transparent);
+  transform: translateX(-100%);
+  animation: importer-skeleton-shimmer 1.6s linear infinite;
+}
+
+@keyframes importer-skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .importer-skeleton::after {
+    animation: none;
+  }
+}

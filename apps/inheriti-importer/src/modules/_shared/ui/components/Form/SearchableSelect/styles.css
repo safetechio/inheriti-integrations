@@ -1,0 +1,7 @@
+.form-searchable-select-option {
+  cursor: pointer;
+}
+
+.form-searchable-select-option:hover {
+  background-color: var(--primary-5);
+}

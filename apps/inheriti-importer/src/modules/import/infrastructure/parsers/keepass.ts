@@ -72,13 +72,13 @@ class KeepassParser {
     const groupName = String(group.name ?? '').trim();
     const nextPath = isRoot || !groupName ? path : [...path, groupName];
     for (const entry of group.entries ?? []) {
-      this.entries.push(this.mapEntry(entry, nextPath.join(' / ')));
+      this.entries.push(this.mapEntry(entry, nextPath));
     }
     for (const child of group.groups ?? []) {
       this.visit(child, nextPath, recycleBinUuid, defaultGroup);
     }
   }
-  private mapEntry(entry: kdbxweb.KdbxEntry, group: string): Omit<VaultEntry, 'sourceId'> {
+  private mapEntry(entry: kdbxweb.KdbxEntry, groupPath: string[]): Omit<VaultEntry, 'sourceId'> {
     const extraFields: VaultEntry['extraFields'] = [];
 
     for (const [key, value] of this.readEntries(entry.fields)) {
@@ -98,7 +98,8 @@ class KeepassParser {
       password: this.readField(this.fieldValue(entry.fields, 'Password')),
       url: this.readField(this.fieldValue(entry.fields, 'URL')),
       notes: this.readField(this.fieldValue(entry.fields, 'Notes')),
-      group,
+      group: groupPath.join(' / '),
+      groupPath: [...groupPath],
       tags,
       extraFields,
       category: '',

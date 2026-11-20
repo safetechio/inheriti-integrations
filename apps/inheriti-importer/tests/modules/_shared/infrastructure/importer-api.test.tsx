@@ -13,7 +13,6 @@ import {
 } from '@shared/infrastructure/importer-api';
 import {
   useFindActiveOrganizationMembersByCriteria,
-  useFindActiveOrganizationPlanCategoriesByCriteria,
   useFindSelectedOrganizationPlanCreationTeamsByCriteria,
   useGetCurrentMember,
   useGetJoinedOrganizations,
@@ -171,7 +170,6 @@ describe('Importer API provider', () => {
       () => ({
         owned: useGetMyOrganization(),
         joined: useGetJoinedOrganizations(),
-        categories: useFindActiveOrganizationPlanCategoriesByCriteria(),
         teams: useFindSelectedOrganizationPlanCreationTeamsByCriteria(),
         members: useFindActiveOrganizationMembersByCriteria({
           organizationId: 'org-1',
@@ -182,12 +180,10 @@ describe('Importer API provider', () => {
     );
     await waitFor(() => expect(result.current.owned.data?.id).toBe('owned'));
     expect(result.current.joined.data?.map((item) => item.id)).toEqual(['joined']);
-    expect(Object.keys(result.current.categories.data ?? {})).toHaveLength(1);
     expect(Object.keys(result.current.teams.data ?? {})).toHaveLength(1);
     expect(Object.keys(result.current.members.data ?? {})).toHaveLength(1);
     const filtered = requests.filter(
       (request) =>
-        request.path.includes('plan-categories') ||
         request.path.includes('member-plan-creation-teams') ||
         request.path.endsWith('/members'),
     );

@@ -1,0 +1,20 @@
+.plan-grouping-unassigned .plan-asset-filters select,
+.plan-grouping-unassigned .plan-asset-search {
+  border-color: #d5dce6;
+  border-radius: 6px;
+}
+
+.source-status-filters .source-status-chip {
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border: 1px solid #d5dce6 !important;
+  border-radius: 15px !important;
+  background: #fff !important;
+}
+.source-status-filters [aria-pressed='true'] .source-status-chip {
+  border-color: #2f5fe8 !important;
+  background: #2f5fe8 !important;
+}
+.source-status-filters [aria-pressed='true'] .source-status-chip > * {
+  color: #fff !important;
+}

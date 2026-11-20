@@ -1,6 +1,43 @@
 import type { FlowState } from './flow-reducer';
 import type { GroupingAsset, PlanDraft } from '../../PlanGroupingSurface';
-import { hasPlanCapacity } from '../../PlanGroupingSurface/capacity';
+import { hasPlanCapacity, planCapacity } from '../../PlanGroupingSurface/capacity';
+
+export function assignAssets(
+  state: FlowState,
+  assets: GroupingAsset[],
+  plan: PlanDraft,
+): FlowState {
+  const target = state.plans.find((item) => item.id === plan.id);
+  const ids = new Set(assets.map((asset) => asset.id));
+  const available = [
+    ...state.unassigned,
+    ...state.plans.flatMap((item) => item.assignedAssets ?? []),
+  ];
+  const selected = [...ids].map((id) => available.find((asset) => asset.id === id));
+  if (!target || !selected.length || selected.some((asset) => !asset?.valid)) return state;
+  const additions = selected.filter(
+    (asset) => !target.assignedAssets?.some((item) => item.id === asset?.id),
+  );
+  if (target.assets + additions.length > planCapacity(target)) return state;
+  return additions.reduce((current, asset) => {
+    const latest = current.plans.find((item) => item.id === target.id);
+    return asset && latest ? assignAsset(current, asset, latest) : current;
+  }, state);
+}
+
+export function unassignAssets(state: FlowState, assets: GroupingAsset[]): FlowState {
+  const ids = new Set(assets.map((asset) => asset.id));
+  const assigned = state.plans.flatMap((plan) =>
+    (plan.assignedAssets ?? []).filter((asset) => ids.has(asset.id)),
+  );
+  if (!ids.size || assigned.length !== ids.size) return state;
+  return assigned.reduce((current, asset) => {
+    const plan = current.plans.find((item) =>
+      item.assignedAssets?.some((candidate) => candidate.id === asset.id),
+    );
+    return plan ? unassignAsset(current, asset, plan) : current;
+  }, state);
+}
 export function assignAsset(state: FlowState, asset: GroupingAsset, plan: PlanDraft): FlowState {
   if (!asset.valid || !hasPlanCapacity(plan)) return state;
   const previous = state.plans.find((item) =>

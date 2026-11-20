@@ -3,6 +3,7 @@ import { BaseModal, Button } from '@main-components';
 import type { PlanDraft, PlanMetadataValues } from '../../types';
 import { PlanDescriptionInput } from './components/PlanDescriptionInput';
 import { PlanNameInput } from './components/PlanNameInput';
+import { PlanAvatar } from '../OrganizationFolderTree/components/PlanAvatar';
 
 export type { PlanMetadataValues } from '../../types';
 
@@ -51,11 +52,12 @@ export function PlanMetadataModal({ plan, visible, onDismiss, onSave }: PlanMeta
     <BaseModal
       visible={visible}
       title="Edit plan details"
+      titleIcon={<PlanAvatar id={plan.id} />}
       description="Update the draft name and description before staging."
       onDismiss={onDismiss}
       footer={
         <>
-          <Button title="Cancel" variant="plain" onPress={onDismiss} />
+          <Button title="Cancel" variant="outlined" color="gray" onPress={onDismiss} />
           <Button title="Save details" onPress={save} />
         </>
       }

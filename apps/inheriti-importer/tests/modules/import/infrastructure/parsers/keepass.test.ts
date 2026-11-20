@@ -65,6 +65,24 @@ describe('parseKeepass', () => {
     expect(result.entries[0].extraFields).toContainEqual({ key: 'Token', value: 'extra-token' });
   });
 
+  it('keeps literal delimiters distinct from nested groups', async () => {
+    const credentials = new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString('master-key'));
+    const db = kdbxweb.Kdbx.create(credentials, 'Paths');
+    const literal = db.createGroup(db.getDefaultGroup(), 'A / B');
+    const nested = db.createGroup(db.createGroup(db.getDefaultGroup(), 'A'), 'B');
+    for (const [group, title] of [
+      [literal, 'literal'],
+      [nested, 'nested'],
+    ] as const) {
+      db.createEntry(group).fields.set('Title', title);
+    }
+    const parsed = await parseKeepass(await db.save(), { password: 'master-key' });
+    expect(parsed.entries.map((entry) => [entry.title, entry.groupPath])).toEqual([
+      ['literal', ['A / B']],
+      ['nested', ['A', 'B']],
+    ]);
+  });
+
   it('asks for a password when the database is locked', async () => {
     const data = await makeDatabase('master-key');
     await expect(parseKeepass(data, { fileName: 'ops.kdbx' })).rejects.toBeInstanceOf(

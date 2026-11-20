@@ -18,7 +18,6 @@ export interface PlanDetailsCommandInput {
   clientId: string;
   name: string;
   description?: string;
-  categoryId: string | null;
   sharingModel: 'SHARED' | 'PRIVATE';
   moderatedAccess: boolean;
   authenticationMethodIds: string[];
@@ -32,6 +31,8 @@ export interface PlanMetadataCommandInput {
   clientId: string;
   name: string;
   description?: string;
+  folderId?: string | null;
+  scope?: 'SHARED' | 'PERSONAL';
 }
 
 function next(state: WorkspaceState, patch: Partial<WorkspaceState>): WorkspaceState {
@@ -50,21 +51,23 @@ function withPlan(
   });
 }
 
-export const createPlan: Command<[{ clientId: string; name: string }]> = (
-  state,
-  { clientId, name },
-) => {
+export const createPlan: Command<
+  [{ clientId: string; name: string; folderId?: string | null; scope?: 'SHARED' | 'PERSONAL' }]
+> = (state, { clientId, name, folderId, scope }) => {
   if (state.plansByClientId[clientId]) return state;
   return next(state, {
     planOrder: [...state.planOrder, clientId],
-    plansByClientId: { ...state.plansByClientId, [clientId]: makePlanDraft(clientId, name) },
+    plansByClientId: {
+      ...state.plansByClientId,
+      [clientId]: makePlanDraft(clientId, name, folderId, scope),
+    },
   });
 };
 
 export const renamePlan: Command<[{ clientId: string; name: string }]> = (
   state,
   { clientId, name },
-) => withPlan(state, clientId, (plan) => ({ ...plan, name }));
+) => withPlan(state, clientId, (plan) => ({ ...plan, name, placeholder: undefined }));
 
 export const updatePlanMetadata: Command<[PlanMetadataCommandInput]> = (state, details) => {
   const name = details.name.trim();
@@ -72,17 +75,47 @@ export const updatePlanMetadata: Command<[PlanMetadataCommandInput]> = (state, d
   const description = details.description?.trim();
   return withPlan(state, details.clientId, (plan) => ({
     ...plan,
+    placeholder: undefined,
     name,
     description: description || undefined,
+    folderId: details.folderId === undefined ? plan.folderId : details.folderId,
+    governance:
+      details.scope === undefined
+        ? plan.governance
+        : {
+            ...plan.governance,
+            sharingModel: details.scope === 'PERSONAL' ? 'PRIVATE' : 'SHARED',
+          },
   }));
+};
+
+export const movePlansToFolder: Command<
+  [{ clientIds: string[]; folderId: string | null; scope: 'SHARED' | 'PERSONAL' }]
+> = (state, { clientIds, folderId, scope }) => {
+  const ids = new Set(clientIds);
+  if (!ids.size || ids.size !== clientIds.length) return state;
+  const plans = clientIds.map((id) => state.plansByClientId[id]);
+  if (
+    plans.some(
+      (plan) =>
+        !plan || plan.governance.sharingModel !== (scope === 'PERSONAL' ? 'PRIVATE' : 'SHARED'),
+    ) ||
+    plans.every((plan) => plan.folderId === folderId)
+  )
+    return state;
+  const plansByClientId = { ...state.plansByClientId };
+  for (const id of ids) {
+    plansByClientId[id] = { ...plansByClientId[id], folderId };
+  }
+  return next(state, { plansByClientId });
 };
 
 export const updatePlanDetails: Command<[PlanDetailsCommandInput]> = (state, details) =>
   withPlan(state, details.clientId, (plan) => ({
     ...plan,
+    placeholder: undefined,
     name: details.name,
     description: details.description,
-    categoryId: details.categoryId,
     governance: {
       ...plan.governance,
       sharingModel: details.sharingModel,
@@ -95,15 +128,11 @@ export const updatePlanDetails: Command<[PlanDetailsCommandInput]> = (state, det
     },
   }));
 
-export const setPlanCategory: Command<[{ clientId: string; categoryId: string | null }]> = (
-  state,
-  { clientId, categoryId },
-) => withPlan(state, clientId, (plan) => ({ ...plan, categoryId }));
-
 export const setPlanTeams: Command<[{ clientId: string; teamIds: string[] }]> = (
   state,
   { clientId, teamIds },
-) => withPlan(state, clientId, (plan) => ({ ...plan, teamIds: [...teamIds] }));
+) =>
+  withPlan(state, clientId, (plan) => ({ ...plan, teamIds: [...teamIds], placeholder: undefined }));
 
 export const removePlan: Command<[{ clientId: string }]> = (state, { clientId }) => {
   if (!state.plansByClientId[clientId]) return state;
@@ -111,6 +140,21 @@ export const removePlan: Command<[{ clientId: string }]> = (state, { clientId })
   delete plansByClientId[clientId];
   return next(state, {
     planOrder: state.planOrder.filter((id) => id !== clientId),
+    plansByClientId,
+  });
+};
+
+export const removePlans: Command<[{ clientIds: string[] }]> = (state, { clientIds }) => {
+  const ids = new Set(clientIds);
+  if (
+    !ids.size ||
+    ids.size !== clientIds.length ||
+    clientIds.some((id) => !state.plansByClientId[id] || !state.planOrder.includes(id))
+  ) return state;
+  const plansByClientId = { ...state.plansByClientId };
+  for (const id of ids) delete plansByClientId[id];
+  return next(state, {
+    planOrder: state.planOrder.filter((id) => !ids.has(id)),
     plansByClientId,
   });
 };

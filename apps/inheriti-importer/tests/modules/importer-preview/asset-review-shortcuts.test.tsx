@@ -19,6 +19,89 @@ const asset: ReviewAsset = {
 };
 
 describe('AssetReviewQueue keyboard shortcuts', () => {
+  it('accepts session-wide from a filtered view and ignores editable or repeated shortcuts', () => {
+    const onAcceptAllEligible = vi.fn(() => 2);
+    const onUndoAcceptAll = vi.fn();
+    render(
+      <AssetReviewQueue
+        assets={[asset, { ...asset, id: 'asset-2', source: 'other.env' }]}
+        onAcceptAllEligible={onAcceptAllEligible}
+        onUndoAcceptAll={onUndoAcceptAll}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    fireEvent.keyDown(screen.getByLabelText('Filter by source'), {
+      key: 'A',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    fireEvent.keyDown(window, { key: 'A', ctrlKey: true, shiftKey: true, repeat: true });
+    fireEvent.keyDown(window, { key: 'A', ctrlKey: true, shiftKey: true, isComposing: true });
+    expect(onAcceptAllEligible).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'A', ctrlKey: true, shiftKey: true });
+    expect(onAcceptAllEligible).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status').textContent).toContain('2 accepted');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(onUndoAcceptAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts only pending valid assets across statuses and sources', () => {
+    const onAcceptAllEligible = vi.fn(() => 1);
+    render(
+      <AssetReviewQueue
+        assets={[
+          asset,
+          { ...asset, id: 'excluded', status: 'excluded' },
+          { ...asset, id: 'accepted', status: 'accepted' },
+          {
+            ...asset,
+            id: 'invalid',
+            source: 'other.env',
+            schemaFields: [
+              { key: 'secret.password', label: 'Password', validationError: 'Required' },
+            ],
+          },
+        ]}
+        onAcceptAllEligible={onAcceptAllEligible}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: /Accept all eligible \(1\) across all sources/ }),
+    );
+    expect(onAcceptAllEligible).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status').textContent).toContain('1 accepted · 2 require review');
+  });
+  it('keeps Source, search, and list/tree controls usable alongside bulk acceptance', () => {
+    const onAcceptAllEligible = vi.fn(() => 2);
+    const onSelect = vi.fn();
+    render(
+      <AssetReviewQueue
+        assets={[
+          { ...asset, folderPath: ['Infrastructure', 'Database'] },
+          { ...asset, id: 'asset-2', name: 'Backup', folderPath: ['Infrastructure', 'Backup'] },
+          { ...asset, id: 'asset-3', source: 'other.env' },
+        ]}
+        onAcceptAllEligible={onAcceptAllEligible}
+        onSelect={onSelect}
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: /Accept all eligible \(3\) across all sources/ }),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tree' }));
+    expect(screen.getByRole('button', { name: 'Infrastructure (2)' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Infrastructure (2)' }));
+    expect(screen.getByRole('button', { name: 'Database (1)' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(screen.getAllByText('Production database').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Search assets' }));
+    expect(screen.getByLabelText('Search assets')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Accept all eligible \(3\) across all sources/ }),
+    );
+    expect(onAcceptAllEligible).toHaveBeenCalledOnce();
+  });
   it('keeps status tabs above both panes and source controls above the scrolling list', () => {
     const { container } = render(<AssetReviewQueue assets={[asset]} />);
     const surface = container.querySelector('.asset-review-surface')!;

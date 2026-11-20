@@ -4,6 +4,7 @@ import { AssignedAssets } from '../AssignedAssets';
 import { PlanAlerts } from '../PlanAlerts';
 import type { DropState, GroupingAsset, PlanDraft } from '../../types';
 import { planCapacity, planUsage } from '../../capacity';
+import type { useAssetSelection } from '../../hooks/use-asset-selection';
 
 type PlanCardProps = {
   plan: PlanDraft;
@@ -17,6 +18,7 @@ type PlanCardProps = {
   onDragOver: () => void;
   onDragLeave: () => void;
   onDrop: () => void;
+  selection?: ReturnType<typeof useAssetSelection>;
 };
 export function PlanCard({
   plan,
@@ -30,6 +32,7 @@ export function PlanCard({
   onDragOver,
   onDragLeave,
   onDrop,
+  selection,
 }: PlanCardProps) {
   const capacityUsed = planUsage(plan);
   const capacityLimit = planCapacity(plan);
@@ -94,6 +97,11 @@ export function PlanCard({
             {plan.description}
           </Text>
         ) : null}
+        {plan.sourceGroup ? (
+          <Text variant="bodySmall" color="gray">
+            {[plan.sourceName ?? plan.sourceGroup.sourceId, ...plan.sourceGroup.path].join(' / ')}
+          </Text>
+        ) : null}
         <Box gap="xs">
           <Box flexDirection="row" justifyContent="space-between" gap="s">
             <Text variant="importerPlanBody" color="gray">
@@ -118,6 +126,16 @@ export function PlanCard({
             assets={plan.assignedAssets}
             onMove={onMoveAsset}
             onRemove={onRemoveAsset}
+            selectedIds={selection?.selectedIds}
+            onSelect={
+              selection
+                ? (asset, event) =>
+                    selection.select(asset.id, plan.assignedAssets ?? [], plan.id, event)
+                : undefined
+            }
+            onFocusSelect={selection ? () => selection.focusPane(plan.id) : undefined}
+            onStart={selection ? (asset) => selection.startDrag(asset.id) : undefined}
+            onEnd={selection?.endDrag}
           />
         ) : null}
         <Box className="plan-drop-zone">
@@ -134,7 +152,11 @@ export function PlanCard({
             Add at least one Asset to this draft plan.
           </Text>
         ) : null}
-        <PlanAlerts plan={plan} dropState={dropState} showGovernance={selected && plan.assets > 0} />
+        <PlanAlerts
+          plan={plan}
+          dropState={dropState}
+          showGovernance={selected && plan.assets > 0}
+        />
       </Stack>
     </Box>
   );

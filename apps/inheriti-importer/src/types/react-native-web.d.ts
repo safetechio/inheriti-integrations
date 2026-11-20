@@ -49,6 +49,12 @@ declare module 'react-native-web' {
   }
   export const View: ForwardRefExoticComponent<ViewProps & RefAttributes<HTMLElement>>;
 
+  export interface ImageProps extends ViewProps {
+    source: { uri: string };
+    resizeMode?: 'contain' | 'cover' | 'stretch' | 'center' | 'repeat';
+  }
+  export const Image: ForwardRefExoticComponent<ImageProps & RefAttributes<HTMLElement>>;
+
   export interface ActivityIndicatorProps extends ViewProps {
     animating?: boolean;
     color?: string;
