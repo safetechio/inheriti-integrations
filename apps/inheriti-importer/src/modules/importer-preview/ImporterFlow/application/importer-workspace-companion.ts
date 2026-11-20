@@ -1,66 +1,70 @@
 import { suggestedAssetToDraft } from '@modules/mapping/application/suggestion-engine';
-import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
 import { bindField, unbindField } from '@modules/plans/domain/workspace-commands';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
-import { additionalFieldsSuggestion, statusKey } from './importer-workspace-suggestions';
+import type { MappingOverrides, PlainTextOverrides } from './importer-workspace-types';
+import {
+  assetMatchesSuggestion,
+  sourceSuggestions,
+  statusKey,
+} from './importer-workspace-suggestions';
+import { projectSuggestions } from './importer-workspace-projection';
 
-export function reconcileCompanion(
+export function reconcileEditedBindings(
   context: ImporterWorkspaceContext,
-  current: WorkspaceState,
-  suggestion: SuggestedAsset,
+  workspace: WorkspaceState,
+  nodeId: string,
+  targetAssetId: string,
   targetField: string,
-  sourceFieldId?: string,
-): WorkspaceState | undefined {
-  const { session, projection, mappingOverrides, plainTextOverrides } = context;
-  // Keep the companion's text limited to fields left out of the structured asset.
-  const companion = projection.suggestions.find(
-    (candidate) =>
-      candidate.fromNodeId === suggestion.fromNodeId && candidate.variant === 'additional-fields',
+  mappingOverrides: MappingOverrides,
+  plainTextOverrides: PlainTextOverrides,
+): WorkspaceState {
+  const { session, projection, typeOverrides, plainTextAssetIds, preservation } = context;
+  const previous = projection.suggestions.filter((asset) => asset.fromNodeId === nodeId);
+  const projected = projectSuggestions(
+    session,
+    sourceSuggestions(session).filter((asset) => asset.fromNodeId === nodeId),
+    mappingOverrides,
+    plainTextOverrides,
+    plainTextAssetIds,
+    typeOverrides,
+    preservation,
   );
-  if (!companion || suggestion.type === 'PLAIN-TEXT') return undefined;
-  const updated = { ...suggestion, fieldBindings: { ...suggestion.fieldBindings } };
-  if (sourceFieldId) updated.fieldBindings[targetField] = { kind: 'source', sourceFieldId };
-  else delete updated.fieldBindings[targetField];
-  const nextCompanion = additionalFieldsSuggestion(session, updated, companion);
-  const companionBinding = suggestedAssetToDraft(nextCompanion, statusKey(companion)).fieldBindings[
-    'secret.text'
-  ];
-  let next = current;
-  for (const plan of listPlanDrafts(current)) {
-    if (plan.assets.some((item) => item.id === statusKey(suggestion))) {
-      next = sourceFieldId
-        ? bindField(next, {
-            planClientId: plan.clientId,
-            assetId: statusKey(suggestion),
-            assetFieldSource: targetField,
-            binding: { kind: 'source', sourceFieldId },
-          })
-        : unbindField(next, {
-            planClientId: plan.clientId,
-            assetId: statusKey(suggestion),
-            assetFieldSource: targetField,
-          });
+  const nextById = new Map(projected.map((asset) => [statusKey(asset), asset]));
+  let next = workspace;
+  for (const plan of listPlanDrafts(workspace)) {
+    for (const draft of plan.assets) {
+      const original = previous.find((asset) => assetMatchesSuggestion(session, draft, asset));
+      if (!original) continue;
+      const reviewId = statusKey(original);
+      const revised = nextById.get(reviewId);
+      const bindings = revised?.fieldBindings ?? {};
+      const keys = new Set([...Object.keys(original.fieldBindings), ...Object.keys(bindings)]);
+      const changed = [...keys].filter(
+        (key) =>
+          (reviewId === targetAssetId && key === targetField) ||
+          JSON.stringify(
+            original.fieldBindings[key]?.kind === 'literal'
+              ? { kind: 'literal' }
+              : original.fieldBindings[key],
+          ) !==
+            JSON.stringify(bindings[key]?.kind === 'literal' ? { kind: 'literal' } : bindings[key]),
+      );
+      if (!changed.length) continue;
+      const copied = revised ? suggestedAssetToDraft(revised, draft.id).fieldBindings : {};
+      for (const assetFieldSource of changed) {
+        const location = { planClientId: plan.clientId, assetId: draft.id, assetFieldSource };
+        const binding = copied[assetFieldSource];
+        const oldBinding = draft.fieldBindings[assetFieldSource];
+        if (oldBinding?.kind === 'literal') oldBinding.value.clear();
+        if (binding) next = bindField(next, { ...location, binding });
+        else next = unbindField(next, location);
+      }
+      for (const [key, binding] of Object.entries(copied)) {
+        if (!changed.includes(key) && binding.kind === 'literal') binding.value.clear();
+      }
     }
-    if (!plan.assets.some((item) => item.id === statusKey(companion))) continue;
-    if (
-      plainTextOverrides[statusKey(companion)] ||
-      Object.hasOwn(mappingOverrides[statusKey(companion)] ?? {}, 'secret.text')
-    )
-      continue;
-    next = companionBinding
-      ? bindField(next, {
-          planClientId: plan.clientId,
-          assetId: statusKey(companion),
-          assetFieldSource: 'secret.text',
-          binding: companionBinding,
-        })
-      : unbindField(next, {
-          planClientId: plan.clientId,
-          assetId: statusKey(companion),
-          assetFieldSource: 'secret.text',
-        });
   }
   return next;
 }

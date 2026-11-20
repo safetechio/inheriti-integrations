@@ -17,6 +17,7 @@ export function freezeBatchSnapshot(entries: readonly PlanBatchEntry[]): readonl
           assets: Object.freeze([...entry.input.assets]),
           payload: Object.freeze({ ...entry.input.payload }),
           totalShares: entry.input.totalShares,
+          preservationRevision: entry.input.preservationRevision,
         }),
       }),
     ),

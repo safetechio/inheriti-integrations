@@ -17,6 +17,7 @@ import {
   convertToCanonicalType,
   applyMappingOverrides,
   sourceSuggestions,
+  originalSuggestionFor,
   statusKey,
 } from './importer-workspace-suggestions';
 import { projectSuggestions } from './importer-workspace-projection';
@@ -86,11 +87,10 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
   function reviewAsset(action: ImporterWorkspaceAction, asset: ReviewAsset) {
     const suggestion = byId(asset.id);
     if (!suggestion) return;
-    const original = sourceSuggestions(session).find(
-      (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
-    );
+    const original = originalSuggestionFor(session, sourceSuggestions(session), suggestion);
     const originalId = original ? statusKey(original) : undefined;
     if (action.startsWith('alternate:')) {
+      if (suggestion.variant === 'rescued-fields') return;
       const type = action.slice('alternate:'.length);
       if (
         !original ||
@@ -146,6 +146,7 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
         nextPlainTextOverrides,
         nextPlainTextAssetIds,
         nextTypeOverrides,
+        context.preservation,
       );
       const finalSuggestion = effective.find(
         (candidate) =>

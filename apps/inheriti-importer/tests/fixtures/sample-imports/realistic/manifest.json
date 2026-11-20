@@ -1,0 +1,280 @@
+{
+  "synthetic": true,
+  "provenance": "Generated locally from authored synthetic records and documented format structures. No real exports or credentials.",
+  "files": {
+    "onepassword-rich.1pux": {
+      "format": "onepassword",
+      "version": 3,
+      "sourceRecords": 42,
+      "expectedEntries": 41,
+      "vaults": 3,
+      "attachments": 2,
+      "historyItems": 1,
+      "archivedItems": 1,
+      "checks": [
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "password",
+          "sha256": "95a865fed489893974ef59760d0232960dd6275c57e483fa589c3f0d98ba16bf"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "notes",
+          "sha256": "4a8a57b3cfab8ff7cc170871715e417b6588e673aa8b3291715fb2ff471dfa5f"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Recovery: Code",
+          "sha256": "cce6420cb0395a26dc5ffe51537abd10a539381d195baafe48ee6d7e090ed1a2"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Recovery: Code (2)",
+          "sha256": "d4f1825b68f6095f99128dc27e519e2557664a4eceaa6f9d4e1cbcda191e6101"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Recovery: Code (3)",
+          "sha256": "c481155be905ff6b13ee98b917e8807c94768f34c8d3e4b917be94371b76a909"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Recovery: מפתח 🔐",
+          "sha256": "90e6546c680747cc6bba5d779333fc431380a4c48ca31119d3ce8be202d32415"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Fixture types: Retry count",
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Fixture types: Enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "Fixture types: Nested labels",
+          "sha256": "a17fd051551b1079f6dca99eef27cbde021631864876a841b7ea2224c7aad9ef"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "URL: Recovery (2)",
+          "sha256": "99389d4d0cc0e15f51cb59e979da6a67033f3a194d60fbeb3e60c3485a878e3e"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "details/futureMetadata",
+          "sha256": "539584272f855eea518b40d4ef72dd0ec9b7dc0cbf22051f024410621c05a12f"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "field": "overview/futureBadge",
+          "sha256": "8b72a9703626bd9c249cf617cb9dae38bdca447334961a60951bbe15601aeba0"
+        },
+        {
+          "title": "Finance sandbox card",
+          "field": "creditCardNumber",
+          "sha256": "12fd0994320f7b29f077e4f792b4880b3647ac87d8288d620fa6b57823a70c6e"
+        },
+        {
+          "title": "Route quote API credential",
+          "field": "API: Private material marker",
+          "sha256": "358d7dea96a24712007371c0505c0e1aef0a6cb99ab05dd388d5ee4935e5092d"
+        }
+      ],
+      "omitted": [
+        {
+          "title": "Shift handoff document only",
+          "scope": "entry",
+          "reason": "file-only item"
+        },
+        {
+          "title": "Billing approval login and attachment",
+          "scope": "file contents",
+          "reason": "text import only"
+        },
+        {
+          "title": "Dispatch console — São Paulo / 出荷",
+          "scope": "password history",
+          "reason": "current credentials only"
+        }
+      ],
+      "bytes": 6113,
+      "sha256": "fdc7080777808926573f42c379ae4079b10fcd2d9064f1af0a6ce7e3843d70fc"
+    },
+    "onepassword-rich.export-data.json": {
+      "format": "onepassword-source",
+      "sourceRecords": 42,
+      "role": "editable archive source",
+      "bytes": 100378,
+      "sha256": "e4e9530a4724b8edff9833b590c6964dbb726c14d5aded71d5ad303dc7511f10"
+    },
+    "onepassword-bulk.1pux": {
+      "format": "onepassword",
+      "version": 3,
+      "sourceRecords": 1050,
+      "expectedEntries": 1050,
+      "vaults": 7,
+      "bytes": 56134,
+      "sha256": "ebc68ba033c4da63d50b0538f4b5de32b4e0b30dc1f880c14c3a639bca28912e"
+    },
+    "unsupported/onepassword-v4.1pux": {
+      "format": "onepassword",
+      "version": 4,
+      "sourceRecords": 1,
+      "expectedError": "Unsupported 1Password export version",
+      "bytes": 1970,
+      "sha256": "42bfc3d91dc670ddf38db1f85ba7655fb27108772b770e29ce4297f24e49cadc"
+    },
+    "unsupported/shift-handoff.zip": {
+      "format": "unknown zip",
+      "sourceRecords": 0,
+      "expectedError": "Unsupported ZIP archive",
+      "bytes": 209,
+      "sha256": "ee3b5f0499f67baa90150d860fbc1fae06b431c67655890e6840f4ef264dd62c"
+    },
+    "unsupported/shift-handoff.xlsx": {
+      "format": "excel",
+      "sourceRecords": 1,
+      "expectedError": "Excel workbooks are unsupported",
+      "bytes": 1371,
+      "sha256": "d87e7d78203adfc9c8824bce0861caf9278ff0794c6b685bf72f10dce02d5569"
+    },
+    "malformed/truncated.1pux": {
+      "format": "onepassword",
+      "expectedError": "ZIP directory",
+      "bytes": 70,
+      "sha256": "cdd5a785203768b1ec6782d8d8104724ff93e86358a5e04f00cf7fbcd2f27290"
+    },
+    "passbolt-export.csv": {
+      "format": "passbolt",
+      "sourceRecords": 36,
+      "expectedEntries": 36,
+      "scenarios": [
+        "UTF-8 BOM",
+        "CRLF quoted multiline notes",
+        "literal comma and double quote",
+        "whitespace-sensitive password"
+      ],
+      "bytes": 9711,
+      "sha256": "2b751d9d384aecc9fe6c9be50ba4d940f1e6a7865466b621a5e48ebe6d441275"
+    },
+    "passbolt-compatible.json": {
+      "format": "passbolt",
+      "provenance": "Importer-compatible resources wrapper",
+      "sourceRecords": 36,
+      "expectedEntries": 36,
+      "scenarios": [
+        "36 resources, one without a secret",
+        "structured secret with numeric zero",
+        "folder parent object"
+      ],
+      "bytes": 25004,
+      "sha256": "7228ba78376386c932afc1f92aa50c5311907161117b9bf1917b764d1a41e9fc"
+    },
+    "kubernetes-multidoc.yaml": {
+      "format": "kubernetes",
+      "sourceRecords": 37,
+      "expectedEntries": 36,
+      "scenarios": [
+        "Secret and ConfigMap",
+        "docker config with two registries",
+        "stringData overrides data",
+        "binary base64",
+        "one skipped Namespace"
+      ],
+      "bytes": 16221,
+      "sha256": "309d9354fd792ea2a45757e6c8918319f2020586fc42416d65a564200fb12734"
+    },
+    "kubernetes-list.json": {
+      "format": "kubernetes",
+      "sourceRecords": 37,
+      "expectedEntries": 36,
+      "scenarios": [
+        "Secret and ConfigMap",
+        "docker config with two registries",
+        "stringData overrides data",
+        "binary base64",
+        "one skipped Namespace"
+      ],
+      "bytes": 23810,
+      "sha256": "1018964bc6558db226da2bd765d8eb931d6c34a6785f81af81439e6d86001d02"
+    },
+    "vault-kv-v1.yaml": {
+      "format": "vault",
+      "version": 1,
+      "sourceRecords": 30,
+      "expectedEntries": 30,
+      "bytes": 20922,
+      "sha256": "2170817037e1f6c231cf40bf460c255367e15ad26dfe24abc62a51e8ff2914bd"
+    },
+    "vault-kv-v2.json": {
+      "format": "vault",
+      "version": 2,
+      "sourceRecords": 30,
+      "expectedEntries": 30,
+      "scenarios": [
+        "versioned API envelopes",
+        "scalar falsy values and nested policy",
+        "Unicode key and multiline marker"
+      ],
+      "bytes": 36195,
+      "sha256": "65cd6163bfa40f2b91fb7bf33ebb3e1b4185bb627e3732f49324d8e647d0d934"
+    },
+    "aws-secretsmanager.json": {
+      "format": "cloud",
+      "provider": "aws",
+      "sourceRecords": 27,
+      "expectedEntries": 27,
+      "scenarios": [
+        "BatchGetSecretValue wrapper",
+        "SecretString JSON and plain text",
+        "SecretBinary text and opaque bytes",
+        "version stages"
+      ],
+      "bytes": 13852,
+      "sha256": "0908b1992b1a6030c4ee86d071faf86ee880e67dc2d76b533ad5e9d4798f9e71"
+    },
+    "azure-keyvault.json": {
+      "format": "cloud",
+      "provider": "azure",
+      "sourceRecords": 27,
+      "expectedEntries": 27,
+      "scenarios": [
+        "array of synthetic Get Secret responses",
+        "plain and structured value",
+        "disabled versions"
+      ],
+      "bytes": 20742,
+      "sha256": "48ab41ffd3ebfc0cc15d9f3f5b1c5acf949a9058c2bd9d23ab4114325a8951d2"
+    },
+    "gcp-secretmanager.json": {
+      "format": "cloud",
+      "provider": "gcp",
+      "sourceRecords": 27,
+      "expectedEntries": 27,
+      "scenarios": [
+        "array of synthetic access responses",
+        "base64 of plain and nested JSON values"
+      ],
+      "bytes": 15006,
+      "sha256": "178a49414a9ef610f20e854e85b11b8fd0d1072338e967fb1bf919fb512f3c37"
+    },
+    "services.env": {
+      "format": "dotenv",
+      "sourceRecords": 42,
+      "expectedEntries": 41,
+      "scenarios": [
+        "quoted multiline",
+        "escapes",
+        "comments",
+        "explicit empty value",
+        "duplicate keys",
+        "preserved spaces and hash inside quoted value"
+      ],
+      "bytes": 1842,
+      "sha256": "a7e64a36773e707f62bc11c487502d6558391666a07614103a9038e1a84ec5ff"
+    }
+  }
+}

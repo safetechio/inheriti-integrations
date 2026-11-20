@@ -1,0 +1,109 @@
+﻿Name,Username,URL,Password,Description,Group,Tags
+"Support, ""Après-vente"" / 出荷","operator-1@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0001","Training rotation 1, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 2","operator-2@billing.example.invalid","https://billing.example.invalid/admin","  SYNTHETIC-FIXTURE-CSV-EDGE # literal  ","Training rotation 2, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 3","operator-3@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0003","Training rotation 3, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 4","operator-4@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0004","Training rotation 4, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 5","operator-5@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0005","Training rotation 5, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 6","operator-6@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0006","Training rotation 6, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"
+"dispatch operator 7","operator-7@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0007","Training rotation 7, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 8","operator-8@billing.example.invalid","https://billing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0008","Training rotation 8, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 9","operator-9@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0009","Training rotation 9, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 10","operator-10@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0010","Training rotation 10, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 11","operator-11@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0011","Training rotation 11, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 12","operator-12@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0012","Training rotation 12, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"
+"dispatch operator 13","operator-13@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0013","Training rotation 13, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 14","operator-14@billing.example.invalid","https://billing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0014","Training rotation 14, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 15","operator-15@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0015","Training rotation 15, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 16","operator-16@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0016","Training rotation 16, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 17","operator-17@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0017","Training rotation 17, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 18","operator-18@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0018","Training rotation 18, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"
+"dispatch operator 19","operator-19@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0019","Training rotation 19, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 20","operator-20@billing.example.invalid","https://billing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0020","Training rotation 20, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 21","operator-21@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0021","Training rotation 21, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 22","operator-22@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0022","Training rotation 22, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 23","operator-23@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0023","Training rotation 23, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 24","operator-24@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0024","Training rotation 24, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"
+"dispatch operator 25","operator-25@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0025","Training rotation 25, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 26","operator-26@billing.example.invalid","https://billing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0026","Training rotation 26, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 27","operator-27@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0027","Training rotation 27, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 28","operator-28@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0028","Training rotation 28, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 29","operator-29@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0029","Training rotation 29, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 30","operator-30@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0030","Training rotation 30, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"
+"dispatch operator 31","operator-31@dispatch.example.invalid","https://dispatch.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0031","Training rotation 31, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/dispatch/Shift 1","fixture;dispatch"
+"billing operator 32","operator-32@billing.example.invalid","https://billing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0032","Training rotation 32, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/billing/Shift 2","fixture;billing"
+"routing operator 33","operator-33@routing.example.invalid","https://routing.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0033","Training rotation 33, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/routing/Shift 0","fixture;routing"
+"inventory operator 34","operator-34@inventory.example.invalid","https://inventory.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0034","Training rotation 34, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/inventory/Shift 1","fixture;inventory"
+"support operator 35","operator-35@support.example.invalid","https://support.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0035","Training rotation 35, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/support/Shift 2","fixture;support"
+"nightly-backup operator 36","operator-36@nightly-backup.example.invalid","https://nightly-backup.example.invalid/admin","SYNTHETIC-FIXTURE-PASSBOLT-0036","Training rotation 36, runbook ""Night shift"".
+Owner: São Paulo / 台北.
+","Training/nightly-backup/Shift 0","fixture;nightly-backup"

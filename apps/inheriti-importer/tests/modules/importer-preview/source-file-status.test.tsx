@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
 import { SourceImportStatus } from '@modules/importer-preview/SourceImportStatus';
@@ -34,8 +34,9 @@ describe('source file status', () => {
     expect(screen.queryByText('Unlock required')).toBeNull();
     fireEvent.change(screen.getByLabelText('KeePass key file'), { target: { files: [keyFile] } });
     await screen.findByText('vault.key');
-    const submit = screen.getAllByRole('button', { name: 'Unlock' })[1];
-    expect(submit.hasAttribute('disabled')).toBe(false);
+    const submit = within(screen.getByRole('dialog', { name: 'Unlock KeePass database' }))
+      .getByRole('button', { name: 'Unlock' });
+    await waitFor(() => expect(submit.getAttribute('aria-disabled')).not.toBe('true'));
     fireEvent.click(submit);
 
     await waitFor(() => expect(onUnlock).toHaveBeenCalledWith(source, '', keyBytes));

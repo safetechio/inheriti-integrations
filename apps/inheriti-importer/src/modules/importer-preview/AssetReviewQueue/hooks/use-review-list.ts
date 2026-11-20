@@ -12,7 +12,7 @@ export const statusFilters = [
 export const exceptionFilters = [
   ['invalid', 'Invalid'],
   ['missing', 'Missing mappings'],
-  ['omitted', 'Fields omitted'],
+  ['omitted', 'Unmapped fields'],
 ] as const;
 
 export const isPending = (asset: ReviewAsset) =>

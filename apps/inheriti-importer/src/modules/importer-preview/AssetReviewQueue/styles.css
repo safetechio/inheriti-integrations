@@ -434,3 +434,89 @@
     padding: 10px 12px !important;
   }
 }
+
+.importer-coverage-card {
+  flex-shrink: 0;
+}
+.importer-review-preservation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex-shrink: 0;
+  align-items: stretch;
+  gap: 8px;
+}
+@media (min-width: 760px) {
+  .importer-review-preservation:has(> .importer-review-note-control):has(
+      > .importer-coverage-card
+    ) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.importer-coverage-filter {
+  width: auto;
+  max-width: 100%;
+}
+.importer-coverage-details {
+  max-height: min(19rem, 38vh);
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.importer-coverage-details:focus-visible {
+  outline: 2px solid var(--primary-50);
+  outline-offset: -2px;
+}
+
+@media (min-width: 760px) {
+  .importer-flow-scroll.is-asset-review:has(.importer-coverage-card) {
+    overflow-y: auto;
+  }
+  .asset-review-surface:has(.importer-coverage-card) .asset-review-columns {
+    min-height: 12rem;
+  }
+  .asset-review-surface:has(.importer-coverage-card) .asset-review-queue {
+    min-height: 76px;
+  }
+}
+
+.importer-coverage-caption,
+.importer-review-preservation label {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.importer-review-preservation .importer-review-note-control select {
+  min-height: 36px !important;
+  padding-block: 4px !important;
+}
+.asset-review-surface:has(.importer-review-preservation) .asset-review-source-label {
+  flex-basis: 0;
+}
+.asset-review-surface:has(.importer-review-preservation) .asset-review-list-pane {
+  container-type: inline-size;
+}
+@container (max-width: 390px) {
+  .asset-review-exception-chips {
+    display: none !important;
+  }
+  .asset-review-exception-select {
+    display: block !important;
+    min-width: 0;
+  }
+}
+
+.asset-review-details-actions {
+  max-width: 55%;
+}
+.asset-review-details-badge {
+  cursor: pointer;
+}
+.asset-review-details-badge:focus-visible,
+.asset-review-details-actions [role='button']:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.asset-review-details-content,
+[role='dialog']:has(.asset-review-details-content) .mw-panel-header {
+  overflow-wrap: anywhere;
+}

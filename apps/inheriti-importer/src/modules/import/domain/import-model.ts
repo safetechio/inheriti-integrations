@@ -1,3 +1,5 @@
+import type { ImportDiagnostic } from './import-diagnostic';
+
 /**
  * The normalized source model every parser adapter produces. The mapping
  * workspace only ever sees this shape — never a KeePass/Kubernetes/etc.
@@ -46,6 +48,7 @@ export interface ImportedSource {
   fileName: string;
   importedAt: string;
   warnings: string[];
+  diagnostics?: ImportDiagnostic[];
 }
 
 export interface ImportedNode {

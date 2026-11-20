@@ -2,6 +2,7 @@ import {
   cloneEntry,
   createEmptyEntry,
   entriesEqual,
+  escapeSourceIdPart,
   type ImportedVault,
   type ImportSourceRecord,
   type ParseResult,
@@ -76,8 +77,13 @@ export function vaultReducer(state: VaultState, action: VaultAction): VaultState
           source.id === action.vault.id
             ? {
                 ...source,
-                status: action.warnings.length ? 'warning' : 'imported',
+                status:
+                  action.warnings.length ||
+                  action.vault.diagnostics?.some(({ kind }) => kind !== 'transformed')
+                    ? 'warning'
+                    : 'imported',
                 warnings: [...action.warnings],
+                diagnostics: action.vault.diagnostics,
                 entries: action.entries.length,
                 detail: undefined,
                 vaultId: action.vault.id,
@@ -182,13 +188,25 @@ export function vaultReducer(state: VaultState, action: VaultAction): VaultState
 }
 
 export function entriesFromParse(result: ParseResult, sourceId: string): VaultEntry[] {
-  return result.entries.map((entry) =>
-    createEmptyEntry({
-      ...entry,
-      id: result.kind === 'onepassword' ? `${sourceId}:${entry.id}` : entry.id,
-      sourceId,
-    }),
+  const prefix = escapeSourceIdPart(sourceId);
+  const reserved = new Set(
+    result.entries.map((entry) => `${prefix}:${escapeSourceIdPart(entry.id)}`),
   );
+  const used = new Set<string>();
+  return result.entries.map((entry) => {
+    const base = `${prefix}:${escapeSourceIdPart(entry.id)}`;
+    let id = base;
+    for (let occurrence = 2; used.has(id); occurrence++) {
+      const candidate = `${base}~${occurrence}`;
+      if (!reserved.has(candidate)) id = candidate;
+    }
+    used.add(id);
+    return createEmptyEntry({
+      ...entry,
+      id,
+      sourceId,
+    });
+  });
 }
 
 export function isDirty(entry: StoredEntry): boolean {

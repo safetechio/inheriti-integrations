@@ -1,7 +1,11 @@
+import { ImportCoverage } from '../../../AssetReviewQueue/components/ImportCoverage';
 import { AssetReviewQueue } from '../../../AssetReviewQueue';
 import { FinalStagingChecklist, type ChecklistItem } from '../../../FinalStagingChecklist';
 import { PlanGroupingSurface, type PlanDraft } from '../../../PlanGroupingSurface';
-import type { FolderWorkspaceProps, PlanGroupingSurfaceProps } from '../../../PlanGroupingSurface/types';
+import type {
+  FolderWorkspaceProps,
+  PlanGroupingSurfaceProps,
+} from '../../../PlanGroupingSurface/types';
 import { SourceImportStatus } from '../../../SourceImportStatus';
 import { StagingBatchStatus, type StagingBatchStatusProps } from '../../../StagingBatchStatus';
 import { Button, Stack } from '@main-components';
@@ -86,6 +90,7 @@ export function StageContent({
         resolveSourceValue={flow.resolveSourceValue}
         onMapField={flow.mapField}
         onEditPlainText={flow.editPlainText}
+        preservation={flow.preservation}
       />
     );
   if (stage === 'plans')
@@ -138,8 +143,8 @@ export function StageContent({
         ...item,
         complete: readiness.assets,
         detail: readiness.assets
-          ? 'Every Asset is accepted or intentionally excluded.'
-          : 'Accept or exclude every detected Asset.',
+          ? 'Asset decisions and source field coverage are complete.'
+          : 'Resolve pending asset decisions, fields, and notes destinations.',
         fixLabel: 'Review Assets',
         onFix: () => flow.goTo('assets'),
       };
@@ -202,16 +207,21 @@ export function StageContent({
           flow.stagingState === 'encrypting'
             ? 'Encrypting data & transmitting to Inheriti® Business for staging.'
             : encryptionReady
-              ? 'Every field was encrypted locally with the Organization Key.'
-              : keyReady
-                ? 'Locally encrypt all data prior to transmission to Inheriti® Business.'
-                : 'Locally encrypt all data prior to transmission to Inheriti® Business.',
+              ? 'Protected fields were encrypted locally with the Organization Key.'
+              : 'Encrypt protected fields locally before sending the draft plans to Inheriti® Business.',
       };
     return item;
   });
 
   return (
     <Stack gap="m">
+      {flow.executionCoverage ? (
+        <ImportCoverage
+          coverage={flow.executionCoverage}
+          sourceNames={new Map(flow.files.map((file) => [file.id ?? file.name, file.name]))}
+          assetNames={new Map(flow.assets.map((asset) => [asset.id, asset.name]))}
+        />
+      ) : null}
       <FinalStagingChecklist
         state={flow.stagingState}
         items={items}

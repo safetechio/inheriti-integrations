@@ -9,6 +9,15 @@ import type { PlanBatchInput } from '../domain/plan-batch-input';
  */
 export interface BatchPreflightContext {
   organizationId: string | undefined;
+  preservationReady?: boolean;
+}
+
+export function assertImportPreservationReady(ready?: boolean): void {
+  if (ready === false) {
+    throw new Error(
+      'Resolve pending source fields and choose how to store imported notes before staging.',
+    );
+  }
 }
 
 /**
@@ -24,6 +33,7 @@ export function assertPlanBatchPreflight(
   if (!context.organizationId) {
     throw new Error('No organization is selected.');
   }
+  assertImportPreservationReady(context.preservationReady);
   const result = validatePlanForExecution(input.plan, session);
   if (!result.valid) {
     throw new Error(result.issues.map((issue) => issue.message).join(' '));

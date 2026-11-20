@@ -17,7 +17,9 @@ import {
   mappedFieldIds,
   assetMatchesSuggestion,
   sourceSuggestions,
+  originalSuggestionFor,
 } from './importer-workspace-suggestions';
+import { nativeNotes, noteForAsset, type PreservationChoices } from './importer-workspace-notes';
 import type { AssetTypeOverrides, MappingOverrides } from './importer-workspace-types';
 
 /** Include schema and materialisation errors in the review row. */
@@ -61,17 +63,22 @@ export function projectAssets(
   plainTextAssetIds: ReadonlySet<string>,
   typeOverrides: AssetTypeOverrides = {},
   mappingOverrides: MappingOverrides = {},
+  choices: PreservationChoices = {},
 ): ReviewAsset[] {
   const originals = sourceSuggestions(session);
+  const assignedIds = new Set(
+    listPlanDrafts(workspace).flatMap((plan) => plan.assets.map((asset) => asset.id)),
+  );
   const companionNodes = new Set(
     suggestions
-      .filter((suggestion) => suggestion.variant === 'additional-fields')
+      .filter(
+        (suggestion) =>
+          suggestion.variant === 'additional-fields' && assignedIds.has(statusKey(suggestion)),
+      )
       .map((suggestion) => suggestion.fromNodeId),
   );
   return suggestions.map((suggestion): ReviewAsset => {
-    const original = originals.find(
-      (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
-    );
+    const original = originalSuggestionFor(session, originals, suggestion);
     const originalId = original ? statusKey(original) : undefined;
     const id = statusKey(suggestion);
     const node = session.nodesById[suggestion.fromNodeId];
@@ -79,16 +86,14 @@ export function projectAssets(
       session.sources.find((source) => source.id === node?.sourceId)?.fileName ?? 'Imported source';
     const folderPath = node?.path ?? [];
     const fields = suggestionFields(session, suggestion);
+    const reservedNote = nativeNotes(session, suggestion.fromNodeId);
     const mappedIds = mappedFieldIds(suggestion);
     const mapped = fields.filter((field) => mappedIds.has(field.id)).map((field) => field.name);
-    const unmapped =
-      suggestion.variant === 'additional-fields' &&
-      suggestions.some(
-        (candidate) =>
-          candidate.fromNodeId === suggestion.fromNodeId && candidate.type !== 'PLAIN-TEXT',
-      )
-        ? []
-        : fields.filter((field) => !mappedIds.has(field.id)).map((field) => field.name);
+    const omitted = fields.filter(
+      (field) =>
+        !field.value.isEmpty && !mappedIds.has(field.id) && !choices.ignored?.has(field.id),
+    );
+    const unmappedFields = suggestion.variant ? [] : omitted;
     const validationErrors = suggestionValidationErrors(session, suggestion);
     const projectedStatus = reviewStatus(session, suggestion, workspace, decisions);
     const status =
@@ -100,11 +105,17 @@ export function projectAssets(
       .filter((field) => field.source.startsWith('secret.') || field.source === 'meta.notes')
       .map((field) => {
         const binding = suggestion.fieldBindings[field.source];
-        const candidates = fields.map((candidate) => ({
-          id: candidate.id,
-          name: candidate.name,
-          length: candidate.value.length,
-        }));
+        const candidates = fields
+          .filter(
+            (candidate) =>
+              !choices.ignored?.has(candidate.id) &&
+              (field.source !== 'meta.notes' || candidate.id !== reservedNote?.id),
+          )
+          .map((candidate) => ({
+            id: candidate.id,
+            name: candidate.name,
+            length: candidate.value.length,
+          }));
         return {
           key: field.source,
           label: getAssetFieldDisplayName(field.source),
@@ -135,16 +146,23 @@ export function projectAssets(
             }`,
       rationale: suggestion.rationale,
       mapped,
-      unmapped,
+      unmapped: unmappedFields.map((field) => field.name),
+      unmappedSourceFieldIds: unmappedFields.map((field) => field.id),
+      note: noteForAsset(session, suggestion, choices),
       source: sourceFileName,
       sourceId: node?.sourceId,
+      sourceNodeId: suggestion.fromNodeId,
       sourceFileName,
       folderPath,
-      alternatives: getCorePlanAssetTypes().filter((type) => type !== suggestion.type),
+      alternatives:
+        suggestion.variant === 'rescued-fields'
+          ? []
+          : getCorePlanAssetTypes().filter((type) => type !== suggestion.type),
       previewFields: mapped,
       schemaFields,
       batchMappingSupported:
         suggestion.type !== 'PLAIN-TEXT' &&
+        !reservedNote &&
         !companionNodes.has(suggestion.fromNodeId) &&
         Object.values(suggestion.fieldBindings).every((binding) => binding.kind === 'source'),
       plainTextValue:

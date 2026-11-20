@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { SelectionHelpPopover } from '@modules/importer-preview/PlanGroupingSurface/components/SelectionHelpPopover';
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('selection help', () => {
   it('opens on hover and remains available while moving into the popover', () => {
@@ -11,7 +14,10 @@ describe('selection help', () => {
     const trigger = screen.getByRole('button', { name: 'Unassigned asset selection help' });
     fireEvent.mouseEnter(trigger);
     expect(screen.getByText('Asset controls')).toBeTruthy();
-    expect(screen.getByText(/Ctrl\/Cmd\+drag to select assets/)).toBeTruthy();
+    expect(screen.getByText(/Drag from a gap to select nearby assets/)).toBeTruthy();
+    expect(
+      screen.getByText(/Ctrl\/Cmd\+drag from an asset row adds to the selection/),
+    ).toBeTruthy();
     expect(screen.getAllByText(/^[1-4]$/)).toHaveLength(4);
     expect(screen.getAllByRole('heading')).toHaveLength(4);
     fireEvent.mouseLeave(trigger);

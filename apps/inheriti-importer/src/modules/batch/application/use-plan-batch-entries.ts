@@ -11,6 +11,7 @@ export function usePlanBatchEntries({
   currentMemberId,
   approvalMode,
   totalShares,
+  preservationRevision,
 }: {
   plans: PlanDraft[];
   session: ImportSession;
@@ -18,6 +19,7 @@ export function usePlanBatchEntries({
   currentMemberId: string | undefined;
   approvalMode: Parameters<typeof buildPlanBatchInput>[0]['approvalModeFallback'];
   totalShares: number;
+  preservationRevision?: symbol;
 }) {
   return useMemo<PlanBatchEntry[]>(
     () =>
@@ -30,8 +32,17 @@ export function usePlanBatchEntries({
           creatorMemberId: currentMemberId,
           approvalModeFallback: approvalMode,
           totalShares,
+          preservationRevision,
         }),
       })),
-    [plans, session, organizationId, currentMemberId, approvalMode, totalShares],
+    [
+      plans,
+      session,
+      organizationId,
+      currentMemberId,
+      approvalMode,
+      totalShares,
+      preservationRevision,
+    ],
   );
 }

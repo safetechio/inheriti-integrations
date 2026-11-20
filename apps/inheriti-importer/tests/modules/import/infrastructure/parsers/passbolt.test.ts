@@ -71,4 +71,50 @@ describe('parsePassbolt', () => {
     ]);
     expect(result.warnings).toHaveLength(1);
   });
+  it('preserves exact nonempty text, falsy primitives, and JSON while retaining duplicate labels', () => {
+    const result = parsePassbolt(
+      buffer(
+        JSON.stringify([
+          {
+            name: 'Resource',
+            username: '  name  ',
+            secret: {
+              password: '  secret  ',
+              description: '   ',
+              flag: false,
+              structure: ['x', null],
+            },
+            'secret.description': '  second   ',
+            zero: 0,
+            attrs: { property: ['a', false] },
+          },
+        ]),
+      ),
+      'passbolt.json',
+    );
+    expect(result.entries[0]).toMatchObject({
+      username: '  name  ',
+      password: '  secret  ',
+      extraFields: [
+        { key: 'secret.description', value: '  second   ' },
+        { key: 'zero', value: '0' },
+        { key: 'attrs', value: '{"property":["a",false]}' },
+        { key: 'secret.description', value: '   ' },
+        { key: 'secret.flag', value: 'false' },
+        { key: 'secret.structure', value: '["x",null]' },
+      ],
+    });
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ kind: 'transformed', count: 4, entryId: result.entries[0].id }),
+    ]);
+  });
+
+  it('rejects unrelated CSV headers and generic JSON records', () => {
+    expect(() => parsePassbolt(buffer('Name,Quantity\nGloves,2'), 'stock.csv')).toThrow(
+      'Unsupported CSV headers',
+    );
+    expect(() => parsePassbolt(buffer('[{"name":"Gloves","quantity":2}]'), 'stock.json')).toThrow(
+      'No Passbolt resources',
+    );
+  });
 });

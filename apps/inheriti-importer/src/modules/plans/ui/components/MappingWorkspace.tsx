@@ -14,7 +14,12 @@ import {
 import Button from '@modules/_shared/ui/components/Base/Button';
 import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
 import { openVaultFiles } from '@shared/infrastructure/files';
-import type { ImportedVault, VaultEntry } from '@modules/import/domain/vault';
+import {
+  extraFieldIds,
+  sourceFieldId,
+  type ImportedVault,
+  type VaultEntry,
+} from '@modules/import/domain/vault';
 import type { StoredEntry } from '@modules/import/infrastructure/stores/vault-store';
 import type { PlanDraft } from '@modules/plans/domain/workspace-model';
 import { PlansWorkspace } from './PlansWorkspace';
@@ -576,29 +581,35 @@ function groupEntries(entries: StoredEntry[]): Array<{ name: string; entries: St
 }
 
 function sourceFields(entry: VaultEntry): SourceField[] {
+  const extraIds = extraFieldIds(entry);
   return [
     {
-      id: `${entry.id}:username`,
+      id: sourceFieldId(entry.id, 'username'),
       assetFieldSource: 'meta.username',
       label: 'Username',
       value: entry.username,
     },
     {
-      id: `${entry.id}:password`,
+      id: sourceFieldId(entry.id, 'password'),
       assetFieldSource: 'secret.password',
       label: 'Password',
       value: entry.password,
       sensitive: true,
     },
-    { id: `${entry.id}:url`, assetFieldSource: 'meta.url', label: 'URL', value: entry.url },
     {
-      id: `${entry.id}:notes`,
+      id: sourceFieldId(entry.id, 'url'),
+      assetFieldSource: 'meta.url',
+      label: 'URL',
+      value: entry.url,
+    },
+    {
+      id: sourceFieldId(entry.id, 'notes'),
       assetFieldSource: 'secret.text',
       label: 'Notes',
       value: entry.notes,
     },
-    ...entry.extraFields.map((field) => ({
-      id: `${entry.id}:extra:${field.key}`,
+    ...entry.extraFields.map((field, index) => ({
+      id: extraIds[index],
       assetFieldSource: `meta.${field.key}`,
       label: field.key,
       value: field.value,

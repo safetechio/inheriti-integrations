@@ -71,6 +71,16 @@ describe('assertPlanBatchPreflight', () => {
     ).not.toThrow();
   });
 
+  it('rejects an otherwise valid plan with unresolved source coverage', () => {
+    expect(() =>
+      assertPlanBatchPreflight(
+        inputFor(draftWithAsset()),
+        session(),
+        baseContext({ preservationReady: false }),
+      ),
+    ).toThrow(/pending source fields/);
+  });
+
   it('rejects when no organization is selected', () => {
     expect(() =>
       assertPlanBatchPreflight(

@@ -223,9 +223,11 @@ function mountController(props: {
   session: ImportSession;
   onSuccess: () => void;
   telemetry?: ImportTelemetrySink;
+  preservationRevision?: symbol;
 }) {
-  const { result } = renderHook(() => usePlanBatchController(props));
+  const { result, rerender } = renderHook(usePlanBatchController, { initialProps: props });
   return {
+    rerender,
     get current(): PlanBatchControllerState {
       return result.current;
     },
@@ -588,6 +590,81 @@ describe('usePlanBatchController', () => {
 
     expect(controller.current.result.complete).toHaveLength(2);
     expect(apiRequest.mock.calls.filter(([request]) => request.method === 'POST')).toHaveLength(1);
+  });
+
+  it('credits an unchanged staged Plan after editing a failed Plan and adding an unrelated source', async () => {
+    stubBaseHooks();
+    stubMasterKeySessionAutoDeliver();
+    const staged = stubImporterToolApi({ failStage: (_planId, index) => index === 2 });
+    const onSuccess = vi.fn();
+    const importSession = session();
+    const source = {
+      id: 'source-a',
+      kind: 'dotenv',
+      name: 'A',
+      fileName: 'a.env',
+      importedAt: '',
+      warnings: [],
+    };
+    importSession.sources = [source];
+    importSession.fieldsById['field-a'] = {
+      id: 'field-a',
+      sourceId: 'source-a',
+      parentNodeId: 'entry-a',
+      sourcePath: ['entry-a', 'token'],
+      name: 'token',
+      metadata: {},
+      value: new SensitiveValue('SYNTHETIC_BOUND_VALUE'),
+    };
+    const planA = validPlan('plan-a', 'Plan A');
+    planA.assets[0].fieldBindings['secret.text'] = { kind: 'source', sourceFieldId: 'field-a' };
+    const planB = validPlan('plan-b', 'Plan B');
+    const controller = mountController({
+      plans: [planA, planB],
+      session: importSession,
+      preservationRevision: Symbol(),
+      onSuccess,
+    });
+    await executeController(controller);
+    await waitFor(() => expect(controller.current.running).toBe(false));
+    expect(controller.current.result.complete.map((item) => item.planId)).toEqual(['plan-a']);
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    stubImporterToolApi({ staged });
+    apiRequest.mockClear();
+    controller.rerender({
+      plans: [{ ...planA }, { ...planB, name: 'Updated Plan B' }],
+      session: {
+        ...importSession,
+        sources: [source, { ...source, id: 'source-other', name: 'Other', fileName: 'other.env' }],
+        fieldsById: {
+          'field-a': {
+            ...importSession.fieldsById['field-a'],
+            value: new SensitiveValue('SYNTHETIC_BOUND_VALUE'),
+          },
+          'field-other': {
+            id: 'field-other',
+            sourceId: 'source-other',
+            parentNodeId: 'entry-other',
+            sourcePath: ['entry-other', 'token'],
+            name: 'token',
+            metadata: {},
+            value: new SensitiveValue('SYNTHETIC_UNRELATED'),
+          },
+        },
+      },
+      preservationRevision: Symbol(),
+      onSuccess,
+    });
+    await executeController(controller);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+    expect(controller.current.result.complete.map((item) => item.planId)).toEqual([
+      'plan-a',
+      'plan-b',
+    ]);
+    const posts = apiRequest.mock.calls.filter(([request]) => request.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(posts[0][0].body).toMatchObject({ planDraft: { name: 'Updated Plan B' } });
   });
 
   it('records only non-sensitive telemetry (no plan name, asset, or key content)', async () => {

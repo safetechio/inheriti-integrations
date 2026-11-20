@@ -38,6 +38,7 @@ it('does not retry a folder already moved after partial failure', async () => {
   await waitFor(() => expect((screen.getByText('Move folders').closest('button') as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByText('Move folders'));
   await screen.findByText(/1 of 2 folders moved/);
+  await waitFor(() => expect((screen.getByText('Move folders').closest('button') as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(await screen.findByText('Move folders'));
   await waitFor(() => expect(move).toHaveBeenCalledTimes(3));
   expect(move.mock.calls.map((call) => call[0].id)).toEqual(['root', 'sibling', 'sibling']);

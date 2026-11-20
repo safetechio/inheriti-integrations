@@ -80,6 +80,45 @@ function buffer(text: string): ArrayBuffer {
 }
 
 describe('FieldAliasSuggestionStrategy', () => {
+  it('protects fields discarded by schema filtering and keeps existing composite sources', () => {
+    const session = sessionWith('Composite', { first: 'one', second: 'two', rejected: 'three' });
+    const composite = {
+      kind: 'sources' as const,
+      sources: [
+        { name: 'first', sourceFieldId: 'f0' },
+        { name: 'second', sourceFieldId: 'f1' },
+      ],
+    };
+    const assets = suggestWithFallback(
+      [
+        {
+          id: 'synthetic',
+          suggest: () => ({
+            strategyId: 'synthetic',
+            assets: [
+              {
+                type: 'PLAIN-TEXT',
+                name: 'Composite',
+                fromNodeId: 'e1',
+                confidence: 1,
+                rationale: '',
+                fieldBindings: {
+                  'secret.text': composite,
+                  'secret.unknown': { kind: 'source', sourceFieldId: 'f2' },
+                },
+              },
+            ],
+          }),
+        },
+      ],
+      { session, nodeIds: ['g1'], knownAssetTypes: KNOWN },
+    );
+    expect(assets.map((asset) => asset.fieldBindings)).toEqual([
+      { 'secret.text': composite },
+      { 'secret.text': { kind: 'source', sourceFieldId: 'f2' } },
+    ]);
+  });
+
   it('maps a 1Password credit card and preserves its unmatched fields', () => {
     const session = sessionWith('Travel card', {
       'extra:creditCardNumber': '4111111111111111',
@@ -117,7 +156,7 @@ describe('FieldAliasSuggestionStrategy', () => {
     expect(JSON.stringify(suggestions)).not.toContain('Call the issuer');
   });
 
-  it('maps dedicated 1Password, KeePass, and Passbolt notes to readable metadata', () => {
+  it('protects dedicated 1Password, KeePass, and Passbolt notes by default', () => {
     for (const [kind, fields, expectedType] of [
       [
         'onepassword',
@@ -144,15 +183,15 @@ describe('FieldAliasSuggestionStrategy', () => {
         knownAssetTypes: KNOWN,
       });
       expect(suggestion?.type).toBe(expectedType);
-      expect(suggestion?.fieldBindings['meta.notes']).toEqual({
+      expect(suggestion?.fieldBindings['meta.notes']).toBeUndefined();
+      expect(companion?.fieldBindings['secret.text']).toEqual({
         kind: 'source',
         sourceFieldId: `f${Object.keys(fields).length - 1}`,
       });
-      expect(companion).toBeUndefined();
       expect(JSON.stringify([suggestion, companion])).not.toContain('Private instructions');
-      const draft = suggestedAssetToDraft(suggestion!, 'asset-1');
-      expect(draft.fieldBindings['meta.notes']).toEqual(suggestion?.fieldBindings['meta.notes']);
-      expect(materialiseAsset(draft, session).asset.meta.notes).toBe('Private instructions');
+      expect(
+        materialiseAsset(suggestedAssetToDraft(companion!, 'asset-1'), session).asset.secret.text,
+      ).toBe('Private instructions');
       const withoutNotes = sessionWith(
         'Service',
         Object.fromEntries(Object.entries(fields).filter(([name]) => name !== 'notes')),
@@ -190,13 +229,11 @@ describe('FieldAliasSuggestionStrategy', () => {
       knownAssetTypes: KNOWN,
     });
     expect(suggestions.map((asset) => asset.type)).toEqual(['USER-PSWD', 'PLAIN-TEXT']);
-    expect(suggestions[0]?.fieldBindings['meta.notes']).toEqual({
-      kind: 'source',
-      sourceFieldId: 'f1',
-    });
+    expect(suggestions[0]?.fieldBindings['meta.notes']).toBeUndefined();
     expect(suggestions[1]?.fieldBindings['secret.text']).toMatchObject({
       kind: 'sources',
       sources: [
+        { sourceFieldId: 'f1', name: 'notes' },
         { sourceFieldId: 'f2', name: 'notes' },
         { sourceFieldId: 'f3', name: 'note' },
         { sourceFieldId: 'f4', name: 'SECRET_NOTES' },
@@ -309,17 +346,24 @@ describe('FieldAliasSuggestionStrategy', () => {
     expect(suggestion?.confidence).toBeGreaterThan(0.5);
   });
 
-  it.each(['IP source', 'IP/source'])('maps an imported %s value separately from the website', (label) => {
-    const [suggestion] = strategy.suggest({
-      session: sessionWith('Server login', {
-        username: 'admin', password: 'secret', website: 'example.com', [label]: '10.0.0.1 / internal',
-      }),
-      nodeIds: ['g1'], knownAssetTypes: KNOWN,
-    }).assets;
-    expect(Object.keys(suggestion!.fieldBindings)).toEqual(expect.arrayContaining([
-      'secret.appOrWebsite', 'secret.ipSource',
-    ]));
-  });
+  it.each(['IP source', 'IP/source'])(
+    'maps an imported %s value separately from the website',
+    (label) => {
+      const [suggestion] = strategy.suggest({
+        session: sessionWith('Server login', {
+          username: 'admin',
+          password: 'secret',
+          website: 'example.com',
+          [label]: '10.0.0.1 / internal',
+        }),
+        nodeIds: ['g1'],
+        knownAssetTypes: KNOWN,
+      }).assets;
+      expect(Object.keys(suggestion!.fieldBindings)).toEqual(
+        expect.arrayContaining(['secret.appOrWebsite', 'secret.ipSource']),
+      );
+    },
+  );
 
   it('maps an email-shaped username to email', () => {
     const session = sessionWith('Mail', { username: 'ada@example.com', password: 'secret' });
@@ -576,7 +620,7 @@ describe('FieldAliasSuggestionStrategy', () => {
     });
   });
 
-  it('separates native notes from fallback secret text when other fields exist', () => {
+  it('keeps native notes with fallback secret text before review', () => {
     for (const kind of ['onepassword', 'keepass', 'passbolt']) {
       const session = sessionWith('Unmatched key', {
         notes: 'Handle with care',
@@ -598,15 +642,22 @@ describe('FieldAliasSuggestionStrategy', () => {
         knownAssetTypes: KNOWN,
       });
       expect(fallback?.fieldBindings).toEqual({
-        'secret.text': { kind: 'source', sourceFieldId: 'f1' },
-        'meta.notes': { kind: 'source', sourceFieldId: 'f0' },
+        'secret.text': {
+          kind: 'sources',
+          sources: [
+            { sourceFieldId: 'f0', name: 'notes' },
+            { sourceFieldId: 'f1', name: 'private key' },
+          ],
+        },
       });
       const materialised = materialiseAsset(
         suggestedAssetToDraft(fallback!, 'asset-1'),
         session,
       ).asset;
-      expect(materialised.secret.text).toBe('private material');
-      expect(materialised.meta.notes).toBe('Handle with care');
+      expect(materialised.secret.text).toBe(
+        'notes: Handle with care\nprivate key: private material',
+      );
+      expect(materialised.meta.notes).toBeUndefined();
       expect(JSON.stringify(fallback)).not.toContain('private material');
     }
   });
@@ -641,7 +692,7 @@ describe('FieldAliasSuggestionStrategy', () => {
     }
   });
 
-  it('keeps native notes separate when converting a structured asset to Plain Text', () => {
+  it('preserves an explicitly mapped note when converting a structured asset to Plain Text', () => {
     const session = sessionWith('Service', {
       password: 'secret',
       notes: 'Instructions',
@@ -666,11 +717,10 @@ describe('FieldAliasSuggestionStrategy', () => {
     const converted = convertToPlainText(session, structured!, true);
     expect(converted.fieldBindings).toEqual({
       'secret.text': { kind: 'source', sourceFieldId: 'f0' },
-      'meta.notes': { kind: 'source', sourceFieldId: 'f1' },
     });
     expect(
-      materialiseAsset(suggestedAssetToDraft(converted, 'asset-1'), session).asset,
-    ).toMatchObject({ secret: { text: 'secret' }, meta: { notes: 'Instructions' } });
+      materialiseAsset(suggestedAssetToDraft(converted, 'asset-1'), session).asset.meta.notes,
+    ).toBeUndefined();
     const remapped = {
       ...structured!,
       fieldBindings: {

@@ -5,30 +5,33 @@ import {
   vaultReducer,
 } from '@modules/import/infrastructure/stores/vault-store';
 
-it('scopes 1Password item IDs to each imported source', () => {
-  const result = {
-    kind: 'onepassword' as const,
-    name: 'Archive',
-    warnings: [],
-    entries: [
-      {
-        id: '0:0:item',
-        title: 'Item',
-        username: '',
-        password: '',
-        url: '',
-        notes: '',
-        group: '',
-        tags: [],
-        extraFields: [],
-        category: '',
-        team: '',
-      },
-    ],
-  };
-  expect(entriesFromParse(result, 'source-1')[0].id).toBe('source-1:0:0:item');
-  expect(entriesFromParse(result, 'source-2')[0].id).toBe('source-2:0:0:item');
-});
+it.each(['onepassword', 'passbolt', 'keepass', 'dotenv', 'kubernetes', 'vault', 'cloud'] as const)(
+  'scopes %s item IDs to each imported source',
+  (kind) => {
+    const result = {
+      kind,
+      name: 'Archive',
+      warnings: [],
+      entries: [
+        {
+          id: '0:0:item',
+          title: 'Item',
+          username: '',
+          password: '',
+          url: '',
+          notes: '',
+          group: '',
+          tags: [],
+          extraFields: [],
+          category: '',
+          team: '',
+        },
+      ],
+    };
+    expect(entriesFromParse(result, 'source-1')[0].id).toBe('source-1:0%3A0%3Aitem');
+    expect(entriesFromParse(result, 'source-2')[0].id).toBe('source-2:0%3A0%3Aitem');
+  },
+);
 
 describe('vault reducer cleanup', () => {
   it('purges imported vaults and entries after a successful import', () => {

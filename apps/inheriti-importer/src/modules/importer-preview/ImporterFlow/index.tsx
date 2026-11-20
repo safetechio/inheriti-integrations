@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, ProgressBar, Text } from '@main-components';
+import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
+import type { ImportReviewControls } from '../AssetReviewQueue/import-review-controls';
 import type { ReviewAsset } from '../AssetReviewQueue';
 import type { ChecklistItem, StagingState } from '../FinalStagingChecklist';
 import type { GroupingAsset, PlanDraft } from '../PlanGroupingSurface';
@@ -27,6 +29,8 @@ export type ImporterFlowProps = {
   headerActions?: ReactNode;
   files: ImportFile[];
   assets: ReviewAsset[];
+  preservation?: ImportReviewControls;
+  executionCoverage?: SourceCoverage;
   unassigned: GroupingAsset[];
   plans: PlanDraft[];
   checklist: ChecklistItem[];
@@ -48,6 +52,8 @@ export function ImporterFlow({
   headerActions,
   files,
   assets,
+  preservation,
+  executionCoverage,
   unassigned,
   plans,
   checklist,
@@ -69,6 +75,8 @@ export function ImporterFlow({
     {
       files,
       assets,
+      preservation,
+      executionCoverage,
       unassigned,
       plans,
       initialStage,
@@ -111,10 +119,26 @@ export function ImporterFlow({
     Number(
       flow.files.some((file) => file.status === 'unlock-required' || file.status === 'unlocking'),
     ) +
-    Number(flow.files.some((file) => file.status === 'failed' || file.status === 'retrying'));
+    Number(flow.files.some((file) => file.status === 'failed' || file.status === 'retrying')) +
+    Number(
+      flow.files.some(
+        (file) =>
+          file.status === 'warning' && file.diagnostics?.length && !file.warningsAcknowledged,
+      ),
+    );
   const planIssueGroups = Number(flow.unassigned.length > 0) + Number(!flow.readiness.plans);
-  const assetIssueGroups = Number(!flow.assets.length || undecided > 0);
-  const blockerCount = sourceIssueGroups + assetIssueGroups + planIssueGroups;
+  const assetIssueGroups = Number(
+    !flow.assets.length || undecided > 0 || preservation?.coverage.ready === false,
+  );
+  const blockerCount =
+    sourceIssueGroups +
+    assetIssueGroups +
+    planIssueGroups +
+    Number(
+      stage === 'staging' &&
+        executionCoverage?.ready === false &&
+        preservation?.coverage.ready !== false,
+    );
   const readiness: ImporterFlowReadiness = {
     sources: flow.readiness.sources,
     assets: flow.readiness.assets,
@@ -247,7 +271,9 @@ export function ImporterFlow({
               onDeletePlans={(selected) => {
                 flow.deletePlans(selected);
                 if (selected.some((plan) => plan.id === selectedPlanId))
-                  setSelectedPlanId(flow.plans.find((plan) => !selected.some((item) => item.id === plan.id))?.id);
+                  setSelectedPlanId(
+                    flow.plans.find((plan) => !selected.some((item) => item.id === plan.id))?.id,
+                  );
               }}
               showKeyboardHints={showKeyboardHints}
               onAddFiles={flow.onAddFiles}
@@ -271,7 +297,9 @@ export function ImporterFlow({
             summary={
               stage === 'plans'
                 ? `${flow.plans.length} draft ${flow.plans.length === 1 ? 'plan' : 'plans'} · ${flow.unassigned.length} ${flow.unassigned.length === 1 ? 'asset' : 'assets'} still unassigned`
-                : undefined
+                : stage === 'assets' && preservation?.coverage.ready === false
+                  ? 'Resolve pending fields and notes destinations.'
+                  : undefined
             }
           />
         </Box>
@@ -330,7 +358,7 @@ function getStageDescription({
   keyLoaded: boolean;
 }) {
   if (stage === 'sources' && sourceIssueGroups)
-    return 'Unlock, retry, remove, or add a source before continuing.';
+    return 'Review source warnings, unlock or retry affected files, or remove them before continuing.';
   if (stage === 'assets') return 'Accept or exclude every detected Asset before continuing.';
   if (stage === 'plans' && planIssueGroups)
     return 'Create valid Plans and assign every accepted Asset before continuing.';

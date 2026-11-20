@@ -31,7 +31,10 @@ export function projectImportSources(state: VaultState): ImportFile[] {
       name: source.file.name,
       format: vault ? formatLabels[vault.kind] : pendingFormat(source),
       entries: source.entries,
-      warnings: source.warnings.length,
+      warnings:
+        source.warnings.length +
+        (source.diagnostics?.filter(({ kind }) => kind !== 'transformed').length ?? 0),
+      ...(source.diagnostics?.length ? { diagnostics: source.diagnostics } : {}),
       status: source.status,
       detail: source.detail,
       warningMessages: source.warnings.slice(),

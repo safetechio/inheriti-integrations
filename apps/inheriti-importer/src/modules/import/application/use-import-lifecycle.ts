@@ -1,3 +1,4 @@
+import { resolveEntryDiagnostics } from '@modules/import/domain/import-diagnostic';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { parseVaultFile } from '@modules/import/infrastructure/parsers';
 import { VaultUnlockError, type OpenedVaultFile } from '@modules/import/domain/vault';
@@ -60,6 +61,12 @@ export function useImportLifecycle() {
         const result = await parseVaultFile(file.data, file.name, secrets);
         if (generation.current !== expectedGeneration || removedSourceIds.current.has(sourceId))
           return null;
+        const entries = entriesFromParse(result, sourceId);
+        const diagnostics = resolveEntryDiagnostics(
+          result.diagnostics,
+          result.entries,
+          entries.map(({ id }) => id),
+        );
         dispatch({
           type: 'import',
           vault: {
@@ -69,13 +76,17 @@ export function useImportLifecycle() {
             fileName: file.name,
             importedAt: new Date().toISOString(),
             warnings: [...result.warnings],
+            diagnostics,
           },
-          entries: entriesFromParse(result, sourceId),
+          entries,
           warnings: [...result.warnings],
         });
         return {
           sourceId,
-          status: result.warnings.length ? ('warning' as const) : ('imported' as const),
+          status:
+            result.warnings.length || diagnostics?.some(({ kind }) => kind !== 'transformed')
+              ? ('warning' as const)
+              : ('imported' as const),
         };
       } catch (caught) {
         if (generation.current !== expectedGeneration || removedSourceIds.current.has(sourceId))

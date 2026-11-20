@@ -12,6 +12,9 @@ import { useReviewSelection } from './hooks/use-review-selection';
 import { flattenReviewTree, indexReviewTree, type ReviewRow } from './review-tree';
 import { compatibleMappingUpdates } from './review-mapping';
 import { hasIncludedSchemaField, type AssetReviewQueueProps, type ReviewAsset } from './types';
+import { ImportCoverage } from './components/ImportCoverage';
+import { NotesDestination } from './components/NotesDestination';
+import type { ImportReviewControls } from './import-review-controls';
 import { AssetViewPicker } from '../AssetViewPicker';
 import './styles.css';
 
@@ -45,7 +48,8 @@ export function AssetReviewQueue({
   resolveSourceValue,
   onMapField,
   onEditPlainText,
-}: AssetReviewQueueProps) {
+  preservation,
+}: AssetReviewQueueProps & { preservation?: ImportReviewControls }) {
   const {
     source,
     setSource,
@@ -63,6 +67,20 @@ export function AssetReviewQueue({
     issues,
     exceptionCounts,
   } = useReviewList(assets, sourceFiles);
+  const noteSources =
+    preservation?.noteSources.filter((entry) => source === 'all' || entry.sourceId === source) ??
+    [];
+  const setSourceNoteDestination = preservation?.onSetSourceNoteDestination;
+  const noteCount = noteSources.reduce((count, entry) => count + entry.fieldCount, 0);
+  const noteDestination = noteSources.every(
+    (entry) => entry.destination === noteSources[0]?.destination,
+  )
+    ? (noteSources[0]?.destination ?? null)
+    : null;
+  const assetNames = useMemo(
+    () => new Map(assets.map((asset) => [asset.id, asset.name])),
+    [assets],
+  );
   const [view, setView] = useState<'list' | 'tree'>('list');
   const [page, setPage] = useState(0);
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
@@ -228,18 +246,18 @@ export function AssetReviewQueue({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const editing = event.target instanceof Element && Boolean(event.target.closest(editable));
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest('.importer-coverage-card, .importer-review-note-control, [role="dialog"]')
+      )
+        return;
+      const editing = Boolean(target?.closest(editable));
       if (event.key === 'Escape' && selection.selectedIds.length) {
         if (editing) selection.replace([]);
         else clearSelection();
       }
-      if (
-        editing ||
-        event.altKey ||
-        event.isComposing ||
-        event.repeat
-      )
-        return;
+      if (editing || event.altKey || event.isComposing || event.repeat) return;
       const key = event.key.toLowerCase();
       const command = event.ctrlKey || event.metaKey;
       if (key === 'a' && command) {
@@ -358,6 +376,29 @@ export function AssetReviewQueue({
           </Box>
         ) : null}
       </Box>
+      {preservation ? (
+        <Box className="importer-review-preservation">
+          {noteCount && setSourceNoteDestination ? (
+            <NotesDestination
+              key={source}
+              scope={source === 'all' ? 'All sources' : (noteSources[0]?.sourceName ?? 'Source')}
+              count={noteCount}
+              destination={noteDestination}
+              hasUnchosen={noteSources.some(({ destination }) => destination === null)}
+              onChange={(destination) =>
+                setSourceNoteDestination(source === 'all' ? null : source, destination)
+              }
+            />
+          ) : null}
+          <ImportCoverage
+            coverage={preservation.coverage}
+            sourceNames={sources}
+            assetNames={assetNames}
+            onPreserveFields={preservation.onPreserveFields}
+            onExcludeFields={preservation.onExcludeFields}
+          />
+        </Box>
+      ) : null}
       {batchAccepted !== null ? (
         <Box flexDirection="row" alignItems="center" gap="s" role="status">
           <Text>
@@ -576,6 +617,8 @@ export function AssetReviewQueue({
             resolveSourceValue={resolveSourceValue}
             onMapField={onMapField}
             onEditPlainText={onEditPlainText}
+            onSetNoteDestination={preservation?.onSetAssetNoteDestination}
+            coverage={preservation?.coverage}
           />
         </Box>
       </Box>

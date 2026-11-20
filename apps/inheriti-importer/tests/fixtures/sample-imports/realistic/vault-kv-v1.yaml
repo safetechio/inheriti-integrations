@@ -1,0 +1,930 @@
+---
+request_id: 00000000-0000-4000-8000-000000009001
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/dispatch/rotation-1
+data:
+  username: dispatch-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0001
+  url: https://dispatch.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 1
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009002
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/billing/rotation-2
+data:
+  username: billing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0002
+  url: https://billing.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 2
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009003
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/routing/rotation-3
+data:
+  username: routing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0003
+  url: https://routing.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 3
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009004
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/inventory/rotation-4
+data:
+  username: inventory-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0004
+  url: https://inventory.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 4
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009005
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/support/rotation-5
+data:
+  username: support-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0005
+  url: https://support.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 5
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009006
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/nightly-backup/rotation-6
+data:
+  username: nightly-backup-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0006
+  url: https://nightly-backup.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 6
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009007
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/dispatch/rotation-7
+data:
+  username: dispatch-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0007
+  url: https://dispatch.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 7
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009008
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/billing/rotation-8
+data:
+  username: billing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0008
+  url: https://billing.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 8
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009009
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/routing/rotation-9
+data:
+  username: routing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0009
+  url: https://routing.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 9
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009010
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/inventory/rotation-10
+data:
+  username: inventory-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0010
+  url: https://inventory.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 10
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009011
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/support/rotation-11
+data:
+  username: support-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0011
+  url: https://support.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 11
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009012
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/nightly-backup/rotation-12
+data:
+  username: nightly-backup-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0012
+  url: https://nightly-backup.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 12
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009013
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/dispatch/rotation-13
+data:
+  username: dispatch-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0013
+  url: https://dispatch.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 13
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009014
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/billing/rotation-14
+data:
+  username: billing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0014
+  url: https://billing.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 14
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009015
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/routing/rotation-15
+data:
+  username: routing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0015
+  url: https://routing.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 15
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009016
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/inventory/rotation-16
+data:
+  username: inventory-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0016
+  url: https://inventory.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 16
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009017
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/support/rotation-17
+data:
+  username: support-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0017
+  url: https://support.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 17
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009018
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/nightly-backup/rotation-18
+data:
+  username: nightly-backup-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0018
+  url: https://nightly-backup.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 18
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009019
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/dispatch/rotation-19
+data:
+  username: dispatch-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0019
+  url: https://dispatch.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 19
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009020
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/billing/rotation-20
+data:
+  username: billing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0020
+  url: https://billing.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 20
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009021
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/routing/rotation-21
+data:
+  username: routing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0021
+  url: https://routing.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 21
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009022
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/inventory/rotation-22
+data:
+  username: inventory-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0022
+  url: https://inventory.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 22
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009023
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/support/rotation-23
+data:
+  username: support-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0023
+  url: https://support.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 23
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009024
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/nightly-backup/rotation-24
+data:
+  username: nightly-backup-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0024
+  url: https://nightly-backup.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 24
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009025
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/dispatch/rotation-25
+data:
+  username: dispatch-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0025
+  url: https://dispatch.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 25
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009026
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/billing/rotation-26
+data:
+  username: billing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0026
+  url: https://billing.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 26
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009027
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/routing/rotation-27
+data:
+  username: routing-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0027
+  url: https://routing.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 27
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009028
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/inventory/rotation-28
+data:
+  username: inventory-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0028
+  url: https://inventory.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 28
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009029
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/support/rotation-29
+data:
+  username: support-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0029
+  url: https://support.example.invalid
+  region: fixture-east
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 29
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null
+---
+request_id: 00000000-0000-4000-8000-000000009030
+lease_id: ""
+renewable: false
+lease_duration: 0
+path: fixture/nightly-backup/rotation-30
+data:
+  username: nightly-backup-fixture-reader
+  password: SYNTHETIC-FIXTURE-VAULT-V1-0030
+  url: https://nightly-backup.example.invalid
+  region: fixture-west
+  enabled: false
+  retries: 0
+  alias: ""
+  credential hint 🔐: |
+    Rotación 30
+      保存位置
+  policy:
+    roles:
+      - fixture-viewer
+      - fixture-rotation
+    limits:
+      maxAttempts: 0
+      enabled: false
+  private_material_marker: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+wrap_info: null
+warnings: null
+auth: null

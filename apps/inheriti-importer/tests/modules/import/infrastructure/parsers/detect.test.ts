@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseVaultFile } from '@modules/import/infrastructure/parsers';
 import { detectVaultKind } from '@modules/import/infrastructure/parsers/utils/detect';
 import { zipSync, strToU8 } from 'fflate';
 import { VaultFormatError } from '@modules/import/domain/vault';
@@ -76,5 +77,32 @@ describe('detectVaultKind', () => {
     expect(() => detectVaultKind('broken.yaml', buffer('kind: Secret\ndata: [broken\n'))).toThrow(
       'Could not recognise',
     );
+  });
+  it('rejects disguised Excel archives and recognizes the 1Password CSV signature', async () => {
+    const workbook = zipSync({
+      '[Content_Types].xml': strToU8(''),
+      'xl/workbook.xml': strToU8(''),
+    });
+    expect(() =>
+      detectVaultKind(
+        'disguised.zip',
+        workbook.buffer.slice(workbook.byteOffset, workbook.byteOffset + workbook.byteLength),
+      ),
+    ).toThrow('Excel workbooks are unsupported');
+
+    const csv = buffer(
+      'Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\r\nLogin,https://example.invalid,ada,"  password  ",otp,0,false,work,"first\nsecond"',
+    );
+    const parsed = await parseVaultFile(csv, 'export.csv');
+    expect(parsed.kind).toBe('onepassword');
+    expect(parsed.entries[0]).toMatchObject({
+      password: '  password  ',
+      notes: 'first\nsecond',
+      extraFields: expect.arrayContaining([
+        { key: 'OTPAuth', value: 'otp' },
+        { key: 'Favorite', value: '0' },
+        { key: 'Archived', value: 'false' },
+      ]),
+    });
   });
 });

@@ -22,36 +22,29 @@ export function runSuggestionStrategies(
     .sort((a, b) => b.confidence - a.confidence);
 }
 
-const NATIVE_NOTES_SOURCE_KINDS = new Set(['onepassword', 'keepass', 'passbolt']);
+export function bindingSourceIds(binding: SuggestedFieldBinding): string[] {
+  if (binding.kind === 'source') return [binding.sourceFieldId];
+  if (binding.kind === 'sources') return binding.sources.map((source) => source.sourceFieldId);
+  return [];
+}
 
 export function allFieldsAsPlainText(
-  session: ImportSession,
+  _session: ImportSession,
   node: ImportedNode,
   fields: ImportedField[],
-  separateNativeNotes = true,
+  _separateNativeNotes = false,
 ): SuggestedAsset {
-  const nonEmpty = fields.filter((field) => !field.value.isEmpty);
-  const sourceKind = session.sources.find((source) => source.id === node.sourceId)?.kind;
-  const nativeNotes =
-    separateNativeNotes && NATIVE_NOTES_SOURCE_KINDS.has(sourceKind ?? '')
-      ? nonEmpty.find((field) => field.name === 'notes')
-      : undefined;
-  const textFields =
-    nativeNotes && nonEmpty.length > 1
-      ? nonEmpty.filter((field) => field.id !== nativeNotes.id)
-      : nonEmpty;
+  const textFields = fields.filter((field) => !field.value.isEmpty);
   const sources = textFields.map((field) => ({
     sourceFieldId: field.id,
     name: field.name.replace(/^extra:/i, ''),
   }));
   const textBinding =
-    sources.length === 1
+    sources.length === 1 && textFields[0].value.reveal().trim().length > 0
       ? { kind: 'source' as const, sourceFieldId: sources[0].sourceFieldId }
       : { kind: 'sources' as const, sources };
   const fieldBindings: Record<string, SuggestedFieldBinding> = {};
   if (sources.length) fieldBindings['secret.text'] = textBinding;
-  if (nativeNotes && nonEmpty.length > 1)
-    fieldBindings['meta.notes'] = { kind: 'source', sourceFieldId: nativeNotes.id };
   return {
     type: 'PLAIN-TEXT',
     name: node.name,
@@ -110,54 +103,32 @@ class FallbackSuggestionEngine {
 
   /** Keep unmatched notes in a protected asset beside the structured asset. */
   private suggestForNode(node: ImportedNode, candidate?: SuggestedAsset): SuggestedAsset[] {
-    const fields = fieldsOf(this.context.session, node);
-    if (fields.length === 0) return [];
-    const isOnePassword = this.isOnePassword(node);
-    if (!isOnePassword && fields.filter((field) => !field.value.isEmpty).length === 1)
+    const fields = fieldsOf(this.context.session, node).filter((field) => !field.value.isEmpty);
+    if (!fields.length) return [];
+    if (!candidate || fields.length === 1)
       return [allFieldsAsPlainText(this.context.session, node, fields)];
-    if (!candidate) return [allFieldsAsPlainText(this.context.session, node, fields)];
 
     const structured = schemaBoundSuggestion(candidate);
-    const leftover = this.uncoveredFields(fields, candidate);
-    if (leftover.length === 0 || (!isOnePassword && !this.hasNotes(leftover))) return [structured];
-    return [structured, this.additionalFields(node, leftover)];
+    delete structured.fieldBindings['meta.notes'];
+    const covered = new Set(Object.values(structured.fieldBindings).flatMap(bindingSourceIds));
+    const leftover = fields.filter((field) => !covered.has(field.id));
+    return leftover.length
+      ? [structured, additionalFieldsAsset(this.context.session, node, leftover)]
+      : [structured];
   }
+}
 
-  /** Canonical imported notes may contain secrets and must not become metadata. */
-  private hasNotes(fields: ImportedField[]): boolean {
-    return fields.some((field) => field.name === 'notes');
-  }
-
-  /** Identify the source format of this entry. */
-  private isOnePassword(node: ImportedNode): boolean {
-    return this.context.session.sources.some(
-      (source) => source.id === node.sourceId && source.kind === 'onepassword',
-    );
-  }
-
-  /** Find non-empty fields absent from direct source bindings. */
-  private uncoveredFields(fields: ImportedField[], candidate: SuggestedAsset): ImportedField[] {
-    const coveredIds = new Set(
-      Object.values(candidate.fieldBindings)
-        .filter(
-          (binding): binding is Extract<SuggestedFieldBinding, { kind: 'source' }> =>
-            binding.kind === 'source',
-        )
-        .map((binding) => binding.sourceFieldId),
-    );
-    return fields.filter((field) => !field.value.isEmpty && !coveredIds.has(field.id));
-  }
-
-  /** Give the companion asset a stable identity and review label. */
-  private additionalFields(node: ImportedNode, fields: ImportedField[]): SuggestedAsset {
-    const companion = allFieldsAsPlainText(this.context.session, node, fields, false);
-    return {
-      ...companion,
-      variant: 'additional-fields',
-      name: `${node.name} — additional fields`,
-      rationale: 'Additional imported fields are preserved as Plain Text for review.',
-    };
-  }
+export function additionalFieldsAsset(
+  session: ImportSession,
+  node: ImportedNode,
+  fields: ImportedField[],
+): SuggestedAsset {
+  return {
+    ...allFieldsAsPlainText(session, node, fields),
+    variant: 'additional-fields',
+    name: `${node.name} — additional fields`,
+    rationale: 'Additional imported fields are preserved as Plain Text for review.',
+  };
 }
 
 export function suggestedAssetToDraft(suggestion: SuggestedAsset, id: string): AssetDraft {

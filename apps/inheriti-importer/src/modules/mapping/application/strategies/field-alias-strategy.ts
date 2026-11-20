@@ -98,7 +98,6 @@ export class FieldAliasSuggestionStrategy implements SuggestionStrategy {
       if (!rule.required.every((field) => bindings[field])) continue;
       this.bindEmailUsername(rule, fields, bindings);
       const candidate = this.createSuggestion(rule, node, bindings);
-      this.bindNativeNotes(context, node, fields, candidate);
       if (!best || candidate.confidence > best.confidence) best = candidate;
     }
     return best;
@@ -151,20 +150,6 @@ export class FieldAliasSuggestionStrategy implements SuggestionStrategy {
     if (!field || !isValidUserPasswordEmail(field.value.reveal())) return;
     bindings['secret.email'] = username;
     delete bindings['secret.username'];
-  }
-
-  /** Only formats with dedicated note fields may populate readable asset metadata. */
-  private bindNativeNotes(
-    context: SuggestionContext,
-    node: ImportedNode,
-    fields: ImportedField[],
-    candidate: SuggestedAsset,
-  ): void {
-    const source = context.session.sources.find((item) => item.id === node.sourceId);
-    if (!source || !['onepassword', 'keepass', 'passbolt'].includes(source.kind)) return;
-    const notes = fields.find((field) => field.name === 'notes' && !field.value.isEmpty);
-    if (!notes) return;
-    candidate.fieldBindings['meta.notes'] = { kind: 'source', sourceFieldId: notes.id };
   }
 
   /** Records the match score and a short explanation for review. */

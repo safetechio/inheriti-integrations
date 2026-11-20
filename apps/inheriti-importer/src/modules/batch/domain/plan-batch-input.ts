@@ -10,6 +10,7 @@ export interface PlanBatchInput {
   readonly assets: readonly unknown[];
   readonly payload: Readonly<Record<string, unknown>>;
   readonly totalShares: number;
+  readonly preservationRevision?: symbol;
 }
 
 export interface PlanBatchEntry {

@@ -9,6 +9,31 @@ export interface ReviewBatchResult {
   skippedIds: string[];
 }
 
+export type {
+  SourceCoverage as ImportCoverage,
+  SourceCoverageField,
+} from '@modules/mapping/application/source-coverage';
+
+export type NoteDestination = 'asset-notes' | 'protected';
+
+export interface NoteSourceDecision {
+  sourceId: string;
+  sourceName: string;
+  fieldCount: number;
+  destination: NoteDestination | null;
+}
+
+export type NoteSource = NoteSourceDecision;
+
+export interface ReviewAssetNote {
+  sourceFieldId: string;
+  destination: NoteDestination;
+  explicit: boolean;
+  inherited: boolean;
+  publicAllowed: boolean;
+  reason?: string;
+}
+
 export interface ReviewAsset {
   id: string;
   name: string;
@@ -19,8 +44,10 @@ export interface ReviewAsset {
   rationale: string;
   mapped: string[];
   unmapped: string[];
+  unmappedSourceFieldIds?: string[];
   source: string;
   sourceId?: string;
+  sourceNodeId?: string;
   sourceFileName?: string;
   folderPath?: string[];
   alternatives: string[];
@@ -30,6 +57,8 @@ export interface ReviewAsset {
   plainTextSources?: ReviewAssetSourceCandidate[];
   convertedFromType?: string;
   batchMappingSupported?: boolean;
+  note?: ReviewAssetNote;
+  preservedInCompanion?: string[];
 }
 
 export interface ReviewAssetSourceCandidate {

@@ -1,0 +1,3 @@
+# Preserve exact export bytes for checksum and whitespace-preservation tests.
+* -text
+*.csv whitespace=cr-at-eol

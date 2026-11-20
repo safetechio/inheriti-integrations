@@ -4,6 +4,7 @@ import {
 } from '@modules/plans/domain/asset-metadata';
 import type { ImportSession, ImportedField } from '@modules/import/domain/import-model';
 import {
+  additionalFieldsAsset,
   fieldsOf,
   allFieldsAsPlainText,
   suggestWithFallback,
@@ -16,7 +17,11 @@ import type { MappingOverrides } from './importer-workspace-types';
 /** Keep the additional text asset distinct from its structured sibling. */
 export const statusKey = (suggestion: SuggestedAsset) =>
   `${suggestion.fromNodeId}:${
-    suggestion.variant === 'additional-fields' ? 'PLAIN-TEXT-ADDITIONAL' : suggestion.type
+    suggestion.variant === 'rescued-fields'
+      ? 'PLAIN-TEXT-RESCUED'
+      : suggestion.variant === 'additional-fields'
+        ? 'PLAIN-TEXT-ADDITIONAL'
+        : suggestion.type
   }`;
 
 /** Reclassify with only bindings valid in the destination schema; the source fields stay in the session. */
@@ -159,37 +164,17 @@ export function sourceSuggestions(session: ImportSession): SuggestedAsset[] {
   });
 }
 
-const companionNodes = new WeakMap<ImportSession, ReadonlySet<string>>();
-
-/** Build companion identities once for this immutable import session. */
-function nodesWithCompanions(session: ImportSession): ReadonlySet<string> {
-  const cached = companionNodes.get(session);
-  if (cached) return cached;
-  const nodes = new Set(
-    sourceSuggestions(session)
-      .filter((suggestion) => suggestion.variant === 'additional-fields')
-      .map((suggestion) => suggestion.fromNodeId),
-  );
-  companionNodes.set(session, nodes);
-  return nodes;
-}
-
-/** Recalculate companion text after review mapping changes. */
-export function automaticCompanion(
+export function originalSuggestionFor(
   session: ImportSession,
-  suggestions: SuggestedAsset[],
-  companion: SuggestedAsset,
-  overrides: MappingOverrides,
-): SuggestedAsset {
-  const structured = suggestions.find(
-    (candidate) =>
-      candidate.fromNodeId === companion.fromNodeId && candidate.variant !== 'additional-fields',
-  )!;
-  return additionalFieldsSuggestion(
-    session,
-    applyMappingOverrides(structured, overrides),
-    companion,
+  originals: SuggestedAsset[],
+  suggestion: SuggestedAsset,
+): SuggestedAsset | undefined {
+  const original = originals.find(
+    (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
   );
+  if (original || suggestion.variant !== 'additional-fields') return original;
+  const node = session.nodesById[suggestion.fromNodeId];
+  return node ? additionalFieldsAsset(session, node, []) : undefined;
 }
 
 /** Match both single-source and composite field bindings. */
@@ -209,10 +194,11 @@ export function requiresExactAssetMatch(
   session: ImportSession,
   suggestion: SuggestedAsset,
 ): boolean {
+  if (suggestion.variant) return true;
   const sourceId = session.nodesById[suggestion.fromNodeId]?.sourceId;
   if (session.sources.some((source) => source.id === sourceId && source.kind === 'onepassword'))
     return true;
-  return nodesWithCompanions(session).has(suggestion.fromNodeId);
+  return false;
 }
 
 /** Match staged assets by stable ID or their bound source fields. */
@@ -222,7 +208,11 @@ export function assetMatchesSuggestion(
   suggestion: SuggestedAsset,
 ): boolean {
   if (asset.id === statusKey(suggestion)) return true;
-  if (requiresExactAssetMatch(session, suggestion)) return false;
+  if (
+    asset.id.startsWith(`${suggestion.fromNodeId}:`) ||
+    requiresExactAssetMatch(session, suggestion)
+  )
+    return false;
   const sourceIds = mappedFieldIds(suggestion);
   if (Object.values(asset.fieldBindings).some((binding) => bindingUsesSource(binding, sourceIds)))
     return true;

@@ -150,9 +150,9 @@ export function FileRow({
                 : labels[file.status]}
             </Badge>
           ) : null}
-          {file.status === 'warning' ? (
+          {file.status === 'warning' || file.diagnostics?.length ? (
             <Button
-              title="View warnings"
+              title={file.status === 'warning' ? 'View warnings' : 'View source details'}
               startIcon={<Icon name="circle-info" size={11} color={theme.colors.gray} />}
               variant="outlined"
               color="gray"
@@ -166,7 +166,11 @@ export function FileRow({
           ) : null}
           {locked ? (
             <Box>
-              <Box ref={(element) => { unlockTriggerRef.current = element; }}>
+              <Box
+                ref={(element) => {
+                  unlockTriggerRef.current = element;
+                }}
+              >
                 <Button
                   title="Unlock"
                   variant="outlined"
@@ -229,7 +233,11 @@ export function FileRow({
                       label="Master password"
                       editable={file.status !== 'unlocking'}
                       secureTextEntry={!showPassword}
-                      error={attemptedUnlock && file.status === 'unlock-required' ? file.detail : undefined}
+                      error={
+                        attemptedUnlock && file.status === 'unlock-required'
+                          ? file.detail
+                          : undefined
+                      }
                       value={password}
                       onChangeText={setPassword}
                       style={{ paddingRight: 44 }}

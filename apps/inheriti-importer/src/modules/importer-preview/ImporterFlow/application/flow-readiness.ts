@@ -15,11 +15,18 @@ export function getImporterFlowReadiness(input: {
   assets: ReviewAsset[];
   unassigned: GroupingAsset[];
   plans: PlanDraft[];
+  preservationReady?: boolean;
+  executionCoverageReady?: boolean;
 }): ImporterFlowReadiness {
   const sources =
     input.files.length > 0 &&
-    input.files.every((file) => file.status === 'imported' || file.status === 'warning');
+    input.files.every(
+      (file) =>
+        file.status === 'imported' ||
+        (file.status === 'warning' && (!file.diagnostics?.length || file.warningsAcknowledged)),
+    );
   const assets =
+    input.preservationReady !== false &&
     input.assets.length > 0 &&
     input.assets.every((asset) => asset.status === 'accepted' || asset.status === 'excluded');
   const plans =
@@ -27,5 +34,10 @@ export function getImporterFlowReadiness(input: {
     input.unassigned.length === 0 &&
     input.plans.every((plan) => plan.valid && !isPlanOverCapacity(plan));
 
-  return { sources, assets, plans, staging: sources && assets && plans };
+  return {
+    sources,
+    assets,
+    plans,
+    staging: sources && assets && plans && input.executionCoverageReady !== false,
+  };
 }

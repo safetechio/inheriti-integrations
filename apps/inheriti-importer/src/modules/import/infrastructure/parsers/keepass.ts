@@ -87,9 +87,15 @@ class KeepassParser {
       if (text) extraFields.push({ key, value: text });
     }
 
-    const tags = Array.isArray(entry.tags)
-      ? entry.tags.map((tag) => String(tag).trim()).filter(Boolean)
-      : this.splitTags(this.readField(this.fieldValue(entry.fields, 'Tags')));
+    const rawTags = Array.isArray(entry.tags) ? entry.tags : [];
+    const rawTagsField = this.readField(this.fieldValue(entry.fields, 'Tags'));
+    if (rawTags.length) {
+      extraFields.push({ key: 'Source tags', value: JSON.stringify(rawTags) });
+    }
+    if (rawTagsField) extraFields.push({ key: 'Tags', value: rawTagsField });
+    const tags = rawTags.length
+      ? rawTags.map((tag) => String(tag).trim()).filter(Boolean)
+      : this.splitTags(rawTagsField);
 
     return {
       id: this.uuidOf(entry.uuid),

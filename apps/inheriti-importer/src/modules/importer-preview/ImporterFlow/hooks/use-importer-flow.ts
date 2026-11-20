@@ -1,6 +1,12 @@
+import type { ImportReviewControls } from '../../AssetReviewQueue/import-review-controls';
+import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
 import { useReducer, useRef } from 'react';
 import type { StagingState } from '../../FinalStagingChecklist';
-import type { ReviewAsset, ReviewBatchAction, ReviewBatchResult } from '../../AssetReviewQueue/types';
+import type {
+  ReviewAsset,
+  ReviewBatchAction,
+  ReviewBatchResult,
+} from '../../AssetReviewQueue/types';
 import type { SensitiveValue } from '@modules/import/domain/import-model';
 import type { GroupingAsset, PlanDraft, PlanMetadataValues } from '../../PlanGroupingSurface';
 import type { ImportFile } from '../../SourceImportStatus';
@@ -26,6 +32,8 @@ type InitialState = {
   assets: ReviewAsset[];
   unassigned: GroupingAsset[];
   plans: PlanDraft[];
+  preservation?: ImportReviewControls;
+  executionCoverage?: SourceCoverage;
 };
 export type ImporterFlowCallbacks = {
   onAddFiles?: () => void;
@@ -109,7 +117,14 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
     const nodeId = state.selectedAssetId.slice(0, separator);
     return assets.find((asset) => asset.id.slice(0, asset.id.lastIndexOf(':')) === nodeId)?.id;
   })();
-  const readiness = getImporterFlowReadiness({ files, assets, unassigned, plans });
+  const readiness = getImporterFlowReadiness({
+    files,
+    assets,
+    unassigned,
+    plans,
+    preservationReady: initial.preservation?.coverage.ready,
+    executionCoverageReady: initial.executionCoverage?.ready,
+  });
   const currentReady = canEnterNextStage(state.stage, readiness);
   return {
     ...state,
@@ -119,6 +134,8 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
     unassigned,
     plans,
     stagingState,
+    preservation: initial.preservation,
+    executionCoverage: initial.executionCoverage,
     index,
     isControlled,
     cancel: controlled?.callbacks.onCancel,

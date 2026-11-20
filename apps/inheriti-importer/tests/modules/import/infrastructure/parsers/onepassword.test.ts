@@ -94,11 +94,55 @@ describe('parseOnePassword', () => {
       uuid: 'mixed',
       details: { documentAttributes: { file: 'blob' }, notesPlain: 'Keep this note' },
     };
-    const result = parseOnePassword(archive(exportData([fileOnly, mixed])));
-    expect(result.entries).toHaveLength(1);
+    const overview = {
+      ...fileOnly,
+      uuid: 'overview',
+      overview: { title: 'Overview', url: 'https://example.invalid', custom: 'field' },
+    };
+    const structured = {
+      ...fileOnly,
+      uuid: 'structured',
+      details: { ...fileOnly.details, notesPlain: { text: 'Structured note' } },
+    };
+    const result = parseOnePassword(archive(exportData([fileOnly, mixed, overview, structured])));
+    expect(result.entries).toHaveLength(3);
     expect(result.entries[0].notes).toBe('Keep this note');
+    expect(result.entries[1].url).toBe('https://example.invalid');
+    expect(result.entries[1].extraFields).toContainEqual({
+      key: 'overview/custom',
+      value: 'field',
+    });
+    expect(result.entries[2].extraFields).toContainEqual({
+      key: 'details/notesPlain',
+      value: '{"text":"Structured note"}',
+    });
     expect(result.warnings).toContain('File-only item "File" was skipped.');
     expect(result.warnings).toContain('File content in item "File" was skipped.');
+  });
+
+  it('reports omitted source categories and falsy URL matching settings', () => {
+    const result = parseOnePassword(
+      archive(
+        exportData([
+          {
+            uuid: 'metadata',
+            categoryUuid: '001',
+            overview: {
+              title: 'Metadata example',
+              urls: [{ url: 'https://example.invalid', mode: 0 }],
+            },
+            details: {},
+          },
+        ]),
+      ),
+    );
+    expect(result.entries[0].url).toBe('https://example.invalid');
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'onepassword-item-metadata', kind: 'skipped', count: 1 }),
+        expect.objectContaining({ code: 'onepassword-url-metadata', kind: 'skipped', count: 1 }),
+      ]),
+    );
   });
 
   it('identifies skipped fields and history without exposing values or archive identifiers', () => {
@@ -186,6 +230,7 @@ describe('parseOnePassword', () => {
     };
     const entry = parseOnePassword(archive(exportData([structured]))).entries[0];
     expect(entry.tags).toEqual(['important']);
+    expect(entry.extraFields).toContainEqual({ key: 'Source tags', value: '["important"]' });
     expect(entry.extraFields).toEqual(
       expect.arrayContaining([
         { key: 'Details: email', value: 'a@example.com' },
@@ -306,5 +351,68 @@ describe('parseOnePassword', () => {
         changed.buffer.slice(changed.byteOffset, changed.byteOffset + changed.byteLength),
       ),
     ).toThrow('Could not decompress');
+  });
+  it('preserves unknown readable item properties under stable labels and reports omitted data', () => {
+    const extra = {
+      ...item,
+      overview: { ...item.overview, 'new/hint': '  hint  ' },
+      details: {
+        ...item.details,
+        custom: { flag: false, entries: [0, null] },
+        binary: 'private-binary',
+        passwordHistory: [{ value: 'private-history' }],
+      },
+    };
+    const result = parseOnePassword(archive(exportData([extra])));
+    expect(result.entries[0].extraFields).toEqual(
+      expect.arrayContaining([
+        { key: 'overview/new~1hint', value: '  hint  ' },
+        { key: 'details/custom', value: '{"flag":false,"entries":[0,null]}' },
+      ]),
+    );
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'onepassword-password-history',
+          kind: 'skipped',
+          entryId: '0:0:source-item',
+          count: 1,
+        }),
+        expect.objectContaining({
+          code: 'onepassword-unreadable-properties',
+          kind: 'unsupported',
+          entryId: '0:0:source-item',
+          count: 1,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(result.diagnostics)).not.toContain('private-');
+  });
+
+  it('retains source-level diagnostics when every item is file-only', () => {
+    const result = parseOnePassword(
+      archive(
+        exportData([
+          {
+            uuid: 'file',
+            overview: { title: 'Private filename' },
+            details: { documentAttributes: {} },
+          },
+        ]),
+        { 'files/attachment': strToU8('x') },
+      ),
+    );
+    expect(result.entries).toEqual([]);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'onepassword-attachments', count: 1 }),
+        expect.objectContaining({
+          code: 'onepassword-file-only-item',
+          sourcePath: ['accounts', '0', 'vaults', '0', 'items', '0'],
+          count: 1,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(result.diagnostics)).not.toContain('Private filename');
   });
 });

@@ -1,4 +1,13 @@
 import type { ImportSession } from '@modules/import/domain/import-model';
+import { additionalFieldsAsset } from '@modules/mapping/application/suggestion-engine';
+import { sourceCoverage } from '@modules/mapping/application/source-coverage';
+import {
+  applyNativeNote,
+  nativeNotes,
+  projectNoteSources,
+  removeSourceBindings,
+  type PreservationChoices,
+} from './importer-workspace-notes';
 import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
@@ -21,7 +30,9 @@ import {
   applyMappingOverrides,
   convertToPlainText,
   sourceSuggestions,
-  automaticCompanion,
+  additionalFieldsSuggestion,
+  suggestionFields,
+  mappedFieldIds,
   assetMatchesSuggestion,
   plainTextValueWithoutNote,
   convertToCanonicalType,
@@ -44,26 +55,10 @@ export function projectSuggestions(
   plainTextOverrides: PlainTextOverrides,
   plainTextAssetIds: ReadonlySet<string>,
   typeOverrides: AssetTypeOverrides = {},
+  choices: PreservationChoices = {},
 ): SuggestedAsset[] {
   const projectOne = (suggestion: SuggestedAsset): SuggestedAsset => {
-    const primary =
-      suggestion.variant === 'additional-fields'
-        ? found.find(
-            (candidate) =>
-              candidate.fromNodeId === suggestion.fromNodeId &&
-              candidate.variant !== 'additional-fields',
-          )
-        : undefined;
-    const projectedPrimary = primary ? projectOne(primary) : undefined;
-    const structured = primary
-      ? automaticCompanion(
-          session,
-          [projectedPrimary?.type === 'PLAIN-TEXT' ? primary : projectedPrimary!],
-          suggestion,
-          mappingOverrides,
-        )
-      : applyMappingOverrides(suggestion, mappingOverrides);
-    const overridden = applyMappingOverrides(structured, mappingOverrides);
+    const overridden = applyMappingOverrides(suggestion, mappingOverrides);
     const converted = typeOverrides[statusKey(suggestion)]
       ? convertToCanonicalType(
           session,
@@ -116,7 +111,48 @@ export function projectSuggestions(
       },
     };
   };
-  return found.map(projectOne);
+  const ignored = choices.ignored ?? new Set<string>();
+  const companions = new Map(
+    found.filter((asset) => asset.variant).map((asset) => [asset.fromNodeId, asset]),
+  );
+  return found
+    .filter((asset) => !asset.variant)
+    .flatMap((asset) => {
+      const rescuedIds = new Set(choices.rescued);
+      const primary = removeSourceBindings(
+        applyNativeNote(session, removeSourceBindings(projectOne(asset), ignored), choices),
+        rescuedIds,
+      );
+      const node = session.nodesById[asset.fromNodeId];
+      const fields = suggestionFields(session, primary);
+      const primaryIds = mappedFieldIds(primary);
+      const rescueFields = fields.filter(
+        (field) =>
+          !ignored.has(field.id) && !primaryIds.has(field.id) && choices.rescued?.has(field.id),
+      );
+      const rescue = rescueFields.length
+        ? {
+            ...additionalFieldsAsset(session, node, rescueFields),
+            variant: 'rescued-fields' as const,
+            name: `${node.name} — preserved fields`,
+          }
+        : undefined;
+      const fallback = companions.get(node.id) ?? additionalFieldsAsset(session, node, []);
+      const companion = removeSourceBindings(
+        projectOne(additionalFieldsSuggestion(session, primary, fallback)),
+        new Set([...ignored, ...rescueFields.map((field) => field.id), ...primaryIds]),
+      );
+      const reservedNote = nativeNotes(session, node.id);
+      const metadata = companion.fieldBindings['meta.notes'];
+      if (reservedNote && metadata?.kind === 'source' && metadata.sourceFieldId === reservedNote.id)
+        delete companion.fieldBindings['meta.notes'];
+      const companionId = statusKey(companion);
+      const keepCompanion =
+        Object.keys(companion.fieldBindings).length ||
+        typeOverrides[companionId] ||
+        Object.keys(mappingOverrides[companionId] ?? {}).length;
+      return [primary, ...(keepCompanion ? [companion] : []), ...(rescue ? [rescue] : [])];
+    });
 }
 
 /** Show accepted suggestions that have not been placed in a plan. */
@@ -206,8 +242,11 @@ export function projectImporterWorkspace(
   plainTextOverrides: PlainTextOverrides = {},
   plainTextAssetIds: ReadonlySet<string> = new Set(),
   typeOverrides: AssetTypeOverrides = {},
+  choices: PreservationChoices = {},
 ): ImporterWorkspaceProjection {
   const found = sourceSuggestions(session);
+  const ignored = new Set(workspace.ignoredSourceFieldIds);
+  choices = { ...choices, ignored };
   const suggestions = projectSuggestions(
     session,
     found,
@@ -215,6 +254,7 @@ export function projectImporterWorkspace(
     plainTextOverrides,
     plainTextAssetIds,
     typeOverrides,
+    choices,
   );
   const assets = projectAssets(
     session,
@@ -224,8 +264,89 @@ export function projectImporterWorkspace(
     plainTextAssetIds,
     typeOverrides,
     mappingOverrides,
+    choices,
   );
   const unassigned = projectUnassigned(session, suggestions, workspace, decisions, assets);
   const plans = projectPlans(session, workspace, suggestions);
-  return { suggestions, assets, unassigned, plans };
+  const drafts = listPlanDrafts(workspace).flatMap((plan) => plan.assets);
+  const draftIds = new Set(drafts.map((asset) => asset.id));
+  const candidateIds = new Set(suggestions.map(statusKey));
+  const legacyDrafts = drafts.filter((asset) => !candidateIds.has(asset.id));
+  const accepted = new Set(
+    assets.filter((asset) => asset.status === 'accepted').map((asset) => asset.id),
+  );
+  const excluded = new Set(
+    assets.filter((asset) => asset.status === 'excluded').map((asset) => asset.id),
+  );
+  const excludedFields = new Set(ignored);
+  for (const suggestion of suggestions) {
+    if (!excluded.has(statusKey(suggestion))) continue;
+    for (const id of mappedFieldIds(suggestion)) excludedFields.add(id);
+  }
+  const acceptedDrafts = suggestions
+    .filter(
+      (asset) =>
+        accepted.has(statusKey(asset)) &&
+        !draftIds.has(statusKey(asset)) &&
+        !legacyDrafts.some((draft) => assetMatchesSuggestion(session, draft, asset)),
+    )
+    .map((asset) => ({
+      id: statusKey(asset),
+      type: asset.type,
+      name: asset.name,
+      fieldBindings: asset.fieldBindings,
+    }));
+  const executionCoverage = sourceCoverage(session, drafts, excludedFields);
+  const coverage = sourceCoverage(session, [...drafts, ...acceptedDrafts], excludedFields);
+  const noteSources = projectNoteSources(session, choices);
+  const explicitlyExcluded = new Set(
+    coverage.fields.filter((field) => field.status === 'excluded').map((field) => field.id),
+  );
+  const pendingNote = assets.some(
+    (asset) =>
+      asset.note && !asset.note.explicit && !explicitlyExcluded.has(asset.note.sourceFieldId),
+  );
+  const actualByField = new Map(executionCoverage.fields.map((field) => [field.id, field]));
+  const reviewByField = new Map(coverage.fields.map((field) => [field.id, field]));
+  const invalidate = (id: string) => {
+    const actual = actualByField.get(id);
+    const review = reviewByField.get(id);
+    if (actual) actual.status = 'invalid';
+    if (review) review.status = 'invalid';
+    coverage.ready = false;
+    executionCoverage.ready = false;
+  };
+  for (const asset of assets) {
+    const note = asset.note;
+    if (!note) continue;
+    const field = actualByField.get(note.sourceFieldId);
+    if (!field?.destinations.length) continue;
+    const expected = note.destination === 'asset-notes' ? 'meta.notes' : 'secret.text';
+    if (field.destinations.length !== 1 || field.destinations[0].fieldId !== expected)
+      invalidate(field.id);
+  }
+  for (const id of ignored) {
+    if (actualByField.get(id)?.destinations.length) invalidate(id);
+  }
+  const companionIds = new Set(suggestions.filter((asset) => asset.variant).map(statusKey));
+  for (const asset of assets) {
+    const omitted = (asset.unmappedSourceFieldIds ?? []).flatMap((id) => {
+      const field = reviewByField.get(id);
+      return field ? [field] : [];
+    });
+    const preserved = omitted.filter(
+      (field) =>
+        (field.status === 'protected' || field.status === 'mapped') &&
+        field.destinations.some((destination) => companionIds.has(destination.assetId)),
+    );
+    if (!preserved.length) continue;
+    const preservedIds = new Set(preserved.map((field) => field.id));
+    const unresolved = omitted.filter((field) => !preservedIds.has(field.id));
+    asset.preservedInCompanion = preserved.map((field) => field.name);
+    asset.unmapped = unresolved.map((field) => field.name);
+    asset.unmappedSourceFieldIds = unresolved.map((field) => field.id);
+  }
+  coverage.ready &&= !pendingNote;
+  executionCoverage.ready &&= !pendingNote;
+  return { suggestions, assets, unassigned, plans, coverage, executionCoverage, noteSources };
 }

@@ -44,7 +44,13 @@ it('keeps workspace batch undo available after leaving and remounting review', (
 
 it('clears selection with Escape in an editor without moving focus or reviewing typed shortcuts', () => {
   const onAction = vi.fn();
-  render(<AssetReviewQueue assets={[asset('Alpha')]} onAction={onAction} onReviewAssets={() => stayed} />);
+  render(
+    <AssetReviewQueue
+      assets={[asset('Alpha')]}
+      onAction={onAction}
+      onReviewAssets={() => stayed}
+    />,
+  );
   fireEvent.click(check('Select Alpha'));
   click('Search assets');
   const input = screen.getByRole('textbox', { name: 'Search assets' });
@@ -105,23 +111,26 @@ it('keeps inspection separate from checkboxes, command-click and shift range, an
   expect(screen.queryByText('2 selected')).toBeNull();
 });
 
-it.each(['Escape', 'Clear'])('returns focus to the inspected row after %s clears selection', (action) => {
-  const assets = ['Alpha', 'Bravo'].map((id) => asset(id));
-  render(<AssetReviewQueue assets={assets} onReviewAssets={() => stayed} />);
-  const alpha = screen.getByRole('button', { name: 'Inspect Alpha' });
-  const bravo = screen.getByRole('button', { name: 'Inspect Bravo' });
-  fireEvent.click(alpha);
-  bravo.focus();
-  fireEvent.click(bravo, { ctrlKey: true });
-  expect(check('Select Bravo').checked).toBe(true);
-  expect(document.activeElement).toBe(bravo);
+it.each(['Escape', 'Clear'])(
+  'returns focus to the inspected row after %s clears selection',
+  (action) => {
+    const assets = ['Alpha', 'Bravo'].map((id) => asset(id));
+    render(<AssetReviewQueue assets={assets} onReviewAssets={() => stayed} />);
+    const alpha = screen.getByRole('button', { name: 'Inspect Alpha' });
+    const bravo = screen.getByRole('button', { name: 'Inspect Bravo' });
+    fireEvent.click(alpha);
+    bravo.focus();
+    fireEvent.click(bravo, { ctrlKey: true });
+    expect(check('Select Bravo').checked).toBe(true);
+    expect(document.activeElement).toBe(bravo);
 
-  if (action === 'Escape') fireEvent.keyDown(bravo, { key: 'Escape' });
-  else click('Clear');
+    if (action === 'Escape') fireEvent.keyDown(bravo, { key: 'Escape' });
+    else click('Clear');
 
-  expect(check('Select Bravo').checked).toBe(false);
-  expect(document.activeElement).toBe(alpha);
-});
+    expect(check('Select Bravo').checked).toBe(false);
+    expect(document.activeElement).toBe(alpha);
+  },
+);
 
 it('filters exceptions with counts, clears selected assets on query and tab changes, and locates the next issue', () => {
   const invalid = asset('Missing', {
@@ -148,7 +157,7 @@ it('filters exceptions with counts, clears selected assets on query and tab chan
   expect(onSelect).toHaveBeenLastCalledWith(invalid);
   click('Focus next issue');
   expect(onSelect).toHaveBeenLastCalledWith(omitted);
-  click('Fields omitted 1');
+  click('Unmapped fields 1');
   expect(screen.queryByLabelText('Inspect Missing')).toBeNull();
   fireEvent.click(check('Select Omitted'));
   click('Search assets');
@@ -279,31 +288,41 @@ it('marquee selects visible mounted rows without rendering a rectangle', () => {
   fireEvent.pointerUp(document);
 });
 
-it.each(['ctrlKey', 'metaKey'] as const)('adds intersecting rows when dragging an inspection row with %s', (modifier) => {
-  const assets = ['Alpha', 'Bravo', 'Charlie'].map((id) => asset(id));
-  const onSelect = vi.fn();
-  render(<AssetReviewQueue assets={assets} onSelect={onSelect} onReviewAssets={() => stayed} />);
-  const queue = list();
-  const bounds = (top: number, bottom: number) => ({ left: 0, right: 100, top, bottom }) as DOMRect;
-  vi.spyOn(queue, 'getBoundingClientRect').mockReturnValue(bounds(0, 100));
-  queue.querySelectorAll('[data-review-asset-id]').forEach((row, index) => {
-    vi.spyOn(row, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
-    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(bounds(10 + index * 30, 30 + index * 30));
-  });
-  const alpha = screen.getByRole('button', { name: 'Inspect Alpha' });
-  fireEvent.click(check('Select Charlie'));
-  fireEvent.pointerDown(alpha, {
-    pointerType: 'mouse', button: 0, [modifier]: true, clientX: 10, clientY: 20,
-  });
-  fireEvent.pointerMove(document, { clientX: 10, clientY: 50 });
-  fireEvent.pointerUp(document);
-  fireEvent.click(alpha, { [modifier]: true });
+it.each(['ctrlKey', 'metaKey'] as const)(
+  'adds intersecting rows when dragging an inspection row with %s',
+  (modifier) => {
+    const assets = ['Alpha', 'Bravo', 'Charlie'].map((id) => asset(id));
+    const onSelect = vi.fn();
+    render(<AssetReviewQueue assets={assets} onSelect={onSelect} onReviewAssets={() => stayed} />);
+    const queue = list();
+    const bounds = (top: number, bottom: number) =>
+      ({ left: 0, right: 100, top, bottom }) as DOMRect;
+    vi.spyOn(queue, 'getBoundingClientRect').mockReturnValue(bounds(0, 100));
+    queue.querySelectorAll('[data-review-asset-id]').forEach((row, index) => {
+      vi.spyOn(row, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+      vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
+        bounds(10 + index * 30, 30 + index * 30),
+      );
+    });
+    const alpha = screen.getByRole('button', { name: 'Inspect Alpha' });
+    fireEvent.click(check('Select Charlie'));
+    fireEvent.pointerDown(alpha, {
+      pointerType: 'mouse',
+      button: 0,
+      [modifier]: true,
+      clientX: 10,
+      clientY: 20,
+    });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 50 });
+    fireEvent.pointerUp(document);
+    fireEvent.click(alpha, { [modifier]: true });
 
-  expect(check('Select Alpha').checked).toBe(true);
-  expect(check('Select Bravo').checked).toBe(true);
-  expect(check('Select Charlie').checked).toBe(true);
-  expect(onSelect).not.toHaveBeenCalled();
-});
+    expect(check('Select Alpha').checked).toBe(true);
+    expect(check('Select Bravo').checked).toBe(true);
+    expect(check('Select Charlie').checked).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
+  },
+);
 
 it('preserves an independent two-pane scroll and reserves list space for the in-flow card', () => {
   const css = readFileSync(

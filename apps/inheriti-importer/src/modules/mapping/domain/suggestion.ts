@@ -15,7 +15,7 @@ export interface SuggestedAsset {
   fieldBindings: Record<string, SuggestedFieldBinding>;
   /** Source node the suggestion was derived from. */
   fromNodeId: string;
-  variant?: 'additional-fields';
+  variant?: 'additional-fields' | 'rescued-fields';
   /** 0..1 — how confident the strategy is. */
   confidence: number;
   /** Why this was suggested, for the preview. */

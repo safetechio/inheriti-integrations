@@ -6,20 +6,23 @@ import type { ReviewAsset, ReviewAssetField } from '../types';
 import type { SensitiveValue } from '@modules/import/domain/import-model';
 import { PlainTextEditor } from './PlainTextEditor';
 import { NotesField } from './NotesField';
+import type { ImportReviewControls } from '../import-review-controls';
 
 export function InspectorFields({
   asset,
   resolveSourceValue,
   onMapField,
   onEditPlainText,
+  onSetNoteDestination,
 }: {
   asset: ReviewAsset;
+  onSetNoteDestination?: ImportReviewControls['onSetAssetNoteDestination'];
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
   onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;
   onEditPlainText?: (asset: ReviewAsset, value: string) => void;
 }) {
   const fields = asset.schemaFields ?? [];
-  if (fields.length === 0 && asset.type !== 'PLAIN-TEXT')
+  if (fields.length === 0 && asset.type !== 'PLAIN-TEXT' && !asset.note)
     return (
       <Text variant="bodySmall" color="gray">
         No schema fields are available for this Asset type.
@@ -76,10 +79,12 @@ export function InspectorFields({
           {secretFields.map((field) => renderField(field))}
         </Box>
       )}
-      {metadataField ? (
+      {metadataField || asset.note ? (
         <NotesField
+          key={asset.id}
           asset={asset}
           field={metadataField}
+          onSetNoteDestination={onSetNoteDestination}
           onMapField={onMapField}
           resolveSourceValue={resolveSourceValue}
         />

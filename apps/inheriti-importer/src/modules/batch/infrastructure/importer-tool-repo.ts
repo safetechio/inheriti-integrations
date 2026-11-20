@@ -238,6 +238,7 @@ export class ImporterToolRepo {
   async stage(
     request: StageBatchItemRequest,
     signal?: AbortSignal,
+    beforeWrite?: () => void,
   ): Promise<{ id: string; expiresAt: string }> {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     if (!request.planDraft.name.trim()) throw new Error('STAGED_PLAN_MISSING_NAME');
@@ -279,6 +280,7 @@ export class ImporterToolRepo {
     );
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    beforeWrite?.();
     const response = await this.transport.request<{ result?: { id: string; expiresAt: string } }>({
       method: 'POST',
       path: stagedItemsPath(request.organizationId),

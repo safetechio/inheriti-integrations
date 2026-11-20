@@ -1,8 +1,20 @@
 import type { SensitiveValue } from '@modules/import/domain/import-model';
 import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
-import type { AssetReviewStatus, ReviewAsset } from '../../AssetReviewQueue/types';
+import type {
+  AssetReviewStatus,
+  NoteSourceDecision,
+  ReviewAsset,
+} from '../../AssetReviewQueue/types';
 import type { GroupingAsset, PlanDraft } from '../../PlanGroupingSurface';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
+
+import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
+
+export type {
+  SourceCoverage,
+  SourceCoverageField,
+} from '@modules/mapping/application/source-coverage';
+export type { NoteDestination, NoteSourceDecision } from '../../AssetReviewQueue/types';
 
 export type ImporterWorkspaceAction =
   'accept' | 'exclude' | `alternate:${string}` | 'restore-suggestion';
@@ -21,6 +33,9 @@ export interface ImporterWorkspaceProjection {
   assets: ReviewAsset[];
   unassigned: GroupingAsset[];
   plans: PlanDraft[];
+  coverage: SourceCoverage;
+  executionCoverage: SourceCoverage;
+  noteSources: NoteSourceDecision[];
 }
 
 export type MappingOverrides = Record<string, Record<string, string | undefined>>;

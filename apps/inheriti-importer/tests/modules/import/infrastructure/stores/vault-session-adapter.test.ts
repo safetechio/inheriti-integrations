@@ -1,3 +1,4 @@
+import { createEmptyEntry } from '@modules/import/domain/vault';
 import { describe, expect, it } from 'vitest';
 import { importSessionFromVaultState } from '@modules/import/infrastructure/stores/vault-session-adapter';
 import { initialVaultState } from '@modules/import/infrastructure/stores/vault-store';
@@ -123,5 +124,28 @@ describe('importSessionFromVaultState', () => {
     expect(run('keepass', ['A', 'B'])).toEqual(['A', 'B']);
     expect(run('keepass')).toEqual(['A', 'B']);
     expect(run('onepassword')).toEqual(['A / B']);
+  });
+  it('preserves duplicate extra-field values without losing their labels or literal suffixed keys', () => {
+    const entry = createEmptyEntry({
+      id: 'entry',
+      sourceId: 'vault',
+      extraFields: [
+        { key: 'token', value: 'first' },
+        { key: 'token:2', value: 'literal' },
+        { key: 'token', value: 'second' },
+      ],
+    });
+    const session = importSessionFromVaultState({
+      ...initialVaultState,
+      entries: [{ current: entry, original: entry }],
+    });
+    expect(session.nodesById.entry.fieldIds).toEqual([
+      'entry:extra:token',
+      'entry:extra:token%3A2',
+      'entry:extra:token:2',
+    ]);
+    expect(session.fieldsById['entry:extra:token%3A2'].value.reveal()).toBe('literal');
+    expect(session.fieldsById['entry:extra:token:2']).toMatchObject({ name: 'extra:token' });
+    expect(session.fieldsById['entry:extra:token:2'].value.reveal()).toBe('second');
   });
 });

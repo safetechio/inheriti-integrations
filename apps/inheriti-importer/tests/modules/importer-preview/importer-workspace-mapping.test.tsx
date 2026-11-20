@@ -113,7 +113,12 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       return useImporterWorkspace(session, workspace, setWorkspace);
     });
     const eligible = result.current.assets.filter(hasIncludedSchemaField);
-    expect(eligible.length).toBe(2);
+    expect(eligible.map((asset) => asset.id)).toEqual([
+      'entry-1:API-KEY',
+      'entry-1:PLAIN-TEXT-ADDITIONAL',
+      'entry-2:API-KEY',
+      'entry-2:PLAIN-TEXT-ADDITIONAL',
+    ]);
     act(() => result.current.acceptAllEligible());
     act(() => result.current.reviewAsset('exclude', result.current.assets[0]!));
     act(() => result.current.reviewAsset('accept', result.current.assets[0]!));
@@ -154,7 +159,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     act(() => result.current.setHistory(undo));
     expect(result.current.history.present.plansByClientId['plan-1']?.assets).toHaveLength(0);
   });
-  it('refreshes revealed Plain Text after excluding Notes before editing and staging', () => {
+  it('refreshes revealed Plain Text after returning native Notes to protected text', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
     session.fieldsById['field-token'].name = 'extra:private key';
@@ -174,15 +179,14 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       );
     }
     render(<Review />);
+    act(() => latest.setSourceNoteDestination('source-1', 'asset-notes'));
     fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
     expect((screen.getByLabelText('Plain text value') as HTMLTextAreaElement).value).toBe(
       'first-token',
     );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Exclude Notes or guidelines field from this Asset' }),
-    );
-    expect(screen.getByRole('button', { name: 'Reveal plain text' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
+    act(() => latest.setSourceNoteDestination('source-1', 'protected'));
+    const reveal = screen.queryByRole('button', { name: 'Reveal plain text' });
+    if (reveal) fireEvent.click(reveal);
     const editor = screen.getByLabelText('Plain text value') as HTMLTextAreaElement;
     expect(editor.value).toContain('notes: second-token');
     fireEvent.change(editor, { target: { value: `${editor.value}\nReviewed` } });
@@ -221,11 +225,8 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     });
     const asset = () => result.current.importer.assets[0]!;
     const suggested = () => result.current.importer.suggestions[0]!;
-    expect(suggested().fieldBindings['meta.notes']).toEqual({
-      kind: 'source',
-      sourceFieldId: 'field-other',
-    });
-    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', undefined));
+    expect(asset().note).toMatchObject({ destination: 'protected', explicit: false });
+    act(() => result.current.importer.setSourceNoteDestination('source-1', 'protected'));
     expect(suggested().fieldBindings['meta.notes']).toBeUndefined();
     expect(
       materialiseAsset(
@@ -245,7 +246,15 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
         result.current.importer.plans[0]!,
       ),
     );
-    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-other'));
+    act(() => result.current.importer.setAssetNoteDestination(asset(), 'asset-notes'));
+    expect(result.current.workspace.plansByClientId['plan-1']!.assets).toHaveLength(0);
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned.find((item) => item.id === asset().id)!,
+        result.current.importer.plans[0]!,
+      ),
+    );
     const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
     expect(materialiseAsset(draft, session).asset.secret.text).toBe('first-token');
     expect(materialiseAsset(draft, session).asset.meta.notes).toBe('second-token');
@@ -280,7 +289,15 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
         result.current.importer.plans[0]!,
       ),
     );
-    act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', 'field-other'));
+    act(() => result.current.importer.setAssetNoteDestination(asset(), 'asset-notes'));
+    expect(result.current.workspace.plansByClientId['plan-1']!.assets).toHaveLength(0);
+    act(() => result.current.importer.reviewAsset('accept', asset()));
+    act(() =>
+      result.current.importer.assignAsset(
+        result.current.importer.unassigned.find((item) => item.id === asset().id)!,
+        result.current.importer.plans[0]!,
+      ),
+    );
     const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
     expect(materialiseAsset(draft, session).asset.secret.text).toBe('Edited value');
     expect(materialiseAsset(draft, session).asset.meta.notes).toBe('second-token');
@@ -350,7 +367,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       'Replacement instructions',
     );
   });
-  it('restores converted note source after structured remap without changing the companion', () => {
+  it('keeps both note occurrences protected after removing a converted asset’s manual note mapping', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
     session.fieldsById['field-token'].name = 'password';
@@ -409,19 +426,8 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     expect(reviewedValue.secret.text).toContain('new note: Replacement instructions');
     expect(assignedValue.secret).toEqual(reviewedValue.secret);
     expect(assignedValue.meta.notes).toBeUndefined();
-    const companion = result.current.importer.suggestions.find(
-      (asset) => asset.variant === 'additional-fields',
-    )!;
-    const companionValue = materialiseAsset(
-      {
-        id: 'companion',
-        type: 'PLAIN-TEXT',
-        name: companion.name,
-        fieldBindings: companion.fieldBindings,
-      },
-      session,
-    ).asset;
-    expect(companionValue.secret.text).toBe('second-token');
+    expect(assignedValue.secret.text).toContain('notes: second-token');
+    expect(result.current.importer.suggestions.some((asset) => asset.variant)).toBe(false);
   });
   it('still matches a single generic suggestion to a legacy source-bound draft', () => {
     const session = importSession();
@@ -566,12 +572,15 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       (item) => item.fromNodeId === 'entry-1' && item.type === 'PLAIN-TEXT' && !item.variant,
     )!;
     expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
-    expect(materialiseAsset(draft, session).asset.secret.text).toBe('first-token');
-    expect(draft.fieldBindings['meta.notes']).toEqual({
-      kind: 'source',
-      sourceFieldId: 'field-notes',
-    });
-    expect(materialiseAsset(draft, session).asset.meta.notes).toBe('Instructions');
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe(
+      'token: first-token\nnotes: Instructions',
+    );
+    expect(draft.fieldBindings['meta.notes']).toBeUndefined();
+    expect(
+      result.current.importer.suggestions.find((asset) => asset.variant)?.fieldBindings[
+        'secret.text'
+      ],
+    ).toEqual({ kind: 'source', sourceFieldId: 'field-other' });
   });
   it('resets companion mapping from structured fields after the primary becomes edited Plain Text', () => {
     const session = importSession();
@@ -610,7 +619,9 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     )!;
     const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
     expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
-    expect(materialiseAsset(draft, session).asset.secret.text).toBe('second-token');
+    expect(materialiseAsset(draft, session).asset.secret.text).toBe(
+      'token: first-token\nother: second-token',
+    );
   });
   it('resets an assigned companion mapping to its unmatched fields only', () => {
     const session = importSession();
@@ -1063,10 +1074,13 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     act(() => result.current.reviewAsset('alternate:PLAIN-TEXT', result.current.assets[0]!));
     expect(result.current.assets[0]?.type).toBe('PLAIN-TEXT');
     expect(result.current.assets[0]?.alternatives).toContain('API-KEY');
-    expect(result.current.assets[0]?.plainTextSources).toEqual([
-      { id: 'field-token', name: 'token', length: 11 },
-      { id: 'field-other', name: 'other', length: 12 },
-    ]);
+    expect(
+      result.current.assets[0]?.schemaFields?.find((field) => field.key === 'secret.text')
+        ?.sourceFieldId,
+    ).toBe('field-token');
+    expect(
+      result.current.suggestions.find((asset) => asset.variant)?.fieldBindings['secret.text'],
+    ).toEqual({ kind: 'source', sourceFieldId: 'field-other' });
     expect(JSON.stringify(result.current.assets[0])).not.toContain('first-token');
     act(() => result.current.editPlainText(result.current.assets[0]!, 'edited fallback'));
     expect(result.current.assets[0]?.plainTextValue?.reveal()).toBe('edited fallback');

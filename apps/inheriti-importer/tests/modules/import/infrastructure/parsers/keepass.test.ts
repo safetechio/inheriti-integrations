@@ -62,6 +62,10 @@ describe('parseKeepass', () => {
       group: 'Engineering',
     });
     expect(result.entries[0].tags).toEqual(['infra', 'git']);
+    expect(result.entries[0].extraFields).toContainEqual({
+      key: 'Source tags',
+      value: '["infra","git"]',
+    });
     expect(result.entries[0].extraFields).toContainEqual({ key: 'Token', value: 'extra-token' });
   });
 

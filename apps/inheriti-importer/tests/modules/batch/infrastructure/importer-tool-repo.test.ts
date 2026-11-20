@@ -238,6 +238,41 @@ describe('ImporterToolRepo', () => {
     expect(reconciledPath.endsWith(`/${sentBody.id}`)).toBe(true);
   });
 
+  it('checks that the revision is current after wrapping and immediately before POST', async () => {
+    const transport = fakeTransport(() => {
+      throw new Error('stale import reached transport');
+    });
+    const repo = new ImporterToolRepo(transport);
+    let current = true;
+    const beforeWrite = vi.fn(() => {
+      if (!current) throw new Error('import changed');
+    });
+    const staging = repo.stage(
+      {
+        id: 'plan-1',
+        organizationId: 'org-1',
+        memberId: 'member-1',
+        organizationKeyHex: ORG_KEY_HEX,
+        planDraft: { name: 'Synthetic Plan' },
+        assets: [
+          {
+            id: 'asset-1',
+            type: 'PLAIN-TEXT',
+            meta: { name: 'Synthetic' },
+            secret: { text: 'SYNTHETIC_ONLY' },
+          },
+        ],
+      },
+      undefined,
+      beforeWrite,
+    );
+    expect(beforeWrite).not.toHaveBeenCalled();
+    current = false;
+    await expect(staging).rejects.toThrow('import changed');
+    expect(beforeWrite).toHaveBeenCalledOnce();
+    expect(transport.request).not.toHaveBeenCalled();
+  });
+
   it('stage() throws ImporterToolRequestError with the API-provided description on failure', async () => {
     const transport = fakeTransport(() => ({
       status: 400,

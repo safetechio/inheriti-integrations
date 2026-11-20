@@ -1,11 +1,15 @@
-import { Badge, Box, Card, Notice, Stack, Text } from '@main-components';
+import { Box, Card, Notice, Stack, Text } from '@main-components';
 import { getAssetTypeDisplayName } from '@modules/_shared/domain/asset-type-display-name';
 import { InspectorActions } from './InspectorActions';
 import { InspectorFields } from './InspectorFields';
-import { statusBadge, statusLabel } from './status';
+import { AssetReviewDetails } from './AssetReviewDetails';
 import type { ReviewAsset } from '../types';
+import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
+import type { ImportReviewControls } from '../import-review-controls';
 
 type InspectorProps = {
+  coverage?: SourceCoverage;
+  onSetNoteDestination?: ImportReviewControls['onSetAssetNoteDestination'];
   asset?: ReviewAsset;
   onAction?: (action: string, asset: ReviewAsset) => void;
   resolveSourceValue?: (
@@ -20,6 +24,8 @@ export function Inspector({
   resolveSourceValue,
   onMapField,
   onEditPlainText,
+  coverage,
+  onSetNoteDestination,
 }: InspectorProps) {
   if (!asset)
     return (
@@ -29,6 +35,19 @@ export function Inspector({
         </Text>
       </Card>
     );
+  const sourceFields =
+    coverage?.fields.filter((field) =>
+      asset.sourceNodeId
+        ? field.nodeId === asset.sourceNodeId && field.sourceId === asset.sourceId
+        : (!asset.sourceId || field.sourceId === asset.sourceId) &&
+          field.destinations.some(({ assetId }) => assetId === asset.id),
+    ) ?? [];
+  const elsewhere = asset.preservedInCompanion?.length ?? 0;
+  const pending = sourceFields.filter(
+    ({ status, id, name }) =>
+      (status === 'pending' || status === 'invalid') &&
+      (asset.unmappedSourceFieldIds?.includes(id) ?? asset.unmapped.includes(name)),
+  ).length;
   return (
     <Card tone="default" className="asset-inspector-card">
       <Stack gap="m">
@@ -45,11 +64,25 @@ export function Inspector({
               {asset.source}
             </Text>
           </Box>
-          {asset.status !== 'suggested' ? (
-            <Badge tone={statusBadge[asset.status].tone}>{statusLabel[asset.status]}</Badge>
-          ) : null}
+          <AssetReviewDetails
+            key={asset.id}
+            asset={asset}
+            coverage={coverage}
+            sourceFields={sourceFields}
+          />
         </Box>
-        {asset.type !== 'PLAIN-TEXT' && asset.unmapped.length > 0 ? (
+        {asset.type !== 'PLAIN-TEXT' && (elsewhere > 0 || pending > 0) && coverage ? (
+          <Notice
+            compact
+            tone="info"
+            icon="circle-info"
+            title={[`${elsewhere} preserved in additional assets`, `${pending} pending`]
+              .filter((_, index) => (index === 0 ? elsewhere > 0 : pending > 0))
+              .join(' · ')}
+            description="Open Details to review these fields."
+          />
+        ) : null}
+        {!coverage && asset.type !== 'PLAIN-TEXT' && asset.unmapped.length > 0 ? (
           <Notice
             compact
             tone="info"
@@ -80,6 +113,7 @@ export function Inspector({
           resolveSourceValue={resolveSourceValue}
           onMapField={onMapField}
           onEditPlainText={onEditPlainText}
+          onSetNoteDestination={onSetNoteDestination}
         />
         <InspectorActions asset={asset} onAction={onAction} />
       </Stack>

@@ -1,0 +1,407 @@
+[
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/dispatch-1/00000000000000000000000000000001",
+    "value": "{\"username\":\"dispatch-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0001\",\"url\":\"https://dispatch.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 1\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955201,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "dispatch",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/billing-2/00000000000000000000000000000002",
+    "value": "{\"username\":\"billing-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0002\",\"url\":\"https://billing.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 2\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955202,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "billing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/routing-3/00000000000000000000000000000003",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0003",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955203,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "routing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/inventory-4/00000000000000000000000000000004",
+    "value": "{\"username\":\"inventory-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0004\",\"url\":\"https://inventory.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 4\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955204,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "inventory",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/support-5/00000000000000000000000000000005",
+    "value": "{\"username\":\"support-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0005\",\"url\":\"https://support.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 5\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955205,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "support",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/nightly-backup-6/00000000000000000000000000000006",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0006",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955206,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "nightly-backup",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/dispatch-7/00000000000000000000000000000007",
+    "value": "{\"username\":\"dispatch-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0007\",\"url\":\"https://dispatch.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 7\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955207,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "dispatch",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/billing-8/00000000000000000000000000000008",
+    "value": "{\"username\":\"billing-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0008\",\"url\":\"https://billing.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 8\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955208,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "billing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/routing-9/00000000000000000000000000000009",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0009",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955209,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "routing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/inventory-10/00000000000000000000000000000010",
+    "value": "{\"username\":\"inventory-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0010\",\"url\":\"https://inventory.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 10\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955210,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "inventory",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/support-11/00000000000000000000000000000011",
+    "value": "{\"username\":\"support-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0011\",\"url\":\"https://support.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 11\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955211,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "support",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/nightly-backup-12/00000000000000000000000000000012",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0012",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955212,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "nightly-backup",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/dispatch-13/00000000000000000000000000000013",
+    "value": "{\"username\":\"dispatch-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0013\",\"url\":\"https://dispatch.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 13\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955213,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "dispatch",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/billing-14/00000000000000000000000000000014",
+    "value": "{\"username\":\"billing-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0014\",\"url\":\"https://billing.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 14\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955214,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "billing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/routing-15/00000000000000000000000000000015",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0015",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955215,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "routing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/inventory-16/00000000000000000000000000000016",
+    "value": "{\"username\":\"inventory-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0016\",\"url\":\"https://inventory.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 16\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955216,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "inventory",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/support-17/00000000000000000000000000000017",
+    "value": "{\"username\":\"support-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0017\",\"url\":\"https://support.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 17\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955217,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "support",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/nightly-backup-18/00000000000000000000000000000018",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0018",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955218,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "nightly-backup",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/dispatch-19/00000000000000000000000000000019",
+    "value": "{\"username\":\"dispatch-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0019\",\"url\":\"https://dispatch.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 19\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955219,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "dispatch",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/billing-20/00000000000000000000000000000020",
+    "value": "{\"username\":\"billing-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0020\",\"url\":\"https://billing.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 20\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955220,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "billing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/routing-21/00000000000000000000000000000021",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0021",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955221,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "routing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/inventory-22/00000000000000000000000000000022",
+    "value": "{\"username\":\"inventory-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0022\",\"url\":\"https://inventory.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 22\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955222,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "inventory",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/support-23/00000000000000000000000000000023",
+    "value": "{\"username\":\"support-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0023\",\"url\":\"https://support.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 23\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955223,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "support",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/nightly-backup-24/00000000000000000000000000000024",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0024",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955224,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "nightly-backup",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/dispatch-25/00000000000000000000000000000025",
+    "value": "{\"username\":\"dispatch-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0025\",\"url\":\"https://dispatch.example.invalid\",\"region\":\"fixture-east\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 25\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955225,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "dispatch",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/billing-26/00000000000000000000000000000026",
+    "value": "{\"username\":\"billing-fixture-reader\",\"password\":\"SYNTHETIC-FIXTURE-AZURE-0026\",\"url\":\"https://billing.example.invalid\",\"region\":\"fixture-west\",\"enabled\":false,\"retries\":0,\"alias\":\"\",\"credential hint 🔐\":\"Rotación 26\\n  保存位置\\n\",\"policy\":{\"roles\":[\"fixture-viewer\",\"fixture-rotation\"],\"limits\":{\"maxAttempts\":0,\"enabled\":false}},\"private_material_marker\":\"-----BEGIN SYNTHETIC TEST MARKER-----\\nNOT VALID PRIVATE KEY DATA\\n-----END SYNTHETIC TEST MARKER-----\\n\"}",
+    "attributes": {
+      "enabled": true,
+      "created": 1761955200,
+      "updated": 1761955226,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "application/json",
+    "tags": {
+      "owner": "billing",
+      "environment": "fixture"
+    }
+  },
+  {
+    "id": "https://training-vault.vault.azure.net.example.invalid/secrets/routing-27/00000000000000000000000000000027",
+    "value": "SYNTHETIC-FIXTURE-AZURE-PLAIN-0027",
+    "attributes": {
+      "enabled": false,
+      "created": 1761955200,
+      "updated": 1761955227,
+      "recoveryLevel": "Recoverable"
+    },
+    "contentType": "text/plain",
+    "tags": {
+      "owner": "routing",
+      "environment": "fixture"
+    }
+  }
+]

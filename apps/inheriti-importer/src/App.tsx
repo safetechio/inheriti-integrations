@@ -62,7 +62,7 @@ const stagingChecklist: ChecklistItem[] = [
   },
   {
     label: 'Encryption',
-    detail: 'The Organization Key encrypts every field locally before staging.',
+    detail: 'The Organization Key encrypts protected fields locally before staging.',
     complete: false,
   },
 ];
@@ -87,8 +87,13 @@ function AuthenticatedImporter() {
   const [warningFile, setWarningFile] = useState<ImportFile | null>(null);
   const [acknowledgedWarnings, setAcknowledgedWarnings] = useState<Set<string>>(() => new Set());
   const [stagingComplete, setStagingComplete] = useState(false);
+  const [reviewRevision, setReviewRevision] = useState(0);
   const planWorkspace = workspaceHistory.present;
   const importSession = useMemo(() => importSessionFromVaultState(imports.state), [imports.state]);
+  const preservationRevision = useMemo(
+    () => Symbol(),
+    [planWorkspace, importSession, reviewRevision],
+  );
   const files = useMemo(
     () =>
       projectImportSources(imports.state).map((file) => ({
@@ -117,11 +122,16 @@ function AuthenticatedImporter() {
     setPlanWorkspace,
     replacePlanWorkspace,
     // Review state is separate; old plan snapshots must not restore excluded or remapped assets.
-    () => setWorkspaceHistory(resetHistory),
+    () => {
+      setWorkspaceHistory(resetHistory);
+      setReviewRevision((revision) => revision + 1);
+    },
   );
   const batchController = usePlanBatchController({
     plans: listPlanDrafts(planWorkspace),
     session: importSession,
+    preservationReady: workspace.executionCoverage.ready,
+    preservationRevision,
     onSuccess: () => setStagingComplete(true),
   });
 
@@ -209,6 +219,15 @@ function AuthenticatedImporter() {
           }
           files={files}
           assets={workspace.assets}
+          preservation={{
+            coverage: workspace.coverage,
+            noteSources: workspace.noteSources,
+            onSetSourceNoteDestination: workspace.setSourceNoteDestination,
+            onSetAssetNoteDestination: workspace.setAssetNoteDestination,
+            onPreserveFields: workspace.preserveFields,
+            onExcludeFields: workspace.excludeFields,
+          }}
+          executionCoverage={workspace.executionCoverage}
           unassigned={workspace.unassigned}
           plans={workspace.plans}
           checklist={stagingChecklist}
@@ -288,7 +307,12 @@ function AuthenticatedImporter() {
 }
 
 function warningKey(file: ImportFile) {
-  return JSON.stringify([file.id ?? file.name, file.warningMessages, file.warnings]);
+  return JSON.stringify([
+    file.id ?? file.name,
+    file.warningMessages,
+    file.diagnostics,
+    file.warnings,
+  ]);
 }
 
 function isSupportedReviewAction(action: string): action is ImporterWorkspaceAction {

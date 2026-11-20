@@ -25,11 +25,14 @@ import {
 import { createMappingActions } from './importer-workspace-mapping';
 import { createPlanActions } from './importer-workspace-plans';
 import { createSourceActions } from './importer-workspace-source';
+import { createPreservationActions } from './importer-workspace-preservation';
+import type { PreservationChoices } from './importer-workspace-notes';
 import { hasIncludedSchemaField } from '../../AssetReviewQueue/types';
 
 export interface ImporterWorkspaceContext {
   session: ImportSession;
   workspace: WorkspaceState;
+  preservation: PreservationChoices;
   projection: ImporterWorkspaceProjection;
   mappingOverrides: MappingOverrides;
   plainTextOverrides: PlainTextOverrides;
@@ -65,6 +68,7 @@ export function useImporterWorkspace(
     Record<string, SuggestedAsset>
   >({});
   const [typeOverrides, setTypeOverrides] = useState<AssetTypeOverrides>({});
+  const [preservation, setPreservation] = useState<PreservationChoices>({});
   const projection = useMemo(
     () =>
       projectImporterWorkspace(
@@ -75,6 +79,7 @@ export function useImporterWorkspace(
         plainTextOverrides,
         plainTextAssetIds,
         typeOverrides,
+        preservation,
       ),
     [
       session,
@@ -84,11 +89,13 @@ export function useImporterWorkspace(
       plainTextOverrides,
       plainTextAssetIds,
       typeOverrides,
+      preservation,
     ],
   );
   const context: ImporterWorkspaceContext = {
     session,
     workspace,
+    preservation: { ...preservation, ignored: new Set(workspace.ignoredSourceFieldIds) },
     projection,
     mappingOverrides,
     plainTextOverrides,
@@ -146,8 +153,13 @@ export function useImporterWorkspace(
     invalidateGlobalBatch,
     onReviewChange,
   );
+  const preservationActions = createPreservationActions(context, setPreservation, (ids) => {
+    ids.forEach((id) => invalidateBatchAsset(id));
+    onReviewChange?.();
+  });
   return {
     ...projection,
+    ...preservationActions,
     ...reviewActions,
     ...mappingActions,
     ...createPlanActions(context),
@@ -182,6 +194,7 @@ export function useImporterWorkspace(
     resetReview: () => {
       lastBatch.current = null;
       clearSelectedSource();
+      setPreservation({});
       sourceActions.resetReview();
       onReviewChange?.();
     },

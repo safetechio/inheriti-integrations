@@ -57,11 +57,15 @@ export function usePlanBatchController({
   plans,
   session,
   onSuccess,
+  preservationReady = true,
+  preservationRevision,
   telemetry = createNoopTelemetrySink(),
 }: {
   plans: PlanDraft[];
   session: ImportSession;
   onSuccess: () => void;
+  preservationReady?: boolean;
+  preservationRevision?: symbol;
   telemetry?: ImportTelemetrySink;
 }): PlanBatchControllerState {
   const context = usePlanBatchContext();
@@ -79,6 +83,7 @@ export function usePlanBatchController({
     currentMemberId: context.currentMember?.id,
     approvalMode: context.policy.approvalMode,
     totalShares: context.storageSummary?.activeDataStorageLayerCount ?? 0,
+    preservationRevision,
   });
   const callbacks = usePlanBatchStaging({
     session,
@@ -86,6 +91,8 @@ export function usePlanBatchController({
     currentMemberId: context.currentMember?.id,
     keyRelease,
     importerToolRepo,
+    preservationReady,
+    preservationRevision,
   });
   const batch = usePlanBatch<PlanBatchInput>(callbacks);
   const actions = usePlanBatchExecution({ entries, batch, telemetry, keyRelease });
@@ -107,17 +114,28 @@ export function usePlanBatchController({
   }, [actions.cancel, batch.reset]);
   useEffect(() => {
     if (
+      !preservationReady ||
       !completionArmed.current ||
       successReported.current ||
       batch.running ||
       batch.items.length === 0 ||
       batch.items.length !== entries.length ||
-      batch.items.some((item) => item.status !== 'COMPLETE')
+      batch.items.some(
+        (item) =>
+          item.status !== 'COMPLETE' || item.input.preservationRevision !== preservationRevision,
+      )
     )
       return;
     successReported.current = true;
     onSuccess();
-  }, [batch.items, batch.running, entries.length, onSuccess]);
+  }, [
+    batch.items,
+    batch.running,
+    entries.length,
+    onSuccess,
+    preservationReady,
+    preservationRevision,
+  ]);
   return {
     organizationId: context.organizationId,
     organizationKey: {
@@ -134,7 +152,7 @@ export function usePlanBatchController({
       loading: context.storageLoading,
       activeDataStorageLayerCount: context.storageSummary?.activeDataStorageLayerCount,
     },
-    ready: plans.length > 0,
+    ready: plans.length > 0 && preservationReady,
     running: batch.running,
     items: batch.items,
     result: batch.result,

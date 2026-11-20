@@ -17,6 +17,7 @@ export function buildPlanBatchInput(params: {
   creatorMemberId?: string;
   approvalModeFallback?: PlanCreationOrgPolicy['approvalMode'];
   totalShares: number;
+  preservationRevision?: symbol;
 }): PlanBatchInput {
   const { plan, session, organizationId, creatorMemberId, approvalModeFallback, totalShares } =
     params;
@@ -48,5 +49,6 @@ export function buildPlanBatchInput(params: {
     assets: materialised.assets,
     payload: payload as unknown as Record<string, unknown>,
     totalShares,
+    preservationRevision: params.preservationRevision,
   };
 }

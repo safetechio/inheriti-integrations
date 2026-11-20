@@ -1,0 +1,665 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-1
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008001
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNREF4In0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAwMSJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-2
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008002
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-3
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008003
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAwMw==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0003
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-4
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008004
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAwNA==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0004
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-5
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008005
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAwNQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0005
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-6
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008006
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QBg==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-7
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008007
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNREEzIn0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAwNyJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-8
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008008
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-9
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008009
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAwOQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0009
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-10
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008010
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAxMA==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0010
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-11
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008011
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAxMQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0011
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-12
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008012
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QDA==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-13
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008013
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNREV6In0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAxMyJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-14
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008014
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-15
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008015
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAxNQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0015
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-16
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008016
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAxNg==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0016
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-17
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008017
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAxNw==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0017
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-18
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008018
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QEg==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-19
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008019
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNREU1In0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAxOSJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-20
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008020
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-21
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008021
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyMQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0021
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-22
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008022
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyMg==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0022
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-23
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008023
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyMw==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0023
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-24
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008024
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QGA==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-25
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008025
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNREkxIn0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAyNSJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-26
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008026
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-27
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008027
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyNw==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0027
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-28
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008028
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyOA==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0028
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-29
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008029
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAyOQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0029
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-30
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008030
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QHg==
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dispatch-31
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008031
+  labels:
+    app: dispatch
+    environment: fixture
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJyZWdpc3RyeS1wcmltYXJ5LmV4YW1wbGUuaW52YWxpZCI6eyJhdXRoIjoiWm1sNGRIVnlaUzF5YjJKdmREcFRXVTVVU0VWVVNVTXRSa2xZVkZWU1JTMVNSVWRKVTFSU1dTMHdNRE14In0sInJlZ2lzdHJ5LW1pcnJvci5leGFtcGxlLmludmFsaWQiOnsidXNlcm5hbWUiOiJmaXh0dXJlLXJlYWRvbmx5IiwicGFzc3dvcmQiOiJTWU5USEVUSUMtRklYVFVSRS1NSVJST1ItMDAzMSJ9fX0=
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-32
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008032
+  labels:
+    app: billing
+    environment: fixture
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    SYNTHETIC CERTIFICATE MARKER ONLY
+  tls.key: |
+    -----BEGIN SYNTHETIC TEST MARKER-----
+    NOT VALID PRIVATE KEY DATA
+    -----END SYNTHETIC TEST MARKER-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: routing-33
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008033
+  labels:
+    app: routing
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAzMw==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0033
+  endpoint: https://routing.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventory-34
+  namespace: training-stage
+  uid: 00000000-0000-4000-8000-000000008034
+  labels:
+    app: inventory
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAzNA==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0034
+  endpoint: https://inventory.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-35
+  namespace: recovery-lab
+  uid: 00000000-0000-4000-8000-000000008035
+  labels:
+    app: support
+    environment: fixture
+type: Opaque
+data:
+  username: Zml4dHVyZS1yZWFkZXI=
+  password: U1lOVEhFVElDLUZJWFRVUkUtSzhTLURBVEEtMDAzNQ==
+  zero.txt: MA==
+stringData:
+  password: SYNTHETIC-FIXTURE-K8S-STRINGDATA-WINS-0035
+  endpoint: https://support.example.invalid
+  disabled: "false"
+  empty: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nightly-backup-36
+  namespace: training-dev
+  uid: 00000000-0000-4000-8000-000000008036
+  labels:
+    app: nightly-backup
+    environment: fixture
+data:
+  app.toml: |
+    [feature]
+    enabled = false
+    retries = 0
+  endpoint: https://nightly-backup.example.invalid
+  locale: 日本語
+binaryData:
+  header.bytes: AP8QJA==
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: training-dev

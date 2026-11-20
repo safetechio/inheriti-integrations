@@ -155,6 +155,20 @@ class OnePasswordZipValidator {
     return { end, count, position };
   }
 
+  contentKind(): 'onepassword' | 'excel' | undefined {
+    const { end, count, position: start } = this.directoryBounds();
+    const names = new Set<string>();
+    let position = start;
+    for (let index = 0; index < count; index++) {
+      const header = this.readHeader(position, end);
+      names.add(header.name);
+      position = header.next;
+    }
+    if (names.has('[Content_Types].xml') && names.has('xl/workbook.xml')) return 'excel';
+    if (names.has(ATTRIBUTES_MEMBER) || names.has(DATA_MEMBER)) return 'onepassword';
+    return undefined;
+  }
+
   validate(): { attachmentCount: number; attributes: ZipMember; exportData: ZipMember } {
     const { end, count, position } = this.directoryBounds();
     try {
@@ -200,4 +214,12 @@ export function validateOnePasswordZip(data: Uint8Array): {
   exportData: ZipMember;
 } {
   return new OnePasswordZipValidator(data).validate();
+}
+
+export function detectZipContent(data: ArrayBuffer): 'onepassword' | 'excel' | undefined {
+  try {
+    return new OnePasswordZipValidator(new Uint8Array(data)).contentKind();
+  } catch {
+    return undefined;
+  }
 }

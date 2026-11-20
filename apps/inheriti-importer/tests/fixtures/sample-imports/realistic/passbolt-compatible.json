@@ -1,0 +1,756 @@
+{
+  "resources": [
+    {
+      "id": "00000000-0000-4000-8000-000000007001",
+      "name": "Support, \"Après-vente\" / 出荷",
+      "username": "operator-1@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 1, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0001",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0001",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007002",
+      "name": "billing operator 2",
+      "username": "operator-2@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 2, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "  SYNTHETIC-FIXTURE-CSV-EDGE # literal  ",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0002",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007003",
+      "name": "routing operator 3",
+      "username": "operator-3@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 3, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0003",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0003",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007004",
+      "name": "inventory operator 4",
+      "username": "operator-4@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 4, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0004",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0004",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007005",
+      "name": "support operator 5",
+      "username": "operator-5@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 5, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0005",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0005",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007006",
+      "name": "nightly-backup operator 6",
+      "username": "operator-6@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 6, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0006",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0006",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007007",
+      "name": "dispatch operator 7",
+      "username": "operator-7@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 7, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0007",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0007",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007008",
+      "name": "billing operator 8",
+      "username": "operator-8@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 8, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0008",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0008",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007009",
+      "name": "routing operator 9",
+      "username": "operator-9@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 9, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0009",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0009",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007010",
+      "name": "inventory operator 10",
+      "username": "operator-10@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 10, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0010",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0010",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007011",
+      "name": "support operator 11",
+      "username": "operator-11@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 11, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0011",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0011",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007012",
+      "name": "nightly-backup operator 12",
+      "username": "operator-12@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 12, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0012",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0012",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007013",
+      "name": "dispatch operator 13",
+      "username": "operator-13@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 13, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0013",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0013",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007014",
+      "name": "billing operator 14",
+      "username": "operator-14@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 14, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0014",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0014",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007015",
+      "name": "routing operator 15",
+      "username": "operator-15@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 15, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0015",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0015",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007016",
+      "name": "inventory operator 16",
+      "username": "operator-16@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 16, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0016",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0016",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007017",
+      "name": "support operator 17",
+      "username": "operator-17@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 17, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0017",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0017",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007018",
+      "name": "nightly-backup operator 18",
+      "username": "operator-18@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 18, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0018",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0018",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007019",
+      "name": "dispatch operator 19",
+      "username": "operator-19@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 19, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0019",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0019",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007020",
+      "name": "billing operator 20",
+      "username": "operator-20@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 20, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0020",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0020",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007021",
+      "name": "routing operator 21",
+      "username": "operator-21@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 21, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0021",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0021",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007022",
+      "name": "inventory operator 22",
+      "username": "operator-22@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 22, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0022",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0022",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007023",
+      "name": "support operator 23",
+      "username": "operator-23@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 23, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0023",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0023",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007024",
+      "name": "nightly-backup operator 24",
+      "username": "operator-24@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 24, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0024",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0024",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007025",
+      "name": "dispatch operator 25",
+      "username": "operator-25@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 25, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0025",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0025",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007026",
+      "name": "billing operator 26",
+      "username": "operator-26@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 26, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0026",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0026",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007027",
+      "name": "routing operator 27",
+      "username": "operator-27@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 27, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0027",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0027",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007028",
+      "name": "inventory operator 28",
+      "username": "operator-28@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 28, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0028",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0028",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007029",
+      "name": "support operator 29",
+      "username": "operator-29@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 29, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0029",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0029",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007030",
+      "name": "nightly-backup operator 30",
+      "username": "operator-30@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 30, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0030",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0030",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007031",
+      "name": "dispatch operator 31",
+      "username": "operator-31@dispatch.example.invalid",
+      "uri": "https://dispatch.example.invalid/admin",
+      "description": "Training rotation 31, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "dispatch"
+      ],
+      "folder_parent": {
+        "name": "Training/dispatch/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0031",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0031",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007032",
+      "name": "billing operator 32",
+      "username": "operator-32@billing.example.invalid",
+      "uri": "https://billing.example.invalid/admin",
+      "description": "Training rotation 32, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "billing"
+      ],
+      "folder_parent": {
+        "name": "Training/billing/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0032",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0032",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007033",
+      "name": "routing operator 33",
+      "username": "operator-33@routing.example.invalid",
+      "uri": "https://routing.example.invalid/admin",
+      "description": "Training rotation 33, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "routing"
+      ],
+      "folder_parent": {
+        "name": "Training/routing/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0033",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0033",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007034",
+      "name": "inventory operator 34",
+      "username": "operator-34@inventory.example.invalid",
+      "uri": "https://inventory.example.invalid/admin",
+      "description": "Training rotation 34, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "inventory"
+      ],
+      "folder_parent": {
+        "name": "Training/inventory/Shift 1"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0034",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0034",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007035",
+      "name": "support operator 35",
+      "username": "operator-35@support.example.invalid",
+      "uri": "https://support.example.invalid/admin",
+      "description": "Training rotation 35, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "support"
+      ],
+      "folder_parent": {
+        "name": "Training/support/Shift 2"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {
+        "password": "SYNTHETIC-FIXTURE-PASSBOLT-0035",
+        "recovery_hint": "SYNTHETIC-FIXTURE-PASSBOLT-RECOVERY-0035",
+        "grace_period": 0
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000007036",
+      "name": "nightly-backup operator 36",
+      "username": "operator-36@nightly-backup.example.invalid",
+      "uri": "https://nightly-backup.example.invalid/admin",
+      "description": "Training rotation 36, runbook \"Night shift\".\r\nOwner: São Paulo / 台北.\r\n",
+      "tags": [
+        "fixture",
+        "nightly-backup"
+      ],
+      "folder_parent": {
+        "name": "Training/nightly-backup/Shift 0"
+      },
+      "personal": false,
+      "rotationWindowDays": 0,
+      "secret": {}
+    }
+  ]
+}

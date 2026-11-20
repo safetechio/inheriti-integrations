@@ -1,3 +1,4 @@
+import { extraFieldIds, sourceFieldId } from '@modules/import/domain/vault';
 import { SensitiveValue, type ImportSession } from '@modules/import/domain/import-model';
 import type { VaultState } from './vault-store';
 
@@ -16,6 +17,7 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
       fileName: vault.fileName,
       importedAt: vault.importedAt,
       warnings: vault.warnings ? [...vault.warnings] : [],
+      diagnostics: vault.diagnostics,
     })),
     rootNodeIds: [],
     nodesById: {},
@@ -38,11 +40,17 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
       ['password', entry.password],
       ['url', entry.url],
       ['notes', entry.notes],
-      ...entry.extraFields.map((field) => [`extra:${field.key}`, field.value]),
     ];
     const fieldIds = fields
       .filter(([, value]) => value)
       .map(([name, value]) => addField(session, entry.id, entry.sourceId, name, value));
+    const extraIds = extraFieldIds(entry);
+    entry.extraFields.forEach(({ key, value }, index) => {
+      if (value)
+        fieldIds.push(
+          addField(session, entry.id, entry.sourceId, `extra:${key}`, value, extraIds[index]),
+        );
+    });
     session.nodesById[entry.id] = {
       id: entry.id,
       sourceId: entry.sourceId,
@@ -65,8 +73,8 @@ function addField(
   sourceId: string,
   fieldName: string,
   value: string,
+  id = sourceFieldId(entryId, fieldName),
 ): string {
-  const id = `${entryId}:${fieldName}`;
   session.fieldsById[id] = {
     id,
     sourceId,
@@ -74,7 +82,7 @@ function addField(
     sourcePath: [entryId, fieldName],
     name: fieldName,
     value: new SensitiveValue(value),
-    metadata: {},
+    metadata: fieldName === 'notes' ? { role: 'notes' } : {},
   };
   return id;
 }

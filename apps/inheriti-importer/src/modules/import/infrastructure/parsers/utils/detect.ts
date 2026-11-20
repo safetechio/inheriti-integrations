@@ -1,3 +1,5 @@
+import { detectZipContent } from './onepassword-zip';
+import { isOnePasswordCsv } from './onepassword-csv';
 import { parseAllDocuments } from 'yaml';
 import { decodeText, isRecord, tryParseJson } from './secret-fields';
 import { VaultFormatError, type VaultSourceKind } from '@modules/import/domain/vault';
@@ -9,14 +11,17 @@ export function detectVaultKind(fileName: string, data: ArrayBuffer): VaultSourc
   if (lower.endsWith('.kdbx') || hasKdbxSignature(data)) {
     return 'keepass';
   }
-  if (
-    lower.endsWith('.1pux') ||
-    (data.byteLength >= 4 && new DataView(data).getUint32(0, true) === 0x04034b50)
-  ) {
-    return 'onepassword';
+  const zip = data.byteLength >= 4 && new DataView(data).getUint32(0, true) === 0x04034b50;
+  const archiveKind = zip ? detectZipContent(data) : undefined;
+  if (/\.xls[xmb]?$/.test(lower) || archiveKind === 'excel') {
+    throw new VaultFormatError(
+      'Excel workbooks are unsupported. Import a supported source export such as KeePass KDBX, 1Password 1PUX/CSV, or Passbolt JSON/CSV.',
+    );
   }
-
+  if (lower.endsWith('.1pux') || archiveKind === 'onepassword') return 'onepassword';
+  if (zip) throw new VaultFormatError('Unsupported ZIP archive. Import a 1Password 1PUX export.');
   const text = decodeText(data);
+  if (isOnePasswordCsv(text)) return 'onepassword';
   const json = tryParseJson(text);
 
   if (looksLikeKubernetes(text, json)) return 'kubernetes';

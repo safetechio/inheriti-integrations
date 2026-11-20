@@ -1,3 +1,5 @@
+import type { ImportDiagnostic } from './import-diagnostic';
+
 export type VaultSourceKind =
   'keepass' | 'passbolt' | 'kubernetes' | 'vault' | 'dotenv' | 'cloud' | 'onepassword';
 
@@ -30,6 +32,7 @@ export type ImportedVault = {
   fileName: string;
   importedAt: string;
   warnings?: string[];
+  diagnostics?: ImportDiagnostic[];
 };
 
 export type ImportSourceStatus =
@@ -41,6 +44,7 @@ export type ImportSourceRecord = {
   file: OpenedVaultFile;
   status: ImportSourceStatus;
   warnings: string[];
+  diagnostics?: ImportDiagnostic[];
   entries?: number;
   detail?: string;
   vaultId?: string;
@@ -55,6 +59,7 @@ export type ParseResult = {
   name: string;
   entries: Omit<VaultEntry, 'sourceId'>[];
   warnings: string[];
+  diagnostics?: ImportDiagnostic[];
 };
 
 export type OpenedVaultFile = {
@@ -126,4 +131,24 @@ export function entriesEqual(a: VaultEntry, b: VaultEntry): boolean {
     a.tags.join('\u0000') === b.tags.join('\u0000') &&
     JSON.stringify(a.extraFields) === JSON.stringify(b.extraFields)
   );
+}
+
+/** Escape separators without requiring well-formed Unicode in imported labels. */
+export function escapeSourceIdPart(value: string): string {
+  return value.replace(/%/g, '%25').replace(/:/g, '%3A');
+}
+
+export function sourceFieldId(entryId: string, field: string): string {
+  return `${escapeSourceIdPart(entryId)}:${escapeSourceIdPart(field)}`;
+}
+
+export function extraFieldIds(entry: Pick<VaultEntry, 'id' | 'extraFields'>): string[] {
+  const prefix = sourceFieldId(entry.id, 'extra');
+  const occurrences = new Map<string, number>();
+  return entry.extraFields.map(({ key }) => {
+    const occurrence = (occurrences.get(key) ?? 0) + 1;
+    occurrences.set(key, occurrence);
+    const id = `${prefix}:${escapeSourceIdPart(key)}`;
+    return occurrence === 1 ? id : `${id}:${occurrence}`;
+  });
 }
