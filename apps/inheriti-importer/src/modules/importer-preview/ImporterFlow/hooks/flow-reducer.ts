@@ -1,10 +1,11 @@
 import type { StagingState } from '../../FinalStagingChecklist';
-import type { ReviewAsset } from '../../AssetReviewQueue';
+import type { ReviewAsset, ReviewBatchAction } from '../../AssetReviewQueue/types';
 import type { GroupingAsset, PlanDraft, PlanMetadataValues } from '../../PlanGroupingSurface';
 import type { ImporterFlowStage } from './use-importer-flow';
 import type { ImportFile } from '../../SourceImportStatus';
 import { assignAsset, unassignAsset, assignAssets, unassignAssets } from './flow-assignment';
 import { reviewAsset } from './flow-review';
+import { reviewBatch, undoReviewBatch, type ReviewBatchUndo } from './flow-review-batch';
 import { getImporterFlowReadiness } from '../application/flow-readiness';
 
 export type FlowState = {
@@ -15,11 +16,14 @@ export type FlowState = {
   assets: ReviewAsset[];
   unassigned: GroupingAsset[];
   plans: PlanDraft[];
+  reviewBatchUndo?: ReviewBatchUndo;
 };
 export type FlowAction =
   | { type: 'stage'; stage: ImporterFlowStage }
   | { type: 'select-asset'; asset: ReviewAsset }
   | { type: 'review-asset'; action: string; asset: ReviewAsset; autoAdvance: boolean }
+  | { type: 'review-batch'; action: ReviewBatchAction; ids: string[] }
+  | { type: 'undo-review-batch' }
   | { type: 'assign-asset'; asset: GroupingAsset; plan: PlanDraft }
   | { type: 'unassign-asset'; asset: GroupingAsset; plan: PlanDraft }
   | { type: 'assign-assets'; assets: GroupingAsset[]; plan: PlanDraft }
@@ -49,6 +53,23 @@ export type FlowAction =
     }
   | { type: 'set-staging'; state: StagingState };
 export function flowReducer(state: FlowState, action: FlowAction): FlowState {
+  if (action.type === 'review-batch') return reviewBatch(state, action.action, action.ids);
+  if (action.type === 'undo-review-batch') return undoReviewBatch(state);
+  const next = reduceFlow(state, action);
+  if (
+    state.reviewBatchUndo &&
+    (next.assets !== state.assets ||
+      next.unassigned !== state.unassigned ||
+      next.plans !== state.plans)
+  )
+    return { ...next, reviewBatchUndo: undefined };
+  return next;
+}
+
+function reduceFlow(
+  state: FlowState,
+  action: Exclude<FlowAction, { type: 'review-batch' | 'undo-review-batch' }>,
+): FlowState {
   if (action.type === 'create-plan' && state.plans.some((plan) => plan.id === action.id))
     return state;
   if (action.type === 'stage') return { ...state, stage: action.stage };

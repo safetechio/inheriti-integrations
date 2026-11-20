@@ -1,4 +1,4 @@
-import { Box, Button, Text } from '@main-components';
+import { Box, Button, Text, Tooltip } from '@main-components';
 import { planCapacity, planUsage } from '../../capacity';
 import type { GroupingAsset, PlanDraft } from '../../types';
 
@@ -32,9 +32,13 @@ export function BulkSelectionBar({
   return (
     <Box flexDirection="row" alignItems="center" gap="s" className="plan-bulk-bar">
       <Text variant="bodySmall">{assets.length} selected</Text>
-      <Button title="Clear selection" size="sm" variant="plain" onPress={onClear} />
+      <Tooltip content="Deselect all assets. Plan assignments are kept.">
+        <Button title="Clear selection" size="sm" variant="plain" onPress={onClear} />
+      </Tooltip>
       {onCreate ? (
-        <Button title="New plan from selected" size="sm" onPress={onCreate} disabled={invalid} />
+        <Tooltip content="Create plans from the selected assets. Large selections are split across plans.">
+          <Button title="New plan from selected" size="sm" onPress={onCreate} disabled={invalid} />
+        </Tooltip>
       ) : null}
       <select
         aria-label="Move to plan"
@@ -58,21 +62,25 @@ export function BulkSelectionBar({
           </option>
         ))}
       </select>
-      <Button
-        title={`Move ${assets.length} assets`}
-        size="sm"
-        disabled={!onMove || !fits || invalid}
-        onPress={() => {
-          if (target && fits && !invalid) onMove?.(additions, target);
-        }}
-      />
-      {onUnassign ? (
+      <Tooltip content="Move the selected assets to the chosen plan.">
         <Button
-          title="Unassign selected"
+          title={`Move ${assets.length} assets`}
           size="sm"
-          variant="plain"
-          onPress={() => onUnassign(assets)}
+          disabled={!onMove || !fits || invalid}
+          onPress={() => {
+            if (target && fits && !invalid) onMove?.(additions, target);
+          }}
         />
+      </Tooltip>
+      {onUnassign ? (
+        <Tooltip content="Return selected assets to Unassigned and keep them in the import.">
+          <Button
+            title="Unassign selected"
+            size="sm"
+            variant="plain"
+            onPress={() => onUnassign(assets)}
+          />
+        </Tooltip>
       ) : null}
       {invalid || (target && !fits) ? (
         <Text variant="bodySmall" color="danger120">

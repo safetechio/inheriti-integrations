@@ -18,7 +18,7 @@ import {
   assetMatchesSuggestion,
   sourceSuggestions,
 } from './importer-workspace-suggestions';
-import type { AssetTypeOverrides } from './importer-workspace-types';
+import type { AssetTypeOverrides, MappingOverrides } from './importer-workspace-types';
 
 /** Include schema and materialisation errors in the review row. */
 function suggestionValidationErrors(
@@ -60,13 +60,20 @@ export function projectAssets(
   decisions: Record<string, AssetReviewStatus>,
   plainTextAssetIds: ReadonlySet<string>,
   typeOverrides: AssetTypeOverrides = {},
+  mappingOverrides: MappingOverrides = {},
 ): ReviewAsset[] {
   const originals = sourceSuggestions(session);
+  const companionNodes = new Set(
+    suggestions
+      .filter((suggestion) => suggestion.variant === 'additional-fields')
+      .map((suggestion) => suggestion.fromNodeId),
+  );
   return suggestions.map((suggestion): ReviewAsset => {
     const original = originals.find(
       (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
     );
     const originalId = original ? statusKey(original) : undefined;
+    const id = statusKey(suggestion);
     const node = session.nodesById[suggestion.fromNodeId];
     const sourceFileName =
       session.sources.find((source) => source.id === node?.sourceId)?.fileName ?? 'Imported source';
@@ -108,10 +115,11 @@ export function projectAssets(
               : undefined,
           candidates,
           validationError: validationErrors[field.source],
+          manuallyMapped: Object.hasOwn(mappingOverrides[id] ?? {}, field.source),
         };
       });
     return {
-      id: statusKey(suggestion),
+      id,
       name: suggestion.name,
       type: suggestion.type,
       status,
@@ -135,6 +143,10 @@ export function projectAssets(
       alternatives: getCorePlanAssetTypes().filter((type) => type !== suggestion.type),
       previewFields: mapped,
       schemaFields,
+      batchMappingSupported:
+        suggestion.type !== 'PLAIN-TEXT' &&
+        !companionNodes.has(suggestion.fromNodeId) &&
+        Object.values(suggestion.fieldBindings).every((binding) => binding.kind === 'source'),
       plainTextValue:
         suggestion.fieldBindings['secret.text']?.kind === 'literal'
           ? suggestion.fieldBindings['secret.text'].value

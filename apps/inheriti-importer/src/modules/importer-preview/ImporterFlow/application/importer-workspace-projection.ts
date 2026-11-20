@@ -223,6 +223,7 @@ export function projectImporterWorkspace(
     decisions,
     plainTextAssetIds,
     typeOverrides,
+    mappingOverrides,
   );
   const unassigned = projectUnassigned(session, suggestions, workspace, decisions, assets);
   const plans = projectPlans(session, workspace, suggestions);

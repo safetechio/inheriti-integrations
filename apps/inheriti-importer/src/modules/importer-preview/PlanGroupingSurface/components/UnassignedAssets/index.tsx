@@ -182,7 +182,7 @@ export function UnassignedAssets({
             {visible.length} {visible.length === 1 ? 'asset' : 'assets'} · {sources.length} {sources.length === 1 ? 'source' : 'sources'}
           </Text>
         </Box>
-        <Box className="plan-source-scroll" tabIndex={0} aria-label={`${heading} ${view}`} ref={marquee.containerRef}>
+        <Box className="plan-source-scroll" tabIndex={0} aria-label={`${heading} ${view}`} ref={marquee.setContainerRef}>
           {visible.length ? (
             view === 'list' ? (
               visible.slice(0, limit).map((asset) => assetRow(asset))

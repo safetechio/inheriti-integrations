@@ -75,8 +75,13 @@ export function StageContent({
         selectedId={flow.selectedAssetId}
         onSelect={flow.selectAsset}
         onAction={flow.reviewAsset}
+        onReviewAssets={flow.reviewAssets}
+        onUndoReviewBatch={flow.undoReviewBatch}
+        canUndoReviewBatch={flow.canUndoReviewBatch}
+        onApplyMappings={flow.applyMappings}
         onAcceptAllEligible={flow.acceptAllEligible}
         onUndoAcceptAll={flow.undoAcceptAll}
+        autoAdvance={flow.reviewAutoAdvance}
         showKeyboardHints={showKeyboardHints}
         resolveSourceValue={flow.resolveSourceValue}
         onMapField={flow.mapField}

@@ -50,12 +50,20 @@ export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove
         <Text className="asset-selection-hint" variant="xSmall" color="gray">Shift+click to extend · Esc to clear</Text>
       </Box>
       <Box className="asset-selection-actions" flexDirection="row" alignItems="center" gap="s">
-        {onCreate ? <Tooltip content={createDestination?.blockedReason}>
+        {onCreate ? <Tooltip content={createDestination?.blockedReason ?? 'Create plans from the selected assets in the chosen folder. Large selections are split across plans.'}>
           <Button title="New plan" size="sm" minHeight={34} variant="outlined" color="gray" onPress={onCreate} disabled={Boolean(createDestination?.blockedReason) || assets.some((asset) => asset.valid === false)} />
         </Tooltip> : null}
-        <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{moveLabel}</button>
-        <Box className="asset-selection-clear"><Button title="Clear" size="sm" minHeight={34} variant="plain" onPress={onClear} /></Box>
-        {onUnassign ? <Button title="Unassign selected" size="sm" minHeight={34} variant="plain" onPress={() => onUnassign(assets)} /> : null}
+        <Tooltip content="Search for an existing plan and move the selected assets there.">
+          <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{moveLabel}</button>
+        </Tooltip>
+        <Box className="asset-selection-clear">
+          <Tooltip content="Deselect all assets. Plan assignments are kept.">
+            <Button title="Clear" size="sm" minHeight={34} variant="plain" onPress={onClear} />
+          </Tooltip>
+        </Box>
+        {onUnassign ? <Tooltip content="Return selected assets to Unassigned and keep them in the import.">
+          <Button title="Unassign selected" size="sm" minHeight={34} variant="plain" onPress={() => onUnassign(assets)} />
+        </Tooltip> : null}
       </Box>
     </Box>
     {open && anchor.current ? <PlanTargetPopover anchor={anchor.current} assets={assets} plans={plans} onDismiss={() => setOpen(false)} onChoose={(plan) => {

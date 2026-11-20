@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Box, Button, Icon, IconAction, NoItemsPlaceholder, Text, Tooltip } from '@main-components';
 import { useMarqueeSelection } from '@modules/_shared/ui/hooks/use-marquee-selection';
 import { setItemDragImage } from '@shared/ui/drag/set-item-drag-image';
@@ -276,6 +276,12 @@ export function OrganizationFolderTree({
   };
   const marquee = useMarqueeSelection({ selectedIds: selectedPlanIds, onSelect: (ids) => { setSelectedFolderIds([]); assetSelection?.clear(); setSelectedPlanIds(ids.slice(0, 100)); }, resetKey: `${workspace.scope}:${query}`, rowSelector: '[data-plan-row-id]', getRowIds: (element) => [element.dataset.planRowId!], onStart: () => setSelectedFolderIds([]), excludeSelector: '[data-assigned-asset-id]' });
   const assetMarquee = useMarqueeSelection({ selectedIds: assetSelection?.pane === 'organization' ? assetSelection.selectedIds : [], onSelect: (ids) => { setSelectedPlanIds([]); setSelectedFolderIds([]); assetSelection?.replaceSelection(ids, 'organization'); }, resetKey: `${workspace.scope}:${query}`, rowSelector: '[data-assigned-asset-id]', startSelector: '[data-assigned-asset-id]', getRowIds: (element) => [element.dataset.assignedAssetId!], onStart: () => { setSelectedPlanIds([]); setSelectedFolderIds([]); } });
+  const { setContainerRef: setPlanMarqueeRef } = marquee;
+  const { setContainerRef: setAssetMarqueeRef } = assetMarquee;
+  const setMarqueeRef = useCallback((element: HTMLElement | null) => {
+    setPlanMarqueeRef(element);
+    setAssetMarqueeRef(element);
+  }, [setPlanMarqueeRef, setAssetMarqueeRef]);
   const movePlans = (plansToMove: PlanDraft[], folderId: string | null) => {
     setDropId(undefined);
     if (!plansToMove.length || !destinationReady(folderId) || plansToMove.some((plan) => (plan.sharingModel === 'PRIVATE' ? 'PERSONAL' : 'SHARED') !== workspace.scope)) return;
@@ -594,7 +600,7 @@ export function OrganizationFolderTree({
         <Text variant="bodySmall" color="gray">Assets</Text>
         <Box width={40} />
       </Box>
-      <Box className={`organization-folder-scroll ${dropId === null ? (dropValid ? 'over-valid' : 'over-invalid') : ''}`} role="tree" tabIndex={0} aria-label="Organisation folders" ref={(element: HTMLElement | null) => { marquee.containerRef.current = element; assetMarquee.containerRef.current = element; }}
+      <Box className={`organization-folder-scroll ${dropId === null ? (dropValid ? 'over-valid' : 'over-invalid') : ''}`} role="tree" tabIndex={0} aria-label="Organisation folders" ref={setMarqueeRef}
         onDragOver={(event: DragEvent) => {
           if ((event.target as HTMLElement).closest('[role="treeitem"]')) return;
           if (draggedFolderIds.length) {
@@ -660,7 +666,22 @@ export function OrganizationFolderTree({
         ) : null}
       </Box>
       {toolbar ? <Box className="folder-tree-footer">{toolbar}</Box> : null}
-      {selectedPlanIds.length ? <Box className="folder-tree-selection" flexDirection="row" alignItems="center" gap="s"><Text variant="bodySmall">{selectedPlanIds.length} {selectedPlanIds.length === 1 ? 'plan' : 'plans'} selected</Text><Button title="Move to folder" size="sm" disabled={!onMovePlans || !visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => setMoveSelectedIds(selectedPlanIds)} /><Button title="Clear selection" size="sm" variant="plain" onPress={() => setSelectedPlanIds([])} />{onDeletePlans ? <Button title="Delete selected" size="sm" color="danger" variant="plain" disabled={!visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => onDeletePlans(visiblePlans.filter((plan) => selectedPlanIds.includes(plan.id)))} /> : null}</Box> : null}
+      {selectedPlanIds.length ? (
+        <Box className="folder-tree-selection" flexDirection="row" alignItems="center" gap="s">
+          <Text variant="bodySmall">{selectedPlanIds.length} {selectedPlanIds.length === 1 ? 'plan' : 'plans'} selected</Text>
+          <Tooltip content="Choose a destination folder for the selected plans.">
+            <Button title="Move to folder" size="sm" disabled={!onMovePlans || !visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => setMoveSelectedIds(selectedPlanIds)} />
+          </Tooltip>
+          <Tooltip content="Deselect all plans.">
+            <Button title="Clear selection" size="sm" variant="plain" onPress={() => setSelectedPlanIds([])} />
+          </Tooltip>
+          {onDeletePlans ? (
+            <Tooltip content="Review and confirm deleting the selected draft plans. Their assets return to Unassigned.">
+              <Button title="Delete selected" size="sm" color="danger" variant="plain" disabled={!visiblePlans.some((plan) => selectedPlanIds.includes(plan.id))} onPress={() => onDeletePlans(visiblePlans.filter((plan) => selectedPlanIds.includes(plan.id)))} />
+            </Tooltip>
+          ) : null}
+        </Box>
+      ) : null}
       {selectedFolderIds.length ? <Box className="folder-tree-selection"><FolderSelectionToolbar folders={visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id))} workspace={workspace} localDraftCount={countLocalDrafts(selectedFolderIds)} onClear={() => setSelectedFolderIds([])} /></Box> : null}
       {assetSelection?.pane === 'organization' && assetSelection.assets.length ? (
         <AssetSelectionToolbar

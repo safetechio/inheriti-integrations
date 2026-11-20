@@ -4,8 +4,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { useMarqueeSelection } from '../../../src/modules/_shared/ui/hooks/use-marquee-selection';
 import { Box, Text } from '@main-components';
 
-function Fixture({ startSelector, excludeSelector }: { startSelector?: string; excludeSelector?: string } = {}) {
-  const [ids, setIds] = useState<string[]>([]);
+function Fixture({ startSelector, excludeSelector, containerKey, initialIds = [] }: {
+  startSelector?: string;
+  excludeSelector?: string;
+  containerKey?: string;
+  initialIds?: string[];
+} = {}) {
+  const [ids, setIds] = useState(initialIds);
   const [key, setKey] = useState('one');
   const marquee = useMarqueeSelection({
     selectedIds: ids,
@@ -19,8 +24,14 @@ function Fixture({ startSelector, excludeSelector }: { startSelector?: string; e
   return <>
     <button onClick={() => setKey('two')}>Reset</button>
     <span data-testid="ids">{ids.join(',')}</span>
-    <Box ref={marquee.containerRef}>
-      <Box dataSet={{ rowId: 'a' }} onClick={() => setIds(['clicked'])}><Text>A</Text></Box>
+    <Box key={containerKey} ref={marquee.setContainerRef}>
+      <Box dataSet={{ rowId: 'a' }} draggable>
+        <Box role="button" dataSet={{ marqueeRowControl: '' }} onClick={() => setIds(['clicked'])}>
+          <Text>A</Text>
+        </Box>
+        <input type="checkbox" aria-label="Select A" />
+        <button>Actions</button>
+      </Box>
       <Box dataSet={{ rowId: 'b' }}><Text>B</Text></Box>
       {marquee.rectangle && <output data-testid="rectangle" />}
     </Box>
@@ -37,14 +48,15 @@ it('selects intersecting mounted rows after five pixels and blocks the following
   vi.spyOn(row.parentElement!, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, right: 100, bottom: 100 } as DOMRect);
   vi.spyOn(row, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
   vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 10, right: 30, bottom: 30 } as DOMRect);
-  fireEvent.pointerDown(row, { pointerType: 'mouse', button: 0, ctrlKey: true, clientX: 0, clientY: 0 });
+  fireEvent.pointerDown(screen.getByText('A'), { pointerType: 'mouse', button: 0, ctrlKey: true, clientX: 0, clientY: 0 });
   fireEvent.pointerMove(document, { clientX: 3, clientY: 0 });
   expect(screen.getByTestId('ids').textContent).toBe('');
-  fireEvent.dragStart(row);
+  expect(fireEvent.dragStart(row)).toBe(false);
+  expect(fireEvent(screen.getByText('A'), new Event('selectstart', { bubbles: true, cancelable: true }))).toBe(false);
   fireEvent.pointerMove(document, { clientX: 20, clientY: 20 });
   fireEvent.pointerUp(document);
   expect(screen.getByTestId('ids').textContent).toBe('a');
-  fireEvent.click(row);
+  fireEvent.click(screen.getByText('A'));
   expect(screen.getByTestId('ids').textContent).toBe('a');
 });
 
@@ -62,6 +74,36 @@ it('ends pending gestures on Escape and reset', () => {
   expect(screen.getByTestId('ids').textContent).toBe('');
 });
 
+it('cancels a pending gesture and binds selection to a replacement container', () => {
+  const requestFrame = vi.fn(() => 1);
+  vi.stubGlobal('requestAnimationFrame', requestFrame);
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  const { rerender } = render(<Fixture containerKey="old" initialIds={['b']} />);
+  const original = screen.getByText('A');
+  const start = { pointerType: 'mouse', button: 0, ctrlKey: true, clientX: 20, clientY: 0 };
+  fireEvent.pointerDown(original, start);
+  expect(fireEvent.dragStart(original)).toBe(false);
+
+  rerender(<Fixture containerKey="new" />);
+  fireEvent.pointerMove(document, { clientX: 20, clientY: 25 });
+  fireEvent.pointerUp(document);
+  expect(requestFrame).not.toHaveBeenCalled();
+  expect(screen.getByTestId('ids').textContent).toBe('b');
+
+  const label = screen.getByText('A');
+  const row = label.closest('[data-row-id]')!;
+  expect(label).not.toBe(original);
+  vi.spyOn(row.parentElement!, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, right: 100, bottom: 100 } as DOMRect);
+  vi.spyOn(row, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 10, right: 30, bottom: 30 } as DOMRect);
+  fireEvent.pointerDown(label, start);
+  expect(fireEvent.dragStart(original)).toBe(true);
+  expect(fireEvent.dragStart(label)).toBe(false);
+  fireEvent.pointerMove(document, { clientX: 20, clientY: 25 });
+  fireEvent.pointerUp(document);
+  expect(screen.getByTestId('ids').textContent).toBe('b,a');
+  expect(screen.queryByTestId('rectangle')).toBeNull();
+});
 
 it('clips rectangle selection to the scroll viewport so hidden assets stay unselected', () => {
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1; });
@@ -92,4 +134,25 @@ it('starts only inside its selection surface and ignores excluded child surfaces
   a.dispatchEvent(activeDrag);
   expect(activeDrag.defaultPrevented).toBe(true);
   fireEvent.pointerUp(document);
+});
+
+it('leaves plain row drags and modified gestures on other controls to the browser', () => {
+  render(<Fixture />);
+  const label = screen.getByText('A');
+  const checkbox = screen.getByRole('checkbox', { name: 'Select A' });
+  const actions = screen.getByRole('button', { name: 'Actions' });
+  for (const [target, modifier] of [
+    [label, { shiftKey: true }],
+    [checkbox, { ctrlKey: true }],
+    [actions, { metaKey: true }],
+  ] as const) {
+    fireEvent.pointerDown(target, { pointerType: 'mouse', button: 0, ...modifier });
+    expect(fireEvent.dragStart(target)).toBe(true);
+    fireEvent.pointerUp(document);
+  }
+
+  fireEvent.pointerDown(label, { pointerType: 'mouse', button: 0, metaKey: true });
+  fireEvent.pointerUp(document);
+  fireEvent.click(label, { metaKey: true });
+  expect(screen.getByTestId('ids').textContent).toBe('clicked');
 });

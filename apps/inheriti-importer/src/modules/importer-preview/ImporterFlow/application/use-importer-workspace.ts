@@ -16,6 +16,12 @@ import {
 import { projectImporterWorkspace } from './importer-workspace-projection';
 import { statusKey } from './importer-workspace-suggestions';
 import { createReviewActions } from './importer-workspace-review';
+import {
+  createReviewBatchActions,
+  invalidateReviewBatch,
+  type ReviewBatch,
+  type ReviewBatchEntry,
+} from './importer-workspace-review-batch';
 import { createMappingActions } from './importer-workspace-mapping';
 import { createPlanActions } from './importer-workspace-plans';
 import { createSourceActions } from './importer-workspace-source';
@@ -49,6 +55,8 @@ export function useImporterWorkspace(
   onReviewChange?: () => void,
 ) {
   const [decisions, setDecisions] = useState<Record<string, AssetReviewStatus>>({});
+  const selectedBatch = useRef<ReviewBatch>(new Map());
+  const [canUndoReviewBatch, setCanUndoReviewBatch] = useState(false);
   const lastBatch = useRef<Record<string, AssetReviewStatus | undefined> | null>(null);
   const [mappingOverrides, setMappingOverrides] = useState<MappingOverrides>({});
   const [plainTextOverrides, setPlainTextOverrides] = useState<PlainTextOverrides>({});
@@ -101,22 +109,68 @@ export function useImporterWorkspace(
   const sourceActions = createSourceActions(context);
   const reviewActions = createReviewActions(context);
   const mappingActions = createMappingActions(context);
-  const invalidateBatchAsset = (id: string) => {
-    if (lastBatch.current) delete lastBatch.current[id];
+  const invalidateGlobalBatch = (ids: string[]) => {
+    if (!lastBatch.current) return;
+    for (const id of ids) delete lastBatch.current[id];
   };
+  const recordBatch = (batch: ReviewBatch) => {
+    selectedBatch.current = batch;
+    setCanUndoReviewBatch(batch.size > 0);
+  };
+  const invalidateBatchAsset = (id: string, field?: string) => {
+    invalidateGlobalBatch([id]);
+    recordBatch(invalidateReviewBatch(selectedBatch.current, id, field));
+  };
+  const discardSelectedEntries = (discard: (id: string, entry: ReviewBatchEntry) => boolean) => {
+    if (!selectedBatch.current.size) return;
+    recordBatch(new Map([...selectedBatch.current].filter(([id, entry]) => !discard(id, entry))));
+  };
+  const clearSelectedSource = (sourceId?: string) => {
+    discardSelectedEntries((_id, entry) => {
+      if (sourceId !== undefined && entry.sourceId !== sourceId) return false;
+      if (entry.decision === 'excluded') {
+        for (const { draft } of entry.originalDrafts) {
+          for (const binding of Object.values(draft.fieldBindings)) {
+            if (binding.kind === 'literal') binding.value.clear();
+          }
+        }
+      }
+      return true;
+    });
+  };
+  const batchActions = createReviewBatchActions(
+    context,
+    decisions,
+    () => selectedBatch.current,
+    recordBatch,
+    invalidateGlobalBatch,
+    onReviewChange,
+  );
   return {
     ...projection,
     ...reviewActions,
     ...mappingActions,
     ...createPlanActions(context),
     ...sourceActions,
+    ...batchActions,
+    canUndoReviewBatch,
     reviewAsset: (...args: Parameters<typeof reviewActions.reviewAsset>) => {
       invalidateBatchAsset(args[1].id);
+      if (args[0].startsWith('alternate:') || args[0] === 'restore-suggestion') {
+        const suggestion = context.byId(args[1].id);
+        if (suggestion)
+          discardSelectedEntries((_id, entry) => entry.nodeId === suggestion.fromNodeId);
+      }
       reviewActions.reviewAsset(...args);
       onReviewChange?.();
     },
     mapAssetField: (...args: Parameters<typeof mappingActions.mapAssetField>) => {
-      invalidateBatchAsset(args[0].id);
+      invalidateBatchAsset(args[0].id, args[1]);
+      const suggestion = context.byId(args[0].id);
+      if (suggestion && !suggestion.variant)
+        discardSelectedEntries(
+          (id, entry) => id !== args[0].id && entry.nodeId === suggestion.fromNodeId,
+        );
       mappingActions.mapAssetField(...args);
       onReviewChange?.();
     },
@@ -127,11 +181,13 @@ export function useImporterWorkspace(
     },
     resetReview: () => {
       lastBatch.current = null;
+      clearSelectedSource();
       sourceActions.resetReview();
       onReviewChange?.();
     },
     removeSource: (sourceId: string) => {
       lastBatch.current = null;
+      clearSelectedSource(sourceId);
       sourceActions.removeSource(sourceId);
     },
     acceptAllEligible: () => {
@@ -140,6 +196,8 @@ export function useImporterWorkspace(
           !['accepted', 'excluded'].includes(asset.status) && hasIncludedSchemaField(asset),
       );
       if (!eligible.length) return 0;
+      const eligibleIds = new Set(eligible.map((asset) => asset.id));
+      discardSelectedEntries((id) => eligibleIds.has(id));
       lastBatch.current = Object.fromEntries(
         eligible.map((asset) => [asset.id, decisions[asset.id]]),
       );
@@ -158,6 +216,7 @@ export function useImporterWorkspace(
       const previous = lastBatch.current;
       if (!previous) return;
       lastBatch.current = null;
+      discardSelectedEntries((id) => Object.hasOwn(previous, id));
       setDecisions((current) => {
         const next = { ...current };
         for (const [id, status] of Object.entries(previous)) {

@@ -2,6 +2,13 @@ import type { SensitiveValue } from '@modules/import/domain/import-model';
 
 export type AssetReviewStatus = 'suggested' | 'needs-review' | 'accepted' | 'excluded' | 'fallback';
 
+export type ReviewBatchAction = 'accept' | 'exclude';
+
+export interface ReviewBatchResult {
+  changedIds: string[];
+  skippedIds: string[];
+}
+
 export interface ReviewAsset {
   id: string;
   name: string;
@@ -22,6 +29,7 @@ export interface ReviewAsset {
   plainTextValue?: SensitiveValue;
   plainTextSources?: ReviewAssetSourceCandidate[];
   convertedFromType?: string;
+  batchMappingSupported?: boolean;
 }
 
 export interface ReviewAssetSourceCandidate {
@@ -38,6 +46,7 @@ export interface ReviewAssetField {
   sourceFieldName?: string;
   candidates?: ReviewAssetSourceCandidate[];
   validationError?: string;
+  manuallyMapped?: boolean;
 }
 
 export interface AssetReviewQueueProps {
@@ -49,7 +58,12 @@ export interface AssetReviewQueueProps {
   onAction?: (action: string, asset: ReviewAsset) => void;
   onAcceptAllEligible?: () => number;
   onUndoAcceptAll?: () => void;
+  onReviewAssets?: (action: ReviewBatchAction, assets: ReviewAsset[]) => ReviewBatchResult;
+  onUndoReviewBatch?: () => ReviewBatchResult | void;
+  canUndoReviewBatch?: boolean;
+  onApplyMappings?: (template: ReviewAsset, assets: ReviewAsset[]) => ReviewBatchResult;
   showKeyboardHints?: boolean;
+  autoAdvance?: boolean;
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
   onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;
   onEditPlainText?: (asset: ReviewAsset, value: string) => void;

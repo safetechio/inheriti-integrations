@@ -93,7 +93,7 @@ export function PlanRow({ plan, depth, active, dropValid, selected, open, reveal
       {onRename ? <PlanNameEditor initialName={plan.name} onFinish={(name, reason) => {
         restoreFocus.current = reason === 'keyboard';
         onRename(name);
-      }} /> : <Box className="folder-plan-name-button" role="button" tabIndex={0} onClick={(event: MouseEvent) => { event.stopPropagation(); if (event.ctrlKey || event.metaKey || event.shiftKey) onToggleSelection(event); else onSelect?.(plan); }} onKeyDown={(event: KeyboardEvent) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); if (event.ctrlKey || event.metaKey || event.shiftKey) onToggleSelection(event); else onSelect?.(plan); }}>
+      }} /> : <Box className="folder-plan-name-button" dataSet={{ marqueeRowControl: '' }} role="button" tabIndex={0} onClick={(event: MouseEvent) => { event.stopPropagation(); if (event.ctrlKey || event.metaKey || event.shiftKey) onToggleSelection(event); else onSelect?.(plan); }} onKeyDown={(event: KeyboardEvent) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); event.stopPropagation(); if (event.ctrlKey || event.metaKey || event.shiftKey) onToggleSelection(event); else onSelect?.(plan); }}>
         <Text className="folder-tree-name" variant="bodySmall" title={plan.name}>{plan.name}</Text>
       </Box>}
       <Box flex={1} />

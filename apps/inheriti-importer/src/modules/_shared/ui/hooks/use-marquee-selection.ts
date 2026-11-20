@@ -17,6 +17,11 @@ const controls = 'button, input, select, textarea, a, [role="button"], [role="ch
 
 export function useMarqueeSelection({ selectedIds, onSelect, resetKey, rowSelector, getRowIds, onStart, allowFromRow = true, startSelector, excludeSelector }: Options) {
   const containerRef = useRef<HTMLElement | null>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  const setContainerRef = useCallback((node: HTMLElement | null) => {
+    containerRef.current = node;
+    setContainer(node);
+  }, []);
   const [rectangle, setRectangle] = useState<Rectangle | null>(null);
   const active = useRef(false);
   const suppressClick = useRef(false);
@@ -41,13 +46,17 @@ export function useMarqueeSelection({ selectedIds, onSelect, resetKey, rowSelect
     if (latest.current.startSelector && !target.closest(latest.current.startSelector)) return;
     if (latest.current.excludeSelector && target.closest(latest.current.excludeSelector)) return;
     const fromRow = target.closest(latest.current.rowSelector);
+    const additive = event.ctrlKey || event.metaKey;
+    const canStartFromRow = additive && latest.current.allowFromRow;
+    const control = target.closest(controls);
     if (event.pointerType !== 'mouse' || event.button !== 0 ||
-      target.closest(controls) || (fromRow && (!(event.ctrlKey || event.metaKey) || !latest.current.allowFromRow)) ||
-      (!(event.ctrlKey || event.metaKey) && target.closest('[draggable="true"]'))) return;
+      (fromRow && !canStartFromRow) ||
+      (control && !(canStartFromRow && fromRow?.contains(control) && control.hasAttribute('data-marquee-row-control'))) ||
+      (!additive && target.closest('[draggable="true"]'))) return;
     const container = containerRef.current;
     if (!container || !container.contains(target)) return;
     const start = { x: event.clientX, y: event.clientY };
-    const baseline = event.ctrlKey || event.metaKey ? latest.current.selectedIds : [];
+    const baseline = additive ? latest.current.selectedIds : [];
     let last = start;
     let moved = false;
     const finish = () => {
@@ -66,7 +75,9 @@ export function useMarqueeSelection({ selectedIds, onSelect, resetKey, rowSelect
       const viewport = container.getBoundingClientRect();
       const left = Math.max(Math.min(start.x, last.x), viewport.left);
       const top = Math.max(Math.min(start.y, last.y), viewport.top);
-      const box = { left, top, width: Math.max(0, Math.min(Math.max(start.x, last.x), viewport.right) - left), height: Math.max(0, Math.min(Math.max(start.y, last.y), viewport.bottom) - top) };
+      const right = start.x === last.x && start.y !== last.y && left === start.x ? left + 1 : Math.max(start.x, last.x);
+      const bottom = start.y === last.y && start.x !== last.x && top === start.y ? top + 1 : Math.max(start.y, last.y);
+      const box = { left, top, width: Math.max(0, Math.min(right, viewport.right) - left), height: Math.max(0, Math.min(bottom, viewport.bottom) - top) };
       setRectangle(box);
       const next = new Set(baseline);
       container.querySelectorAll<HTMLElement>(latest.current.rowSelector).forEach((node) => {
@@ -101,22 +112,27 @@ export function useMarqueeSelection({ selectedIds, onSelect, resetKey, rowSelect
   const pointerDown = useRef(onPointerDownCapture);
   pointerDown.current = onPointerDownCapture;
   useEffect(() => {
-    const container = containerRef.current;
     if (!container) return;
     const down = (event: globalThis.PointerEvent) => pointerDown.current(event);
     const drag = (event: globalThis.DragEvent) => { if (active.current) { event.preventDefault(); event.stopPropagation(); } };
+    const select = (event: Event) => { if (active.current) event.preventDefault(); };
     const click = (event: globalThis.MouseEvent) => { if (suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation(); } };
     container.addEventListener('pointerdown', down, true);
     container.addEventListener('dragstart', drag, true);
+    container.addEventListener('selectstart', select, true);
     container.addEventListener('click', click, true);
     return () => {
       container.removeEventListener('pointerdown', down, true);
       container.removeEventListener('dragstart', drag, true);
+      container.removeEventListener('selectstart', select, true);
       container.removeEventListener('click', click, true);
+      cancel();
+      suppressClick.current = false;
     };
-  }, []);
+  }, [container, cancel]);
   return {
     containerRef,
+    setContainerRef,
     rectangle,
     cancel,
   };

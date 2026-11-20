@@ -259,7 +259,7 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
         ]}
       />,
     );
-    expect(screen.queryByRole('button', { name: 'Tree' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tree' })).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Filter by source'), { target: { value: 'prod.kdbx' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tree' }));
     expect(screen.getByLabelText('Inspect Root asset')).toBeTruthy();

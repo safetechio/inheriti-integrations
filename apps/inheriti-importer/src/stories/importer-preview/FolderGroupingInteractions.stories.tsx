@@ -95,6 +95,10 @@ function FolderGroupingStory({
               if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion')
                 workspace.reviewAsset(action, asset);
             },
+            onReviewAssets: workspace.reviewAssets,
+            onUndoReviewBatch: workspace.undoReviewBatch,
+            canUndoReviewBatch: workspace.canUndoReviewBatch,
+            onApplyMappings: workspace.applyMappings,
             onAcceptAllEligible: workspace.acceptAllEligible,
             onUndoAcceptAll: workspace.undoAcceptAll,
             resolveSourceValue: workspace.resolveSourceValue,

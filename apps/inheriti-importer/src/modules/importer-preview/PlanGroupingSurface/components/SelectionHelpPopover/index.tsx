@@ -10,7 +10,7 @@ const help: Record<Kind, { title: string; groups: { heading: string; detail: str
     title: 'Asset controls',
     groups: [
       { heading: 'Select', detail: 'Checkbox or Ctrl/Cmd+click to toggle; Shift+click for a range.' },
-      { heading: 'Select an area', detail: 'Ctrl/Cmd+drag to select assets in a rectangle.' },
+      { heading: 'Select an area', detail: 'Drag from a gap to select nearby assets. Ctrl/Cmd+drag from an asset row adds to the selection.' },
       { heading: 'Move', detail: 'Drag a selected asset to move the group, or an unselected asset to move only it.' },
       { heading: 'Clear', detail: 'Escape clears the selection.' },
     ],
@@ -19,7 +19,7 @@ const help: Record<Kind, { title: string; groups: { heading: string; detail: str
     title: 'Organisation controls',
     groups: [
       { heading: 'Select', detail: 'Checkbox or Ctrl/Cmd+click to toggle; Shift+click for a range.' },
-      { heading: 'Select an area', detail: 'Ctrl/Cmd+drag from a plan selects plans; from an asset selects assets.' },
+      { heading: 'Select an area', detail: 'Drag from a gap to select plans. Ctrl/Cmd+drag from a plan selects plans; from an asset selects assets.' },
       { heading: 'Move and open', detail: 'Drag selected items as a group. Ctrl/Cmd+click selects folders; drag to move them. Use an asset’s three dots to move or unassign it. Click a plan title to open it, or its blank row to expand it.' },
       { heading: 'Clear', detail: 'Escape clears the selection.' },
     ],

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AssetReviewQueue, type ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
 import { hasIncludedSchemaField } from '@modules/importer-preview/AssetReviewQueue/types';
+import { ImporterFlow } from '@modules/importer-preview/ImporterFlow';
+import { AppHeader } from '@modules/import/ui/components/AppHeader';
+import type { ImporterFlowCallbacks } from '@modules/importer-preview/ImporterFlow/hooks/use-importer-flow';
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
 import { createEmptyWorkspace } from '@modules/plans/domain/workspace-model';
 import { SensitiveValue } from '@modules/import/domain/import-model';
@@ -9,7 +12,13 @@ import { createAssetFlowFixture } from './asset-flow-fixture';
 
 type Scenario = 'mixed' | 'reviewed' | 'filtered' | 'large' | 'undo';
 
-function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
+function ReviewBulkStory({
+  scenario,
+  fullFlow = false,
+}: {
+  scenario: Scenario;
+  fullFlow?: boolean;
+}) {
   const [{ session, files }] = useState(() => {
     const fixture = createAssetFlowFixture();
     if (scenario === 'mixed' || scenario === 'filtered') {
@@ -17,8 +26,12 @@ function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
       if (field) field.value = new SensitiveValue('');
     }
     if (scenario === 'large') {
-      for (let index = 0; index < 200; index++) {
+      const count = 1500;
+      for (let index = 0; index < count; index++) {
         const id = `synthetic-large-${index}`;
+        const fields = ['username', 'password'];
+        if (index % 3 === 0) fields.push('url');
+        if (index === 0) fields.push('email');
         fixture.session.nodesById[id] = {
           id,
           sourceId: 'synthetic-vault',
@@ -27,10 +40,10 @@ function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
           name: `Synthetic service ${index}`,
           path: [],
           childNodeIds: [],
-          fieldIds: [`${id}:username`, `${id}:password`],
+          fieldIds: fields.map((field) => `${id}:${field}`),
         };
         fixture.session.rootNodeIds.push(id);
-        for (const field of ['username', 'password']) {
+        for (const field of fields) {
           const fieldId = `${id}:${field}`;
           fixture.session.fieldsById[fieldId] = {
             id: fieldId,
@@ -38,12 +51,20 @@ function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
             parentNodeId: id,
             sourcePath: [`Synthetic service ${index}`, field],
             name: field,
-            value: new SensitiveValue(`synthetic-${field}-${index}`),
+            value: new SensitiveValue(
+              field === 'email'
+                ? 'invalid-address'
+                : field === 'url'
+                  ? `https://service-${index}.example.invalid`
+                  : field === 'username' && index % 2 === 0
+                    ? `service-${index}@example.invalid`
+                    : `synthetic-${field}-${index}`,
+            ),
             metadata: {},
           };
         }
       }
-      if (fixture.files[0]) fixture.files[0].entries = (fixture.files[0].entries ?? 0) + 200;
+      if (fixture.files[0]) fixture.files[0].entries = (fixture.files[0].entries ?? 0) + count;
     }
     return fixture;
   });
@@ -65,9 +86,39 @@ function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
     }
   }, [scenario, workspace]);
   const onAction = (action: string, asset: ReviewAsset) => {
-    if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion')
+    if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion') {
       workspace.reviewAsset(action, asset);
+    } else if (action.startsWith('alternate:')) {
+      workspace.reviewAsset(`alternate:${action.slice('alternate:'.length)}`, asset);
+    }
   };
+  const callbacks = {
+    onReviewAssets: workspace.reviewAssets,
+    onUndoReviewBatch: workspace.undoReviewBatch,
+    canUndoReviewBatch: workspace.canUndoReviewBatch,
+    onApplyMappings: workspace.applyMappings,
+    onAcceptAllEligible: workspace.acceptAllEligible,
+    onUndoAcceptAll: workspace.undoAcceptAll,
+    resolveSourceValue: workspace.resolveSourceValue,
+    onMapField: workspace.mapAssetField,
+    onEditPlainText: workspace.editPlainText,
+  } satisfies ImporterFlowCallbacks;
+  if (fullFlow) {
+    return (
+      <ShellFixture>
+        <ImporterFlow
+          headerActions={<AppHeader dirtyCount={0} />}
+          initialStage="assets"
+          files={files}
+          assets={workspace.assets}
+          unassigned={workspace.unassigned}
+          plans={workspace.plans}
+          checklist={[]}
+          callbacks={{ ...callbacks, onReviewAsset: onAction }}
+        />
+      </ShellFixture>
+    );
+  }
   return (
     <ShellFixture>
       <AssetReviewQueue
@@ -76,11 +127,7 @@ function ReviewBulkStory({ scenario }: { scenario: Scenario }) {
         onSelect={(asset) => setSelectedId(asset.id)}
         sourceFiles={files}
         onAction={onAction}
-        onAcceptAllEligible={workspace.acceptAllEligible}
-        onUndoAcceptAll={workspace.undoAcceptAll}
-        resolveSourceValue={workspace.resolveSourceValue}
-        onMapField={workspace.mapAssetField}
-        onEditPlainText={workspace.editPlainText}
+        {...callbacks}
       />
     </ShellFixture>
   );
@@ -91,3 +138,9 @@ export const AllReviewedNoEligible = () => <ReviewBulkStory scenario="reviewed" 
 export const SourceFilterDoesNotLimitBulk = () => <ReviewBulkStory scenario="filtered" />;
 export const LargeSyntheticSet = () => <ReviewBulkStory scenario="large" />;
 export const UndoPreservesLaterManualDecision = () => <ReviewBulkStory scenario="undo" />;
+
+export const FullFlowReviewAssets = () => <ReviewBulkStory scenario="mixed" fullFlow />;
+FullFlowReviewAssets.meta = { iframed: true };
+
+export const FullFlowLargeReview = () => <ReviewBulkStory scenario="large" fullFlow />;
+FullFlowLargeReview.meta = { iframed: true };

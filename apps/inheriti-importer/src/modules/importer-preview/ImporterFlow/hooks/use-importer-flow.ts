@@ -1,10 +1,11 @@
 import { useReducer, useRef } from 'react';
 import type { StagingState } from '../../FinalStagingChecklist';
-import type { ReviewAsset } from '../../AssetReviewQueue';
+import type { ReviewAsset, ReviewBatchAction, ReviewBatchResult } from '../../AssetReviewQueue/types';
 import type { SensitiveValue } from '@modules/import/domain/import-model';
 import type { GroupingAsset, PlanDraft, PlanMetadataValues } from '../../PlanGroupingSurface';
 import type { ImportFile } from '../../SourceImportStatus';
 import { flowReducer, type FlowState } from './flow-reducer';
+import { getReviewBatchResult } from './flow-review-batch';
 import { getImporterFlowReadiness } from '../application/flow-readiness';
 
 export type ImporterFlowStage = 'sources' | 'assets' | 'plans' | 'staging';
@@ -34,6 +35,10 @@ export type ImporterFlowCallbacks = {
   onRemoveSource?: (file: ImportFile) => void;
   onSelectAsset?: (asset: ReviewAsset) => void;
   onReviewAsset?: (action: string, asset: ReviewAsset) => void;
+  onReviewAssets?: (action: ReviewBatchAction, assets: ReviewAsset[]) => ReviewBatchResult;
+  onUndoReviewBatch?: () => ReviewBatchResult | void;
+  canUndoReviewBatch?: boolean;
+  onApplyMappings?: (template: ReviewAsset, assets: ReviewAsset[]) => ReviewBatchResult;
   onAcceptAllEligible?: () => number;
   onUndoAcceptAll?: () => void;
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
@@ -163,8 +168,32 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
         autoAdvance: initial.autoAdvance ?? true,
       });
     },
+    reviewAssets: controlled
+      ? controlled.callbacks.onReviewAssets
+      : (action: ReviewBatchAction, selected: ReviewAsset[]) => {
+          const ids = selected.map((asset) => asset.id);
+          const result = getReviewBatchResult(state.assets, action, ids);
+          if (result.changedIds.length) {
+            stagingRevision.current += 1;
+            dispatch({ type: 'review-batch', action, ids });
+          }
+          return result;
+        },
+    undoReviewBatch: controlled
+      ? controlled.callbacks.onUndoReviewBatch
+      : () => {
+          if (!state.reviewBatchUndo) return;
+          stagingRevision.current += 1;
+          dispatch({ type: 'undo-review-batch' });
+          return { changedIds: [...state.reviewBatchUndo.statuses.keys()], skippedIds: [] };
+        },
+    canUndoReviewBatch: controlled
+      ? controlled.callbacks.canUndoReviewBatch
+      : Boolean(state.reviewBatchUndo),
+    applyMappings: controlled?.callbacks.onApplyMappings,
     acceptAllEligible: controlled?.callbacks.onAcceptAllEligible,
     undoAcceptAll: controlled?.callbacks.onUndoAcceptAll,
+    reviewAutoAdvance: initial.autoAdvance ?? true,
     resolveSourceValue: controlled?.callbacks.resolveSourceValue,
     mapField: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => {
       controlled?.callbacks.onMapField?.(asset, targetField, sourceFieldId);

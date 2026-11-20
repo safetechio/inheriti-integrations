@@ -1,17 +1,17 @@
-import {
-  Box,
-  Button,
-  Icon,
-  FilterChip,
-  NoItemsPlaceholder,
-  Stack,
-  Text,
-  theme,
-} from '@main-components';
-import { useEffect, useState } from 'react';
+import { Box, Button, Icon, FilterChip, NoItemsPlaceholder, Stack, Text } from '@main-components';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useMarqueeSelection } from '@modules/_shared/ui/hooks/use-marquee-selection';
 import { AssetRow } from './components/AssetRow';
 import { Inspector } from './components/Inspector';
-import { hasIncludedSchemaField, type AssetReviewQueueProps } from './types';
+import { ReviewGroupRow } from './components/ReviewGroupRow';
+import { ReviewSelectionCard, type ReviewResult } from './components/ReviewSelectionCard';
+import { ReviewSourceToolbar } from './components/ReviewSourceToolbar';
+import { ReviewSelectionHelp } from './components/ReviewSelectionHelp';
+import { exceptionFilters, isPending, statusFilters, useReviewList } from './hooks/use-review-list';
+import { useReviewSelection } from './hooks/use-review-selection';
+import { flattenReviewTree, indexReviewTree, type ReviewRow } from './review-tree';
+import { compatibleMappingUpdates } from './review-mapping';
+import { hasIncludedSchemaField, type AssetReviewQueueProps, type ReviewAsset } from './types';
 import { AssetViewPicker } from '../AssetViewPicker';
 import './styles.css';
 
@@ -21,7 +21,12 @@ export type {
   ReviewAsset,
   ReviewAssetField,
   ReviewAssetSourceCandidate,
+  ReviewBatchResult,
 } from './types';
+
+const pageSize = 100;
+const editable =
+  'input:not([type="checkbox"]), textarea, select, [contenteditable="true"], [role="textbox"]';
 
 export function AssetReviewQueue({
   assets,
@@ -31,184 +36,265 @@ export function AssetReviewQueue({
   onAction,
   onAcceptAllEligible,
   onUndoAcceptAll,
+  onReviewAssets,
+  onUndoReviewBatch,
+  canUndoReviewBatch,
+  onApplyMappings,
+  autoAdvance = true,
   showKeyboardHints = true,
   resolveSourceValue,
   onMapField,
   onEditPlainText,
 }: AssetReviewQueueProps) {
-  const [filter, setFilter] = useState<'all' | 'review' | 'accepted' | 'excluded'>(() =>
-    assets.some((asset) => !['accepted', 'excluded'].includes(asset.status)) ? 'review' : 'all',
-  );
-  const [source, setSource] = useState('all');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const {
+    source,
+    setSource,
+    search,
+    setSearch,
+    filter,
+    setFilter,
+    exception,
+    setException,
+    sources,
+    counts,
+    eligibleCount,
+    canShowTree,
+    visible,
+    issues,
+    exceptionCounts,
+  } = useReviewList(assets, sourceFiles);
   const [view, setView] = useState<'list' | 'tree'>('list');
+  const [page, setPage] = useState(0);
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
+  const [localInspectedId, setLocalInspectedId] = useState<string>();
+  const [revealId, setRevealId] = useState<string>();
   const [batchAccepted, setBatchAccepted] = useState<number | null>(null);
-  const sourceKey = (asset: (typeof assets)[number]) =>
-    asset.sourceId ?? asset.sourceFileName ?? asset.source.split(' · ')[0];
-  const sources = [
-    ...new Map([
-      ...(sourceFiles ?? []).map((file) => [file.id ?? file.name, file.name] as const),
-      ...assets
-        .filter(
-          (asset) => !sourceFiles?.some((file) => (file.id ?? file.name) === sourceKey(asset)),
-        )
-        .map(
-          (asset) =>
-            [sourceKey(asset), asset.sourceFileName ?? asset.source.split(' · ')[0]] as const,
-        ),
-    ]).entries(),
-  ];
-  const reviewed = assets.filter((asset) => ['accepted', 'excluded'].includes(asset.status)).length;
-  const counts = {
-    all: assets.length,
-    review: assets.length - reviewed,
-    accepted: assets.filter((asset) => asset.status === 'accepted').length,
-    excluded: assets.filter((asset) => asset.status === 'excluded').length,
+  const [batchResult, setBatchResult] = useState<ReviewResult>();
+
+  const treeActive = view === 'tree' && canShowTree;
+  const tree = useMemo(
+    () => (treeActive ? indexReviewTree(visible, source === 'all', sources) : undefined),
+    [treeActive, visible, source, sources],
+  );
+  const rows = useMemo<ReviewRow[]>(
+    () =>
+      tree
+        ? flattenReviewTree(tree.root, openFolders)
+        : visible.map((asset) => ({ key: asset.id, asset, depth: 0 })),
+    [tree, openFolders, visible],
+  );
+  const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1);
+  const currentPage = Math.min(page, lastPage);
+  const firstRow = currentPage * pageSize;
+  const endRow = Math.min(firstRow + pageSize, rows.length);
+  const navigableAssets = useMemo(
+    () =>
+      tree
+        ? flattenReviewTree(tree.root, new Set([...tree.paths.values()].flat())).flatMap((row) =>
+            'asset' in row ? [row.asset] : [],
+          )
+        : visible,
+    [tree, visible],
+  );
+  const rangeAssets = useMemo(
+    () => (tree ? rows.flatMap((row) => ('asset' in row ? [row.asset] : [])) : visible),
+    [rows, tree, visible],
+  );
+  const selection = useReviewSelection(navigableAssets, rangeAssets);
+  const bulkEnabled = Boolean(onReviewAssets);
+  const selected =
+    visible.find((asset) => asset.id === (selectedId ?? localInspectedId)) ?? navigableAssets[0];
+  const selectedAssets = useMemo(
+    () => navigableAssets.filter((asset) => selection.selectedIdsSet.has(asset.id)),
+    [navigableAssets, selection.selectedIdsSet],
+  );
+  const compatibleCount = useMemo(
+    () =>
+      !onApplyMappings || !selected
+        ? 0
+        : selectedAssets.reduce(
+            (count, target) =>
+              count + Number(compatibleMappingUpdates(selected, target).length > 0),
+            0,
+          ),
+    [onApplyMappings, selected, selectedAssets],
+  );
+  const marquee = useMarqueeSelection({
+    selectedIds: selection.selectedIds,
+    onSelect: bulkEnabled ? selection.replace : () => {},
+    resetKey: JSON.stringify([view, source, search, filter, exception]),
+    rowSelector: '[data-review-asset-id]',
+    getRowIds: (row) => (row.dataset.reviewAssetId ? [row.dataset.reviewAssetId] : []),
+    excludeSelector: bulkEnabled ? undefined : '*',
+  });
+  const inspect = (asset: ReviewAsset, reveal = false) => {
+    setLocalInspectedId(asset.id);
+    onSelect?.(asset);
+    if (!reveal) return;
+    if (tree) {
+      const path = tree.paths.get(asset.id) ?? [];
+      setOpenFolders((current) =>
+        path.every((key) => current.has(key)) ? current : new Set([...current, ...path]),
+      );
+    }
+    setRevealId(asset.id);
   };
-  const eligibleCount = assets.filter(
-    (asset) => !['accepted', 'excluded'].includes(asset.status) && hasIncludedSchemaField(asset),
-  ).length;
+  useLayoutEffect(() => {
+    if (!revealId) return;
+    const index = rows.findIndex((row) => 'asset' in row && row.asset.id === revealId);
+    const targetPage = Math.floor(index / pageSize);
+    if (targetPage >= 0 && targetPage !== currentPage) {
+      setPage(targetPage);
+      return;
+    }
+    const list = marquee.containerRef.current;
+    const row =
+      list &&
+      Array.from(list.querySelectorAll<HTMLElement>('[data-review-asset-id]')).find(
+        (element) => element.dataset.reviewAssetId === revealId,
+      );
+    if (list && row) {
+      const viewport = list.getBoundingClientRect();
+      const item = row.getBoundingClientRect();
+      if (item.top < viewport.top) list.scrollTop += item.top - viewport.top;
+      else if (item.bottom > viewport.bottom) list.scrollTop += item.bottom - viewport.bottom;
+    }
+    setRevealId(undefined);
+  }, [revealId, rows, currentPage, marquee.containerRef]);
+  const clearSelection = () => {
+    selection.replace([]);
+    const list = marquee.containerRef.current;
+    if (!list) return;
+    const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-review-asset-id]'));
+    const row = rows.find((element) => element.dataset.reviewAssetId === selected?.id) ?? rows[0];
+    const focusTarget = row?.querySelector<HTMLElement>('[data-marquee-row-control]') ?? list;
+    focusTarget.focus({ preventScroll: true });
+  };
+  const changePage = (next: number) => {
+    setPage(next);
+    if (marquee.containerRef.current) marquee.containerRef.current.scrollTop = 0;
+  };
+  const changeFilter = (change: () => void) => {
+    change();
+    selection.replace([]);
+    changePage(0);
+  };
+  const nextPending = (activeId: string, changed: ReadonlySet<string>) => {
+    const index = navigableAssets.findIndex((asset) => asset.id === activeId);
+    const after = navigableAssets.find(
+      (asset, position) => position > index && isPending(asset) && !changed.has(asset.id),
+    );
+    const next =
+      after ?? navigableAssets.find((asset) => isPending(asset) && !changed.has(asset.id));
+    if (next) inspect(next, true);
+  };
+  const singleReview = (action: string, asset: ReviewAsset) => {
+    onAction?.(action, asset);
+    if (autoAdvance && (action === 'accept' || action === 'exclude'))
+      nextPending(asset.id, new Set([asset.id]));
+  };
   const acceptAll = () => {
     const accepted = onAcceptAllEligible?.() ?? 0;
-    if (accepted) setBatchAccepted(accepted);
+    if (!accepted) return;
+    setBatchAccepted(accepted);
+    setBatchResult(undefined);
+    selection.replace([]);
   };
-  const visible = assets.filter(
-    (asset) =>
-      (source === 'all' || sourceKey(asset) === source) &&
-      (!search.trim() ||
-        asset.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) &&
-      (filter === 'all' ||
-        (filter === 'review' && !['accepted', 'excluded'].includes(asset.status)) ||
-        filter === asset.status),
-  );
-  const selected = visible.find((asset) => asset.id === selectedId) ?? visible[0];
-  const canShowTree =
-    source !== 'all' &&
-    assets.some((asset) => sourceKey(asset) === source && Boolean(asset.folderPath?.length));
-  const folderCounts = new Map<string, number>();
-  for (const asset of visible) {
-    const parts = asset.folderPath ?? [];
-    for (let index = 0; index < parts.length; index++) {
-      const path = parts.slice(0, index + 1).join('/');
-      folderCounts.set(path, (folderCounts.get(path) ?? 0) + 1);
-    }
-  }
-  const rows =
-    view === 'tree' && canShowTree
-      ? visible.flatMap((asset) => {
-          const parts = asset.folderPath ?? [];
-          const entries: {
-            key: string;
-            label?: string;
-            count?: number;
-            depth: number;
-            asset?: typeof asset;
-          }[] = [];
-          for (let index = 0; index < parts.length; index++) {
-            const key = parts.slice(0, index + 1).join('/');
-            if (
-              parts
-                .slice(0, index)
-                .every((_, parentIndex) =>
-                  openFolders.has(parts.slice(0, parentIndex + 1).join('/')),
-                ) &&
-              !visible
-                .slice(0, visible.indexOf(asset))
-                .some((prior) => prior.folderPath?.slice(0, index + 1).join('/') === key)
-            )
-              entries.push({
-                key: `folder:${key}`,
-                label: parts[index],
-                count: folderCounts.get(key),
-                depth: index,
-              });
-          }
-          if (parts.every((_, index) => openFolders.has(parts.slice(0, index + 1).join('/'))))
-            entries.push({ key: asset.id, asset, depth: parts.length });
-          return entries;
-        })
-      : visible.map((asset) => ({
-          key: asset.id,
-          asset,
-          depth: 0,
-          label: undefined,
-          count: undefined,
-        }));
+  const reviewSelected = (action: 'accept' | 'exclude') => {
+    if (!onReviewAssets || !selectedAssets.length) return;
+    const result = onReviewAssets(action, selectedAssets);
+    setBatchResult({ ...result, label: action === 'accept' ? 'accepted' : 'excluded' });
+    if (result.changedIds.length) setBatchAccepted(null);
+    selection.replace([]);
+    const changed = new Set(result.changedIds);
+    if (autoAdvance && selected && changed.has(selected.id)) nextPending(selected.id, changed);
+  };
 
-  useEffect(() => {
-    if (filter === 'review' && counts.review === 0) setFilter('all');
-  }, [counts.review, filter]);
+  const applyMappings = () => {
+    if (!onApplyMappings || !selected || !compatibleCount) return;
+    const result = onApplyMappings(selected, selectedAssets);
+    setBatchResult({ ...result, label: 'updated' });
+    if (result.changedIds.length) setBatchAccepted(null);
+    selection.replace([]);
+  };
+  const focusNextIssue = () => {
+    const index = navigableAssets.findIndex((asset) => asset.id === selected?.id);
+    const issueIds = new Set(issues.map((asset) => asset.id));
+    const next =
+      navigableAssets.find((asset, position) => position > index && issueIds.has(asset.id)) ??
+      navigableAssets.find((asset) => issueIds.has(asset.id));
+    if (next) inspect(next, true);
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        (target.closest("input, textarea, select, [contenteditable='true']") ||
-          target.closest('[role="textbox"]'))
-      )
-        return;
-      if (
-        event.key.toLowerCase() === 'a' &&
-        event.shiftKey &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.isComposing &&
-        !event.repeat &&
-        onAcceptAllEligible
-      ) {
-        event.preventDefault();
-        acceptAll();
-        return;
+      const editing = event.target instanceof Element && Boolean(event.target.closest(editable));
+      if (event.key === 'Escape' && selection.selectedIds.length) {
+        if (editing) selection.replace([]);
+        else clearSelection();
       }
-      if (!selected || !onAction) return;
       if (
+        editing ||
         event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey ||
         event.isComposing ||
         event.repeat
       )
         return;
-      if (
-        event.key.toLowerCase() === 'a' &&
-        selected.status !== 'accepted' &&
-        hasIncludedSchemaField(selected)
-      )
-        onAction('accept', selected);
-      if (event.key.toLowerCase() === 'x' && selected.status !== 'excluded')
-        onAction('exclude', selected);
-      if (!['ArrowUp', 'ArrowDown'].includes(event.key) || !onSelect) return;
+      const key = event.key.toLowerCase();
+      const command = event.ctrlKey || event.metaKey;
+      if (key === 'a' && command) {
+        if (event.shiftKey && onAcceptAllEligible) {
+          event.preventDefault();
+          acceptAll();
+        } else if (
+          !event.shiftKey &&
+          bulkEnabled &&
+          event.target instanceof Node &&
+          marquee.containerRef.current?.contains(event.target)
+        ) {
+          event.preventDefault();
+          selection.replace(navigableAssets.map((asset) => asset.id));
+        }
+        return;
+      }
+      if (command || event.shiftKey || !selected) return;
+      if (key === 'a' || key === 'x') {
+        const action = key === 'a' ? 'accept' : 'exclude';
+        if (selectedAssets.length && bulkEnabled) {
+          event.preventDefault();
+          reviewSelected(action);
+        } else if (
+          onAction &&
+          (action === 'accept'
+            ? selected.status !== 'accepted' && hasIncludedSchemaField(selected)
+            : selected.status !== 'excluded')
+        ) {
+          event.preventDefault();
+          singleReview(action, selected);
+        }
+        return;
+      }
+      if (key !== 'arrowup' && key !== 'arrowdown') return;
       event.preventDefault();
-      const currentIndex = visible.findIndex((asset) => asset.id === selected.id);
-      const offset = event.key === 'ArrowUp' ? -1 : 1;
-      const nextIndex = Math.min(visible.length - 1, Math.max(0, currentIndex + offset));
-      if (visible[nextIndex]) onSelect(visible[nextIndex]);
+      const index = navigableAssets.findIndex((asset) => asset.id === selected.id);
+      const next = navigableAssets[index + (key === 'arrowup' ? -1 : 1)];
+      if (next) inspect(next, true);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onAction, onSelect, selected, visible, onAcceptAllEligible]);
+  });
+
   return (
     <Stack gap="m" className="asset-review-surface" style={{ gap: 12 }}>
-      <Box flexDirection="row" alignItems="center" gap="s" style={{ flexWrap: 'wrap' }}>
-        <Box flexDirection="row" gap="s" style={{ flexWrap: 'wrap' }}>
-          {(
-            [
-              ['all', 'All'],
-              ['review', 'To review'],
-              ['accepted', 'Accepted'],
-              ['excluded', 'Excluded'],
-            ] as const
-          ).map(([value, label]) => (
+      <Box flexDirection="row" alignItems="center" gap="s" flexWrap="wrap">
+        <Box flexDirection="row" gap="s" flexWrap="wrap">
+          {statusFilters.map(([value, label]) => (
             <FilterChip
               key={value}
               variant="tab"
               count={counts[value]}
               selected={filter === value}
-              onPress={() => setFilter(value)}
+              onPress={() => changeFilter(() => setFilter(value))}
             >
               {label}
             </FilterChip>
@@ -234,26 +320,41 @@ export function AssetReviewQueue({
           </Box>
         ) : null}
         {showKeyboardHints ? (
-          <Box flexDirection="row" flexWrap="wrap" alignItems="center" gap="xs" style={{ marginLeft: 'auto' }}>
-            <Text variant="bodySmall" color="gray">
-              Shortcuts:
-            </Text>
-            {onAcceptAllEligible ? <>
-              <Text className="asset-review-shortcut">Ctrl/Cmd+Shift+A</Text>
-              <Text variant="bodySmall" color="gray">accept all</Text>
-            </> : null}
-            <Text className="asset-review-shortcut">A</Text>
-            <Text variant="bodySmall" color="gray">
-              accept
-            </Text>
-            <Text className="asset-review-shortcut">X</Text>
-            <Text variant="bodySmall" color="gray">
-              exclude
-            </Text>
-            <Text className="asset-review-shortcut">↑↓</Text>
-            <Text variant="bodySmall" color="gray">
-              move
-            </Text>
+          <Box
+            className="asset-review-shortcuts"
+            flexDirection="row"
+            alignItems="center"
+            gap="xs"
+            flexWrap="wrap"
+          >
+            {onAcceptAllEligible ? (
+              <>
+                <Text className="asset-review-shortcut">Ctrl/Cmd+Shift+A</Text>
+                <Text variant="bodySmall" color="gray">
+                  accept all
+                </Text>
+              </>
+            ) : null}
+            <Box
+              className="asset-review-secondary-shortcuts"
+              flexDirection="row"
+              gap="xs"
+              alignItems="center"
+            >
+              <Text className="asset-review-shortcut">A</Text>
+              <Text variant="bodySmall" color="gray">
+                accept
+              </Text>
+              <Text className="asset-review-shortcut">X</Text>
+              <Text variant="bodySmall" color="gray">
+                exclude
+              </Text>
+              <Text className="asset-review-shortcut">↑↓</Text>
+              <Text variant="bodySmall" color="gray">
+                move
+              </Text>
+            </Box>
+            <ReviewSelectionHelp />
           </Box>
         ) : null}
       </Box>
@@ -275,119 +376,203 @@ export function AssetReviewQueue({
           ) : null}
         </Box>
       ) : null}
-      <Box
-        flexDirection="row"
-        gap="m"
-        className="asset-review-columns"
-        style={{ flexWrap: 'wrap' }}
-      >
+      <Box flexDirection="row" gap="m" className="asset-review-columns">
         <Box className="asset-review-list-pane">
-          <Box flexDirection="row" alignItems="flex-end" gap="s" className="asset-review-toolbar">
-            <label className="asset-review-source-label">
-              Source
-              <select
-                aria-label="Filter by source"
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-              >
-                <option value="all">All sources</option>
-                {sources.map(([key, name]) => (
-                  <option key={key} value={key}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {searchOpen ? (
-              <Box flexDirection="row" alignItems="center" className="asset-review-search">
-                <button
-                  type="button"
-                  aria-label="Close asset search"
-                  onClick={() => setSearchOpen(false)}
+          <ReviewSourceToolbar
+            source={source}
+            sources={sources}
+            search={search}
+            onSourceChange={(next) => changeFilter(() => setSource(next))}
+            onSearchChange={(next) => changeFilter(() => setSearch(next))}
+          />
+          <Box
+            className="asset-review-list-controls"
+            flexDirection="row"
+            alignItems="center"
+            gap="s"
+            flexWrap="wrap"
+          >
+            {canShowTree ? (
+              <AssetViewPicker
+                view={view}
+                onChange={(next) => {
+                  setView(next);
+                  changePage(0);
+                }}
+              />
+            ) : null}
+            <Box
+              className="asset-review-exception-chips"
+              flexDirection="row"
+              gap="s"
+              flexWrap="wrap"
+            >
+              {exceptionFilters.map(([value, label]) => (
+                <FilterChip
+                  key={value}
+                  count={exceptionCounts[value]}
+                  selected={exception === value}
+                  onPress={() =>
+                    changeFilter(() => setException(exception === value ? undefined : value))
+                  }
                 >
-                  <Icon name="magnifying-glass" size={14} color={theme.colors.gray} />
-                </button>
-                <input
-                  autoFocus
-                  aria-label="Search assets"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search assets"
-                />
-                {search ? (
-                  <button
-                    type="button"
-                    aria-label="Clear asset search"
-                    onClick={() => setSearch('')}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </Box>
-            ) : (
-              <button
-                type="button"
-                className="asset-review-search-toggle"
-                aria-label="Search assets"
-                onClick={() => setSearchOpen(true)}
-              >
-                <Icon name="magnifying-glass" size={16} color={theme.colors.gray50} />
-              </button>
-            )}
+                  {label}
+                </FilterChip>
+              ))}
+            </Box>
+            <select
+              className="asset-review-exception-select"
+              aria-label="Filter by exception"
+              value={exception ?? ''}
+              onChange={(event) => {
+                const choice = exceptionFilters.find(([value]) => value === event.target.value);
+                changeFilter(() => setException(choice?.[0]));
+              }}
+            >
+              <option value="">Issues</option>
+              {exceptionFilters.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label} ({exceptionCounts[value]})
+                </option>
+              ))}
+            </select>
           </Box>
-          {canShowTree ? <AssetViewPicker view={view} onChange={setView} /> : null}
-          <Stack gap="s" className="asset-review-queue">
+          <Box
+            className="asset-review-list-heading"
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="space-between"
+          >
+            <Text variant="bodySmall" semibold accessibilityRole="heading">
+              Assets ({visible.length})
+            </Text>
+            {issues.length ? (
+              <Box ref={(element) => element?.setAttribute('title', 'Focus next issue')}>
+                <Button
+                  title={
+                    <Text
+                      className="asset-review-next-issue-label"
+                      variant="buttonSmall"
+                      color="primary120"
+                    >
+                      Next issue
+                    </Text>
+                  }
+                  endIcon={<Icon name="arrow-down" size={12} color="primary120" label="" />}
+                  accessibilityLabel="Focus next issue"
+                  size="sm"
+                  minHeight={32}
+                  variant="plain"
+                  onPress={focusNextIssue}
+                />
+              </Box>
+            ) : null}
+          </Box>
+          <Stack
+            gap="s"
+            className="asset-review-queue"
+            ref={marquee.setContainerRef}
+            tabIndex={0}
+            role="region"
+            aria-label="Asset review list"
+          >
             {!assets.length ? (
               <NoItemsPlaceholder description="No Assets were detected. Add another source containing value-bearing entries." />
             ) : !visible.length ? (
-              <NoItemsPlaceholder description="No Assets match this filter." />
+              <NoItemsPlaceholder
+                description={
+                  filter === 'review' && counts.review === 0
+                    ? 'All Assets have been reviewed. Switch to All to see them.'
+                    : 'No Assets match this filter.'
+                }
+              />
             ) : null}
-            {rows.map((row) =>
-              row.asset ? (
-                <Box key={row.key} style={{ paddingLeft: row.depth ? row.depth * 16 + 14 : 0 }}>
+            {rows.slice(firstRow, endRow).map((row) =>
+              'asset' in row ? (
+                <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
                   <AssetRow
                     asset={row.asset}
-                    selected={row.asset.id === selected?.id}
-                    onSelect={onSelect}
+                    inspected={row.asset.id === selected?.id}
+                    selected={selection.selectedIdsSet.has(row.asset.id)}
+                    onSelect={inspect}
+                    onToggle={
+                      bulkEnabled ? (range) => selection.toggle(row.asset.id, range) : undefined
+                    }
                   />
                 </Box>
               ) : (
-                <button
+                <ReviewGroupRow
                   key={row.key}
-                  type="button"
-                  className="asset-review-folder"
-                  style={{ paddingLeft: row.depth * 16 + 8 }}
-                  aria-label={`${row.label} (${row.count})`}
-                  aria-expanded={openFolders.has(row.key.slice(7))}
-                  onClick={() =>
+                  row={row}
+                  expanded={openFolders.has(row.key)}
+                  selection={selection.selectedIdsSet}
+                  onExpand={() =>
                     setOpenFolders((current) => {
                       const next = new Set(current);
-                      const path = row.key.slice(7);
-                      if (next.has(path)) next.delete(path);
-                      else next.add(path);
+                      if (next.has(row.key)) next.delete(row.key);
+                      else next.add(row.key);
                       return next;
                     })
                   }
-                >
-                  <Text className="asset-review-folder-chevron" color="gray50" aria-hidden="true">
-                    {openFolders.has(row.key.slice(7)) ? '⌄' : '›'}
-                  </Text>
-                  <Icon name="folder" type="font-awesome-6" size={18} color={theme.colors.gray} />
-                  <Text className="asset-review-folder-name" color="gray120" semibold>
-                    {row.label}
-                  </Text>
-                  <Text className="asset-review-folder-count" color="gray50">
-                    {row.count} {row.count === 1 ? 'asset' : 'assets'}
-                  </Text>
-                </button>
+                  onToggle={
+                    bulkEnabled ? () => selection.toggleGroup(row.group.assetIds) : undefined
+                  }
+                />
               ),
             )}
+            {lastPage > 0 ? (
+              <Box flexDirection="row" alignItems="center" gap="s" flexWrap="wrap">
+                <Text variant="bodySmall" color="gray">
+                  Showing {firstRow + 1}–{endRow} of {rows.length} rows
+                </Text>
+                <Button
+                  title="Previous assets"
+                  variant="plain"
+                  size="sm"
+                  disabled={currentPage === 0}
+                  onPress={() => changePage(currentPage - 1)}
+                />
+                <Button
+                  title="Show more assets"
+                  variant="plain"
+                  size="sm"
+                  disabled={currentPage === lastPage}
+                  onPress={() => changePage(currentPage + 1)}
+                />
+              </Box>
+            ) : null}
           </Stack>
+          <ReviewSelectionCard
+            count={selectedAssets.length}
+            result={batchResult}
+            mapping={
+              onApplyMappings && selected && selectedAssets.length
+                ? {
+                    template: selected.name,
+                    templateId: selected.id,
+                    compatibleCount,
+                    onApply: applyMappings,
+                  }
+                : undefined
+            }
+            onReview={reviewSelected}
+            onClear={clearSelection}
+            onUndo={
+              (canUndoReviewBatch ?? Boolean(batchResult?.changedIds.length)) && onUndoReviewBatch
+                ? () => {
+                    const result = onUndoReviewBatch();
+                    setBatchResult(
+                      result?.skippedIds.length ? { ...result, label: 'restored' } : undefined,
+                    );
+                  }
+                : undefined
+            }
+          />
         </Box>
         <Box className="asset-review-inspector">
           <Inspector
             asset={selected}
-            onAction={onAction}
+            onAction={onAction ? singleReview : undefined}
             resolveSourceValue={resolveSourceValue}
             onMapField={onMapField}
             onEditPlainText={onEditPlainText}
