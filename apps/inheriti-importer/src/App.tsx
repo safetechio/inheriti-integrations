@@ -20,13 +20,10 @@ import {
 import type { ImportFile } from '@modules/importer-preview/SourceImportStatus';
 import {
   createHistory,
+  getFolderHistoryControls,
   pushHistory,
   replaceHistory,
   resetHistory,
-  canUndo,
-  canRedo,
-  undo,
-  redo,
 } from '@modules/plans/domain/workspace-history';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
@@ -89,6 +86,7 @@ function AuthenticatedImporter() {
   const [warningFile, setWarningFile] = useState<ImportFile | null>(null);
   const [stagingComplete, setStagingComplete] = useState(false);
   const [reviewRevision, setReviewRevision] = useState(0);
+  const planHistory = getFolderHistoryControls(workspaceHistory, organizationId ? folders : null);
   const planWorkspace = workspaceHistory.present;
   const importSession = useMemo(() => importSessionFromVaultState(imports.state), [imports.state]);
   const preservationRevision = useMemo(
@@ -262,13 +260,13 @@ function AuthenticatedImporter() {
             onAssignAssets: workspace.assignAssets,
             onUnassignAssets: workspace.unassignAssets,
             onAutoGroupUnassigned: workspace.autoGroupUnassigned,
-            canUndoPlans: canUndo(workspaceHistory) && !batchController.running,
-            canRedoPlans: canRedo(workspaceHistory) && !batchController.running,
+            canUndoPlans: planHistory.canUndo && !batchController.running,
+            canRedoPlans: planHistory.canRedo && !batchController.running,
             onUndoPlans: () => {
-              if (!batchController.running) setWorkspaceHistory(undo);
+              if (!batchController.running) setWorkspaceHistory(planHistory.undo);
             },
             onRedoPlans: () => {
-              if (!batchController.running) setWorkspaceHistory(redo);
+              if (!batchController.running) setWorkspaceHistory(planHistory.redo);
             },
             onCreatePlan: workspace.createPlan,
             onCreatePlansFromAssets: workspace.createPlansFromAssets,

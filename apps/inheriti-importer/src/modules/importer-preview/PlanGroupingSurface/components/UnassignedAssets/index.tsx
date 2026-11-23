@@ -24,6 +24,7 @@ import { setItemDragImage } from '@modules/_shared/ui/drag/set-item-drag-image';
 
 const emptyAssets: GroupingAsset[] = [];
 const emptyIds: string[] = [];
+const emptyIdSet = new Set<string>();
 
 type UnassignedAssetsProps = {
   assets: GroupingAsset[];
@@ -61,8 +62,9 @@ export function UnassignedAssets({
     text: [asset.name, asset.source, ...(asset.folderPath ?? [])].join(' ').toLocaleLowerCase(),
   })), [candidates]);
   const selectedSource = source === 'all' || sources.some(([id]) => id === source) ? source : 'all';
+  const sourceSelection = selection?.pane === 'unassigned' ? selection : undefined;
   const marquee = useMarqueeSelection({
-    selectedIds: selection?.selectedIds ?? emptyIds,
+    selectedIds: sourceSelection?.selectedIds ?? emptyIds,
     onSelect: (ids) => selection?.replaceSelection(ids, 'unassigned'),
     resetKey: `${view}\u0000${selectedSource}\u0000${query}\u0000${filter}`,
     rowSelector: '[data-marquee-asset-id]',
@@ -98,8 +100,9 @@ export function UnassignedAssets({
   const startDrag = useCallback((asset: GroupingAsset, event: DragEvent) => {
     const { grouping, selection } = commands.current;
     grouping.startDrag(asset.id);
-    selection?.startDrag(asset.id);
-    const count = selection?.selectedIdSet.has(asset.id) ? selection.selectedIds.length : 1;
+    const carriesSelection = selection?.pane === 'unassigned' && selection.selectedIdSet.has(asset.id);
+    selection?.startDrag(asset.id, carriesSelection ? undefined : [asset.id]);
+    const count = carriesSelection ? selection.selectedIds.length : 1;
     if (event.dataTransfer) setItemDragImage(event.dataTransfer, event.currentTarget as HTMLElement, asset.name, count, `${count} ${count === 1 ? 'asset' : 'assets'}`, '[data-drag-icon]');
   }, []);
   const endDrag = useCallback(() => {
@@ -118,7 +121,7 @@ export function UnassignedAssets({
       asset={asset}
       showTypeIcon={folderMode}
       showAssign={false}
-      selected={selection?.selectedIdSet.has(asset.id)}
+      selected={sourceSelection?.selectedIdSet.has(asset.id)}
       selectionRows={selectionRows}
       onSelect={selection ? selectAsset : undefined}
       onFocusSelect={selection ? focusSelection : undefined}
@@ -221,7 +224,7 @@ export function UnassignedAssets({
             view === 'list' ? (
               visible.slice(0, limit).map((asset) => assetRow(asset))
             ) : (
-              <SourceAssetTree assets={visible} selection={selection} grouping={grouping} renderAsset={assetRow} />
+              <SourceAssetTree assets={visible} selection={sourceSelection ?? (selection && { ...selection, selectedIdSet: emptyIdSet })} grouping={grouping} renderAsset={assetRow} />
             )
           ) : (
             <NoItemsPlaceholder

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import { BaseModal, Box, Button, Checkbox, Icon, PanelHeader, Stack, Text, Tooltip, theme } from '@main-components';
 import { UnassignedAssets } from './components/UnassignedAssets';
 import { PlanDraftList } from './components/PlanDraftList';
@@ -114,9 +114,9 @@ export function PlanGroupingSurface({
         const target = event.target as HTMLElement;
         if (
           target.closest(
-            'textarea, select, [contenteditable="true"], [role="dialog"], input:not([type="checkbox"])',
+            'textarea, select, [contenteditable="true"], [role="dialog"], .asset-selection-popover, input:not([type="checkbox"])',
           ) ||
-          event.isComposing ||
+          event.nativeEvent.isComposing ||
           event.repeat ||
           event.altKey
         )
@@ -126,17 +126,17 @@ export function PlanGroupingSurface({
           selection.endDrag();
           grouping.endDrag();
         }
-        if (
-          event.key.toLowerCase() === 'a' &&
-          (event.ctrlKey || event.metaKey) &&
-          !event.shiftKey &&
-          selection.pane && selection.pane !== 'organization'
-        ) {
-          const rows = selection.pane === 'unassigned'
-            ? selection.visibleUnassigned.current
-            : plans.find((plan) => plan.id === selection.pane)?.assignedAssets ?? [];
-          event.preventDefault();
-          selection.selectAll(rows, selection.pane);
+        if (event.key.toLowerCase() === 'a' && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
+          const pane = folders
+            ? (onAssignMany && target.closest('.plan-grouping-unassigned') ? 'unassigned' : undefined)
+            : selection.pane;
+          if (pane) {
+            const rows = pane === 'unassigned'
+              ? selection.visibleUnassigned.current
+              : plans.find((plan) => plan.id === pane)?.assignedAssets ?? [];
+            event.preventDefault();
+            selection.selectAll(rows, pane);
+          }
         }
         if (
           (event.ctrlKey || event.metaKey) &&

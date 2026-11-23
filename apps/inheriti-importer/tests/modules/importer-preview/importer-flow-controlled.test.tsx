@@ -61,6 +61,26 @@ function renderFlow(callbacks: Parameters<typeof ImporterFlow>[0]['callbacks']) 
 }
 
 describe('ImporterFlow controlled mode', () => {
+  it.each([
+    [0, 0, '0 of 0 assets assigned'],
+    [0, 1, '0 of 1 asset assigned'],
+    [1, 0, '1 of 1 asset assigned'],
+    [1, 1, '1 of 2 assets assigned'],
+  ])('labels assignment progress with %i assigned and %i unassigned', (assigned, unassigned, label) => {
+    render(
+      <ImporterFlow
+        initialStage="plans"
+        files={[file]}
+        assets={[asset]}
+        unassigned={unassigned ? [asset] : []}
+        plans={assigned ? [plan] : []}
+        checklist={checklist}
+      />,
+    );
+
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
   it('keeps completed step numbers and explains imported sources and pending assignments', () => {
     render(
       <ImporterFlow

@@ -403,6 +403,54 @@
 .folder-tree-heading > :first-child { min-width: 0; max-width: 100%; }
 .folder-tree-heading > :last-child { margin-left: auto; }
 
+@media (min-width: 980px) and (max-height: 768px) {
+  .has-folder-workspace .plan-grouping-unassigned > * {
+    gap: var(--importer-compact-padding-block) !important;
+  }
+
+  .organization-folder-tree {
+    padding: var(--importer-section-gap);
+  }
+
+  .organization-folder-tree .folder-tree-header {
+    gap: var(--importer-compact-padding-block) !important;
+    padding-bottom: 0;
+  }
+
+  .organization-folder-tree .folder-tree-search {
+    flex: 1 1 0;
+  }
+
+  .organization-folder-tree .folder-tree-columns,
+  .organization-folder-tree .organization-folder-scroll {
+    margin-inline: calc(-1 * var(--importer-section-gap));
+  }
+
+  .organization-folder-tree .folder-tree-footer {
+    padding: var(--importer-compact-padding-block) 0;
+  }
+
+  .organization-folder-tree .folder-tree-footer > * {
+    column-gap: 4px !important;
+  }
+
+  .has-folder-workspace .plan-asset-filters {
+    flex-wrap: nowrap;
+  }
+
+  .has-folder-workspace .plan-asset-filters select {
+    flex: 1 1 0;
+    min-width: 116px;
+    text-overflow: ellipsis;
+  }
+
+  .has-folder-workspace .plan-asset-search,
+  .has-folder-workspace .plan-asset-search input {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
 .plan-grouping-direction-slot[class] { position: relative; flex: 0 0 0; width: 0; align-self: stretch; }
 .plan-grouping-direction[class] {
   position: absolute;

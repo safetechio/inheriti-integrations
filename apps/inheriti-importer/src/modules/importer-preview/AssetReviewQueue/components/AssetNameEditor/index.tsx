@@ -50,12 +50,12 @@ export function AssetNameEditor({
       <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap="s" minWidth={0}>
         <Text
           variant="importerAssetTitle"
-          className="asset-inspector-heading-text"
-          style={{ minWidth: 140, flex: 1 }}
+          className="asset-inspector-heading-text asset-inspector-title"
         >
           {name}
         </Text>
         <Box
+          className="asset-inspector-heading-actions"
           flexDirection="row"
           alignItems="center"
           gap="s"

@@ -10,7 +10,13 @@ import { ImporterFlow } from '@modules/importer-preview/ImporterFlow';
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
 import { AppHeader } from '@modules/import/ui/components/AppHeader';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
-import { pushHistory, resetHistory, undo, redo } from '@modules/plans/domain/workspace-history';
+import {
+  getFolderHistoryControls,
+  pushHistory,
+  resetHistory,
+  undo,
+  redo,
+} from '@modules/plans/domain/workspace-history';
 import { ShellFixture } from './shell-fixtures';
 import { createFolderGroupingFixture } from './folder-grouping/fixture';
 import { storyWorkspace, type GroupingScenario } from './folder-grouping/workspace';
@@ -70,7 +76,12 @@ function FolderGroupingStory({
     workspace.acceptAllEligible();
   }, [scenario, workspace]);
   if (fullFlow && !initialized.current) return null;
-  if (fullFlow)
+  if (fullFlow) {
+    const planHistory = getFolderHistoryControls(history, {
+      scope: 'SHARED',
+      folders: storyFolders,
+      hasLoaded: true,
+    });
     return (
       <ShellFixture>
         <ImporterFlow
@@ -121,14 +132,15 @@ function FolderGroupingStory({
             onDeletePlans: workspace.deletePlans,
             onUpdatePlan: workspace.updatePlanMetadata,
             onMovePlans: workspace.movePlansToFolder,
-            onUndoPlans: () => setHistory(undo),
-            onRedoPlans: () => setHistory(redo),
-            canUndoPlans: history.past.length > 0,
-            canRedoPlans: history.future.length > 0,
+            onUndoPlans: () => setHistory(planHistory.undo),
+            onRedoPlans: () => setHistory(planHistory.redo),
+            canUndoPlans: planHistory.canUndo,
+            canRedoPlans: planHistory.canRedo,
           }}
         />
       </ShellFixture>
     );
+  }
   return (
     <ShellFixture>
       <Box gap="s">

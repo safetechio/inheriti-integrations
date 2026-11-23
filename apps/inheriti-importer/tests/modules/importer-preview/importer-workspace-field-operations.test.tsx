@@ -240,6 +240,55 @@ describe('source field operations', () => {
     ]);
   });
 
+  it('releases an incompatible manual binding when an assigned generated asset changes type', () => {
+    const session = createSession([['token', 'alpha', 'beta']]);
+    const { result } = mount(session);
+    const current = () => result.current.importer;
+    const [, alpha, beta] = session.nodesById['entry-0'].fieldIds;
+    const initial = current().fieldOperations.preview({
+      sourceAssetId: current().assets[0].id,
+      action: 'suggest',
+      fieldIds: [alpha, beta],
+    });
+    const group = initial.groups[0];
+    const preview = current().fieldOperations.preview({
+      ...initial.request,
+      groups: [{ ...group, type: 'API-KEY', fieldBindings: { 'secret.apiKey': alpha } }],
+    });
+    act(() => expect(current().fieldOperations.commit(preview).success).toBe(true));
+    const generated = () => current().assets.find(({ id }) => id === group.id)!;
+    const suggestion = () => current().suggestions.find(({ id }) => id === group.id)!;
+    const draft = () =>
+      result.current.workspace.plansByClientId.plan.assets.find(({ id }) => id === group.id)!;
+
+    act(() => current().mapAssetField(generated(), 'secret.apiKey', beta));
+    act(() => current().reviewAsset('accept', generated()));
+    act(() => current().assignAsset(current().unassigned[0], current().plans[0]));
+    expect(draft().fieldBindings['secret.apiKey']).toEqual({
+      kind: 'source',
+      sourceFieldId: beta,
+    });
+
+    act(() => current().reviewAsset('alternate:USER-PSWD', generated()));
+    expect(generated().type).toBe('USER-PSWD');
+    expect(suggestion().fieldBindings).not.toHaveProperty(['secret.apiKey']);
+    expect(draft().fieldBindings).not.toHaveProperty(['secret.apiKey']);
+    expect(
+      generated().schemaFields?.find(({ key }) => key === 'secret.password')?.candidates,
+    ).toContainEqual(expect.objectContaining({ id: beta }));
+
+    act(() => current().mapAssetField(generated(), 'secret.password', alpha));
+    act(() => current().reviewAsset('accept', generated()));
+    expect(generated().status).toBe('accepted');
+    expect(current().coverage.fields.find(({ id }) => id === beta)).toMatchObject({
+      status: 'pending',
+      destinations: [],
+    });
+    const materialised = materialiseAsset(draft(), session);
+    expect(materialised.errors).toEqual([]);
+    expect(materialised.asset.secret).toEqual({ password: 'test-0-1' });
+  });
+
   it('rejects foreign fields, public notes and stale previews', () => {
     const session = createSession(
       [
@@ -1063,7 +1112,15 @@ describe('explicit field operation batches', () => {
     expect(excluded.errors[0]).toContain('Entry 1');
     expect(result.current.importer.fieldOperations.commit(excluded).success).toBe(false);
     expect(result.current.importer.assets.map(({ id }) => id)).toEqual(assets.map(({ id }) => id));
-    expect(result.current.importer.fieldOperations.canUndo).toBe(false);
+    expect(result.current.importer.fieldOperations.canUndo).toBe(true);
+    act(() => expect(result.current.importer.fieldOperations.undo().success).toBe(true));
+    expect(result.current.importer.coverage.fields).toEqual(
+      expect.arrayContaining(
+        request.entries![1].fieldIds.map((id) =>
+          expect.objectContaining({ id, status: 'pending' }),
+        ),
+      ),
+    );
   });
 
   it('rejects an entry backed by edited literal text', () => {

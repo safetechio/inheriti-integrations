@@ -15,6 +15,9 @@ export function PlanAssetsModal({ plan, folders, onDismiss, onSave, onDelete, on
   onDelete?: (plan: PlanDraft) => void;
   onRemove?: (asset: NonNullable<PlanDraft['assignedAssets']>[number], plan: PlanDraft) => void;
 }) {
+  const capacityUsed = plan ? planUsage(plan) : 0;
+  const capacityLimit = plan ? planCapacity(plan) : 0;
+  const capacityLabel = `${capacityUsed} of ${capacityLimit} ${capacityLimit === 1 ? 'asset' : 'assets'}`;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string>();
@@ -42,8 +45,8 @@ export function PlanAssetsModal({ plan, folders, onDismiss, onSave, onDelete, on
       {plan ? <Stack gap="m">
         {onSave ? <><PlanNameInput value={name} onChangeText={(value) => { setName(value); setError(undefined); }} error={error} /><PlanDescriptionInput value={description} onChangeText={(value) => { setDescription(value); setError(undefined); }} error={error?.startsWith('Plan description') ? error : undefined} /></> : <Text variant="bodyRegular">{plan.description}</Text>}
         <Text variant="bodySmall" color="gray">Location in your organisation: {location}</Text>
-        <Box gap="xs"><Text variant="bodySmall" color="gray">{planUsage(plan)} of {planCapacity(plan)} Assets</Text><Meter value={planUsage(plan)} max={planCapacity(plan)} label={`${planUsage(plan)} of ${planCapacity(plan)} assets used`} tone={planUsage(plan) > planCapacity(plan) ? 'danger' : 'success'} /></Box>
-        <Stack gap="xs"><Text variant="bodyRegular" semibold>Assets in this plan</Text>{plan.assignedAssets?.length ? plan.assignedAssets.map((asset) => <ModalAssetRow key={asset.id} asset={asset} onRemove={onRemove ? () => onRemove(asset, plan) : undefined} />) : <Text variant="bodySmall" color="gray">No Assets assigned yet.</Text>}</Stack>
+        <Box gap="xs"><Text variant="bodySmall" color="gray">{capacityLabel}</Text><Meter value={capacityUsed} max={capacityLimit} label={`${capacityLabel} used`} tone={capacityUsed > capacityLimit ? 'danger' : 'success'} /></Box>
+        <Stack gap="xs"><Text variant="bodyRegular" semibold>Assets in this plan</Text>{plan.assignedAssets?.length ? plan.assignedAssets.map((asset) => <ModalAssetRow key={asset.id} asset={asset} onRemove={onRemove ? () => onRemove(asset, plan) : undefined} />) : <Text variant="bodySmall" color="gray">No assets assigned yet.</Text>}</Stack>
       </Stack> : null}
     </BaseModal>
   );

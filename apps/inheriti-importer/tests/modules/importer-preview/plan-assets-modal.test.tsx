@@ -16,10 +16,18 @@ describe('plan assets modal', () => {
     render(<PlanAssetsModal plan={plan} folders={folders} onDismiss={vi.fn()} />);
     expect(screen.getByRole('dialog', { name: 'Payments' })).toBeTruthy();
     expect(screen.getByText('Location in your organisation: Finance')).toBeTruthy();
-    expect(screen.getByText('1 of 10 Assets')).toBeTruthy();
+    expect(screen.getByText('1 of 10 assets')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '1 of 10 assets used' })).toBeTruthy();
     expect(screen.getByText('API key')).toBeTruthy();
     expect(screen.getByText('Username and Password')).toBeTruthy();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('uses singular capacity and lowercase empty-state copy', () => {
+    render(<PlanAssetsModal plan={{ ...plan, assets: 0, capacity: '0/1', assignedAssets: [] }} folders={folders} onDismiss={vi.fn()} />);
+    expect(screen.getByText('0 of 1 asset')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '0 of 1 asset used' })).toBeTruthy();
+    expect(screen.getByText('No assets assigned yet.')).toBeTruthy();
   });
 
   it('saves edited metadata and keeps removal wired to its plan', () => {

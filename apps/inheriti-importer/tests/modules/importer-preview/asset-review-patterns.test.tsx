@@ -95,6 +95,23 @@ it('uses visible entries in the pattern and applies mappings only after confirma
   expect(onApplyMappings).toHaveBeenCalledWith(first, [first, second]);
 });
 
+it('exposes the full source and all field names for compact group rows', () => {
+  const source = 'production-infrastructure-service-credentials-export.csv';
+  const unmapped = ['Account', 'Host', 'Region', 'Username'];
+  render(
+    <AssetReviewQueue
+      assets={[asset('First', { source, unmapped }), asset('Second', { source, unmapped })]}
+      onReviewAssets={() => ({ changedIds: [], skippedIds: [] })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Group similar entries' }));
+  const summary = `${source}, Account, Host, Password, Region, Username`;
+  const row = screen.getByRole('button', { name: `Select Username and Password group, 2 entries, ${summary}` });
+  expect(row.getAttribute('title')).toBe(summary);
+  expect(within(row).getByText(`${source} · Account, Host, Password +2`)).toBeTruthy();
+});
+
 it('paginates groups and explains singleton results', () => {
   const assets = Array.from({ length: 21 }, (_, index) => [
     asset(`First ${index}`, { sourcePatternKey: String(index) }),

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workspace = resolve(appRoot, '../../../..');
@@ -76,7 +76,12 @@ function secret(name) {
   return undefined;
 }
 
-async function authenticate(app, window, output) {
+export async function authenticate(
+  app,
+  window,
+  output,
+  { captureFailure = true, useStorageState = true } = {},
+) {
   await app.evaluate(({ shell }) => {
     const openExternal = shell.openExternal;
     shell.openExternal = async (url) => {
@@ -102,11 +107,13 @@ async function authenticate(app, window, output) {
     browser = await chromium.launch({ headless: true });
     const storagePath = resolve(businessUi, '.playwright/auth/owner.json');
     let storageState;
-    try {
-      await readFile(storagePath);
-      storageState = storagePath;
-    } catch {
-      /* Login form is handled below. */
+    if (useStorageState) {
+      try {
+        await readFile(storagePath);
+        storageState = storagePath;
+      } catch {
+        /* Login form is handled below. */
+      }
     }
     const context = await browser.newContext(storageState ? { storageState } : {});
     page = await context.newPage();
@@ -153,7 +160,8 @@ async function authenticate(app, window, output) {
       await writeFile(join(output, 'auth-browser-failure.json'), JSON.stringify(details, null, 2), {
         mode: 0o600,
       }).catch(() => {});
-      await page.screenshot({ path: join(output, 'auth-browser-failure.png') }).catch(() => {});
+      if (captureFailure)
+        await page.screenshot({ path: join(output, 'auth-browser-failure.png') }).catch(() => {});
     }
     throw error;
   } finally {
@@ -587,4 +595,4 @@ async function main() {
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

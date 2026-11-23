@@ -36,6 +36,7 @@ export function PlanCard({
 }: PlanCardProps) {
   const capacityUsed = planUsage(plan);
   const capacityLimit = planCapacity(plan);
+  const capacityLabel = `${capacityUsed} of ${capacityLimit} ${capacityLimit === 1 ? 'asset' : 'assets'}`;
   const capacityRatio = capacityUsed / capacityLimit;
   const overCapacity = capacityRatio > 1;
   return (
@@ -105,7 +106,7 @@ export function PlanCard({
         <Box gap="xs">
           <Box flexDirection="row" justifyContent="space-between" gap="s">
             <Text variant="importerPlanBody" color="gray">
-              {capacityUsed} of {capacityLimit} Assets
+              {capacityLabel}
             </Text>
           </Box>
           <Meter
@@ -118,7 +119,7 @@ export function PlanCard({
                   ? 'warning'
                   : 'success'
             }
-            label={`${capacityUsed} of ${capacityLimit} assets used`}
+            label={`${capacityLabel} used`}
           />
         </Box>
         {plan.assignedAssets?.length ? (

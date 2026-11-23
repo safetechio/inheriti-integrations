@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { PlanGroupingSurface } from '@modules/importer-preview/PlanGroupingSurface';
 import { AssetSelectionToolbar } from '@modules/importer-preview/PlanGroupingSurface/components/AssetSelectionToolbar';
 import { setItemDragImage } from '@modules/_shared/ui/drag/set-item-drag-image';
@@ -102,4 +102,122 @@ it.each([false, true])('explains moving assigned assets into new plans (mixed se
   fireEvent.click(screen.getByRole('button', { name: 'Move to plan', exact: true }));
   fireEvent.click(screen.getByRole('button', { name: /Target plan/ }));
   expect(onMove).toHaveBeenCalledWith(selected, target);
+});
+
+const otherAsset = { ...asset, id: 'b', name: 'Backup' };
+const freshAsset = { ...asset, id: 'c', name: 'New credential' };
+const targetPlan = { ...plan, id: 'target', name: 'Target plan' };
+
+function renderFolderGrouping(onAssignMany = vi.fn()) {
+  render(<PlanGroupingSurface
+    unassigned={[freshAsset]}
+    plans={[{ ...plan, assets: 2, assignedAssets: [asset, otherAsset] }, targetPlan]}
+    folders={{
+      scope: 'SHARED',
+      folders: [{ id: 'folder', name: 'Folder A', parentId: null, scope: 'SHARED', revision: 1 }],
+      onDeleteFolders: vi.fn(),
+    }}
+    onAssignMany={onAssignMany}
+    onDeletePlans={vi.fn()}
+  />);
+  fireEvent.click(screen.getByRole('button', { name: 'Expand Plan A' }));
+  const tree = screen.getByRole('tree', { name: 'Organisation folders' });
+  return { tree, source: screen.getByText('Unassigned assets').closest<HTMLElement>('.plan-grouping-unassigned')! };
+}
+
+it.each(['List', 'Tree'])('drags only the filtered source asset in %s view when the organisation has a different selection', (view) => {
+  const onAssignMany = vi.fn();
+  const { tree, source } = renderFolderGrouping(onAssignMany);
+  if (view === 'Tree') fireEvent.click(within(source).getByRole('button', { name: 'Tree', exact: true }));
+  fireEvent.click(within(source).getByRole('button', { name: 'Assigned · 2' }));
+  fireEvent.change(within(source).getByRole('textbox'), { target: { value: asset.name } });
+  fireEvent.click(within(tree).getByRole('checkbox', { name: 'Select Credential' }));
+  fireEvent.click(within(tree).getByRole('checkbox', { name: 'Select Backup' }));
+  const transfer = { types: [], setData: vi.fn(), getData: vi.fn(), setDragImage: vi.fn() };
+  const dragged = view === 'Tree'
+    ? within(source).getByRole('checkbox', { name: 'Select source vault.json' }).closest('.plan-source-group')!
+    : within(source).getByText('Credential');
+  fireEvent.dragStart(dragged, { dataTransfer: transfer });
+  expect((within(source).getByRole('checkbox', { name: 'Select Credential' }) as HTMLInputElement).checked).toBe(false);
+  if (view === 'Tree') {
+    expect((within(source).getByRole('checkbox', { name: 'Select source vault.json' }) as HTMLInputElement).checked).toBe(false);
+  }
+  expect(transfer.setDragImage.mock.calls[0]?.[0].querySelector('[data-drag-layer]')).toBeNull();
+  fireEvent.drop(within(tree).getByText('Target plan'), { dataTransfer: transfer });
+  expect(onAssignMany.mock.calls[0]?.[0].map((item: typeof asset) => item.id)).toEqual(['a']);
+});
+
+it('selects plans only when Ctrl+A is pressed on a focused organisation tree after source selection', () => {
+  const { tree, source } = renderFolderGrouping();
+  const sourceAsset = (within(source).getByRole('checkbox', { name: 'Select New credential' }) as HTMLInputElement);
+  fireEvent.click(sourceAsset);
+  tree.focus();
+  fireEvent.keyDown(tree, { key: 'a', ctrlKey: true });
+  expect(sourceAsset.checked).toBe(false);
+  expect(screen.getByText('2 plans selected')).toBeTruthy();
+  expect((within(tree).getByRole('checkbox', { name: 'Select Credential' }) as HTMLInputElement).checked).toBe(false);
+});
+
+it('lets focused asset and plan checkboxes choose the Ctrl+A selection kind', () => {
+  const { tree, source } = renderFolderGrouping();
+  const rightAsset = (within(tree).getByRole('checkbox', { name: 'Select Credential' }) as HTMLInputElement);
+  const rightBackup = (within(tree).getByRole('checkbox', { name: 'Select Backup' }) as HTMLInputElement);
+  const rightPlan = (within(tree).getByRole('checkbox', { name: 'Select Plan A' }) as HTMLInputElement);
+  fireEvent.click(rightAsset);
+  rightPlan.focus();
+  fireEvent.keyDown(rightPlan, { key: 'a', ctrlKey: true });
+  expect(rightPlan.checked).toBe(true);
+  expect(rightAsset.checked).toBe(false);
+  expect(screen.getByText('2 plans selected')).toBeTruthy();
+  rightAsset.focus();
+  fireEvent.keyDown(rightAsset, { key: 'a', ctrlKey: true });
+  expect(rightAsset.checked).toBe(true);
+  expect(rightBackup.checked).toBe(true);
+  expect(rightPlan.checked).toBe(false);
+  const sourceAsset = (within(source).getByRole('checkbox', { name: 'Select New credential' }) as HTMLInputElement);
+  sourceAsset.focus();
+  fireEvent.keyDown(sourceAsset, { key: 'a', ctrlKey: true });
+  expect(sourceAsset.checked).toBe(true);
+  expect(rightAsset.checked).toBe(false);
+});
+
+it('leaves text selection, repeated shortcuts and input composition alone', () => {
+  const { tree, source } = renderFolderGrouping();
+  const search = within(source).getByRole('textbox');
+  search.focus();
+  expect(fireEvent.keyDown(search, { key: 'a', ctrlKey: true })).toBe(true);
+  const rightAsset = within(tree).getByRole('checkbox', { name: 'Select Credential' }) as HTMLInputElement;
+  rightAsset.focus();
+  expect(fireEvent.keyDown(rightAsset, { key: 'a', ctrlKey: true, repeat: true })).toBe(true);
+  expect(fireEvent.keyDown(rightAsset, { key: 'a', ctrlKey: true, isComposing: true })).toBe(true);
+  expect(rightAsset.checked).toBe(false);
+  const sourceAsset = within(source).getByRole('checkbox', { name: 'Select New credential' }) as HTMLInputElement;
+  sourceAsset.focus();
+  expect(fireEvent.keyDown(sourceAsset, { key: 'a', ctrlKey: true, repeat: true })).toBe(true);
+  expect(fireEvent.keyDown(sourceAsset, { key: 'a', ctrlKey: true, isComposing: true })).toBe(true);
+  expect(sourceAsset.checked).toBe(false);
+});
+
+it.each(['Plan A', 'Folder A'])('clears the %s selection when Ctrl+A selects source assets', (name) => {
+  const { tree, source } = renderFolderGrouping();
+  const rightSelection = name === 'Plan A'
+    ? within(tree).getByRole('checkbox', { name: 'Select Plan A' })
+    : within(tree).getByText('Folder A').closest<HTMLElement>('[role="treeitem"]')!;
+  const isSelected = () => rightSelection instanceof HTMLInputElement
+    ? rightSelection.checked
+    : rightSelection.getAttribute('aria-selected') === 'true';
+  rightSelection.focus();
+  fireEvent.click(rightSelection, { ctrlKey: name === 'Folder A' });
+  expect(isSelected()).toBe(true);
+  expect(screen.getByRole('button', { name: 'Delete selected' })).toBeTruthy();
+
+  const sourceList = within(source).getByLabelText('Unassigned assets list');
+  sourceList.focus();
+  fireEvent.keyDown(sourceList, { key: 'a', ctrlKey: true });
+
+  const sourceSelection = within(source).getAllByRole('checkbox', { checked: true });
+  expect(sourceSelection).toHaveLength(1);
+  expect(sourceSelection[0]).toBe(within(source).getByRole('checkbox', { name: 'Select New credential' }));
+  expect(isSelected()).toBe(false);
+  expect(screen.queryByRole('button', { name: 'Delete selected' })).toBeNull();
 });

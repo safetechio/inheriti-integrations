@@ -1,4 +1,4 @@
-import type { AssetDraft } from '@modules/plans/domain/workspace-model';
+import type { AssetDraft, WorkspaceState } from '@modules/plans/domain/workspace-model';
 import { bindingSourceIds } from '@modules/mapping/application/suggestion-engine';
 import { ignoreSourceField, removeAsset } from '@modules/plans/domain/workspace-commands';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
@@ -6,12 +6,18 @@ import type { NoteDestination, ReviewAsset, ReviewBatchResult } from '../../Asse
 import { nativeNotes, type PreservationChoices } from './importer-workspace-notes';
 import { projectSuggestions } from './importer-workspace-projection';
 import { sourceSuggestions, statusKey } from './importer-workspace-suggestions';
+import type { FieldOperationChange } from './importer-workspace-field-operations';
+import type { ReviewDecisions } from './importer-workspace-types';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
 
 export function createPreservationActions(
   context: ImporterWorkspaceContext,
+  decisions: ReviewDecisions,
   setChoices: (choices: PreservationChoices) => void,
   invalidate: (ids: string[]) => void,
+  commitExclusion: (
+    change: Pick<FieldOperationChange, 'workspace' | 'decisions' | 'result'>,
+  ) => void,
 ) {
   const { preservation, projection, session, setDecisions, updateWorkspace, byId } = context;
 
@@ -25,14 +31,15 @@ export function createPreservationActions(
     for (const asset of projection.suggestions) {
       if (usesField(asset)) affected.add(statusKey(asset));
     }
-    setDecisions((current) => {
+    const reopenDecisions = (current: ReviewDecisions) => {
       const updated = { ...current };
       for (const id of affected) {
         if (updated[id] !== 'excluded') updated[id] = 'needs-review';
       }
       return updated;
-    });
-    updateWorkspace((current) => {
+    };
+    const unassignDrafts = (current: WorkspaceState) => {
+      const removedAssetIds = new Set<string>();
       let next = exclude
         ? fieldIds.reduce(
             (state, sourceFieldId) => ignoreSourceField(state, { sourceFieldId }),
@@ -42,11 +49,29 @@ export function createPreservationActions(
       for (const plan of listPlanDrafts(current)) {
         for (const asset of plan.assets) {
           if (!(exclude ? usesField(asset) : affected.has(asset.id) || usesField(asset))) continue;
+          removedAssetIds.add(asset.id);
           next = removeAsset(next, { planClientId: plan.clientId, assetId: asset.id });
         }
       }
-      return next;
-    });
+      return { workspace: next, removedAssetIds: [...removedAssetIds] };
+    };
+    if (exclude) {
+      const { workspace, removedAssetIds } = unassignDrafts(context.workspace);
+      commitExclusion({
+        workspace,
+        decisions: reopenDecisions(decisions),
+        result: {
+          success: true,
+          message: 'Fields excluded.',
+          createdAssetIds: [],
+          changedAssetIds: [...affected],
+          removedAssetIds,
+        },
+      });
+      return;
+    }
+    setDecisions(reopenDecisions);
+    updateWorkspace((current) => unassignDrafts(current).workspace);
     invalidate([...affected]);
   }
 

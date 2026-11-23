@@ -292,7 +292,7 @@ export function ImporterFlow({
             <Box className="importer-assignment-progress" gap="xs">
               <Box flexDirection="row" justifyContent="space-between">
                 <Text variant="bodySmall" color="gray">
-                  {assignedCount} of {assignmentTotal} assets assigned
+                  {assignedCount} of {assignmentTotal} {assignmentTotal === 1 ? 'asset' : 'assets'} assigned
                 </Text>
                 <Text variant="bodySmall" color="gray">
                   {assignmentPercent}%

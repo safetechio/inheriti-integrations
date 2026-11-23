@@ -27,6 +27,19 @@ const invalidAsset: GroupingAsset = {
 };
 
 describe('PlanGroupingSurface controls', () => {
+  it('labels capacity using the limit', () => {
+    render(
+      <PlanGroupingSurface
+        unassigned={[]}
+        plans={[{ ...plan, assets: 1 }, { ...plan, id: 'small', assets: 0, capacity: '0 / 1' }]}
+      />,
+    );
+
+    expect(screen.getByText('1 of 10 assets')).toBeTruthy();
+    expect(screen.getByText('0 of 1 asset')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '0 of 1 asset used' })).toBeTruthy();
+  });
+
   it('navigates same-named folders from separate sources and groups once', () => {
     const onAutoGroup = vi.fn();
     const left = {
@@ -128,12 +141,13 @@ describe('PlanGroupingSurface controls', () => {
         onAssignMany={onAssignMany}
       />,
     );
+    expect(screen.queryByRole('button', { name: /^Move \d+ assets?$/ })).toBeNull();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Move to plan' }), {
       target: { value: plan.id },
     });
     expect(screen.getByText('Already in this plan.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Move 1 assets' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move 1 asset' }));
     expect(onAssignMany).not.toHaveBeenCalled();
   });
   it('selects a range and moves the whole batch once', () => {

@@ -703,6 +703,123 @@ describe('import source preservation', () => {
     expect(current().executionCoverage.ready).toBe(true);
   });
 
+  it('undoes pending field exclusions and preserves undo after a skipped exclusion', () => {
+    const { current, result } = setup(
+      fixture('cloud', [
+        [
+          'entry',
+          [
+            ['token', 'SYNTHETIC_TOKEN'],
+            ['region', 'SYNTHETIC_REGION'],
+            ['owner', 'SYNTHETIC_OWNER'],
+          ],
+        ],
+      ]),
+    );
+    const selected = ['entry:field:1', 'entry:field:2'];
+    const before = current();
+    act(() =>
+      expect(current().excludeFields(selected)).toEqual({
+        changedIds: selected,
+        skippedIds: [],
+      }),
+    );
+    expect(result.current.workspace.ignoredSourceFieldIds).toEqual(selected);
+    expect(
+      current()
+        .coverage.fields.slice(1)
+        .map(({ status }) => status),
+    ).toEqual(['excluded', 'excluded']);
+    expect(current().fieldOperations.canUndo).toBe(true);
+    act(() =>
+      expect(current().excludeFields(selected)).toEqual({
+        changedIds: [],
+        skippedIds: selected,
+      }),
+    );
+    act(() => expect(current().fieldOperations.undo().success).toBe(true));
+    expect(result.current.workspace.ignoredSourceFieldIds).toEqual([]);
+    expect(current().coverage).toEqual(before.coverage);
+    expect(getReviewBlockers(current().assets, current().coverage)).toEqual(
+      getReviewBlockers(before.assets, before.coverage),
+    );
+
+    act(() => current().excludeFields(selected));
+    act(() => expect(current().renameAsset(current().assets[0], 'Renamed API key')).toBe(true));
+    expect(current().fieldOperations.canUndo).toBe(false);
+    expect(current().fieldOperations.undo().success).toBe(false);
+    expect(result.current.workspace.ignoredSourceFieldIds).toEqual(selected);
+  });
+
+  it.each([false, true])(
+    'preserves unrelated Accept All history after field exclusion (undo field first: %s)',
+    (undoFieldFirst) => {
+      const { current, result } = setup(
+        fixture('cloud', [
+          [
+            'first',
+            [
+              ['token', 'SYNTHETIC_FIRST'],
+              ['region', 'SYNTHETIC_REGION'],
+            ],
+          ],
+          ['second', [['token', 'SYNTHETIC_SECOND']]],
+        ]),
+      );
+      act(() => expect(current().acceptAllEligible()).toBe(2));
+      expect(current().assets.map(({ status }) => status)).toEqual(['accepted', 'accepted']);
+
+      const fieldId = 'first:field:1';
+      act(() => expect(current().excludeFields([fieldId]).changedIds).toEqual([fieldId]));
+      expect(current().fieldOperations.canUndo).toBe(true);
+      if (undoFieldFirst) {
+        act(() => expect(current().fieldOperations.undo().success).toBe(true));
+        expect(current().assets.map(({ status }) => status)).toEqual(['accepted', 'accepted']);
+      }
+      act(() => current().undoAcceptAll());
+      expect(current().assets.map(({ status }) => status)).not.toContain('accepted');
+      expect(current().fieldOperations.canUndo).toBe(false);
+      expect(result.current.workspace.ignoredSourceFieldIds).toEqual(
+        undoFieldFirst ? [] : [fieldId],
+      );
+    },
+  );
+
+  it('restores an assigned draft and its mappings when undoing an invalid field exclusion', () => {
+    const { current, result } = setup(
+      fixture('onepassword', [
+        [
+          'entry',
+          [
+            ['password', 'SYNTHETIC_PASSWORD'],
+            ['email', 'SYNTHETIC_INVALID_EMAIL'],
+          ],
+        ],
+      ]),
+      {
+        id: 'entry:USER-PSWD',
+        name: 'Assigned login',
+        type: 'USER-PSWD',
+        fieldBindings: {
+          'secret.password': { kind: 'source', sourceFieldId: 'entry:field:0' },
+          'secret.email': { kind: 'source', sourceFieldId: 'entry:field:1' },
+        },
+      },
+    );
+    const { assets, coverage, executionCoverage } = current();
+    const assigned = result.current.workspace.plansByClientId.plan.assets;
+    const fieldId = 'entry:field:1';
+    expect(coverage.fields.find(({ id }) => id === fieldId)?.status).toBe('invalid');
+    act(() => current().excludeFields([fieldId]));
+    expect(result.current.workspace.plansByClientId.plan.assets).toEqual([]);
+    expect(current().assets[0].status).toBe('suggested');
+    act(() => expect(current().fieldOperations.undo().success).toBe(true));
+    expect(result.current.workspace.plansByClientId.plan.assets).toEqual(assigned);
+    expect(current().assets[0].status).toBe(assets[0].status);
+    expect(current().coverage).toEqual(coverage);
+    expect(current().executionCoverage).toEqual(executionCoverage);
+  });
+
   it('rejects direct native note metadata mapping on the protected companion', () => {
     const session = fixture('keepass', [
       [

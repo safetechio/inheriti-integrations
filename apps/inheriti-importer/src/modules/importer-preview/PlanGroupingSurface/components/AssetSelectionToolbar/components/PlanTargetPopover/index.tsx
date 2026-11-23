@@ -38,11 +38,11 @@ export function PlanTargetPopover({ anchor, assets, plans, onChoose, onDismiss }
       {matching.slice(0, 50).map((plan) => {
         const additions = assets.filter((asset) => !plan.assignedAssets?.some((assigned) => assigned.id === asset.id));
         const available = Math.max(0, planCapacity(plan) - planUsage(plan));
-        return <button key={plan.id} type="button" disabled={invalid || !additions.length || additions.length > available} onClick={() => onChoose(plan)}>
+        return <button key={plan.id} type="button" title={plan.name} disabled={invalid || !additions.length || additions.length > available} onClick={() => onChoose(plan)}>
           <PlanAvatar id={plan.id} />
           <Box flex={1} style={{ minWidth: 0 }} gap="xxs">
             <Text className="asset-selection-target-name" variant="bodySmall">{plan.name}</Text>
-            <Text variant="xSmall" color="gray">{!additions.length ? 'Already assigned' : additions.length > available ? `${additions.length} spaces needed · ${available} available` : `${available} spaces available`}</Text>
+            <Text variant="xSmall" color="gray">{!additions.length ? 'Already assigned' : additions.length > available ? `${additions.length} ${additions.length === 1 ? 'space' : 'spaces'} needed · ${available} available` : `${available} ${available === 1 ? 'space' : 'spaces'} available`}</Text>
           </Box>
         </button>;
       })}

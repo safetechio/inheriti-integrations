@@ -65,8 +65,10 @@ export function applyMappingOverrides(
 ): SuggestedAsset {
   const changes = overrides[statusKey(suggestion)];
   if (!changes) return suggestion;
+  const allowed = new Set(getPlanAssetFormFields(suggestion.type).map((field) => field.source));
   let fieldBindings: SuggestedAsset['fieldBindings'] | undefined;
   for (const [target, sourceFieldId] of Object.entries(changes)) {
+    if (!allowed.has(target)) continue;
     const existing = suggestion.fieldBindings[target];
     if (
       sourceFieldId

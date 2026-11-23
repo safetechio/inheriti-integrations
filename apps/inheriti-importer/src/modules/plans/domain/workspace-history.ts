@@ -1,4 +1,5 @@
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
+import type { PlanFolder, PlanFolderScope } from '@modules/organization/domain/plan-folder';
 
 /**
  * Bounded in-memory undo/redo. It keeps whole `WorkspaceState`
@@ -14,6 +15,8 @@ export interface WorkspaceHistory {
 
 const DEFAULT_LIMIT = 50;
 
+type FolderCatalog = { scope: PlanFolderScope; folders: readonly Pick<PlanFolder, 'id'>[] };
+
 export function createHistory(initial: WorkspaceState): WorkspaceHistory {
   return { past: [], present: initial, future: [] };
 }
@@ -26,6 +29,50 @@ export function pushHistory(
   if (nextPresent === history.present) return history;
   const past = [...history.past, history.present].slice(-limit);
   return { past, present: nextPresent, future: [] };
+}
+
+export function filterHistoryByFolderCatalog(
+  history: WorkspaceHistory,
+  catalog: FolderCatalog | null,
+): WorkspaceHistory {
+  if (!catalog) return history;
+
+  const folderIds = new Set(catalog.folders.map(({ id }) => id));
+  const sharingModel = catalog.scope === 'PERSONAL' ? 'PRIVATE' : 'SHARED';
+  const canRestore = (snapshot: WorkspaceState) =>
+    Object.values(snapshot.plansByClientId).every(
+      (plan) =>
+        plan.governance.sharingModel !== sharingModel ||
+        plan.folderId == null ||
+        folderIds.has(plan.folderId),
+    );
+  const past = history.past.filter(canRestore);
+  const future = history.future.filter(canRestore);
+  if (past.length === history.past.length && future.length === history.future.length) return history;
+  return { ...history, past, future };
+}
+
+export function getFolderHistoryControls(
+  history: WorkspaceHistory,
+  catalog: (FolderCatalog & {
+    hasLoaded: boolean;
+    loading?: boolean;
+    refreshing?: boolean;
+    error?: string;
+  }) | null,
+) {
+  const verifiedCatalog =
+    catalog?.hasLoaded && !catalog.loading && !catalog.refreshing && !catalog.error ? catalog : null;
+  const available = verifiedCatalog && filterHistoryByFolderCatalog(history, verifiedCatalog);
+
+  return {
+    canUndo: available !== null && canUndo(available),
+    canRedo: available !== null && canRedo(available),
+    undo: (current: WorkspaceHistory) =>
+      verifiedCatalog ? undo(filterHistoryByFolderCatalog(current, verifiedCatalog)) : current,
+    redo: (current: WorkspaceHistory) =>
+      verifiedCatalog ? redo(filterHistoryByFolderCatalog(current, verifiedCatalog)) : current,
+  };
 }
 
 export function canUndo(history: WorkspaceHistory): boolean {

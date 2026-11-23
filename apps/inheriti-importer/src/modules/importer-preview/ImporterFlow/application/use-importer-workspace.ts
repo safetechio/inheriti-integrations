@@ -241,10 +241,13 @@ export function useImporterWorkspace(
     change: FieldOperationChange,
     changedAssetIds: string[],
     nextEdits = edits,
+    invalidateReviewHistory = () => {
+      lastBatch.current = null;
+      recordBatch(new Map());
+    },
   ) {
     pending.current = null;
-    lastBatch.current = null;
-    recordBatch(new Map());
+    invalidateReviewHistory();
     setFieldUndo({
       before: { organization, preservation, mappings: mappingOverrides, decisions, workspace },
       after: change,
@@ -396,10 +399,22 @@ export function useImporterWorkspace(
       : undefined;
     setOrganization({ assets, owners, names, generatedAssetIds, releasedFieldIds });
   }
-  const preservationActions = createPreservationActions(context, setPreservation, (ids) => {
-    ids.forEach((id) => invalidateBatchAsset(id));
-    notifyReviewChange();
-  });
+  const preservationActions = createPreservationActions(
+    context,
+    decisions,
+    setPreservation,
+    (ids) => {
+      ids.forEach((id) => invalidateBatchAsset(id));
+      notifyReviewChange();
+    },
+    (change) =>
+      commitFieldChange(
+        { ...change, organization, preservation, mappings: mappingOverrides },
+        change.result.changedAssetIds,
+        edits,
+        () => change.result.changedAssetIds.forEach((id) => invalidateBatchAsset(id)),
+      ),
+  );
   return {
     ...projection,
     ...preservationActions,

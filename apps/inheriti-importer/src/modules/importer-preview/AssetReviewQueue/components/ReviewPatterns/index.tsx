@@ -107,12 +107,14 @@ export function ReviewPatterns({
                   const entries = `${pattern.assetIds.length} entries`;
                   const remaining = pattern.fieldNames.length - 3;
                   const fields = pattern.fieldNames.slice(0, 3).join(', ');
+                  const fullSummary = [pattern.source, ...pattern.fieldNames].join(', ');
                   return (
                     <Box
                       key={pattern.key}
                       role="button"
                       className="asset-review-row"
-                      aria-label={`Select ${type} group, ${entries}, ${pattern.source}${fields ? `, ${fields}` : ''}`}
+                      ref={(element) => element?.setAttribute('title', fullSummary)}
+                      aria-label={`Select ${type} group, ${entries}, ${fullSummary}`}
                       flexDirection="row"
                       alignItems="center"
                       gap="s"

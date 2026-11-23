@@ -156,6 +156,22 @@
   min-width: 0;
   min-height: 0;
 }
+@media (min-width: 980px) and (max-width: 1100px) {
+  .importer-flow-page.is-plan-grouping .importer-flow-stepper {
+    flex-basis: 192px;
+    min-width: 0;
+  }
+}
+@media (min-width: 980px) and (max-height: 768px) {
+  .is-plan-grouping .importer-assignment-progress,
+  .importer-flow-scroll.is-plan-grouping {
+    padding-block-start: var(--importer-section-gap);
+  }
+
+  .importer-flow-scroll.is-plan-grouping {
+    padding-block-end: var(--importer-section-gap);
+  }
+}
 .importer-flow-main {
   display: block;
   min-width: 0;

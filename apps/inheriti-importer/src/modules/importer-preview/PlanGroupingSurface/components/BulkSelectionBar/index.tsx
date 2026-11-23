@@ -64,7 +64,7 @@ export function BulkSelectionBar({
       </select>
       <Tooltip content="Move the selected assets to the chosen plan.">
         <Button
-          title={`Move ${assets.length} assets`}
+          title={`Move ${assets.length} ${assets.length === 1 ? 'asset' : 'assets'}`}
           size="sm"
           disabled={!onMove || !fits || invalid}
           onPress={() => {

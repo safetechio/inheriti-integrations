@@ -223,7 +223,8 @@ export function OrganizationFolderTree({
   };
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target as HTMLElement;
+      const target = event.target;
+      const tree = marquee.containerRef.current;
       if (target instanceof Element && target.closest('input:not([type="checkbox"]), textarea, select, [contenteditable="true"], [role="dialog"], .folder-menu-popover, .asset-selection-popover')) return;
       if (event.key === 'Escape') {
         if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
@@ -231,10 +232,21 @@ export function OrganizationFolderTree({
         setSelectedFolderIds([]);
         assetSelection?.clear();
         setDropId(undefined); clearFolderDrag();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && document.activeElement?.closest('.organization-folder-tree')) {
+      } else if (
+        !event.defaultPrevented && !event.isComposing && !event.repeat && !event.altKey && !event.shiftKey &&
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' &&
+        target instanceof Element && tree?.contains(target)
+      ) {
         event.preventDefault();
-        if (assetSelection?.pane === 'organization') assetSelection.selectAll(renderedAssets(), 'organization');
-        else setSelectedPlanIds(Array.from(marquee.containerRef.current?.querySelectorAll<HTMLElement>('[data-plan-row-id]') ?? []).map((row) => row.dataset.planRowId!).slice(0, 100));
+        if (assetSelection && target.closest('[data-assigned-asset-id]')) {
+          setSelectedPlanIds([]);
+          setSelectedFolderIds([]);
+          assetSelection.selectAll(renderedAssets(), 'organization');
+        } else {
+          setSelectedFolderIds([]);
+          assetSelection?.clear();
+          setSelectedPlanIds(Array.from(tree.querySelectorAll<HTMLElement>('[data-plan-row-id]')).map((row) => row.dataset.planRowId!).slice(0, 100));
+        }
       }
     };
     document.addEventListener('keydown', onKeyDown);
