@@ -88,3 +88,5 @@ Verify AWS identity in that same subprocess context as above. For candidate IDs 
 ## Image and installation preparation
 
 `automations runtime install-instructions --container` prints Dockerfile guidance; without `--container`, an interactive user chooses host/container guidance. `automations runtime image --image ECR_OR_ARTIFACT_REGISTRY_TAG` previews the image operation; `--build` builds and verifies an image containing this CLI version; `--publish` also pushes it and reports an immutable digest. Inspect source context, Dockerfile, registry, tag, and destination before build/publish. Docker and registry sign-in are separate prerequisites. An image build/push does not deploy the workload; use the separate managed `automations setup --apply` flow only when the user requested that change.
+
+For supported Local or Dev automation tests, `--cli-tarball` requires the matching `@safetech/inheriti-cli` package built without `--side-by-side`. It exports the workload command `inheriti`. Business downloads that export `inheriti-dev` or `inheriti-stg` are for operator terminals.

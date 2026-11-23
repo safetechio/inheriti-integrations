@@ -1,7 +1,7 @@
 import { CLI_COMMAND } from '../install-identity.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
-import { copyFile, readFile, stat } from 'node:fs/promises';
+import { open, readFile, stat, unlink } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import {
@@ -24,6 +24,8 @@ import { renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { cliAutomationProvider } from './automation-provider.js';
 import { connectionChoice, grantChoice, operationalConnections, operationalGrants } from './automation-choices.js';
+import { automationCliTarballError, readCliTarball } from './automation-cli-tarball.js';
+import { MESSAGES } from './errors.js';
 
 function flags(argv: readonly string[]): Record<string, string> | undefined {
   if (argv.length % 2) return;
@@ -60,14 +62,28 @@ export async function automationRuntimeInstructions(terminal: Terminal, cliVersi
   if (tarball) {
     const source = resolve(tarball);
     const destination = resolve('inheriti-cli.tgz');
-    const file = await stat(source).catch(() => undefined);
-    if (!(local || /-dev\./.test(cliVersion)) || !tarball.endsWith('.tgz') || !file?.isFile() || !file.size || file.size > 32 * 1024 * 1024) {
+    if (!(local || /-dev\./.test(cliVersion))) {
       terminal.writeError('--cli-tarball requires a local or dev CLI version and a readable .tgz file of at most 32 MiB.');
       return 1;
     }
+    const bytes = await readCliTarball(source);
+    if (!bytes) { terminal.writeError(MESSAGES.automation_cli_tarball_invalid!); return 1; }
+    const invalid = automationCliTarballError(bytes, cliVersion);
+    if (invalid) { terminal.writeError(MESSAGES[invalid]!); return 1; }
     if (source !== destination) {
-      try { await copyFile(source, destination, constants.COPYFILE_EXCL); }
-      catch { terminal.writeError('Could not copy inheriti-cli.tgz into the current Docker build context. Remove any existing file and retry.'); return 1; }
+      let output: FileHandle | undefined;
+      try {
+        output = await open(destination, 'wx');
+        await output.writeFile(bytes);
+        await output.close();
+      } catch {
+        if (output) {
+          await output.close().catch(() => {});
+          await unlink(destination).catch(() => {});
+        }
+        terminal.writeError('Could not copy inheriti-cli.tgz into the current Docker build context. Remove any existing file and retry.');
+        return 1;
+      }
     }
   }
   const target = argv[0] === '--container' ? 'container' : terminal.interactive ? await promptSelect('Where will the CLI run?', [
@@ -123,12 +139,12 @@ export async function automationRuntimeInstallEc2(
   let artifactEndpoint: URL | undefined;
   let downloadOrigin: URL | undefined;
   let deleteUrl: URL | undefined;
+  let bytes: Buffer | undefined;
   if (tarball) {
-    try {
-      const file = await stat(tarball);
-      if (!tarball.endsWith('.tgz') || !file.isFile() || file.size < 1 || file.size > 32 * 1024 * 1024)
-        throw new Error('invalid');
-    } catch { terminal.writeError('A readable .tgz file of at most 32 MiB is required.'); return 1; }
+    bytes = await readCliTarball(tarball);
+    if (!bytes) { terminal.writeError(MESSAGES.automation_cli_tarball_invalid!); return 1; }
+    const invalid = automationCliTarballError(bytes, cliVersion);
+    if (invalid) { terminal.writeError(MESSAGES[invalid]!); return 1; }
     try {
       const origin = new URL(artifactApiUrl!);
       downloadOrigin = new URL(artifactDownloadOrigin!);
@@ -166,7 +182,7 @@ export async function automationRuntimeInstallEc2(
     if (required) minimumNodeMajor = Number(required[1]);
   } catch { /* Source tests run without the packaged manifest. */ }
   try {
-    if (tarball && artifactEndpoint) {
+    if (bytes && artifactEndpoint) {
       let uploadToken: string;
       try {
         const path = resolve(process.env.HOME ?? homedir(), '.local/state/inheriti/cli-artifact-upload-token');
@@ -178,9 +194,8 @@ export async function automationRuntimeInstallEc2(
           throw new Error('invalid');
       } catch { throw new Error('automation_ec2_cli_install_artifact_token_invalid'); }
       const form = new FormData();
-      const bytes = await readFile(tarball);
       const localSha256 = createHash('sha256').update(bytes).digest('hex');
-      form.set('file', new Blob([bytes]), 'cli.tgz');
+      form.set('file', new Blob([new Uint8Array(bytes)]), 'cli.tgz');
       let response: Response;
       try { response = await request(artifactEndpoint, { method: 'POST', body: form,
         headers: { Authorization: `Bearer ${uploadToken}` },

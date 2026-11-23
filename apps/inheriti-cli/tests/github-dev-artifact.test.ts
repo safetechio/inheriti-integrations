@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { cliTarball } from './fixtures/cli-tarball.js';
 import { loadGithubDevArtifact, uploadGithubDevArtifact } from '../src/commands/github-dev-artifact.js';
 
 const previous = process.env.INHERITI_ELEMENTS_STATE_DIR;
@@ -16,32 +16,11 @@ afterEach(async () => {
   if (previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = previousHome;
 });
-function entry(name: string, text: string): Buffer {
-  const data = Buffer.from(text);
-  const head = Buffer.alloc(512);
-  head.write(name, 0);
-  head.write('0000644\0', 100);
-  head.write('0000000\0', 108);
-  head.write('0000000\0', 116);
-  head.write(data.length.toString(8).padStart(11, '0') + '\0', 124);
-  head.write('00000000000\0', 136);
-  head.write('        ', 148);
-  head.write('0', 156);
-  head.write('ustar\0', 257);
-  head.write('00', 263);
-  const sum = head.reduce((n, byte) => n + byte, 0);
-  head.write(sum.toString(8).padStart(6, '0') + '\0 ', 148);
-  return Buffer.concat([head, data, Buffer.alloc((512 - data.length % 512) % 512)]);
-}
-async function profile(marker = 'dev', version = '0.0.24-dev.1') {
+async function profile(marker = 'dev', version = '0.0.24-dev.1', name?: string) {
   directory = await mkdtemp(join(tmpdir(), 'github-dev-artifact-'));
   process.env.INHERITI_ELEMENTS_STATE_DIR = directory;
   const tarball = join(directory, 'cli.tgz');
-  const bytes = gzipSync(Buffer.concat([
-    entry('package/package.json', JSON.stringify({ name: '@safetech/inheriti-cli', version })),
-    entry('package/dist/build-deployment.json', JSON.stringify({ deployment: marker })),
-    Buffer.alloc(1024),
-  ]));
+  const bytes = cliTarball(version, { deployment: marker, ...(name ? { name, bin: { 'inheriti-dev': 'dist/main.js' } } : {}) });
   await writeFile(tarball, bytes);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   await writeFile(join(directory, 'github-dev-cli.json'), JSON.stringify({ schema: 1, deployment: 'dev', tarball,
@@ -57,6 +36,10 @@ it('accepts a protected DEV profile with matching CLI package, marker, and diges
 it('rejects a package from another deployment', async () => {
   await profile('stg');
   await expect(loadGithubDevArtifact()).rejects.toThrow('github_dev_artifact_tarball_invalid');
+});
+it('identifies a Business download in a protected DEV profile', async () => {
+  await profile('dev', '0.0.24-dev.1', '@safetech/inheriti-cli-dev');
+  await expect(loadGithubDevArtifact()).rejects.toThrow('automation_cli_tarball_business_download');
 });
 it('rejects a profile readable by other users', async () => {
   await profile();

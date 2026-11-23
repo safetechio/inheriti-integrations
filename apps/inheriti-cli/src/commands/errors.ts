@@ -113,6 +113,10 @@ const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 export const MESSAGES: Readonly<Record<string, string>> = {
+  automation_cli_tarball_business_download: 'This Business download installs a local operator CLI. For automation, use the canonical @safetech/inheriti-cli tarball built without --side-by-side.',
+  automation_cli_tarball_invalid: 'Use a readable @safetech/inheriti-cli automation .tgz file of at most 32 MiB, built for the selected deployment with the inheriti executable.',
+  automation_cli_tarball_version_mismatch: 'The automation tarball version does not match the expected CLI version. Rebuild the canonical @safetech/inheriti-cli tarball for that exact version.',
+  github_dev_artifact_tarball_invalid: 'The GitHub DEV profile requires the canonical @safetech/inheriti-cli DEV automation tarball with the inheriti executable.',
   integration_tester_required: 'You are not an integration tester. Contact developer support.',
   operator_not_signed_in: `Not signed in. Run \`${CLI_COMMAND} login\` first.`,
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',

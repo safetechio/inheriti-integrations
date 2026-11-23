@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { cliTarball } from './fixtures/cli-tarball.js';
 import { automationRuntimeImage } from '../src/commands/automation-runtime-image.js';
 
 const image = '123456789012.dkr.ecr.us-east-1.amazonaws.com/app:test';
@@ -17,19 +18,19 @@ it('previews the image without running Docker', async () => {
   expect(output.write).toHaveBeenCalledWith(expect.stringContaining('will add Inheriti CLI 0.0.19-dev.0'));
 });
 
-it('builds, verifies the exact CLI version, then publishes and pins the image', async () => {
+it.each(['0.0.19-dev.0', '0.0.19'])('builds, verifies and publishes the pinned %s CLI image', async version => {
   const output = terminal();
   let generatedDockerfile = '';
   const docker = vi.fn(async (args: string[]) => {
     if (args[0] === 'image' && args[1] === 'inspect') return 'node';
     if (args[0] === 'build' && args[args.indexOf('--tag') + 1] === image)
       generatedDockerfile = await readFile(args[args.indexOf('--file') + 1]!, 'utf8');
-    return args[0] === 'run' ? '0.0.19-dev.0' : '';
+    return args[0] === 'run' ? version : '';
   });
   const resolve = vi.fn(async () => `${image.slice(0, image.lastIndexOf(':'))}@sha256:${'a'.repeat(64)}`);
-  expect(await automationRuntimeImage(output, '0.0.19-dev.0', ['--image', image, '--publish'], undefined, docker, resolve)).toBe(0);
+  expect(await automationRuntimeImage(output, version, ['--image', image, '--publish'], undefined, docker, resolve)).toBe(0);
   expect(docker.mock.calls.map(([args]) => args[0])).toEqual(['build', 'image', 'build', 'run', 'push', 'image']);
-  expect(generatedDockerfile).toContain('RUN npm install --engine-strict --global --prefix /usr/local @safetech/inheriti-cli@0.0.19-dev.0');
+  expect(generatedDockerfile).toContain(`RUN npm install --engine-strict --global --prefix /usr/local @safetech/inheriti-cli@${version}`);
   expect(generatedDockerfile).toContain('USER node');
   expect(resolve).toHaveBeenCalledWith(image, 'AWS', undefined);
   expect(output.write).toHaveBeenCalledWith(expect.stringContaining('Published image:'));
@@ -46,13 +47,14 @@ it('installs a local dev CLI tarball and does not push if its version mismatches
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   try {
     const tarball = join(directory, 'cli.tgz');
-    await writeFile(tarball, 'local artifact');
+    const bytes = cliTarball('0.0.19-dev.0');
+    await writeFile(tarball, bytes);
     let generatedDockerfile = '';
-    let copiedTarball = '';
+    let copiedTarball: Buffer | undefined;
     const docker = vi.fn(async (args: string[]) => {
       if (args[0] === 'build' && args[args.indexOf('--tag') + 1] === image) {
         generatedDockerfile = await readFile(args[args.indexOf('--file') + 1]!, 'utf8');
-        copiedTarball = await readFile(join(args.at(-1)!, 'cli.tgz'), 'utf8');
+        copiedTarball = await readFile(join(args.at(-1)!, 'cli.tgz'));
       }
       return args[0] === 'run' ? '0.0.18' : '';
     });
@@ -61,7 +63,7 @@ it('installs a local dev CLI tarball and does not push if its version mismatches
       .rejects.toThrow('expected 0.0.19-dev.0');
     expect(generatedDockerfile).toContain('COPY cli.tgz /tmp/inheriti-cli.tgz');
     expect(generatedDockerfile).toContain('npm install --engine-strict --global --prefix /usr/local /tmp/inheriti-cli.tgz');
-    expect(copiedTarball).toBe('local artifact');
+    expect(copiedTarball).toEqual(bytes);
     expect(docker.mock.calls.map(([args]) => args[0])).toEqual(['build', 'image', 'build', 'run', 'image']);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -71,8 +73,27 @@ it('rejects an absent local tarball before Docker work', async () => {
   const output = terminal();
   expect(await automationRuntimeImage(output, '0.0.19-dev.0',
     ['--image', image, '--cli-tarball', join(tmpdir(), 'missing-inheriti-cli.tgz'), '--build'], undefined, docker)).toBe(1);
-  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('existing .tgz file'));
+  expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('readable @safetech/inheriti-cli automation .tgz file'));
   expect(docker).not.toHaveBeenCalled();
+});
+
+it.each([
+  [cliTarball('0.0.19-dev.0', { name: '@safetech/inheriti-cli-dev', bin: { 'inheriti-dev': 'dist/main.js' } }), 'built without --side-by-side'],
+  [cliTarball('0.0.18-dev.0'), 'version does not match'],
+  [cliTarball('0.0.19-dev.0', { bin: { inheriti: 'dist/other.js' } }), 'with the inheriti executable'],
+  [cliTarball('0.0.19-dev.0', { extraEntries: [['package/package.json', '{}']] }), 'with the inheriti executable'],
+])('rejects incompatible tarball contents before building or publishing', async (bytes, message) => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  try {
+    const tarball = join(directory, 'renamed.tgz');
+    const docker = vi.fn(async () => '');
+    const output = terminal();
+    await writeFile(tarball, bytes);
+    expect(await automationRuntimeImage(output, '0.0.19-dev.0',
+      ['--image', image, '--cli-tarball', tarball, '--publish'], undefined, docker)).toBe(1);
+    expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining(message));
+    expect(docker).not.toHaveBeenCalled();
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it('requires a tarball before building a local CLI image', async () => {
@@ -87,7 +108,7 @@ it('builds a local CLI image from its tarball without npm registry lookup', asyn
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   try {
     const tarball = join(directory, 'cli.tgz');
-    await writeFile(tarball, 'local artifact');
+    await writeFile(tarball, cliTarball('0.0.19-local.0'));
     let generatedDockerfile = '';
     const docker = vi.fn(async (args: string[]) => {
       if (args[0] === 'build' && args[args.indexOf('--tag') + 1] === image)

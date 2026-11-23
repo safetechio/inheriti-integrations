@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { cliTarball } from './fixtures/cli-tarball.js';
 
 const { listConnections, listGrants, proofBrowser, createConnection, createGrant, activateGrant, disableConnection, changeTrust, revokeGrant, replaceResponsibleMember, getVerifiedGithubRelease, close, complete, windowClosed, select, installEc2Cli } = vi.hoisted(() => ({
   listConnections: vi.fn(async () => [{ id: 'connection-1', name: 'CI', provider: 'GITHUB', environment: 'TEST', status: 'VERIFIED', trust: { privateKey: 'NEVER_PRINT' }, verifiedIdentity: 'NEVER_PRINT' }]),
@@ -143,12 +144,13 @@ it('copies a dev tarball into the Docker build context without using the registr
   const context = join(directory, 'app');
   const original = process.cwd();
   await mkdir(context);
-  await writeFile(source, 'local CLI package');
+  const bytes = cliTarball('1.2.3-dev.4');
+  await writeFile(source, bytes);
   try {
     process.chdir(context);
     const output = terminal(false);
     expect(await automationRuntimeInstructions(output, '1.2.3-dev.4', ['--container', '--cli-tarball', source])).toBe(0);
-    expect(await readFile('inheriti-cli.tgz', 'utf8')).toBe('local CLI package');
+    expect(await readFile('inheriti-cli.tgz')).toEqual(bytes);
     const printed = output.write.mock.calls.flat().join('\n');
     expect(printed).toContain('COPY inheriti-cli.tgz /tmp/inheriti-cli.tgz');
     expect(printed).not.toContain('@safetech/inheriti-cli@1.2.3-dev.4');
@@ -216,9 +218,11 @@ it('prints each noninteractive EC2 stage once', async () => {
 const testApi = { ...configuration, apiUrl: 'https://business-dev.example/integrations/', deployment: 'dev' };
 const artifactApiOrigin = 'http://127.0.0.1:3400';
 const artifactDownloadOrigin = 'https://local-api-tunnel.example';
+const automationTarball = cliTarball('0.0.19-dev.0');
+const artifactDigest = createHash('sha256').update(automationTarball).digest('hex');
 const artifactResponse = { id: 'artifact_1', downloadPath: '/test/cli-artifacts/artifact_1?expires=9999999999&signature=secret',
   deletePath: '/test/cli-artifacts/artifact_1?expires=9999999999&signature=delete-secret',
-  sha256: '16ac1ea143cf30263883056bf563bf5984d91a980fae7b224a70b2e2b8fe9dbf', expiresInSeconds: 900 };
+  sha256: artifactDigest, expiresInSeconds: 900 };
 const localOptions = (path: string, origin = artifactApiOrigin, download = artifactDownloadOrigin) => ['--region', 'us-east-1', '--instance', 'i-09ce8440ae7294ab9', '--cli-tarball', path, '--artifact-api-url', origin, '--artifact-download-origin', download];
 const uploadToken = randomBytes(32).toString('base64url');
 let tokenHome: string;
@@ -232,10 +236,31 @@ beforeAll(async () => {
 });
 afterAll(async () => { vi.unstubAllEnvs(); await rm(tokenHome, { recursive: true, force: true }); });
 
+it('rejects a renamed Business download before copying it or starting an EC2 upload', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
+  const original = process.cwd();
+  const path = join(directory, 'renamed.tgz');
+  const version = '0.0.19-dev.0';
+  const output = terminal(false);
+  const request = vi.fn(async () => new Response());
+  installEc2Cli.mockClear();
+  await writeFile(path, cliTarball(version, { name: '@safetech/inheriti-cli-dev', bin: { 'inheriti-dev': 'dist/main.js' } }));
+  try {
+    process.chdir(directory);
+    expect(await automationRuntimeInstructions(output, version, ['--container', '--cli-tarball', path])).toBe(1);
+    await expect(readFile('inheriti-cli.tgz')).rejects.toHaveProperty('code', 'ENOENT');
+    expect(await automationRuntimeInstallEc2(output, version, localOptions(path),
+      testApi as never, undefined, request as typeof fetch)).toBe(1);
+    expect(output.writeError).toHaveBeenCalledWith(expect.stringContaining('built without --side-by-side'));
+    expect(request).not.toHaveBeenCalled();
+    expect(installEc2Cli).not.toHaveBeenCalled();
+  } finally { process.chdir(original); await rm(directory, { recursive: true, force: true }); }
+});
+
 it('uploads local dev tarball to TEST API, installs, and deletes by ID', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
     options.method === 'POST' ? JSON.stringify(artifactResponse) : null, { status: options.method === 'POST' ? 200 : 204 }));
   try {
@@ -248,14 +273,14 @@ it('uploads local dev tarball to TEST API, installs, and deletes by ID', async (
     expect(request.mock.calls[1]![0].searchParams.get('signature')).toBe('delete-secret');
     expect(installEc2Cli).toHaveBeenCalledWith(expect.objectContaining({ artifact: {
       id: 'artifact_1', url: 'https://local-api-tunnel.example/test/cli-artifacts/artifact_1?expires=9999999999&signature=secret',
-      sha256: '16ac1ea143cf30263883056bf563bf5984d91a980fae7b224a70b2e2b8fe9dbf' } }));
+      sha256: artifactDigest } }));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it('rejects a missing, malformed, or exposed local upload token before POST', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async () => new Response());
   try {
     for (const state of ['missing', 'malformed', 'exposed']) {
@@ -286,7 +311,7 @@ it('rejects invalid tarball mode before upload', async () => {
 it('rejects nonlocal upload URLs and invalid tunnel URLs', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async () => new Response());
   try {
     for (const origin of ['http://remote.example', 'https://127.0.0.1:3400',
@@ -307,7 +332,7 @@ it('rejects nonlocal upload URLs and invalid tunnel URLs', async () => {
 it('rejects an altered checksum or signed path and deletes the artifact ID', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   try {
     for (const invalid of [{ ...artifactResponse, sha256: 'b'.repeat(64) },
       { ...artifactResponse, downloadPath: '/test/cli-artifacts/other?expires=9999999999&signature=secret' }]) {
@@ -323,7 +348,7 @@ it('rejects an altered checksum or signed path and deletes the artifact ID', asy
 it('deletes artifact after confirmed SSM failure', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
     options.method === 'POST' ? JSON.stringify(artifactResponse) : null, { status: options.method === 'POST' ? 200 : 204 }));
   installEc2Cli.mockRejectedValueOnce(new Error('ssm failed'));
@@ -337,7 +362,7 @@ it('deletes artifact after confirmed SSM failure', async () => {
 it('retains artifact ID and command ID when SSM completion is uncertain', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async () => new Response(JSON.stringify(artifactResponse)));
   const output = terminal(false);
   installEc2Cli.mockRejectedValueOnce(Object.assign(new Error('wait failed'),
@@ -354,7 +379,7 @@ it('retains artifact ID and command ID when SSM completion is uncertain', async 
 it('does not claim success when TEST API cleanup fails', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-cli-test-'));
   const path = join(directory, 'cli.tgz');
-  await writeFile(path, 'test tarball');
+  await writeFile(path, automationTarball);
   const request = vi.fn(async (_url: URL, options: RequestInit) => new Response(
     options.method === 'POST' ? JSON.stringify(artifactResponse) : 'failed', { status: options.method === 'POST' ? 200 : 500 }));
   const output = terminal(false);

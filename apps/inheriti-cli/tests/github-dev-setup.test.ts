@@ -49,6 +49,15 @@ function fixture(existing?: string) {
 }
 const setup = (f: ReturnType<typeof fixture>, flags: string[] = []) => githubAutomationSetup(f.context, f.configuration, f.terminal, [...args, ...flags], { run: f.run, operations: f.operations });
 beforeEach(() => { loadGithubDevArtifact.mockClear(); uploadGithubDevArtifact.mockClear(); });
+it('reports a Business download rejected by the DEV profile before applying', async () => {
+  const f = fixture();
+  f.configuration.environment = 'TEST';
+  loadGithubDevArtifact.mockRejectedValueOnce(new Error('automation_cli_tarball_business_download'));
+  expect(await setup(f, ['--apply'])).toBe(1);
+  expect(f.errors.join()).toContain('built without --side-by-side');
+  expect(uploadGithubDevArtifact).not.toHaveBeenCalled();
+  expect(f.writes).toEqual([]);
+});
 it('DEV preview validates profile but does not upload, store a secret, or commit', async () => {
   const f = fixture();
   expect(await setup(f)).toBe(0);

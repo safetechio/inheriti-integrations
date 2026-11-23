@@ -19,6 +19,8 @@ Before either automatic GitHub command mutates state, the CLI checks that `gh` i
 
 For a channel-locked **DEV** CLI with a protected local `github-dev-cli.json` profile, setup can use a local packaged CLI artifact while the Business-verified public Action/CLI release is unavailable. The profile is prepared by the supervised local harness at the CLI state root and points to a dev-marked `.tgz`, local upload API, and HTTPS download origin. Do not ask for its token, signed URL, or tarball contents in chat. Preview validates it without upload. `--apply` uploads the package, stores the short-lived signed download URL as a GitHub Actions secret through stdin, and generates a workflow pinned to the artifact version and SHA-256 for both pairing and normal usage. A later setup run refreshes the URL; it can replace only an untouched generated DEV workflow. This path does not publish npm packages, replace an arbitrary workflow, or bypass the release gate for local, staging, or production builds.
 
+The DEV profile requires the canonical `@safetech/inheriti-cli` tarball built without `--side-by-side`, with the `inheriti` executable and the exact version recorded in the profile.
+
 ## Inspect the selected project
 
 1. If a repository is selected, confirm its local checkout if one exists. Read its git root, current branch and status, remote **names**, and a sanitized repository identity. Do not print raw remote URLs: they can contain credentials. Compare the identity with the selected GitHub repository; do not infer intent from the current directory or a single checkout. For a new or empty repository, propose a dedicated `.github/workflows/inheriti.yml` file and explicit job environment and ref; do not pretend an existing workflow was found.

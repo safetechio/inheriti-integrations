@@ -1,12 +1,14 @@
 import { CLI_COMMAND } from '../install-identity.js';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { automationRuntimeInstallInstructions, resolveAutomationImage } from '@safetech/inheriti-elements-core/node-base';
 import type { Terminal } from '../output.js';
+import { automationCliTarballError, readCliTarball } from './automation-cli-tarball.js';
+import { MESSAGES } from './errors.js';
 
 const execFileAsync = promisify(execFile);
 const usage = `Usage: ${CLI_COMMAND} automations runtime image --image ECR_OR_ARTIFACT_REGISTRY_TAG [--context DIRECTORY] [--dockerfile FILE] [--cli-tarball PATH] [--build | --publish]`;
@@ -57,11 +59,16 @@ export async function automationRuntimeImage(
     terminal.writeError('A local CLI build requires --cli-tarball PATH for --build or --publish.');
     return 1;
   }
+  let bytes: Buffer | undefined;
   if (tarball) {
-    if (!(local || /-dev\./.test(cliVersion)) || !tarball.endsWith('.tgz') || !(await stat(tarball).then(file => file.isFile()).catch(() => false))) {
+    if (!(local || /-dev\./.test(cliVersion))) {
       terminal.writeError('--cli-tarball requires a local or dev CLI version and an existing .tgz file.');
       return 1;
     }
+    bytes = await readCliTarball(tarball);
+    if (!bytes) { terminal.writeError(MESSAGES.automation_cli_tarball_invalid!); return 1; }
+    const invalid = automationCliTarballError(bytes, cliVersion);
+    if (invalid) { terminal.writeError(MESSAGES[invalid]!); return 1; }
   }
   const packageSpec = local ? undefined : automationRuntimeInstallInstructions({ cliVersion }).packageSpec;
   terminal.write(`Image: ${image}\nDockerfile: ${dockerfile}\nBuild context: ${context}\n` +
@@ -78,7 +85,7 @@ export async function automationRuntimeImage(
     const directory = await mkdtemp(join(tmpdir(), 'inheriti-image-'));
     try {
       const generatedDockerfile = join(directory, 'Dockerfile');
-      if (tarball) await copyFile(tarball, join(directory, 'cli.tgz'));
+      if (bytes) await writeFile(join(directory, 'cli.tgz'), bytes);
       await writeFile(generatedDockerfile,
         `FROM ${sourceImage}\nUSER 0\n${tarball ? 'COPY cli.tgz /tmp/inheriti-cli.tgz\n' : ''}RUN npm install --engine-strict --global --prefix /usr/local ${tarball ? '/tmp/inheriti-cli.tgz' : packageSpec} && test "$(/usr/local/bin/inheriti --version)" = '${cliVersion}'${tarball ? ' && rm /tmp/inheriti-cli.tgz' : ''}\n${user ? `USER ${user}\n` : ''}`);
       try { await docker(['build', '--file', generatedDockerfile, '--tag', image, directory], signal); }

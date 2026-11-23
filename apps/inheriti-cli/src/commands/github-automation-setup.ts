@@ -12,6 +12,7 @@ import { createGithubSetupPresenter } from '../render/github-setup.js';
 import { pairGithubWorkflow } from './github-workflow-pairing.js';
 import { loadGithubDevArtifact, uploadGithubDevArtifact } from './github-dev-artifact.js';
 import { connectionChoice, operationalConnections } from './automation-choices.js';
+import { MESSAGES } from './errors.js';
 
 const usage = `Usage: ${CLI_COMMAND} automations setup github --connection ID --plan ID --field ASSET.FIELD [--apply] [--retry]`;
 const createUsage = `Usage: ${CLI_COMMAND} automations create github [--repository OWNER/REPO] [--environment GH_ENV] [--workflow FILE.yml]`;
@@ -197,9 +198,16 @@ export async function githubAutomationSetup(
     }
     terminal.write(`Ready: verified connection ${connectionId}, generated workflow ${path}. Grant plan access with the separate grant commands before running protected usage.`);
     return 0;
-  } catch (error) { terminal.writeError(error instanceof Error && error.message === 'github_pairing_pending'
-    ? 'Pairing is still in progress. Rerun the same setup command to resume; no new connection or job is needed.'
-    : error instanceof Error ? error.message : 'GitHub setup failed.'); return 1; }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'GitHub setup failed.';
+    if (message === 'github_pairing_pending') {
+      terminal.writeError('Pairing is still in progress. Rerun the same setup command to resume; no new connection or job is needed.');
+      return 1;
+    }
+    const tarballError = message.startsWith('automation_cli_tarball_') || message === 'github_dev_artifact_tarball_invalid';
+    terminal.writeError(tarballError ? MESSAGES[message] ?? message : message);
+    return 1;
+  }
 }
 
 export async function githubAutomationCreate(

@@ -2,11 +2,10 @@ import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { automationCliTarballError, readCliTarball } from './automation-cli-tarball.js';
 
 type Profile = { schema: 1; deployment: 'dev'; tarball: string; cliVersion: string; sha256: string;
   artifactApiUrl: string; downloadOrigin: string };
-const maxTarball = 32 * 1024 * 1024;
 const stateRoot = () => process.env.INHERITI_ELEMENTS_STATE_DIR ?? join(process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? homedir(), '.local', 'state'), 'inheriti');
 const origin = (raw: string, protocol: 'http:' | 'https:') => {
   let url: URL;
@@ -15,21 +14,6 @@ const origin = (raw: string, protocol: 'http:' | 'https:') => {
       protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('github_dev_artifact_profile_invalid');
   return url;
 };
-function tarEntry(tar: Buffer, path: string): Buffer | undefined {
-  for (let offset = 0; offset + 512 <= tar.length;) {
-    const header = tar.subarray(offset, offset + 512);
-    const name = header.toString('utf8', 0, 100).replace(/\0.*$/u, '');
-    if (!name) return undefined;
-    const rawSize = header.toString('ascii', 124, 136).replace(/\0.*$/u, '').trim();
-    if (!/^[0-7]+$/u.test(rawSize)) throw new Error('github_dev_artifact_tarball_invalid');
-    const size = parseInt(rawSize, 8);
-    const start = offset + 512;
-    if (start + size > tar.length) throw new Error('github_dev_artifact_tarball_invalid');
-    if (name === path) return tar.subarray(start, start + size);
-    offset = start + Math.ceil(size / 512) * 512;
-  }
-  return undefined;
-}
 export async function loadGithubDevArtifact(): Promise<{ profile: Profile; bytes: Buffer } | undefined> {
   const path = join(stateRoot(), 'github-dev-cli.json');
   let file;
@@ -50,21 +34,11 @@ export async function loadGithubDevArtifact(): Promise<{ profile: Profile; bytes
   origin(profile.artifactApiUrl, 'http:');
   if (profile.downloadOrigin !== origin(profile.downloadOrigin, 'https:').origin)
     throw new Error('github_dev_artifact_profile_invalid');
-  const archive = await stat(profile.tarball).catch(() => undefined);
-  if (!archive?.isFile() || archive.size < 1 || archive.size > maxTarball) throw new Error('github_dev_artifact_tarball_invalid');
-  const bytes = await readFile(profile.tarball);
+  const bytes = await readCliTarball(profile.tarball);
+  if (!bytes) throw new Error('github_dev_artifact_tarball_invalid');
   if (createHash('sha256').update(bytes).digest('hex') !== profile.sha256.toLowerCase()) throw new Error('github_dev_artifact_digest_mismatch');
-  let tar: Buffer;
-  try { tar = gunzipSync(bytes, { maxOutputLength: 64 * 1024 * 1024 }); }
-  catch { throw new Error('github_dev_artifact_tarball_invalid'); }
-  let pkg: { name?: string; version?: string };
-  let marker: { deployment?: string };
-  try {
-    pkg = JSON.parse(tarEntry(tar, 'package/package.json')?.toString('utf8') ?? 'null');
-    marker = JSON.parse(tarEntry(tar, 'package/dist/build-deployment.json')?.toString('utf8') ?? 'null');
-  } catch { throw new Error('github_dev_artifact_tarball_invalid'); }
-  if (pkg?.name !== '@safetech/inheriti-cli' || pkg.version !== profile.cliVersion || marker?.deployment !== 'dev')
-    throw new Error('github_dev_artifact_tarball_invalid');
+  const invalid = automationCliTarballError(bytes, profile.cliVersion);
+  if (invalid) throw new Error(invalid === 'automation_cli_tarball_invalid' ? 'github_dev_artifact_tarball_invalid' : invalid);
   return { profile, bytes };
 }
 export async function uploadGithubDevArtifact(artifact: { profile: Profile; bytes: Buffer }, request: typeof fetch = fetch): Promise<string> {
