@@ -258,8 +258,8 @@ importers:
         specifier: 2.1.0
         version: 2.1.0
       '@safetech/inheriti-client-sdk':
-        specifier: 1.17.33
-        version: 1.17.33(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 1.17.34
+        version: 1.17.34(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
     devDependencies:
       '@safetech/inheriti-core-sdk':
         specifier: 4.0.44
@@ -282,8 +282,8 @@ importers:
         specifier: 6.3.0
         version: 6.3.0
       '@safetech/inheriti-client-sdk':
-        specifier: 1.17.33
-        version: 1.17.33(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
+        specifier: 1.17.34
+        version: 1.17.34(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/inheriti-core-sdk':
         specifier: 4.0.44
         version: 4.0.44(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
@@ -1929,8 +1929,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@safetech/inheriti-client-sdk@1.17.33':
-    resolution: {integrity: sha512-OJLw2H/6F8/dP3mYj8pIEzht7pzjslHIwxbpQX1Q564Wiz8tW0oycmslZ3N0SHX28USr+TU8sLvMO/pNYwz7Fw==}
+  '@safetech/inheriti-client-sdk@1.17.34':
+    resolution: {integrity: sha512-kK2l1PGJtTfzpYHYTEufEnvh+cG51nU8bOYVtxgjYTjCsuamv/tq3RTNRu2aySWcsCK1LmWgQHe7aKUEilw7yw==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.1.0
@@ -8815,7 +8815,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.4':
     optional: true
 
-  '@safetech/inheriti-client-sdk@1.17.33(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
+  '@safetech/inheriti-client-sdk@1.17.34(@tanstack/react-query@5.103.2(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))':
     dependencies:
       '@safetech/inheriti-core-sdk': 4.0.44(@tanstack/react-query@5.103.2(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sonner@2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0))
       '@safetech/safekey-sdk': 1.0.1

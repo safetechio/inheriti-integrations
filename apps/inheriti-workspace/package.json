@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@napi-rs/keyring": "2.1.0",
-    "@safetech/inheriti-client-sdk": "1.17.33"
+    "@safetech/inheriti-client-sdk": "1.17.34"
   },
   "devDependencies": {
     "@safetech/inheriti-core-sdk": "4.0.44"
