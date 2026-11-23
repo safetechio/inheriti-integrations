@@ -43,4 +43,5 @@ module.exports = {
   win: {
     target: ['nsis'],
   },
+  nsis: { include: resolve(__dirname, '../../scripts/desktop-channel-install.nsh') },
 };

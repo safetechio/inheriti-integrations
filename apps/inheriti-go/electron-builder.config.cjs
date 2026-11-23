@@ -39,4 +39,5 @@ module.exports = {
     entitlementsInherit: resolve(__dirname, 'build/entitlements.mac.plist'),
   },
   win: { target: ['nsis'] },
+  nsis: { include: resolve(__dirname, '../../scripts/desktop-channel-install.nsh') },
 };

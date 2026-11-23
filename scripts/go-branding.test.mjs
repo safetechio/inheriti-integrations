@@ -30,6 +30,7 @@ for (const deployment of ['local', 'dev', 'stg', 'prod']) {
       assert.equal(config.appId, `com.safetech.inheriti.go.${deployment}`);
       assert.equal(config.artifactName, 'Inheriti-Go-' + (deployment === 'prod' ? '' : `${deployment}-`) + '${version}-${os}-${arch}.${ext}');
       assert.equal(config.linux.executableName, 'inheriti-go');
+      assert.equal(config.nsis.include, require.resolve('./desktop-channel-install.nsh'));
     } finally {
       if (previous === undefined) delete process.env.INHERITI_BUILD_DEPLOYMENT;
       else process.env.INHERITI_BUILD_DEPLOYMENT = previous;

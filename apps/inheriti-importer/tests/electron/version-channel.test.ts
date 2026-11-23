@@ -23,4 +23,5 @@ it.each([
   const config = require(configPath);
   expect(config.extraMetadata.version).toBe(version);
   expect(config.artifactName).toBe(`Inheriti-Importer-${environment === 'prod' ? '' : `${environment}-`}\${version}-\${os}-\${arch}.\${ext}`);
+  expect(config.nsis.include).toBe(require.resolve('../../../../scripts/desktop-channel-install.nsh'));
 });
