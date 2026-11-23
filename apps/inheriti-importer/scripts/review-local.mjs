@@ -269,31 +269,38 @@ async function measureUnlock(
 }
 
 async function verifySourceChips(window, output) {
-  const section = window.locator('.asset-metadata-section').last();
+  const section = window
+    .locator('.asset-source-picker')
+    .filter({
+      has: window.getByRole('button', { name: /^(Choose|Change).+source field$/ }),
+    })
+    .first();
   const trigger = section.getByRole('button', { name: /^(Choose|Change).+source field$/ }).first();
   await trigger.waitFor({ timeout: 15000 });
   const mapped = (await trigger.getAttribute('aria-label')).startsWith('Change');
   await trigger.click();
   const options = section.locator('.asset-source-options');
   await options.waitFor();
-  const chips = options.getByRole('button');
+  const chips = options.getByRole('button', { name: /^Map / });
   const count = await chips.count();
-  assert(count > 0, 'Real Notes field has no source candidates');
+  assert(count > 0, 'Real asset field has no source candidates');
   const metrics = await options.evaluate((element) => {
     const box = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
+    const style = getComputedStyle(element.querySelector('.scrollable-tabs-track'));
     return {
       container: { x: box.x, y: box.y, width: box.width, height: box.height },
       flexDirection: style.flexDirection,
       flexWrap: style.flexWrap,
-      chips: Array.from(element.querySelectorAll('[role="button"]')).map((chip) => {
-        const bounds = chip.getBoundingClientRect();
-        return {
-          label: chip.getAttribute('aria-label'),
-          ariaPressed: chip.getAttribute('aria-pressed'),
-          bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
-        };
-      }),
+      chips: Array.from(element.querySelectorAll('.scrollable-tabs-track [role="button"]')).map(
+        (chip) => {
+          const bounds = chip.getBoundingClientRect();
+          return {
+            label: chip.getAttribute('aria-label'),
+            ariaPressed: chip.getAttribute('aria-pressed'),
+            bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+          };
+        },
+      ),
     };
   });
   await capture(window, output, '06-real-source-chips.png');
@@ -303,7 +310,11 @@ async function verifySourceChips(window, output) {
     { mode: 0o600 },
   );
   assert.equal(metrics.flexDirection, 'row');
-  assert.equal(metrics.flexWrap, 'wrap');
+  assert.equal(metrics.flexWrap, 'nowrap');
+  assert(
+    metrics.chips.every((chip) => Math.abs(chip.bounds.y - metrics.chips[0].bounds.y) < 1),
+    'Source chips should remain on one scrollable row',
+  );
   assert(
     metrics.chips.every(
       (chip) => chip.bounds.height <= 36 && chip.bounds.width <= metrics.container.width + 1,
@@ -399,6 +410,29 @@ async function verifyImport(app, window, output, checkpoint) {
   await capture(window, output, '05-real-step-2.png');
   checkpoint.stage = 'real Step 2 source chips';
   await verifySourceChips(window, output);
+  checkpoint.stage = 'real Step 2 default notes';
+  const notes = window.getByRole('radiogroup', { name: 'Notes destination for this asset' });
+  assert(
+    await notes.getByRole('radio', { name: 'Asset notes', exact: true }).isChecked(),
+    'Native notes should default to Asset notes without an extra decision',
+  );
+  checkpoint.stage = 'real Step 2 inherited notes';
+  await window.getByRole('button', { name: 'Notes destination', exact: true }).click();
+  await window
+    .getByRole('radiogroup', { name: /^Notes destination · All sources/ })
+    .getByText('As secret', { exact: true })
+    .click();
+  await window.keyboard.press('Escape');
+  assert(
+    await notes.getByRole('radio', { name: 'As secret', exact: true }).isChecked(),
+    'The source note destination is not reflected in the inspected asset',
+  );
+  assert.equal(
+    await window.getByRole('button', { name: 'Continue', exact: true }).isEnabled(),
+    false,
+    'Unresolved assets should still block Continue',
+  );
+  await capture(window, output, '07-real-inherited-notes.png');
   return { entries: 4, contentSize };
 }
 
@@ -520,6 +554,7 @@ async function main() {
                 '04-real-kdbx-entries.png',
                 '05-real-step-2.png',
                 '06-real-source-chips.png',
+                '07-real-inherited-notes.png',
               ],
         },
         null,

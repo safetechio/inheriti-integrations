@@ -75,25 +75,49 @@ async function loadFixtures(names) {
       expected,
     count,
   );
-  for (const name of names) {
-    const warning = page
-      .locator('.source-file-card')
-      .filter({ hasText: name })
-      .getByRole('button', { name: 'View warnings', exact: true });
-    if (name === 'onepassword-rich.1pux') await warning.waitFor();
-    if (!(await warning.count())) continue;
-    await warning.click();
-    const modal = page.getByRole('dialog');
-    if (name === 'onepassword-rich.1pux')
-      await modal
-        .getByText(/attachment|file-only|document/i)
-        .first()
-        .waitFor();
-    await modal.getByRole('button', { name: 'Understood' }).click();
-    await modal.waitFor({ state: 'hidden' });
-  }
+  assert.equal(await button('Continue').isEnabled(), true, 'Import cannot continue after warnings');
   await button('Continue').click();
+  const warningDialog = page.getByRole('dialog', {
+    name: 'Some source content won’t be imported',
+    exact: true,
+  });
+  if (await warningDialog.count()) {
+    await warningDialog.getByRole('button', { name: 'Continue import', exact: true }).click();
+    await warningDialog.waitFor({ state: 'hidden' });
+  }
   return count;
+}
+
+async function createSelectedAssets() {
+  await page
+    .getByRole('dialog', { name: 'Source field details', exact: true })
+    .getByRole('button', { name: /^Create assets?$/ })
+    .click();
+  const preview = page.getByRole('dialog', { name: /^Create assets?$/ });
+  assert.equal(
+    await preview.getByRole('button', { name: /^(?:Confirm|Create \d+ assets?)$/ }).isEnabled(),
+    true,
+    'Selected unresolved fields could not be organized',
+  );
+  await preview.getByRole('button', { name: /^(?:Confirm|Create \d+ assets?)$/ }).click();
+  assert.equal(await page.getByRole('dialog').count(), 0, 'Creation reopened Details');
+  await button('View source field details').click();
+  await page.getByRole('dialog', { name: 'Source field details', exact: true }).waitFor();
+}
+
+async function organizeUnassignedFields() {
+  step = 'organize unassigned fields across entries';
+  const coverage = page.getByRole('dialog', { name: 'Source field details', exact: true });
+  const clear = coverage.getByRole('button', { name: 'Clear', exact: true });
+  if (await clear.isEnabled()) await clear.click();
+  await button('Show Unassigned fields').click();
+  const selectAll = coverage.getByRole('checkbox', {
+    name: /^Select all \d+ fields in this filter$/,
+  });
+  if (await selectAll.count()) {
+    await selectAll.click();
+    await createSelectedAssets();
+  }
 }
 
 async function reviewRich(destination, bulk) {
@@ -101,31 +125,57 @@ async function reviewRich(destination, bulk) {
   const source = page.getByRole('combobox', { name: 'Filter by source' });
   if (bulk) await source.selectOption({ label: 'onepassword-rich.1pux' });
   await page.locator('.asset-review-row').filter({ hasText: dispatch }).first().click();
-  const note = page.getByRole('combobox', { name: 'Notes destination for this asset' });
+  const note = page.getByRole('radiogroup', { name: 'Notes destination for this asset' });
+  const destinationLabel = destination === 'asset-notes' ? 'Asset notes' : 'As secret';
   await note.waitFor();
-  assert.equal(await note.inputValue(), '');
+  assert.equal(
+    await note.getByRole('radio', { name: 'Asset notes', exact: true }).isChecked(),
+    true,
+    'Native notes should inherit the Asset notes default',
+  );
   assert.equal(
     await page.locator('.asset-metadata-preview').count(),
-    0,
-    'Unset notes appeared as visible metadata',
+    1,
+    'Inherited Asset notes should be visible in metadata',
   );
-  await note.selectOption(destination);
+  // Toggle away first so this lane proves an explicit per-asset override.
+  const opposite = destinationLabel === 'Asset notes' ? 'As secret' : 'Asset notes';
+  await note.getByText(opposite, { exact: true }).click();
+  await note.getByText(destinationLabel, { exact: true }).click();
+  assert.equal(
+    await note.getByRole('radio', { name: destinationLabel, exact: true }).isChecked(),
+    true,
+  );
   assert.equal(
     await page.locator('.asset-metadata-preview').count(),
     destination === 'asset-notes' ? 1 : 0,
   );
+  if (destination === 'protected') {
+    const targetName = `${dispatch} — Notes`;
+    assert.equal(await button('Reveal Notes or guidelines value').count(), 0);
+    await button(`Open ${targetName}`).click();
+    await page.locator('.asset-review-inspector').getByText(targetName, { exact: true }).waitFor();
+    await page.locator('.asset-review-row').filter({ hasText: dispatch }).first().click();
+    await note.waitFor();
+  }
   if (bulk) {
+    await button('Notes destination').click();
     await page
-      .getByRole('combobox', { name: /Notes destination · onepassword-rich/ })
-      .selectOption('protected');
+      .getByRole('radiogroup', { name: /Notes destination · onepassword-rich/ })
+      .getByText('As secret', { exact: true })
+      .click();
+    await page.keyboard.press('Escape');
     await source.selectOption('all');
   }
+  await button('Notes destination').click();
   await page
-    .getByRole('combobox', { name: /Notes destination · All sources/ })
-    .selectOption('protected');
+    .getByRole('radiogroup', { name: /Notes destination · All sources/ })
+    .getByText('As secret', { exact: true })
+    .click();
+  await page.keyboard.press('Escape');
   assert.equal(
-    await note.inputValue(),
-    destination,
+    await note.getByRole('radio', { name: destinationLabel, exact: true }).isChecked(),
+    true,
     'Bulk note selection replaced individual choice',
   );
 
@@ -147,37 +197,62 @@ async function reviewRich(destination, bulk) {
       Number(before.match(/\d+/)[0]) - 1,
       'Per-asset acceptance affected another asset',
     );
+    // Typed suggestions leave unmatched source fields pending. Resolve them
+    // explicitly in this bulk lane so staging still proves the final coverage gate.
+    await button('View source field details').click();
+    await organizeUnassignedFields();
+    await button('Close Source field details').click();
     return;
   }
   step = 'preserve and exclude reviewed fields';
   await button('View source field details').click();
-  await page.getByLabel('Filter source field coverage').selectOption('pending');
+  await page.getByRole('button', { name: 'Show Unassigned fields' }).click();
   const details = page.getByRole('region', { name: 'Source field details' });
   await details
     .getByRole('checkbox', { name: /Recovery: Code \(3\) from onepassword-rich/ })
     .click();
   await button('Exclude fields').click();
   await button('Confirm exclusion').click();
+  await details.waitFor({ state: 'hidden' });
+  await button('View source field details').click();
+  await page.getByRole('button', { name: 'Show Unassigned fields' }).click();
   await details
     .getByRole('checkbox', { name: /Recovery: Code \(2\) from onepassword-rich/ })
     .click();
-  await button('Preserve as protected text').click();
-  await page.getByText('1 preserved · 0 skipped', { exact: true }).waitFor();
-  await button('Done').click();
+  await createSelectedAssets();
+  await button('Close Source field details').click();
 }
 
 async function reviewRemaining() {
   step = 'accept eligible assets';
   let accept = button(/^Accept all eligible/);
-  await accept.click();
-  if (await button('View source field details').count()) {
+  if (await accept.isEnabled()) await accept.click();
+  if (await button('Resolve fields').count()) {
+    assert.equal(
+      await button('Continue').isEnabled(),
+      false,
+      'Unresolved fields did not block progression',
+    );
+    await button('Resolve fields').click();
+    assert.equal(await button('Show Unassigned fields').getAttribute('aria-pressed'), 'true');
+    await organizeUnassignedFields();
+    await button('Close Source field details').click();
+    if (await accept.isEnabled()) await accept.click();
+  } else if (await button('View source field details').count()) {
     await button('View source field details').click();
-    if (await button('Preserve as protected text').count()) {
-      await button('Preserve as protected text').click();
-      if (await accept.isEnabled()) await accept.click();
-    }
-    await button('Done').click();
+    await organizeUnassignedFields();
+    await button('Close Source field details').click();
   }
+  assert.equal(
+    await button('Continue').isEnabled(),
+    true,
+    'Resolved review did not enable progression',
+  );
+  assert.equal(
+    await button('Focus next issue').isEnabled(),
+    false,
+    'Resolved review retained an actionable issue',
+  );
   await button('Continue').click();
 }
 
@@ -204,7 +279,8 @@ async function group() {
 
 async function checkLongStagingScroll(planCount) {
   step = 'verify long staging scroll';
-  assert.equal(planCount, 225, 'Mixed fixture did not produce the expected long staging list');
+  // Explicit creation keeps Notes assets separate from the new assets for extra fields.
+  assert.equal(planCount, 333, 'Mixed fixture did not produce the expected long staging list');
   assert.equal(
     await page.locator('.staging-batch-embedded [role="progressbar"]').count(),
     planCount,
@@ -269,14 +345,36 @@ async function checkLongStagingScroll(planCount) {
 }
 
 async function stage({ fail, destination, name }) {
+  const stagingStartedAt = Date.now();
   step = 'encrypt and stage';
   await page.getByText('Planned source field coverage', { exact: true }).waitFor();
   assert.equal((await result()).attempts, 0, 'Writes started before explicit staging');
   await page.screenshot({ path: join(output, `${name}-preflight.png`) });
-  await button(/^Encrypt (?:&|and) stage$/)
-    .first()
-    .click({ timeout: 90000 });
+  const profiler =
+    browserMode && name === 'bulk-mixed' && process.argv.includes('--profile-staging')
+      ? await page.context().newCDPSession(page)
+      : undefined;
+  if (profiler) {
+    await profiler.send('Profiler.enable');
+    await profiler.send('Profiler.start');
+  }
+  try {
+    await button(/^Encrypt (?:&|and) stage$/)
+      .first()
+      .click({ timeout: 90000 });
+  } finally {
+    if (profiler) {
+      const { profile } = await profiler.send('Profiler.stop');
+      await writeFile(join(output, 'bulk-staging.cpuprofile'), JSON.stringify(profile));
+      const { entries, attempts, writes, failed, running } = await result();
+      console.log(
+        'Bulk staging status:',
+        JSON.stringify({ entries, attempts, writes, failed, running }),
+      );
+    }
+  }
   let scrollChecks;
+  let priorAttempts = 0;
   if (fail) {
     step = 'retry failed write only';
     const partial = await waitResult((value) => !value.running && value.attempts > 0);
@@ -284,6 +382,7 @@ async function stage({ fail, destination, name }) {
     assert.equal(await page.getByRole('dialog', { name: 'Import staged' }).count(), 0);
     assert.equal(partial.failed, 1);
     assert.equal(partial.writes, partial.entries - 1);
+    priorAttempts = partial.attempts;
     if (name === 'bulk-mixed') scrollChecks = await checkLongStagingScroll(partial.entries);
     await page.screenshot({ path: join(output, `${name}-retry.png`) });
     await page
@@ -292,7 +391,10 @@ async function stage({ fail, destination, name }) {
       .click();
   }
   const verified = await waitResult(
-    (value) => value.audit || value.auditError || (!value.running && value.failed),
+    (value) =>
+      value.audit ||
+      value.auditError ||
+      (!value.running && value.failed && value.attempts > priorAttempts),
   );
   assert.equal(
     verified.failed,
@@ -326,7 +428,7 @@ async function stage({ fail, destination, name }) {
   await page.screenshot({ path: join(output, `${name}-staged.png`) });
   await button('Start a new import').click();
   await waitResult((value) => value.entries === 0 && value.writes === 0);
-  return { ...verified.audit, scrollChecks };
+  return { ...verified.audit, scrollChecks, stagingDurationMs: Date.now() - stagingStartedAt };
 }
 
 try {
@@ -402,7 +504,7 @@ app.on('window-all-closed', () => app.quit());
       fail: true,
       files: ['onepassword-rich.1pux', 'onepassword-bulk.1pux', 'vault-kv-v2.json'],
     },
-  ]) {
+  ].filter(({ name }) => !process.argv.includes('--bulk-only') || name === 'bulk-mixed')) {
     console.log(`Running ${scenario.name}`);
     if (!scenario.fail)
       await page.getByLabel('Fail the second staged write once').evaluate((input) => {

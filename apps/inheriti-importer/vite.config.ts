@@ -68,6 +68,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'node',
+      setupFiles: ['tests/setup-text-encoding.ts'],
       environmentMatchGlobs: [['tests/**/*.test.tsx', 'jsdom']],
       include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
       server: {
