@@ -27,6 +27,19 @@ HOST=example.com # trailing comment
     );
   });
 
+  it('diagnoses malformed lines without exposing content or adding empty secrets', () => {
+    const result = parseDotenv(
+      buffer('private malformed text\nBAD="unterminated\nGOOD=valid\nEMPTY=\n'),
+    );
+
+    expect(result.entries.map(({ title }) => title)).toEqual(['GOOD']);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ code: 'dotenv-malformed-line', count: 1, sourcePath: ['1'] }),
+      expect.objectContaining({ code: 'dotenv-malformed-line', count: 1, sourcePath: ['2'] }),
+    ]);
+    expect(JSON.stringify(result.diagnostics)).not.toContain('private');
+  });
+
   it('reads inline comments and multiline quoted values', () => {
     const result = parseDotenv(
       buffer('MESSAGE="hello # team" # comment\nCERT="line one\nline two"\n'),
@@ -36,6 +49,15 @@ HOST=example.com # trailing comment
     expect(result.entries.map((entry) => entry.extraFields[0]?.value)).toEqual([
       'hello # team',
       'line one\nline two',
+    ]);
+  });
+
+  it('preserves trailing spaces on the opening line of both quote styles', () => {
+    const result = parseDotenv(buffer(`DOUBLE="first  \nsecond"\nSINGLE='first  \nsecond'\n`));
+
+    expect(result.entries.map((entry) => entry.extraFields[0]?.value)).toEqual([
+      'first  \nsecond',
+      'first  \nsecond',
     ]);
   });
 

@@ -3,9 +3,35 @@ import type { ImportDiagnostic } from './import-diagnostic';
 export type VaultSourceKind =
   'keepass' | 'passbolt' | 'kubernetes' | 'vault' | 'dotenv' | 'cloud' | 'onepassword';
 
+export type ImportSourceHints = {
+  sourceKind?: VaultSourceKind;
+  category?: string;
+  provider?: 'aws' | 'azure' | 'gcp';
+};
+
+export type SourceFieldMetadata = Partial<
+  Record<
+    | 'sourceKey'
+    | 'sourceRole'
+    | 'sourceSection'
+    | 'sourceSectionIdentity'
+    | 'sourceFieldType'
+    | 'sourceDesignation'
+    | 'sourcePath'
+    | 'sourceRecordPath'
+    | 'sourceStructuredFieldIndex'
+    | 'sourceAutoMapping',
+    string
+  >
+>;
+
+export const canonicalFieldNames = ['username', 'password', 'url', 'notes'] as const;
+type CanonicalFieldName = (typeof canonicalFieldNames)[number];
+
 export type ExtraField = {
   key: string;
   value: string;
+  metadata?: SourceFieldMetadata;
 };
 
 export type VaultEntry = {
@@ -21,6 +47,8 @@ export type VaultEntry = {
   groupPath?: string[];
   tags: string[];
   extraFields: ExtraField[];
+  sourceHints?: ImportSourceHints;
+  fieldMetadata?: Partial<Record<CanonicalFieldName, SourceFieldMetadata>>;
   category: string;
   team: string;
 };
@@ -103,6 +131,8 @@ export function createEmptyEntry(partial: Partial<VaultEntry> = {}): VaultEntry 
     ...(partial.groupPath ? { groupPath: [...partial.groupPath] } : {}),
     tags: partial.tags ?? [],
     extraFields: partial.extraFields ?? [],
+    ...(partial.sourceHints ? { sourceHints: partial.sourceHints } : {}),
+    ...(partial.fieldMetadata ? { fieldMetadata: partial.fieldMetadata } : {}),
     category: partial.category ?? '',
     team: partial.team ?? '',
   };
@@ -145,10 +175,35 @@ export function sourceFieldId(entryId: string, field: string): string {
 export function extraFieldIds(entry: Pick<VaultEntry, 'id' | 'extraFields'>): string[] {
   const prefix = sourceFieldId(entry.id, 'extra');
   const occurrences = new Map<string, number>();
-  return entry.extraFields.map(({ key }) => {
+  return entry.extraFields.map(({ key, metadata }) => {
+    if (metadata?.sourcePath && metadata.sourceStructuredFieldIndex !== undefined) {
+      return `${prefix}:structured:${metadata.sourceStructuredFieldIndex}:${escapeSourceIdPart(metadata.sourcePath)}`;
+    }
     const occurrence = (occurrences.get(key) ?? 0) + 1;
     occurrences.set(key, occurrence);
     const id = `${prefix}:${escapeSourceIdPart(key)}`;
     return occurrence === 1 ? id : `${id}:${occurrence}`;
   });
+}
+
+export function entrySourceHints(
+  entry: Pick<VaultEntry, 'sourceHints' | 'category'>,
+  sourceKind?: VaultSourceKind,
+): ImportSourceHints {
+  return {
+    ...(sourceKind === 'onepassword' && entry.category ? { category: entry.category } : {}),
+    ...entry.sourceHints,
+    ...(sourceKind ? { sourceKind } : {}),
+  };
+}
+
+export function canonicalFieldMetadata(
+  entry: Pick<VaultEntry, 'fieldMetadata'>,
+  name: CanonicalFieldName,
+): Record<string, string> {
+  return {
+    sourceKey: name,
+    ...(name === 'notes' ? { role: 'notes' } : {}),
+    ...entry.fieldMetadata?.[name],
+  };
 }

@@ -1,5 +1,11 @@
 import { parseAllDocuments } from 'yaml';
-import { VaultFormatError, type ParseResult, type VaultEntry } from '@modules/import/domain/vault';
+import type { ImportDiagnostic } from '@modules/import/domain/import-diagnostic';
+import {
+  VaultFormatError,
+  type ParseResult,
+  type SourceFieldMetadata,
+  type VaultEntry,
+} from '@modules/import/domain/vault';
 import {
   asString,
   decodeBase64,
@@ -18,6 +24,7 @@ export function parseKubernetes(data: ArrayBuffer, fileName = 'Kubernetes export
 }
 
 class KubernetesParser {
+  private readonly diagnostics: ImportDiagnostic[] = [];
   private readonly warnings: string[] = [];
 
   constructor(
@@ -50,6 +57,7 @@ class KubernetesParser {
       name: stripExtension(this.fileName),
       entries,
       warnings: this.warnings,
+      diagnostics: this.diagnostics,
     };
   }
 
@@ -88,141 +96,241 @@ class KubernetesParser {
     const namespace = asString(metadata.namespace);
     const kind = asString(resource.kind) || 'Secret';
     const type = asString(resource.type);
-    const secrets = this.readSecretData(resource, kind);
-
-    if (
+    const id = asString(metadata.uid) || `k8s-${index + 1}`;
+    const fields: VaultEntry['extraFields'] = [];
+    this.readSecretData(resource, kind, fields);
+    const isDocker =
       type === 'kubernetes.io/dockerconfigjson' ||
-      secrets['.dockerconfigjson'] ||
-      secrets['.dockercfg']
-    ) {
-      return this.mapDockerSecret(resource, secrets, name, namespace, kind, index);
-    }
-
-    const notes = [kind !== 'Secret' ? kind : '', type && type !== 'Opaque' ? type : '']
-      .filter(Boolean)
-      .join(' · ');
-
-    if (Object.keys(secrets).length === 0) {
-      this.warnings.push(`${name} has no data keys.`);
-    }
-
-    return entryFromSecrets(secrets, {
-      id: asString(metadata.uid) || `k8s-${index + 1}`,
+      type === 'kubernetes.io/dockercfg' ||
+      fields.some((field) => this.isDockerKey(field));
+    const tags = [kind.toLowerCase(), type.replace(/^kubernetes\.io\//, '')].filter(
+      (tag) => tag && tag !== 'opaque',
+    );
+    const meta = {
+      id,
       title: name,
       group: namespace,
-      tags: [kind.toLowerCase(), type.replace(/^kubernetes\.io\//, '')].filter(
-        (tag) => tag && tag !== 'opaque',
+      sourceHints: { category: kind },
+      tags,
+      notes: [kind !== 'Secret' ? kind : '', type && type !== 'Opaque' ? type : '']
+        .filter(Boolean)
+        .join(' · '),
+    };
+    if (fields.length === 0) this.warnings.push(`${name} has no data keys.`);
+    if (isDocker) {
+      return this.mapDockerSecret(fields, meta);
+    }
+
+    const unique = this.uniqueFields(fields);
+    return entryFromSecrets(Object.fromEntries(unique.map((field) => [field.key, field.value])), {
+      ...meta,
+      extraFieldMetadata: new Map(
+        unique.flatMap((field) => (field.metadata ? [[field.key, field.metadata]] : [])),
       ),
-      notes,
     });
   }
 
-  private readSecretData(resource: LooseRecord, kind: string): Record<string, string> {
-    const secrets: Record<string, string> = {};
-    const encoded = isRecord(resource.data) ? resource.data : {};
-    const plain = isRecord(resource.stringData) ? resource.stringData : {};
-    const binary = isRecord(resource.binaryData) ? resource.binaryData : {};
-
-    if (kind === 'ConfigMap') this.copyPlainValues(encoded, secrets);
-    else this.copyBase64Values(encoded, secrets);
-    this.copyPlainValues(plain, secrets);
-    this.copyBase64Values(binary, secrets);
-
-    return secrets;
-  }
-
-  private copyPlainValues(source: LooseRecord, target: Record<string, string>): void {
-    for (const [key, value] of Object.entries(source)) {
-      const text = asString(value);
-      if (text) target[key] = text;
+  private readSecretData(
+    resource: LooseRecord,
+    kind: string,
+    fields: VaultEntry['extraFields'],
+  ): void {
+    const seen = new Set<string>();
+    for (const source of ['stringData', 'data', 'binaryData']) {
+      const values = resource[source];
+      if (!isRecord(values)) continue;
+      const base64 = source === 'binaryData' || (source === 'data' && kind !== 'ConfigMap');
+      for (const [key, value] of Object.entries(values)) {
+        const path = [source, key];
+        const shadowed = seen.has(key);
+        seen.add(key);
+        const binary = base64 && typeof value === 'string' ? decodeBase64(value) : undefined;
+        const metadata = binary?.binary
+          ? ({
+              sourceKey: key,
+              sourcePath: JSON.stringify(path),
+              sourceFieldType: 'base64',
+              sourceAutoMapping: 'manual-only',
+            } satisfies SourceFieldMetadata)
+          : shadowed
+            ? {
+                sourceKey: key,
+                sourcePath: JSON.stringify(path),
+                sourceAutoMapping: 'manual-only' as const,
+              }
+            : undefined;
+        this.addField(
+          fields,
+          binary?.binary ? `${key} (base64)` : key,
+          binary?.text ?? value,
+          path,
+          metadata,
+        );
+      }
     }
   }
 
-  private copyBase64Values(source: LooseRecord, target: Record<string, string>): void {
-    for (const [key, value] of Object.entries(source)) {
-      const raw = asString(value);
-      if (!raw) continue;
-      const decoded = decodeBase64(raw);
-      target[decoded.binary ? `${key} (base64)` : key] = decoded.text;
-    }
+  private isDockerKey(field: VaultEntry['extraFields'][number]): boolean {
+    const key = field.metadata?.sourceKey ?? field.key;
+    return key === '.dockerconfigjson' || key === '.dockercfg';
   }
 
   private mapDockerSecret(
-    resource: LooseRecord,
-    secrets: Record<string, string>,
-    name: string,
-    namespace: string,
-    kind: string,
-    index: number,
+    fields: VaultEntry['extraFields'],
+    meta: Parameters<typeof entryFromSecrets>[1] & { id: string },
   ): Omit<VaultEntry, 'sourceId'> {
-    // Use the first registry as the primary credential and retain the rest as labeled fields.
-    const payload = secrets['.dockerconfigjson'] || secrets['.dockercfg'] || '';
-    const parsed = tryParseJson(payload);
-    const auths =
-      isRecord(parsed) && isRecord(parsed.auths) ? parsed.auths : isRecord(parsed) ? parsed : {};
-    const registries = Object.entries(auths).filter(([, auth]) => isRecord(auth));
-
-    const extra: Record<string, string> = {};
-    let username = '';
-    let password = '';
-    let url = '';
-
-    registries.forEach(([registry, auth], authIndex) => {
-      if (!isRecord(auth)) return;
-      const decoded = this.decodeDockerAuth(auth);
-      if (authIndex === 0) {
-        url = registry;
-        username = decoded.username;
-        password = decoded.password;
-        Object.assign(extra, decoded.extra);
-      } else {
-        extra[`${registry} username`] = decoded.username;
-        extra[`${registry} password`] = decoded.password;
-        for (const [key, value] of Object.entries(decoded.extra)) {
-          extra[`${registry} ${key}`] = value;
+    const entry = entryFromSecrets({}, meta);
+    const extras = entry.extraFields;
+    for (const field of fields) {
+      if (!this.isDockerKey(field) || field.metadata?.sourceAutoMapping === 'manual-only') {
+        extras.push(field);
+        if (this.isDockerKey(field) && field.metadata?.sourceFieldType === 'base64')
+          this.reportUnreadableDocker(field, entry.id);
+        continue;
+      }
+      const key = field.metadata?.sourceKey ?? field.key;
+      const parsed = tryParseJson(field.value);
+      const hasAuths =
+        key === '.dockerconfigjson' || (isRecord(parsed) && Object.hasOwn(parsed, 'auths'));
+      const auths = isRecord(parsed) ? (hasAuths ? parsed.auths : parsed) : undefined;
+      if (!isRecord(parsed) || !isRecord(auths) || !Object.values(auths).some(isRecord)) {
+        extras.push({
+          ...field,
+          metadata: {
+            ...field.metadata,
+            sourceKey: key,
+            sourceAutoMapping: 'manual-only',
+          },
+        });
+        this.reportUnreadableDocker(field, entry.id);
+        continue;
+      }
+      const path = this.dockerSourcePath(field, key);
+      if (hasAuths) {
+        for (const [configKey, value] of Object.entries(parsed)) {
+          if (configKey !== 'auths') this.addField(extras, configKey, value, [...path, configKey]);
         }
       }
-    });
-
-    const metadata = isRecord(resource.metadata) ? resource.metadata : {};
-    const entry = entryFromSecrets(
-      { username, password, url, ...extra },
-      {
-        id: asString(metadata.uid) || `k8s-${index + 1}`,
-        title: name,
-        group: namespace,
-        tags: [kind.toLowerCase(), 'dockerconfigjson'],
-        notes: 'kubernetes.io/dockerconfigjson',
-      },
-    );
-    if (!entry.username) entry.username = username;
-    if (!entry.password) entry.password = password;
-    if (!entry.url) entry.url = url;
+      for (const [registry, auth] of Object.entries(auths)) {
+        const authPath = hasAuths ? [...path, 'auths', registry] : [...path, registry];
+        if (!isRecord(auth)) {
+          this.addField(extras, registry, auth, authPath);
+          continue;
+        }
+        const primary = !entry.url;
+        const { username, password, used } = this.decodeDockerAuth(auth);
+        if (primary) {
+          entry.url = registry;
+          entry.username = username;
+          entry.password = password;
+        } else {
+          this.addField(extras, `${registry} username`, username, [...authPath, 'username']);
+          this.addField(extras, `${registry} password`, password, [...authPath, 'password']);
+        }
+        for (const [authKey, value] of Object.entries(auth)) {
+          if (used.has(authKey)) continue;
+          const label = primary ? authKey : `${registry} ${authKey}`;
+          const opaqueAuth =
+            authKey === 'auth'
+              ? ({
+                  sourceKey: authKey,
+                  sourcePath: JSON.stringify([...authPath, authKey]),
+                  sourceAutoMapping: 'manual-only',
+                } satisfies SourceFieldMetadata)
+              : undefined;
+          this.addField(extras, label, value, [...authPath, authKey], opaqueAuth);
+        }
+      }
+    }
+    entry.fieldMetadata = {
+      ...(entry.username ? { username: { sourceKey: 'username' } } : {}),
+      ...(entry.password ? { password: { sourceKey: 'password' } } : {}),
+      ...(entry.url ? { url: { sourceKey: 'url' } } : {}),
+    };
+    entry.extraFields = this.uniqueFields(extras);
     return entry;
   }
 
-  private decodeDockerAuth(auth: LooseRecord): {
-    username: string;
-    password: string;
-    extra: Record<string, string>;
-  } {
+  private reportUnreadableDocker(field: VaultEntry['extraFields'][number], entryId: string): void {
+    const key = field.metadata?.sourceKey ?? field.key;
+    this.diagnostics.push({
+      code: 'k8s-docker-unreadable-payload',
+      kind: 'unsupported',
+      message:
+        'A Docker configuration could not be read as credentials. Its original value was retained for manual mapping.',
+      count: 1,
+      entryId,
+      sourcePath: this.dockerSourcePath(field, key),
+    });
+  }
+
+  private dockerSourcePath(field: VaultEntry['extraFields'][number], key: string): string[] {
+    return field.metadata?.sourcePath ? JSON.parse(field.metadata.sourcePath) : [key];
+  }
+
+  private decodeDockerAuth(auth: LooseRecord) {
     let username = asString(auth.username);
     let password = asString(auth.password);
+    const used = new Set<string>();
+    if (username) used.add('username');
+    if (password) used.add('password');
+
     const token = asString(auth.auth);
-    if ((!username || !password) && token) {
-      const decoded = decodeBase64(token).text;
-      const split = decoded.indexOf(':');
-      if (split >= 0) {
-        username = username || decoded.slice(0, split);
-        password = password || decoded.slice(split + 1);
+    if (token) {
+      const decoded = decodeBase64(token);
+      const split = decoded.text.indexOf(':');
+      if (!decoded.binary && split >= 0) {
+        const tokenUser = decoded.text.slice(0, split);
+        const tokenPassword = decoded.text.slice(split + 1);
+        username ||= tokenUser;
+        password ||= tokenPassword;
+        if (username === tokenUser && password === tokenPassword) used.add('auth');
       }
     }
-    const extra: Record<string, string> = {};
-    for (const [key, value] of Object.entries(auth)) {
-      if (key === 'username' || key === 'password' || key === 'auth') continue;
-      const text = asString(value);
-      if (text) extra[key] = text;
+    return { username, password, used };
+  }
+
+  private addField(
+    fields: VaultEntry['extraFields'],
+    key: string,
+    value: unknown,
+    sourcePath: string[],
+    metadata?: SourceFieldMetadata,
+  ): void {
+    const structured = value != null && typeof value === 'object';
+    const text = structured ? JSON.stringify(value) : asString(value);
+    if (!text) return;
+    if (structured) metadata = { ...metadata, sourceFieldType: 'json' };
+    if (metadata || this.isDockerKey({ key, value: text })) {
+      metadata = {
+        sourceKey: sourcePath.at(-1),
+        sourcePath: JSON.stringify(sourcePath),
+        ...metadata,
+      };
     }
-    return { username, password, extra };
+    fields.push({ key, value: text, ...(metadata ? { metadata } : {}) });
+  }
+
+  private uniqueFields(fields: VaultEntry['extraFields']): VaultEntry['extraFields'] {
+    const reserved = new Set(fields.map((field) => field.key));
+    const used = new Set<string>();
+    return fields.map((field) => {
+      if (!used.has(field.key)) {
+        used.add(field.key);
+        return field;
+      }
+      let index = 2;
+      let key = `${field.key} (${index})`;
+      while (reserved.has(key) || used.has(key)) {
+        index++;
+        key = `${field.key} (${index})`;
+      }
+      used.add(key);
+      return {
+        ...field,
+        key,
+        metadata: { sourceKey: field.key, ...field.metadata, sourceAutoMapping: 'manual-only' },
+      };
+    });
   }
 }

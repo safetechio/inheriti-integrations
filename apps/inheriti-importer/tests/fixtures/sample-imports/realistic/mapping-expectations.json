@@ -1,0 +1,88 @@
+{
+  "cases": [
+    {
+      "fixture": "onepassword-rich.1pux",
+      "entrySelector": { "name": "Dispatch console — São Paulo / 出荷" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.email": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:tenant", "extra:Primary URL label", "extra:URL: Recovery", "extra:URL: Recovery (2)", "extra:Operations: Rotation ticket", "extra:Operations: Owner", "extra:Recovery: Code", "extra:Recovery: Code (2)", "extra:Recovery: PIN", "extra:Recovery: TOTP", "extra:Recovery: Code (3)", "extra:Recovery: מפתח 🔐", "extra:Fixture types: Retry count", "extra:Fixture types: Enabled", "extra:Fixture types: Nested labels.fixtureArray[0][0]", "extra:Fixture types: Nested labels.fixtureArray[0][1]", "extra:Fixture types: Nested labels.fixtureArray[1][0]", "extra:Fixture types: Nested labels.fixtureArray[1][1]", "extra:Fixture types: Address.address.street", "extra:Fixture types: Address.address.city", "extra:Fixture types: Address.address.state", "extra:Fixture types: Address.address.zip", "extra:Fixture types: Address.address.country", "extra:Password history", "extra:overview/subtitle", "extra:overview/futureBadge.enabled", "extra:overview/futureBadge.rank", "extra:Source tags", "extra:details/futureMetadata.version", "extra:details/futureMetadata.payload[0]", "extra:details/futureMetadata.payload[1]", "extra:details/futureMetadata.payload[2]"]
+    },
+    {
+      "fixture": "onepassword-rich.1pux",
+      "entrySelector": { "name": "Finance sandbox card" },
+      "expectedAssets": [{ "type": "PAYMENT-CREDIT-CARD", "fields": { "secret.cardNumber": ["extra:creditCardNumber"], "secret.expiryDate": ["extra:Card: Expiry"], "secret.cardHolderName": ["extra:Card: Cardholder"], "secret.code": ["extra:Card: Security code"], "secret.pinCode": ["extra:Card: PIN"] } }],
+      "expectedUnassigned": ["notes"]
+    },
+    {
+      "fixture": "onepassword-rich.1pux",
+      "entrySelector": { "name": "Inventory handheld PIN" },
+      "expectedAssets": [{ "type": "PLAIN-TEXT", "fields": { "secret.text": ["extra:Access: PIN", "extra:Access: Asset tag"] } }],
+      "expectedUnassigned": []
+    },
+    {
+      "fixture": "onepassword-rich.1pux",
+      "entrySelector": { "name": "Night shift escalation notes" },
+      "expectedAssets": [{ "type": "PLAIN-TEXT", "fields": { "secret.text": ["notes"] } }],
+      "expectedUnassigned": []
+    },
+    {
+      "fixture": "passbolt-export.csv",
+      "entrySelector": { "name": "Support, \"Après-vente\" / 出荷" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.email": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:Tags"]
+    },
+    {
+      "fixture": "passbolt-compatible.json",
+      "entrySelector": { "name": "dispatch operator 7" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.email": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:tags[0]", "extra:tags[1]", "extra:folder_parent.name", "extra:rotationWindowDays", "extra:secret.recovery_hint", "extra:secret.grace_period"]
+    },
+    {
+      "fixture": "kubernetes-list.json",
+      "entrySelector": { "name": "routing-3" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["extra:disabled", "extra:password (2)", "extra:zero.txt"]
+    },
+    {
+      "fixture": "kubernetes-multidoc.yaml",
+      "entrySelector": { "name": "nightly-backup-6" },
+      "expectedAssets": [{ "type": "PLAIN-TEXT", "fields": { "secret.text": ["url", "notes", "extra:app.toml", "extra:locale"] } }],
+      "expectedUnassigned": ["extra:header.bytes (base64)"]
+    },
+    {
+      "fixture": "vault-kv-v2.json",
+      "entrySelector": { "name": "rotation-1" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:region", "extra:enabled", "extra:retries", "extra:credential hint 🔐", "extra:policy.roles[0]", "extra:policy.roles[1]", "extra:policy.limits.maxAttempts", "extra:policy.limits.enabled", "extra:private_material_marker"]
+    },
+    {
+      "fixture": "vault-kv-v1.yaml",
+      "entrySelector": { "name": "rotation-1" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:region", "extra:enabled", "extra:retries", "extra:credential hint 🔐", "extra:policy.roles[0]", "extra:policy.roles[1]", "extra:policy.limits.maxAttempts", "extra:policy.limits.enabled", "extra:private_material_marker"]
+    },
+    {
+      "fixture": "aws-secretsmanager.json",
+      "entrySelector": { "name": "fixture/dispatch-1" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:region", "extra:enabled", "extra:retries", "extra:credential hint 🔐", "extra:policy.roles[0]", "extra:policy.roles[1]", "extra:policy.limits.maxAttempts", "extra:policy.limits.enabled", "extra:private_material_marker"]
+    },
+    {
+      "fixture": "azure-keyvault.json",
+      "entrySelector": { "name": "dispatch-1" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:region", "extra:enabled", "extra:retries", "extra:credential hint 🔐", "extra:policy.roles[0]", "extra:policy.roles[1]", "extra:policy.limits.maxAttempts", "extra:policy.limits.enabled", "extra:private_material_marker"]
+    },
+    {
+      "fixture": "gcp-secretmanager.json",
+      "entrySelector": { "name": "dispatch-1" },
+      "expectedAssets": [{ "type": "USER-PSWD", "fields": { "secret.appOrWebsite": ["url"], "secret.username": ["username"], "secret.password": ["password"] } }],
+      "expectedUnassigned": ["notes", "extra:region", "extra:enabled", "extra:retries", "extra:credential hint 🔐", "extra:policy.roles[0]", "extra:policy.roles[1]", "extra:policy.limits.maxAttempts", "extra:policy.limits.enabled", "extra:private_material_marker"]
+    },
+    {
+      "fixture": "services.env",
+      "entrySelector": { "name": "ROUTING_URL" },
+      "expectedAssets": [{ "type": "PLAIN-TEXT", "fields": { "secret.text": ["extra:ROUTING_URL"] } }],
+      "expectedUnassigned": []
+    }
+  ]
+}

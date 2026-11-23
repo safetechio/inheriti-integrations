@@ -7,7 +7,18 @@ export type SuggestedFieldBinding =
   | { kind: 'literal'; value: SensitiveValue }
   | { kind: 'sources'; sources: Array<{ sourceFieldId: string; name: string }> };
 
+export type SuggestionEvidence =
+  | 'native-role'
+  | 'specific-anchor'
+  | 'recognized-format'
+  | 'matching-context'
+  | 'ambiguous-fields'
+  | 'competing-types'
+  | 'invalid-field';
+
 export interface SuggestedAsset {
+  /** Distinguishes independent assets derived from the same entry. */
+  id?: string;
   /** Core `DataAssetType` id. */
   type: string;
   name: string;
@@ -16,10 +27,11 @@ export interface SuggestedAsset {
   /** Source node the suggestion was derived from. */
   fromNodeId: string;
   variant?: 'additional-fields' | 'rescued-fields';
-  /** 0..1 — how confident the strategy is. */
+  /** 0..1 deterministic ranking score. */
   confidence: number;
   /** Why this was suggested, for the preview. */
   rationale: string;
+  evidence?: readonly SuggestionEvidence[];
 }
 
 export interface SuggestionResult {

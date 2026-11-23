@@ -1,7 +1,14 @@
+import { expandStructuredExtraFields } from '@modules/import/domain/structured-extra-fields';
 import { resolveEntryDiagnostics } from '@modules/import/domain/import-diagnostic';
 import { parseVaultFile } from '@modules/import/infrastructure/parsers';
 import { detectVaultKind } from '@modules/import/infrastructure/parsers/utils/detect';
-import type { ParseResult, VaultEntry } from '@modules/import/domain/vault';
+import {
+  canonicalFieldMetadata,
+  canonicalFieldNames,
+  entrySourceHints,
+  type ParseResult,
+  type VaultEntry,
+} from '@modules/import/domain/vault';
 import {
   SensitiveValue,
   type ImportedField,
@@ -95,6 +102,7 @@ export class VaultFileImportParser implements ImportParser {
         path: [...group.path, entry.title || entry.username || '(untitled)'],
         childNodeIds: [],
         fieldIds: [],
+        sourceHints: entrySourceHints(entry, result.kind),
       };
       group.childNodeIds.push(entryNode.id);
       nodes.push(entryNode);
@@ -118,7 +126,12 @@ function buildEntryFields(
 ): ImportedField[] {
   const out: ImportedField[] = [];
 
-  const push = (name: string, rawValue: string, detectedType?: string) => {
+  const push = (
+    name: string,
+    rawValue: string,
+    metadata: ImportedField['metadata'],
+    detectedType?: string,
+  ) => {
     if (!rawValue) return;
     out.push({
       id: crypto.randomUUID(),
@@ -128,17 +141,21 @@ function buildEntryFields(
       name,
       value: new SensitiveValue(rawValue),
       detectedType,
-      metadata: name === 'notes' && detectedType === 'PLAIN-TEXT' ? { role: 'notes' } : {},
+      metadata,
     });
   };
 
-  push('username', entry.username, 'USER-PSWD');
-  push('password', entry.password, 'USER-PSWD');
-  push('url', entry.url, 'USER-PSWD');
-  push('notes', entry.notes, 'PLAIN-TEXT');
+  for (const name of canonicalFieldNames) {
+    push(
+      name,
+      entry[name],
+      canonicalFieldMetadata(entry, name),
+      name === 'notes' ? 'PLAIN-TEXT' : 'USER-PSWD',
+    );
+  }
 
-  for (const extra of entry.extraFields) {
-    push(extra.key, extra.value);
+  for (const extra of expandStructuredExtraFields(entry.extraFields)) {
+    push(`extra:${extra.key}`, extra.value, { sourceKey: extra.key, ...extra.metadata });
   }
 
   return out;

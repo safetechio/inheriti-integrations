@@ -99,9 +99,26 @@ describe('detectVaultKind', () => {
       password: '  password  ',
       notes: 'first\nsecond',
       extraFields: expect.arrayContaining([
-        { key: 'OTPAuth', value: 'otp' },
-        { key: 'Favorite', value: '0' },
-        { key: 'Archived', value: 'false' },
+        {
+          key: 'OTPAuth',
+          value: 'otp',
+          metadata: { sourceKey: 'OTPAuth', sourceFieldType: 'otp' },
+        },
+        {
+          key: 'Favorite',
+          value: '0',
+          metadata: { sourceKey: 'Favorite', sourceAutoMapping: 'manual-only' },
+        },
+        {
+          key: 'Archived',
+          value: 'false',
+          metadata: { sourceKey: 'Archived', sourceAutoMapping: 'manual-only' },
+        },
+        {
+          key: 'Tags',
+          value: 'work',
+          metadata: { sourceKey: 'Tags', sourceAutoMapping: 'manual-only' },
+        },
       ]),
     });
   });

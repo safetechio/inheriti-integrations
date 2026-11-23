@@ -109,6 +109,27 @@ describe('parsePassbolt', () => {
     ]);
   });
 
+  it('keeps custom-only named resources inside an explicit resources wrapper', () => {
+    const result = parsePassbolt(
+      buffer(
+        JSON.stringify({
+          body: {
+            resources: [{ name: 'Custom', connection: { endpoint: 'example' }, tags: ['ops'] }],
+          },
+        }),
+      ),
+    );
+
+    expect(result.entries[0]).toMatchObject({
+      title: 'Custom',
+      tags: ['ops'],
+      extraFields: [
+        { key: 'connection', metadata: { sourceFieldType: 'json' } },
+        { key: 'tags', value: '["ops"]', metadata: { sourceFieldType: 'json' } },
+      ],
+    });
+  });
+
   it('rejects unrelated CSV headers and generic JSON records', () => {
     expect(() => parsePassbolt(buffer('Name,Quantity\nGloves,2'), 'stock.csv')).toThrow(
       'Unsupported CSV headers',

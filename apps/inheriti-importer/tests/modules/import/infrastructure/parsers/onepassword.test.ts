@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { parseOnePassword } from '@modules/import/infrastructure/parsers/onepassword';
 import { VaultFormatError } from '@modules/import/domain/vault';
+import { VaultFileImportParser } from '@modules/import/infrastructure/vault-file-import-parser';
+import { importSessionFromVaultState } from '@modules/import/infrastructure/stores/vault-session-adapter';
+import {
+  entriesFromParse,
+  initialVaultState,
+} from '@modules/import/infrastructure/stores/vault-store';
 
 function archive(data: unknown, files: Record<string, Uint8Array> = {}): ArrayBuffer {
   const zipped = zipSync({
@@ -45,6 +51,71 @@ function exportData(items: unknown[]) {
 }
 
 describe('parseOnePassword', () => {
+  it('keeps native scalars readable after unknown nested content exhausts its budget', () => {
+    const source = {
+      ...item,
+      details: {
+        loginFields: [
+          {
+            name: 'password',
+            designation: 'password',
+            value: 'current-secret',
+            unknown: Object.fromEntries(Array.from({ length: 3000 }, (_, i) => ['key' + i, i])),
+          },
+        ],
+        sections: [
+          { title: 'Extras', fields: [{ title: 'Token', value: { string: 'later-scalar' } }] },
+        ],
+      },
+    };
+    const entry = parseOnePassword(archive(exportData([source]))).entries[0];
+    expect(entry.password).toBe('current-secret');
+    expect(entry.extraFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: 'later-scalar' })]),
+    );
+  });
+
+  it('reports a wide history that exceeds recovery work limits without copying every child', () => {
+    const source = {
+      ...item,
+      details: { passwordHistory: Array.from({ length: 10000 }, (_, i) => i) },
+    };
+    const result = parseOnePassword(archive(exportData([source])));
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'onepassword-recovery-limit', kind: 'unsupported' }),
+      ]),
+    );
+    expect(
+      result.entries[0].extraFields.some(
+        ({ metadata }) => metadata?.sourceKey === 'passwordHistory',
+      ),
+    ).toBe(false);
+  });
+
+  it('retains exact owner paths for unknown scalar login properties', () => {
+    const source = {
+      ...item,
+      details: {
+        loginFields: [
+          { name: 'a', value: 'x', username: 'alpha', password: 'same-owner' },
+          { name: 'b', value: 'y', password: 'different-owner' },
+        ],
+      },
+    };
+    const fields = parseOnePassword(archive(exportData([source]))).entries[0].extraFields;
+    const username = fields.find(({ metadata }) => metadata?.sourceKey === 'username')!;
+    const passwords = fields.filter(({ metadata }) => metadata?.sourceKey === 'password');
+    expect(username.metadata?.sourceRecordPath).toBe(passwords[0].metadata?.sourceRecordPath);
+    expect(username.metadata?.sourceRecordPath).not.toBe(passwords[1].metadata?.sourceRecordPath);
+    expect(JSON.parse(username.metadata!.sourcePath!)).toEqual([
+      'details',
+      'loginFields',
+      '0',
+      'username',
+    ]);
+  });
+
   it('preserves canonical fields, section fields, duplicates and vault grouping', () => {
     const result = parseOnePassword(archive(exportData([item])));
     expect(result.kind).toBe('onepassword');
@@ -58,13 +129,82 @@ describe('parseOnePassword', () => {
       group: 'Personal',
       category: '002',
     });
-    expect(result.entries[0].extraFields).toEqual([
+    expect(result.entries[0].extraFields.map(({ key, value }) => ({ key, value }))).toEqual([
       { key: 'URL: other', value: 'https://other.example' },
       { key: 'creditCardNumber', value: '4111' },
       { key: 'Payment: PIN', value: '1234' },
       { key: 'Payment: custom', value: 'first' },
       { key: 'Payment: custom (2)', value: 'second' },
     ]);
+  });
+
+  it('carries source facts through both normalization paths with distinct duplicate fields', async () => {
+    const fileName = 'export.1pux';
+    const data = archive(exportData([item]));
+    const parsed = parseOnePassword(data);
+    const normalized = await new VaultFileImportParser().parse({ fileName, data });
+    const [entry] = entriesFromParse(parsed, normalized.source.id);
+    const session = importSessionFromVaultState({
+      ...initialVaultState,
+      vaults: [{ ...normalized.source, kind: parsed.kind }],
+      entries: [{ current: entry, original: entry }],
+    });
+
+    for (const [node, fields] of [
+      [normalized.nodes.find((candidate) => candidate.kind === 'entry'), normalized.fields],
+      [session.nodesById[entry.id], Object.values(session.fieldsById)],
+    ] as const) {
+      expect(node?.sourceHints).toEqual({ sourceKind: 'onepassword', category: '002' });
+      expect(fields.find(({ metadata }) => metadata.sourceRole === 'password')?.metadata).toEqual({
+        sourceKey: 'password',
+        sourceRole: 'password',
+        sourceDesignation: 'password',
+        sourceFieldType: 'string',
+      });
+      expect(
+        fields.find(({ metadata }) => metadata.sourceFieldType === 'creditCardNumber')?.metadata,
+      ).toEqual({
+        sourceKey: 'Payment account',
+        sourceSection: 'Payment',
+        sourceSectionIdentity: '0',
+        sourceFieldType: 'creditCardNumber',
+      });
+      expect(fields.find(({ metadata }) => metadata.role === 'notes')?.metadata.sourceKey).toBe(
+        'notesPlain',
+      );
+      expect(
+        fields.filter(({ metadata }) => metadata.sourceRole === 'url').map(({ name }) => name),
+      ).toEqual(['url']);
+      const duplicates = fields.filter(({ metadata }) => metadata.sourceKey === 'custom');
+      expect(new Set(duplicates.map(({ id }) => id)).size).toBe(2);
+      expect(duplicates.map(({ value }) => value.reveal())).toEqual(['first', 'second']);
+      expect(JSON.stringify(fields.map(({ metadata }) => metadata))).not.toContain('4111');
+    }
+  });
+
+  it('uses distinct section identities even when source titles are duplicated or absent', async () => {
+    const data = archive(
+      exportData([
+        {
+          ...item,
+          details: {
+            sections: ['Payment', 'Payment', '', ''].map((title, index) => ({
+              title,
+              fields: [{ title: 'custom', value: { string: String(index) } }],
+            })),
+          },
+        },
+      ]),
+    );
+    const { fields } = await new VaultFileImportParser().parse({ fileName: 'export.1pux', data });
+    const sections = fields.filter(({ metadata }) => metadata.sourceKey === 'custom');
+    expect(sections.map(({ metadata }) => metadata.sourceSection)).toEqual([
+      'Payment',
+      'Payment',
+      'Details',
+      'Details',
+    ]);
+    expect(new Set(sections.map(({ metadata }) => metadata.sourceSectionIdentity)).size).toBe(4);
   });
 
   it('warns about file attachments and unsupported fields', () => {
@@ -108,11 +248,11 @@ describe('parseOnePassword', () => {
     expect(result.entries).toHaveLength(3);
     expect(result.entries[0].notes).toBe('Keep this note');
     expect(result.entries[1].url).toBe('https://example.invalid');
-    expect(result.entries[1].extraFields).toContainEqual({
+    expect(result.entries[1].extraFields.map(({ key, value }) => ({ key, value }))).toContainEqual({
       key: 'overview/custom',
       value: 'field',
     });
-    expect(result.entries[2].extraFields).toContainEqual({
+    expect(result.entries[2].extraFields.map(({ key, value }) => ({ key, value }))).toContainEqual({
       key: 'details/notesPlain',
       value: '{"text":"Structured note"}',
     });
@@ -120,7 +260,7 @@ describe('parseOnePassword', () => {
     expect(result.warnings).toContain('File content in item "File" was skipped.');
   });
 
-  it('reports omitted source categories and falsy URL matching settings', () => {
+  it('retains source categories and reports omitted URL matching settings', () => {
     const result = parseOnePassword(
       archive(
         exportData([
@@ -137,15 +277,15 @@ describe('parseOnePassword', () => {
       ),
     );
     expect(result.entries[0].url).toBe('https://example.invalid');
+    expect(result.entries[0].sourceHints?.category).toBe('001');
     expect(result.diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: 'onepassword-item-metadata', kind: 'skipped', count: 1 }),
         expect.objectContaining({ code: 'onepassword-url-metadata', kind: 'skipped', count: 1 }),
       ]),
     );
   });
 
-  it('identifies skipped fields and history without exposing values or archive identifiers', () => {
+  it('reports skipped fields and retains password history without exposing values in diagnostics', () => {
     const secret = 'DO-NOT-SHOW-THIS-SECRET';
     const affected = {
       ...item,
@@ -162,14 +302,25 @@ describe('parseOnePassword', () => {
         passwordHistory: [{ value: secret }],
       },
     };
-    const warnings = parseOnePassword(archive(exportData([affected]))).warnings;
+    const result = parseOnePassword(archive(exportData([affected])));
+    expect(result.entries[0]).toMatchObject({ password: '', notes: '' });
+    expect(result.entries[0].extraFields).toContainEqual({
+      key: 'Password history',
+      value: JSON.stringify([{ value: secret }]),
+      metadata: {
+        sourceKey: 'passwordHistory',
+        sourceFieldType: 'json',
+        sourceAutoMapping: 'manual-only',
+      },
+    });
+    const { warnings, diagnostics } = result;
     expect(warnings).toEqual([
       'Item "Card", login field "Recovery code" was skipped.',
       'Item "Card", Security field "Token" was skipped.',
-      'Password history in item "Card" was skipped.',
     ]);
     expect(warnings.join(' ')).not.toContain(secret);
     expect(warnings.join(' ')).not.toContain('raw-field-id');
+    expect(JSON.stringify(diagnostics)).not.toContain(secret);
   });
 
   it('keeps a warning for every skipped field with the same label', () => {
@@ -230,12 +381,22 @@ describe('parseOnePassword', () => {
     };
     const entry = parseOnePassword(archive(exportData([structured]))).entries[0];
     expect(entry.tags).toEqual(['important']);
-    expect(entry.extraFields).toContainEqual({ key: 'Source tags', value: '["important"]' });
-    expect(entry.extraFields).toEqual(
+    expect(entry.extraFields).toContainEqual({
+      key: 'Source tags',
+      value: '["important"]',
+      metadata: { sourceKey: 'tags', sourceFieldType: 'json', sourceAutoMapping: 'manual-only' },
+    });
+    expect(entry.extraFields.map(({ key, value }) => ({ key, value }))).toEqual(
       expect.arrayContaining([
-        { key: 'Details: email', value: 'a@example.com' },
-        { key: 'Details: address', value: 'street: Main\ncity: Lima' },
-        { key: 'Details: private key', value: 'privateKey: key text\nmetadata: RSA' },
+        {
+          key: 'Details: email',
+          value: '{"email":{"email_address":"a@example.com","provider":null}}',
+        },
+        { key: 'Details: address', value: '{"address":{"street":"Main","city":"Lima"}}' },
+        {
+          key: 'Details: private key',
+          value: '{"sshKey":{"privateKey":"key text","metadata":{"keyType":"RSA"}}}',
+        },
       ]),
     );
   });
@@ -364,7 +525,7 @@ describe('parseOnePassword', () => {
       },
     };
     const result = parseOnePassword(archive(exportData([extra])));
-    expect(result.entries[0].extraFields).toEqual(
+    expect(result.entries[0].extraFields.map(({ key, value }) => ({ key, value }))).toEqual(
       expect.arrayContaining([
         { key: 'overview/new~1hint', value: '  hint  ' },
         { key: 'details/custom', value: '{"flag":false,"entries":[0,null]}' },
@@ -374,7 +535,7 @@ describe('parseOnePassword', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'onepassword-password-history',
-          kind: 'skipped',
+          kind: 'transformed',
           entryId: '0:0:source-item',
           count: 1,
         }),
@@ -387,6 +548,127 @@ describe('parseOnePassword', () => {
       ]),
     );
     expect(JSON.stringify(result.diagnostics)).not.toContain('private-');
+  });
+
+  it('recovers readable siblings from mixed content and keeps JSON-looking strings literal', () => {
+    const literal = '  {"file":"raw", "passkey":[]}  ';
+    const result = parseOnePassword(
+      archive(
+        exportData([
+          {
+            ...item,
+            details: {
+              loginFields: [
+                { designation: 'password', value: literal, fieldType: 'json' },
+                {
+                  name: 'Password candidate',
+                  designation: 'password',
+                  value: { custom: ['second'] },
+                },
+              ],
+              sections: [
+                {
+                  title: 'Recovery',
+                  fields: [
+                    {
+                      id: 'stable-field',
+                      title: 'Mixed',
+                      value: {
+                        data: { file: 'reference text', flags: [false, 0] },
+                        file: { documentId: 'private-document-id' },
+                        passkeys: [{ credentialId: 'private-passkey-id' }],
+                        nested: { binary: { value: 'private-binary-value' } },
+                      },
+                    },
+                    {
+                      title: 'Attachments only',
+                      value: { attachments: [{ attachmentId: 'private-id' }] },
+                    },
+                  ],
+                },
+              ],
+              extra: { file: 'benign literal', backup: { type: 'Buffer', data: [1, 2, 3] } },
+            },
+          },
+        ]),
+      ),
+    );
+
+    const [entry] = result.entries;
+    expect(entry.password).toBe(literal);
+    expect(entry.fieldMetadata?.password?.sourceFieldType).toBe('string');
+    expect(entry.extraFields).toEqual(
+      expect.arrayContaining([
+        {
+          key: 'Recovery: Mixed',
+          value: '{"data":{"file":"reference text","flags":[false,0]}}',
+          metadata: {
+            sourceKey: 'stable-field',
+            sourceSection: 'Recovery',
+            sourceSectionIdentity: '0',
+            sourceFieldType: 'json',
+          },
+        },
+        expect.objectContaining({ key: 'details/extra', value: '{"file":"benign literal"}' }),
+        expect.objectContaining({
+          key: 'Password candidate',
+          value: '{"custom":["second"]}',
+          metadata: expect.objectContaining({ sourceFieldType: 'json' }),
+        }),
+      ]),
+    );
+    expect(entry.extraFields).toHaveLength(4);
+    expect(result.warnings).toContain(
+      'Item "Card", Recovery field "Attachments only" was skipped.',
+    );
+    expect(
+      result.diagnostics?.filter(({ code }) => code === 'onepassword-partial-recovery'),
+    ).toHaveLength(2);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'unsupported',
+          message: 'Unsupported attachment content was omitted.',
+        }),
+        expect.objectContaining({
+          kind: 'unsupported',
+          message: 'Unsupported passkey content was omitted.',
+        }),
+        expect.objectContaining({
+          kind: 'unsupported',
+          message: 'Unsupported binary content was omitted.',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(result.diagnostics)).not.toContain('private-');
+  });
+
+  it('preserves primary website labels and keeps alternative labels with their websites', () => {
+    const result = parseOnePassword(
+      archive(
+        exportData([
+          {
+            ...item,
+            overview: {
+              ...item.overview,
+              urls: [
+                { url: item.overview.url, label: 'Console' },
+                { url: item.overview.url, label: 'Console' },
+                ...item.overview.urls,
+              ],
+            },
+          },
+        ]),
+      ),
+    );
+    expect(result.entries[0].extraFields.slice(0, 2)).toEqual([
+      {
+        key: 'Primary URL label',
+        value: 'Console',
+        metadata: { sourceKey: 'label', sourceAutoMapping: 'manual-only' },
+      },
+      expect.objectContaining({ key: 'URL: other', value: 'https://other.example' }),
+    ]);
   });
 
   it('retains source-level diagnostics when every item is file-only', () => {

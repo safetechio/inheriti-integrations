@@ -200,7 +200,8 @@ describe('useImportLifecycle', () => {
     expect(Object.values(session.fieldsById).map(({ value }) => value.reveal())).toEqual([
       'first',
       'custom',
-      '["two words","x,y"]',
+      'two words',
+      'x,y',
       'second',
       'third',
       'fourth',

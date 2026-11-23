@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import { getImportablePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
 import type { ImportSession } from '@modules/import/domain/import-model';
 import { FieldAliasSuggestionStrategy } from '@modules/mapping/application/strategies/field-alias-strategy';
 import { suggestWithFallback } from '@modules/mapping/application/suggestion-engine';
@@ -21,7 +21,7 @@ export function useMappingSuggestions(
     const found = suggestWithFallback([new FieldAliasSuggestionStrategy()], {
       session,
       nodeIds,
-      knownAssetTypes: new Set(getCorePlanAssetTypes()),
+      knownAssetTypes: new Set(getImportablePlanAssetTypes()),
     });
     setSuggestions(found);
     setSelectedSuggestionKeys(new Set(found.map(suggestionKey)));

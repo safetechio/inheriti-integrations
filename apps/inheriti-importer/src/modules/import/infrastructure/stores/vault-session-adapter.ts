@@ -1,5 +1,16 @@
-import { extraFieldIds, sourceFieldId } from '@modules/import/domain/vault';
-import { SensitiveValue, type ImportSession } from '@modules/import/domain/import-model';
+import { expandStructuredExtraFields } from '@modules/import/domain/structured-extra-fields';
+import {
+  canonicalFieldMetadata,
+  canonicalFieldNames,
+  entrySourceHints,
+  extraFieldIds,
+  sourceFieldId,
+} from '@modules/import/domain/vault';
+import {
+  SensitiveValue,
+  type ImportedField,
+  type ImportSession,
+} from '@modules/import/domain/import-model';
 import type { VaultState } from './vault-store';
 
 /**
@@ -35,20 +46,32 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
           ? entry.group.split(' / ')
           : [entry.group]
         : [];
-    const fields = [
-      ['username', entry.username],
-      ['password', entry.password],
-      ['url', entry.url],
-      ['notes', entry.notes],
-    ];
-    const fieldIds = fields
-      .filter(([, value]) => value)
-      .map(([name, value]) => addField(session, entry.id, entry.sourceId, name, value));
-    const extraIds = extraFieldIds(entry);
-    entry.extraFields.forEach(({ key, value }, index) => {
+    const fieldIds = canonicalFieldNames
+      .filter((name) => entry[name])
+      .map((name) =>
+        addField(
+          session,
+          entry.id,
+          entry.sourceId,
+          name,
+          entry[name],
+          canonicalFieldMetadata(entry, name),
+        ),
+      );
+    const extraFields = expandStructuredExtraFields(entry.extraFields);
+    const extraIds = extraFieldIds({ id: entry.id, extraFields });
+    extraFields.forEach(({ key, value, metadata }, index) => {
       if (value)
         fieldIds.push(
-          addField(session, entry.id, entry.sourceId, `extra:${key}`, value, extraIds[index]),
+          addField(
+            session,
+            entry.id,
+            entry.sourceId,
+            `extra:${key}`,
+            value,
+            { sourceKey: key, ...metadata },
+            extraIds[index],
+          ),
         );
     });
     session.nodesById[entry.id] = {
@@ -60,6 +83,7 @@ export function importSessionFromVaultState(state: VaultState): ImportSession {
       path,
       childNodeIds: [],
       fieldIds,
+      sourceHints: entrySourceHints(entry, sourceKind),
     };
     session.rootNodeIds.push(entry.id);
   }
@@ -73,6 +97,7 @@ function addField(
   sourceId: string,
   fieldName: string,
   value: string,
+  metadata: ImportedField['metadata'],
   id = sourceFieldId(entryId, fieldName),
 ): string {
   session.fieldsById[id] = {
@@ -82,7 +107,7 @@ function addField(
     sourcePath: [entryId, fieldName],
     name: fieldName,
     value: new SensitiveValue(value),
-    metadata: fieldName === 'notes' ? { role: 'notes' } : {},
+    metadata,
   };
   return id;
 }

@@ -1,5 +1,9 @@
 import { parseAllDocuments } from 'yaml';
-import { VaultFormatError, type ParseResult } from '@modules/import/domain/vault';
+import {
+  VaultFormatError,
+  type ParseResult,
+  type SourceFieldMetadata,
+} from '@modules/import/domain/vault';
 import {
   asString,
   decodeText,
@@ -7,6 +11,7 @@ import {
   flattenStringMap,
   isRecord,
   stripExtension,
+  structuredFieldMetadata,
   tryParseJson,
   type LooseRecord,
 } from './utils/secret-fields';
@@ -21,6 +26,7 @@ type VaultBundle = {
   group: string;
   notes: string;
   secrets: Record<string, string>;
+  extraFieldMetadata: ReadonlyMap<string, SourceFieldMetadata>;
 };
 
 class VaultParser {
@@ -45,6 +51,7 @@ class VaultParser {
         title: bundle.title || `Secret ${index + 1}`,
         group: bundle.group,
         notes: bundle.notes,
+        extraFieldMetadata: bundle.extraFieldMetadata,
       }),
     );
 
@@ -80,21 +87,28 @@ class VaultParser {
     const wrapped = this.unwrapPayload(value);
     if (wrapped) return [wrapped];
 
-    const named = this.flattenNamedSecrets(value);
-    if (named.length > 0) return named;
-
-    const flat = flattenStringMap(value);
-    if (!flat || !this.looksLikeSecretMap(flat)) return [];
-    return [{ title: 'Vault secrets', group: '', notes: '', secrets: flat }];
+    const remaining = new Map(Object.entries(value));
+    const named = this.flattenNamedSecrets(value, remaining);
+    const fields = Object.fromEntries(remaining);
+    const flat = flattenStringMap(fields);
+    if (flat && this.looksLikeSecretMap(flat)) {
+      named.push({
+        title: 'Vault secrets',
+        group: '',
+        notes: '',
+        secrets: flat,
+        extraFieldMetadata: structuredFieldMetadata(fields),
+      });
+    }
+    return named;
   }
 
   private unwrapPayload(value: LooseRecord): VaultBundle | null {
     if (!this.isVaultEnvelope(value)) return null;
 
     const inner = isRecord(value.data) ? value.data : {};
-    const kv2 = isRecord(inner.data) ? flattenStringMap(inner.data) : null;
-    const kv1 = flattenStringMap(inner);
-    const secrets = kv2 ?? kv1 ?? {};
+    const fields = isRecord(inner.data) && flattenStringMap(inner.data) ? inner.data : inner;
+    const secrets = flattenStringMap(fields) ?? {};
     if (Object.keys(secrets).length === 0) return null;
 
     const metadata = isRecord(inner.metadata) ? inner.metadata : {};
@@ -107,18 +121,22 @@ class VaultParser {
       group: path.includes('/') ? path.split('/').slice(0, -1).join('/') : '',
       notes: path,
       secrets,
+      extraFieldMetadata: structuredFieldMetadata(fields),
     };
   }
 
-  private flattenNamedSecrets(value: LooseRecord): VaultBundle[] {
+  private flattenNamedSecrets(value: LooseRecord, remaining: Map<string, unknown>): VaultBundle[] {
     // Treat each key as a secret path when the document is a KV dump.
     if (this.isVaultEnvelope(value) || value.request_id != null) return [];
 
     const bundles: VaultBundle[] = [];
+    const allRecords = Object.values(value).every(isRecord);
     for (const [path, item] of Object.entries(value)) {
       if (!isRecord(item)) continue;
+      if (!allRecords && !path.includes('/') && !this.isVaultEnvelope(item)) continue;
       const wrapped = this.unwrapPayload(item);
       if (wrapped) {
+        remaining.delete(path);
         bundles.push({
           ...wrapped,
           title: wrapped.title || path.split('/').filter(Boolean).at(-1) || path,
@@ -127,13 +145,16 @@ class VaultParser {
         });
         continue;
       }
-      const map = isRecord(item.data) ? flattenStringMap(item.data) : flattenStringMap(item);
+      const fields = isRecord(item.data) && Object.keys(item).length === 1 ? item.data : item;
+      const map = flattenStringMap(fields);
       if (map) {
+        remaining.delete(path);
         bundles.push({
           title: path.split('/').filter(Boolean).at(-1) || path,
           group: path.includes('/') ? path.split('/').slice(0, -1).join('/') : '',
           notes: path,
           secrets: map,
+          extraFieldMetadata: structuredFieldMetadata(fields),
         });
       }
     }

@@ -78,7 +78,39 @@ describe('parseVault', () => {
       'nested.json',
     );
 
-    expect(result.entries[0].extraFields).toEqual([{ key: 'config', value: '{"region":"eu"}' }]);
+    expect(result.entries[0].extraFields).toEqual([
+      {
+        key: 'config',
+        value: '{"region":"eu"}',
+        metadata: { sourceKey: 'config', sourceFieldType: 'json' },
+      },
+    ]);
+  });
+
+  it('keeps fields beside named paths without promoting structured aliases', () => {
+    const result = parseVault(
+      buffer(
+        JSON.stringify({
+          'secret/ops/db': { username: 'example' },
+          TOKEN: 'opaque',
+          password: { parts: ['one', 'two'] },
+        }),
+      ),
+    );
+
+    expect(result.entries).toHaveLength(2);
+    expect(result.entries[1]).toMatchObject({
+      title: 'Vault secrets',
+      password: '',
+      extraFields: [
+        { key: 'TOKEN', value: 'opaque' },
+        {
+          key: 'password',
+          value: '{"parts":["one","two"]}',
+          metadata: { sourceFieldType: 'json' },
+        },
+      ],
+    });
   });
 
   it('rejects malformed YAML documents', () => {

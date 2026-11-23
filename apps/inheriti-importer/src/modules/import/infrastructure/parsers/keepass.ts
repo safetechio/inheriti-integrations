@@ -2,12 +2,15 @@ import * as kdbxweb from 'kdbxweb';
 import { setupKdbxCrypto } from '@shared/infrastructure/crypto/crypto-engine';
 import { VaultUnlockError, type ParseResult, type VaultEntry } from '@modules/import/domain/vault';
 
+import type { ImportDiagnostic } from '@modules/import/domain/import-diagnostic';
+
 const KEEPASS_STANDARD_FIELDS = new Set(['Title', 'UserName', 'Password', 'URL', 'Notes', 'Tags']);
 
 type KeepassOptions = { password?: string; keyFile?: ArrayBuffer; fileName?: string };
 
 class KeepassParser {
   private readonly entries: Omit<VaultEntry, 'sourceId'>[] = [];
+  private readonly diagnostics: ImportDiagnostic[] = [];
   private readonly warnings: string[] = [];
 
   constructor(
@@ -29,6 +32,7 @@ class KeepassParser {
         this.stripExtension(this.options.fileName ?? 'KeePass database'),
       entries: this.entries,
       warnings: this.warnings,
+      diagnostics: this.diagnostics,
     };
   }
 
@@ -79,16 +83,19 @@ class KeepassParser {
     }
   }
   private mapEntry(entry: kdbxweb.KdbxEntry, groupPath: string[]): Omit<VaultEntry, 'sourceId'> {
+    const id = this.uuidOf(entry.uuid);
     const extraFields: VaultEntry['extraFields'] = [];
+    const read = (key: string, value = this.fieldValue(entry.fields, key)) =>
+      this.readField(value, key, id);
 
     for (const [key, value] of this.readEntries(entry.fields)) {
       if (KEEPASS_STANDARD_FIELDS.has(key)) continue;
-      const text = this.readField(value);
+      const text = read(key, value);
       if (text) extraFields.push({ key, value: text });
     }
 
     const rawTags = Array.isArray(entry.tags) ? entry.tags : [];
-    const rawTagsField = this.readField(this.fieldValue(entry.fields, 'Tags'));
+    const rawTagsField = read('Tags');
     if (rawTags.length) {
       extraFields.push({ key: 'Source tags', value: JSON.stringify(rawTags) });
     }
@@ -98,16 +105,22 @@ class KeepassParser {
       : this.splitTags(rawTagsField);
 
     return {
-      id: this.uuidOf(entry.uuid),
-      title: this.readField(this.fieldValue(entry.fields, 'Title')),
-      username: this.readField(this.fieldValue(entry.fields, 'UserName')),
-      password: this.readField(this.fieldValue(entry.fields, 'Password')),
-      url: this.readField(this.fieldValue(entry.fields, 'URL')),
-      notes: this.readField(this.fieldValue(entry.fields, 'Notes')),
+      id,
+      title: read('Title'),
+      username: read('UserName'),
+      password: read('Password'),
+      url: read('URL'),
+      notes: read('Notes'),
       group: groupPath.join(' / '),
       groupPath: [...groupPath],
       tags,
       extraFields,
+      fieldMetadata: {
+        username: { sourceKey: 'UserName', sourceRole: 'username' },
+        password: { sourceKey: 'Password', sourceRole: 'password' },
+        url: { sourceKey: 'URL', sourceRole: 'url' },
+        notes: { sourceKey: 'Notes', sourceRole: 'notes' },
+      },
       category: '',
       team: '',
     };
@@ -131,13 +144,21 @@ class KeepassParser {
     return uuid.toString();
   }
 
-  private readField(value: unknown): string {
+  private readField(value: unknown, key: string, entryId: string): string {
     if (value == null) return '';
     if (typeof value === 'string') return value;
     if (typeof value === 'object' && 'getText' in value && typeof value.getText === 'function') {
       try {
         return String(value.getText() ?? '');
       } catch {
+        this.diagnostics.push({
+          code: 'keepass-unreadable-protected-field',
+          kind: 'unsupported',
+          message: 'A protected KeePass field could not be read.',
+          count: 1,
+          entryId,
+          sourcePath: [key],
+        });
         return '';
       }
     }

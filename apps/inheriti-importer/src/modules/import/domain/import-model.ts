@@ -1,4 +1,5 @@
 import type { ImportDiagnostic } from './import-diagnostic';
+import type { ImportSourceHints } from './vault';
 
 /**
  * The normalized source model every parser adapter produces. The mapping
@@ -61,6 +62,7 @@ export interface ImportedNode {
   path: string[];
   childNodeIds: string[];
   fieldIds: string[];
+  sourceHints?: ImportSourceHints;
 }
 
 export interface ImportedField {

@@ -5,7 +5,47 @@ export interface ImportDiagnostic {
   message: string;
   count: number;
   entryId?: string;
+  entryName?: string;
   sourcePath?: string[];
+}
+
+const sourceMetadataCodes = new Set([
+  'onepassword-container-metadata',
+  'onepassword-item-metadata',
+  'onepassword-login-settings',
+  'onepassword-url-metadata',
+  'onepassword-field-settings',
+  'passbolt-resource-metadata',
+]);
+
+/** Keep source configuration omissions distinct from unsupported credential content. */
+export function importDiagnosticCategory(diagnostic: Pick<ImportDiagnostic, 'code' | 'kind'>) {
+  return diagnostic.kind === 'skipped' && sourceMetadataCodes.has(diagnostic.code)
+    ? 'metadata'
+    : diagnostic.kind;
+}
+
+export type ImportDiagnosticGroup = Pick<
+  ImportDiagnostic,
+  'code' | 'kind' | 'message' | 'count'
+> & {
+  occurrences: ImportDiagnostic[];
+};
+
+export function groupImportDiagnostics(diagnostics: readonly ImportDiagnostic[] = []) {
+  const groups = new Map<string, ImportDiagnosticGroup>();
+  for (const diagnostic of diagnostics) {
+    const { code, kind, message, count } = diagnostic;
+    const key = JSON.stringify([code, kind, message]);
+    const previous = groups.get(key);
+    if (previous) {
+      previous.count += count;
+      previous.occurrences.push(diagnostic);
+    } else {
+      groups.set(key, { code, kind, message, count, occurrences: [diagnostic] });
+    }
+  }
+  return [...groups.entries()];
 }
 
 export function resolveEntryDiagnostics(

@@ -11,6 +11,86 @@ function b64(text: string): string {
 }
 
 describe('parseKubernetes', () => {
+  it('does not parse raw JSON from an invalid-base64 or shadowed Docker data field', () => {
+    const raw = JSON.stringify({
+      auths: { 'registry.invalid': { username: 'old-user', password: 'old-password' } },
+    });
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'Secret',
+          metadata: { name: 'docker-override' },
+          type: 'kubernetes.io/dockerconfigjson',
+          stringData: { '.dockerconfigjson': '' },
+          data: { '.dockerconfigjson': raw },
+        }),
+      ),
+      'docker.json',
+    );
+    expect(result.entries[0].password).toBe('');
+    expect(result.entries[0].extraFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: raw,
+          metadata: expect.objectContaining({ sourceAutoMapping: 'manual-only' }),
+        }),
+      ]),
+    );
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'k8s-docker-unreadable-payload' })]),
+    );
+  });
+
+  it('does not infer superseded data when stringData explicitly overrides it with empty text', () => {
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'Secret',
+          metadata: { name: 'empty-override' },
+          stringData: { password: '' },
+          data: { password: b64('superseded') },
+        }),
+      ),
+      'empty.json',
+    );
+    expect(result.entries[0].password).toBe('');
+    expect(result.entries[0].extraFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: 'superseded',
+          metadata: expect.objectContaining({ sourceAutoMapping: 'manual-only' }),
+        }),
+      ]),
+    );
+  });
+
+  it('retains lower-priority data conflicts for manual mapping without hiding the primary login', () => {
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'Secret',
+          metadata: { name: 'collision' },
+          stringData: { username: 'current-user', password: 'current-password' },
+          data: { password: b64('alternate-password') },
+        }),
+      ),
+      'collision.json',
+    );
+    expect(result.entries[0].password).toBe('current-password');
+    expect(result.entries[0].extraFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'password (2)',
+          value: 'alternate-password',
+          metadata: expect.objectContaining({
+            sourceAutoMapping: 'manual-only',
+            sourcePath: '["data","password"]',
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('reads an Opaque Secret from YAML', () => {
     const result = parseKubernetes(
       buffer(`apiVersion: v1
@@ -33,6 +113,7 @@ data:
       username: 'ada',
       password: 's3cret',
       group: 'production',
+      sourceHints: { category: 'Secret' },
     });
   });
 
@@ -109,6 +190,7 @@ data:
     );
     expect(result.entries[1]).toMatchObject({
       title: 'app-config',
+      sourceHints: { category: 'ConfigMap' },
       password: '',
     });
     expect(result.entries[1].extraFields).toEqual([{ key: 'LOG_LEVEL', value: 'info' }]);
@@ -148,6 +230,75 @@ data:
     );
   });
 
+  it('keeps malformed Docker payloads for manual mapping alongside sibling keys', () => {
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'Secret',
+          type: 'kubernetes.io/dockerconfigjson',
+          data: { '.dockerconfigjson': b64('{broken'), sibling: b64('retained') },
+        }),
+      ),
+    );
+
+    expect(result.entries[0].extraFields).toMatchObject([
+      {
+        key: '.dockerconfigjson',
+        value: '{broken',
+        metadata: { sourceAutoMapping: 'manual-only' },
+      },
+      { key: 'sibling', value: 'retained' },
+    ]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'k8s-docker-unreadable-payload',
+        count: 1,
+        sourcePath: ['data', '.dockerconfigjson'],
+      }),
+    ]);
+  });
+
+  it('retains unconsumed Docker config and auth values with collision-safe labels', () => {
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'Secret',
+          stringData: {
+            email: 'sibling',
+            '.dockerconfigjson': JSON.stringify({
+              credsStore: 'helper',
+              auths: {
+                registry: {
+                  username: 'explicit',
+                  password: 'pass',
+                  auth: b64('conflicting:other'),
+                  email: 'registry email',
+                },
+                unsupported: 'raw member',
+              },
+            }),
+          },
+        }),
+      ),
+    );
+
+    const [entry] = result.entries;
+    expect(entry).toMatchObject({ username: 'explicit', password: 'pass', url: 'registry' });
+    expect(entry.extraFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'email', value: 'sibling' }),
+        expect.objectContaining({ key: 'email (2)', value: 'registry email' }),
+        expect.objectContaining({ key: 'credsStore', value: 'helper' }),
+        expect.objectContaining({
+          key: 'auth',
+          value: b64('conflicting:other'),
+          metadata: expect.objectContaining({ sourceAutoMapping: 'manual-only' }),
+        }),
+        expect.objectContaining({ key: 'unsupported', value: 'raw member' }),
+      ]),
+    );
+  });
+
   it('rejects malformed YAML documents', () => {
     expect(() =>
       parseKubernetes(buffer('kind: Secret\nmetadata: [broken\n'), 'broken.yaml'),
@@ -157,5 +308,25 @@ data:
   it('keeps invalid UTF-8 base64 encoded values intact', () => {
     const encoded = Buffer.from([0xff, 0xfe]).toString('base64');
     expect(decodeBase64(encoded)).toEqual({ text: encoded, binary: true });
+    const result = parseKubernetes(
+      buffer(
+        JSON.stringify({
+          kind: 'ConfigMap',
+          binaryData: { 'blob.bin': encoded },
+        }),
+      ),
+    );
+    expect(result.entries[0].extraFields).toEqual([
+      {
+        key: 'blob.bin (base64)',
+        value: encoded,
+        metadata: {
+          sourceKey: 'blob.bin',
+          sourceFieldType: 'base64',
+          sourcePath: '["binaryData","blob.bin"]',
+          sourceAutoMapping: 'manual-only',
+        },
+      },
+    ]);
   });
 });

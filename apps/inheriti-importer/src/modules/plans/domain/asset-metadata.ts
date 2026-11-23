@@ -56,6 +56,10 @@ export function getCorePlanAssetTypes(): PlanAssetType[] {
     .map((definition) => definition.id) as PlanAssetType[];
 }
 
+export function getImportablePlanAssetTypes(): PlanAssetType[] {
+  return getCorePlanAssetTypes().filter((type) => !mediaTypes.has(type));
+}
+
 export function getPlanAssetIconName(type?: string): string | undefined {
   const resolved = resolvePlanAssetUiType(type);
   return definitionService.getCoreDefinitions().find((definition) => definition.id === resolved)

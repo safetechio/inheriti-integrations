@@ -13,6 +13,7 @@ export interface SourceCoverageField {
   name: string;
   sourceId: string;
   nodeId: string;
+  nodeName?: string;
   status: 'mapped' | 'protected' | 'excluded' | 'pending' | 'invalid';
   destinations: Array<{ assetId: string; fieldId: string; valid?: boolean }>;
 }
@@ -65,6 +66,7 @@ export function sourceCoverage(
         name: field.name,
         sourceId: field.sourceId,
         nodeId: field.parentNodeId,
+        nodeName: session.nodesById[field.parentNodeId]?.name,
         status: valid.some((destination) => destination.protectedText)
           ? 'protected'
           : valid.length
@@ -84,7 +86,16 @@ export function sourceCoverage(
   return {
     fields,
     diagnostics: session.sources.flatMap((source) =>
-      (source.diagnostics ?? []).map((diagnostic) => ({ ...diagnostic, sourceId: source.id })),
+      (source.diagnostics ?? []).map((diagnostic) => {
+        const node = diagnostic.entryId ? session.nodesById[diagnostic.entryId] : undefined;
+        return {
+          ...diagnostic,
+          sourceId: source.id,
+          ...(node?.sourceId === source.id && node.kind === 'entry'
+            ? { entryName: node.name }
+            : {}),
+        };
+      }),
     ),
     ready: fields.every((field) => field.status !== 'invalid' && field.status !== 'pending'),
   };

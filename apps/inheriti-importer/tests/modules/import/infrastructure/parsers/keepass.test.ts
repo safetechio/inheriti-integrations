@@ -1,6 +1,6 @@
 import * as kdbxweb from 'kdbxweb';
 import { readFile } from 'node:fs/promises';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { setupKdbxCrypto } from '@shared/infrastructure/crypto/crypto-engine';
 import { parseKeepass } from '@modules/import/infrastructure/parsers/keepass';
 import { VaultUnlockError } from '@modules/import/domain/vault';
@@ -85,6 +85,41 @@ describe('parseKeepass', () => {
       ['literal', ['A / B']],
       ['nested', ['A', 'B']],
     ]);
+  });
+
+  it('reports unreadable protected fields without dropping readable fields or exposing errors', async () => {
+    const data = await makeDatabase('example');
+    const db = await kdbxweb.Kdbx.load(
+      data,
+      new kdbxweb.Credentials(kdbxweb.ProtectedValue.fromString('example')),
+    );
+    const entry = db.getDefaultGroup().groups.find((group) => group.name === 'Engineering')!
+      .entries[0];
+    const protectedValue = entry.fields.get('Password') as kdbxweb.ProtectedValue;
+    const read = vi.spyOn(protectedValue, 'getText').mockImplementation(() => {
+      throw new Error('private diagnostic content');
+    });
+    const load = vi.spyOn(kdbxweb.Kdbx, 'load').mockResolvedValue(db);
+    try {
+      const result = await parseKeepass(data, { password: 'example' });
+      expect(result.entries[0]).toMatchObject({
+        username: 'ada',
+        password: '',
+        extraFields: expect.arrayContaining([{ key: 'Token', value: 'extra-token' }]),
+      });
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          code: 'keepass-unreadable-protected-field',
+          count: 1,
+          sourcePath: ['Password'],
+          entryId: result.entries[0].id,
+        }),
+      ]);
+      expect(JSON.stringify(result.diagnostics)).not.toContain('private diagnostic content');
+    } finally {
+      load.mockRestore();
+      read.mockRestore();
+    }
   });
 
   it('asks for a password when the database is locked', async () => {

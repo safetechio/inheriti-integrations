@@ -35,7 +35,7 @@ export function isOnePasswordCsv(text: string): boolean {
 
 export function parseOnePasswordCsv(text: string, fileName: string): ParseResult {
   const result = Papa.parse<string[]>(text, { delimiter: ',', skipEmptyLines: true });
-  const rows = result.data.slice(1);
+  const [headers, ...rows] = result.data;
   if (result.errors.length || rows.some((row) => row.length !== FIELD_ORDER.length)) {
     throw new VaultFormatError('The 1Password CSV has malformed or incomplete rows.');
   }
@@ -52,6 +52,12 @@ export function parseOnePasswordCsv(text: string, fileName: string): ParseResult
         url,
         notes,
         group: '',
+        fieldMetadata: {
+          username: { sourceKey: headers[2], sourceRole: 'username' },
+          password: { sourceKey: headers[3], sourceRole: 'password' },
+          url: { sourceKey: headers[1], sourceRole: 'url' },
+          notes: { sourceKey: headers[8], sourceRole: 'notes' },
+        },
         tags: tags
           ? tags
               .split(',')
@@ -59,10 +65,26 @@ export function parseOnePasswordCsv(text: string, fileName: string): ParseResult
               .filter(Boolean)
           : [],
         extraFields: [
-          { key: 'OTPAuth', value: otp },
-          { key: 'Favorite', value: favorite },
-          { key: 'Archived', value: archived },
-          { key: 'Tags', value: tags },
+          {
+            key: 'OTPAuth',
+            value: otp,
+            metadata: { sourceKey: headers[4], sourceFieldType: 'otp' },
+          },
+          {
+            key: 'Favorite',
+            value: favorite,
+            metadata: { sourceKey: headers[5], sourceAutoMapping: 'manual-only' },
+          },
+          {
+            key: 'Archived',
+            value: archived,
+            metadata: { sourceKey: headers[6], sourceAutoMapping: 'manual-only' },
+          },
+          {
+            key: 'Tags',
+            value: tags,
+            metadata: { sourceKey: headers[7], sourceAutoMapping: 'manual-only' },
+          },
         ].filter(({ value }) => value !== ''),
         category: '',
         team: '',

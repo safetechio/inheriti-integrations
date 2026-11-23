@@ -1,4 +1,10 @@
-import { VaultFormatError, type ParseResult } from '@modules/import/domain/vault';
+import { hasLosslessJsonNumbers } from '@modules/import/domain/structured-extra-fields';
+import type { ImportDiagnostic } from '@modules/import/domain/import-diagnostic';
+import {
+  VaultFormatError,
+  type ParseResult,
+  type SourceFieldMetadata,
+} from '@modules/import/domain/vault';
 import {
   asString,
   decodeBase64,
@@ -7,6 +13,7 @@ import {
   flattenStringMap,
   isRecord,
   stripExtension,
+  structuredFieldMetadata,
   tryParseJson,
   type LooseRecord,
 } from './utils/secret-fields';
@@ -19,12 +26,15 @@ type CloudBundle = {
   id?: string;
   title: string;
   group: string;
-  tags: string[];
+  provider: 'aws' | 'azure' | 'gcp';
   notes: string;
   secrets: Record<string, string>;
+  extraFieldMetadata?: ReadonlyMap<string, SourceFieldMetadata>;
 };
 
 class CloudParser {
+  private readonly diagnostics: ImportDiagnostic[] = [];
+
   constructor(
     private readonly data: ArrayBuffer,
     private readonly fileName: string,
@@ -36,7 +46,7 @@ class CloudParser {
       throw new VaultFormatError('This cloud secret export is not valid JSON.');
     }
 
-    const bundles = this.extractCloudSecrets(parsed);
+    const bundles = this.extractCloudSecrets(parsed, []);
     if (bundles.length === 0) {
       throw new VaultFormatError(
         'No AWS, Azure, or Google cloud secrets were found. Import a get-secret-value / secret show JSON export.',
@@ -48,8 +58,10 @@ class CloudParser {
         id: bundle.id || `cloud-${index + 1}`,
         title: bundle.title || `Secret ${index + 1}`,
         group: bundle.group,
-        tags: bundle.tags,
+        tags: [bundle.provider],
+        sourceHints: { provider: bundle.provider },
         notes: bundle.notes,
+        extraFieldMetadata: bundle.extraFieldMetadata,
       }),
     );
 
@@ -58,33 +70,36 @@ class CloudParser {
       name: stripExtension(this.fileName),
       entries,
       warnings: [],
+      diagnostics: this.diagnostics,
     };
   }
 
-  private extractCloudSecrets(value: unknown): CloudBundle[] {
-    // Exports may wrap one or more secrets in provider-specific lists.
+  private extractCloudSecrets(value: unknown, sourcePath: string[]): CloudBundle[] {
     if (Array.isArray(value)) {
-      return value.flatMap((item) => this.extractCloudSecrets(item));
+      return value.flatMap((item, index) =>
+        this.extractCloudSecrets(item, [...sourcePath, String(index)]),
+      );
     }
-    if (!isRecord(value)) return [];
-
-    const listKeys = ['SecretValues', 'SecretList', 'value', 'secrets', 'items'];
-    for (const key of listKeys) {
-      if (Array.isArray(value[key])) {
-        const nested = value[key].flatMap((item) => this.extractCloudSecrets(item));
-        if (nested.length > 0) return nested;
+    if (isRecord(value)) {
+      const bundle =
+        this.readAwsSecret(value) ?? this.readAzureSecret(value) ?? this.readGcpSecret(value);
+      const listKeys = ['SecretValues', 'SecretList', 'value', 'secrets', 'items'].filter((key) =>
+        Array.isArray(value[key]),
+      );
+      if (bundle || listKeys.length) {
+        return [
+          ...(bundle ? [bundle] : []),
+          ...listKeys.flatMap((key) => this.extractCloudSecrets(value[key], [...sourcePath, key])),
+        ];
       }
     }
-
-    const aws = this.readAwsSecret(value);
-    if (aws) return [aws];
-
-    const azure = this.readAzureSecret(value);
-    if (azure) return [azure];
-
-    const gcp = this.readGcpSecret(value);
-    if (gcp) return [gcp];
-
+    this.diagnostics.push({
+      code: 'cloud-unsupported-record',
+      kind: 'unsupported',
+      count: 1,
+      message: 'A cloud export record had no supported secret payload.',
+      sourcePath,
+    });
     return [];
   }
 
@@ -99,14 +114,24 @@ class CloudParser {
     if (!secretString && !secretBinary) return null;
 
     const title = name || this.lastSegment(arn, ':') || 'AWS secret';
-    const payload = secretString || decodeBase64(secretBinary).text;
+    const decoded = decodeBase64(secretBinary);
+    const payload =
+      secretString || !decoded.binary
+        ? this.secretsFromPayload(secretString || decoded.text, title)
+        : this.binaryPayload('SecretBinary', secretBinary);
+    if (secretString && secretBinary) {
+      let key = 'SecretBinary (base64)';
+      while (Object.hasOwn(payload.secrets, key)) key += ' (source)';
+      payload.secrets[key] = secretBinary;
+      payload.extraFieldMetadata.set(key, this.binaryMetadata('SecretBinary'));
+    }
     return {
       id: asString(value.ARN) || asString(value.VersionId) || undefined,
       title,
       group: this.regionFromArn(arn),
-      tags: ['aws'],
+      provider: 'aws',
       notes: arn,
-      secrets: this.secretsFromPayload(payload, title),
+      ...payload,
     };
   }
 
@@ -121,9 +146,9 @@ class CloudParser {
       id: id || undefined,
       title: name,
       group: this.vaultNameFromAzureId(id),
-      tags: ['azure'],
+      provider: 'azure',
       notes: id,
-      secrets: this.secretsFromPayload(rawValue, name),
+      ...this.secretsFromPayload(rawValue, name),
     };
   }
 
@@ -140,18 +165,50 @@ class CloudParser {
       id: name || undefined,
       title,
       group: name.split('/secrets/')[0] || '',
-      tags: ['gcp'],
+      provider: 'gcp',
       notes: name,
-      secrets: this.secretsFromPayload(decoded.text, title),
+      ...(decoded.binary
+        ? this.binaryPayload('payload.data', data, ['payload', 'data'])
+        : this.secretsFromPayload(decoded.text, title)),
     };
   }
 
-  private secretsFromPayload(payload: string, fallbackKey: string): Record<string, string> {
+  private secretsFromPayload(payload: string, fallbackKey: string) {
     // Keep plain text as a named field when the payload is not a JSON object.
     const json = tryParseJson(payload);
+    if (json !== null && typeof json === 'object' && !hasLosslessJsonNumbers(payload)) {
+      const key = fallbackKey || 'value';
+      return {
+        secrets: { [key]: payload },
+        extraFieldMetadata: new Map<string, SourceFieldMetadata>([
+          [key, { sourceKey: key, sourceFieldType: 'json', sourceAutoMapping: 'manual-only' }],
+        ]),
+      };
+    }
     const map = flattenStringMap(json);
-    if (map) return map;
-    return { [fallbackKey || 'value']: payload };
+    if (map) return { secrets: map, extraFieldMetadata: structuredFieldMetadata(json) };
+
+    const key = fallbackKey || 'value';
+    const extraFieldMetadata = new Map<string, SourceFieldMetadata>();
+    if (Array.isArray(json)) extraFieldMetadata.set(key, { sourceFieldType: 'json' });
+    return { secrets: { [key]: payload }, extraFieldMetadata };
+  }
+
+  private binaryPayload(key: string, value: string, sourcePath = [key]) {
+    const label = `${key} (base64)`;
+    return {
+      secrets: { [label]: value },
+      extraFieldMetadata: new Map([[label, this.binaryMetadata(key, sourcePath)]]),
+    };
+  }
+
+  private binaryMetadata(key: string, sourcePath = [key]): SourceFieldMetadata {
+    return {
+      sourceKey: key,
+      sourcePath: JSON.stringify(sourcePath),
+      sourceFieldType: 'base64',
+      sourceAutoMapping: 'manual-only',
+    };
   }
 
   private lastSegment(value: string, delimiter: string): string {

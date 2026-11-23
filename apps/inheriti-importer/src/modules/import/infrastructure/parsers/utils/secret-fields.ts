@@ -1,4 +1,4 @@
-import type { ExtraField, VaultEntry } from '@modules/import/domain/vault';
+import type { ExtraField, SourceFieldMetadata, VaultEntry } from '@modules/import/domain/vault';
 
 const USERNAME_KEYS = new Set(['username', 'user', 'login', 'user_name', 'userid', 'user_id']);
 
@@ -56,7 +56,7 @@ export function tryParseJson(text: string): unknown | undefined {
 
 export function flattenStringMap(value: unknown): Record<string, string> | null {
   if (!isRecord(value)) return null;
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null);
   for (const [key, item] of Object.entries(value)) {
     if (item == null) continue;
     const text = typeof item === 'object' ? JSON.stringify(item) : asString(item);
@@ -64,6 +64,18 @@ export function flattenStringMap(value: unknown): Record<string, string> | null 
     if (text) result[key] = text;
   }
   return Object.keys(result).length > 0 ? result : null;
+}
+
+export function structuredFieldMetadata(source: unknown): Map<string, SourceFieldMetadata> {
+  const metadata = new Map<string, SourceFieldMetadata>();
+  if (isRecord(source)) {
+    for (const [key, value] of Object.entries(source)) {
+      if (value != null && typeof value === 'object') {
+        metadata.set(key, { sourceFieldType: 'json', sourceKey: key });
+      }
+    }
+  }
+  return metadata;
 }
 
 export function entryFromSecrets(
@@ -74,6 +86,8 @@ export function entryFromSecrets(
     group?: string;
     tags?: string[];
     notes?: string;
+    sourceHints?: VaultEntry['sourceHints'];
+    extraFieldMetadata?: ReadonlyMap<string, SourceFieldMetadata>;
   },
 ): Omit<VaultEntry, 'sourceId'> {
   const extraFields: ExtraField[] = [];
@@ -86,7 +100,13 @@ export function entryFromSecrets(
   const take = (keys: Set<string>, already: string): { value: string; key?: string } => {
     if (already) return { value: already };
     for (const [key, value] of Object.entries(secrets)) {
-      if (keys.has(normalizeKey(key)) && value) {
+      const metadata = meta.extraFieldMetadata?.get(key);
+      if (
+        keys.has(normalizeKey(key)) &&
+        value &&
+        metadata?.sourceAutoMapping !== 'manual-only' &&
+        metadata?.sourceFieldType !== 'json'
+      ) {
         return { value, key };
       }
     }
@@ -113,7 +133,8 @@ export function entryFromSecrets(
 
   for (const [key, value] of Object.entries(secrets)) {
     if (used.has(key) || !value) continue;
-    extraFields.push({ key, value });
+    const metadata = meta.extraFieldMetadata?.get(key);
+    extraFields.push({ key, value, ...(metadata ? { metadata } : {}) });
   }
 
   return {
@@ -126,6 +147,13 @@ export function entryFromSecrets(
     group: meta.group ?? '',
     tags: meta.tags ?? [],
     extraFields,
+    sourceHints: meta.sourceHints,
+    fieldMetadata: {
+      ...(userHit.key ? { username: { sourceKey: userHit.key } } : {}),
+      ...(passHit.key ? { password: { sourceKey: passHit.key } } : {}),
+      ...(urlHit.key ? { url: { sourceKey: urlHit.key } } : {}),
+      ...(notesHit.key ? { notes: { sourceKey: notesHit.key } } : {}),
+    },
     category: '',
     team: '',
   };

@@ -57,9 +57,10 @@ class PassboltParser {
       throw new VaultFormatError('This Passbolt file is not valid JSON.');
     }
 
-    const candidates = this.extractResources(parsed);
+    const { candidates, explicit } = this.extractResources(parsed);
     const resources = candidates.filter(
-      (value): value is LooseRecord => isRecord(value) && this.looksLikeResource(value),
+      (value): value is LooseRecord =>
+        isRecord(value) && (this.looksLikeResource(value) || (explicit && this.hasName(value))),
     );
     const skipped = candidates.length - resources.length;
     if (skipped)
@@ -129,25 +130,21 @@ class PassboltParser {
     };
   }
 
-  private extractResources(parsed: unknown): unknown[] {
-    // Passbolt exports use several envelope shapes across versions.
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
+  private extractResources(parsed: unknown): { candidates: unknown[]; explicit: boolean } {
+    if (Array.isArray(parsed)) return { candidates: parsed, explicit: false };
+    if (!isRecord(parsed)) return { candidates: [], explicit: false };
 
-    if (!isRecord(parsed)) return [];
-
-    const nestedKeys = ['resources', 'passwords', 'export', 'body', 'data'];
-    for (const key of nestedKeys) {
+    for (const key of ['resources', 'passwords', 'export', 'body', 'data']) {
       const value = parsed[key];
-      if (Array.isArray(value)) return value;
+      if (Array.isArray(value)) {
+        return { candidates: value, explicit: key === 'resources' || key === 'passwords' };
+      }
       if (isRecord(value) && Array.isArray(value.resources)) {
-        return value.resources;
+        return { candidates: value.resources, explicit: true };
       }
     }
 
-    if (this.looksLikeResource(parsed)) return [parsed];
-    return [];
+    return { candidates: [parsed], explicit: false };
   }
 
   private mapPassboltResource(resource: LooseRecord, index: number): Omit<VaultEntry, 'sourceId'> {
@@ -194,7 +191,20 @@ class PassboltParser {
         const text = valueText(value);
         if (!text) continue;
         if (typeof value !== 'string') transformed++;
-        extraFields.push({ key: prefix + key, value: text });
+        const path = prefix ? ['secret', key] : [key];
+        extraFields.push({
+          key: prefix + key,
+          value: text,
+          ...(typeof value === 'object'
+            ? {
+                metadata: {
+                  sourceFieldType: 'json',
+                  sourceKey: key,
+                  sourcePath: JSON.stringify(path),
+                },
+              }
+            : {}),
+        });
       }
     }
     if (transformed)
@@ -253,9 +263,15 @@ class PassboltParser {
     return '';
   }
 
+  private hasName(record: LooseRecord): boolean {
+    return ['name', 'Name', 'title', 'Title'].some(
+      (key) => typeof record[key] === 'string' && Boolean(record[key].trim()),
+    );
+  }
+
   private looksLikeResource(record: LooseRecord): boolean {
     return (
-      ['name', 'Name', 'title', 'Title'].some((key) => typeof record[key] === 'string') &&
+      this.hasName(record) &&
       [
         'username',
         'Username',
