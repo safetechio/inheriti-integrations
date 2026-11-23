@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { CLI_COMMAND } from './install-identity.js';
 import { BUILD_DEPLOYMENT, defaultConfigurationPath, resolveConfiguration } from './configuration.js';
 import { defaultSessionPath } from './session-store.js';
 import { createCliContext } from './session.js';
@@ -175,7 +176,7 @@ export async function run(
         const all = argumentsAfterVerb.at(-1) === '--all';
         const values = all ? argumentsAfterVerb.slice(0, -1) : argumentsAfterVerb;
         if (rest[0] === 'list' ? values.length !== 0 : values.length !== 1 || !values[0] || values[0].startsWith('--')) {
-          terminal.writeError(rest[0] === 'list' ? 'Usage: inheriti automations list [--all]' : 'Usage: inheriti automations grants PLAN_ID [--all]');
+          terminal.writeError(rest[0] === 'list' ? `Usage: ${CLI_COMMAND} automations list [--all]` : `Usage: ${CLI_COMMAND} automations grants PLAN_ID [--all]`);
           return 1;
         }
         return await automationMetadata(scoped, configuration, terminal, rest[0] === 'grants' ? values[0] : undefined, all);
@@ -278,10 +279,10 @@ if (isEntrypoint) {
   if (argv[0] === '__skill-install') {
     if (!process.env.CI && !(lifecycleInstall && process.getuid?.() === 0)) {
       const status = await installSkill(fileURLToPath(new URL('..', import.meta.url)), process.env, terminal, [], true);
-      if (status !== 0) terminal.writeError('Run inheriti skill install to retry.');
+      if (status !== 0) terminal.writeError(`Run ${CLI_COMMAND} skill install to retry.`);
       else if (!process.stdout.isTTY) {
-        try { if (!(await readSkillChoice(process.env))) terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
-        catch { terminal.writeError('Run inheriti skill install to choose an agent for the Inheriti CLI skill.'); }
+        try { if (!(await readSkillChoice(process.env))) terminal.writeError(`Run ${CLI_COMMAND} skill install to choose an agent for the Inheriti CLI skill.`); }
+        catch { terminal.writeError(`Run ${CLI_COMMAND} skill install to choose an agent for the Inheriti CLI skill.`); }
       }
     }
   } else if (argv[0] && argv[0] !== '__skill-install' && argv[0] !== 'skill' &&

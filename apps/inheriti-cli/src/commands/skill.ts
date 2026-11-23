@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -97,7 +98,7 @@ export async function installSkill(packageRoot: string, env: Readonly<Record<str
       } else choice = { agent: selected as 'codex' | 'claude' | 'all' };
     }
     if (!choice || (args.length && !parseChoice(args, home))) {
-      terminal.writeError('Usage: inheriti skill install [--target codex|claude|all | --directory ABSOLUTE_PATH]'); return 1;
+      terminal.writeError(`Usage: ${CLI_COMMAND} skill install [--target codex|claude|all | --directory ABSOLUTE_PATH]`); return 1;
     }
   } else if (!choice) {
     if (terminal.interactive && !env.CI && owner(env)) return installSkill(packageRoot, env, terminal, []);

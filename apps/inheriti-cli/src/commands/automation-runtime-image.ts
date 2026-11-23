@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import { automationRuntimeInstallInstructions, resolveAutomationImage } from '@s
 import type { Terminal } from '../output.js';
 
 const execFileAsync = promisify(execFile);
-const usage = 'Usage: inheriti automations runtime image --image ECR_OR_ARTIFACT_REGISTRY_TAG [--context DIRECTORY] [--dockerfile FILE] [--cli-tarball PATH] [--build | --publish]';
+const usage = `Usage: ${CLI_COMMAND} automations runtime image --image ECR_OR_ARTIFACT_REGISTRY_TAG [--context DIRECTORY] [--dockerfile FILE] [--cli-tarball PATH] [--build | --publish]`;
 const ecrTag = /^\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?\/[a-z0-9]+(?:[._/-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
 const artifactTag = /^[a-z0-9-]+-docker\.pkg\.dev\/[a-z][a-z0-9-]{4,61}[a-z0-9]\/[a-z][a-z0-9-]{2,62}\/[a-z0-9]+(?:[._/-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
 type Runner = (args: string[], signal?: AbortSignal) => Promise<string>;

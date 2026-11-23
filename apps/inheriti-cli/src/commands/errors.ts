@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { CliConfigurationInvalid } from '../configuration.js';
 import { OrganizationChoiceRequired } from '../organizations.js';
 import { UsePlanInvalid } from './use.js';
@@ -113,7 +114,7 @@ const RECONSTRUCTION_MESSAGES: Readonly<Record<string, string>> = {
 
 export const MESSAGES: Readonly<Record<string, string>> = {
   integration_tester_required: 'You are not an integration tester. Contact developer support.',
-  operator_not_signed_in: 'Not signed in. Run `inheriti login` first.',
+  operator_not_signed_in: `Not signed in. Run \`${CLI_COMMAND} login\` first.`,
   business_context_required: 'Set business: true in the CLI configuration to use organizations.',
   automation_aws_publication_outcome_unknown: 'AWS publication was interrupted. An in-flight write may have completed; inspect target versions before retrying.',
   automation_aws_publication_value_invalid: 'A selected plan field could not be serialized for AWS publication.',
@@ -128,12 +129,12 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_setup_permission_denied: 'You cannot manage automation for this organisation or plan.',
   automation_setup_request_failed: 'Inheriti® Business did not accept this automation request. Check your access and entries.',
   automation_portable_public_key_invalid: 'Portable --public-key must be a canonical Ed25519 PEM public key. Pass only the public key, including its BEGIN/END lines.',
-  automation_connection_verification_required: 'Inheriti® Business cannot activate this grant until its connection is verified. Run the appropriate `inheriti automations pair` command, then retry. See `inheriti help automations pair`.',
-  automation_grant_already_exists: 'Inheriti® Business already has a grant for this plan and connection. Run `inheriti automations grants PLAN_ID` to check its ID and status. If pending, verify the connection and activate the existing grant.',
+  automation_connection_verification_required: `Inheriti® Business cannot activate this grant until its connection is verified. Run the appropriate \`${CLI_COMMAND} automations pair\` command, then retry. See \`${CLI_COMMAND} help automations pair\`.`,
+  automation_grant_already_exists: `Inheriti® Business already has a grant for this plan and connection. Run \`${CLI_COMMAND} automations grants PLAN_ID\` to check its ID and status. If pending, verify the connection and activate the existing grant.`,
   automation_grant_already_active: 'This grant is already active in Inheriti® Business. No activation is needed.',
   automation_grant_revoked: 'This grant was revoked in Inheriti® Business and cannot be activated. Create a new grant if access is still needed.',
   automation_connection_changed: 'The automation connection changed in Inheriti® Business. Check its current status and retry.',
-  automation_grant_changed: 'The automation grant changed in Inheriti® Business. Run `inheriti automations grants PLAN_ID` to check its current status before retrying.',
+  automation_grant_changed: `The automation grant changed in Inheriti® Business. Run \`${CLI_COMMAND} automations grants PLAN_ID\` to check its current status before retrying.`,
   automation_cloud_target_invalid: 'The cloud workload or its configuration could not be read. Check the region, project or cluster, workload name and access.',
   automation_cloud_container_ambiguous: 'The workload has multiple containers. Select the application container with --container.',
   automation_cloud_identity_invalid: 'The workload identity is missing or invalid. Check its service account or ECS task role.',
@@ -195,7 +196,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_ec2_identity_invalid: 'The EC2 instance needs exactly one attached instance profile role. Check its IAM configuration.',
   automation_ec2_pair_input_invalid: 'Check the EC2 region, instance ID and connection ID.',
   automation_ec2_pair_target_unavailable: 'This EC2 instance is not an online SSM managed Linux instance. Check the SSM agent, IAM permissions and network access.',
-  automation_ec2_pair_cli_missing: 'Inheriti CLI is missing from the SSM command PATH on this EC2 instance. From your computer, run inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID, then retry pairing.',
+  automation_ec2_pair_cli_missing: `Inheriti CLI is missing from the SSM command PATH on this EC2 instance. From your computer, run ${CLI_COMMAND} automations runtime install ec2 --region REGION --instance INSTANCE_ID, then retry pairing.`,
   automation_ec2_pair_provider_failed: 'AWS CLI could not run the EC2 pairing command. Check local AWS credentials and Systems Manager permissions.',
   automation_ec2_pair_response_invalid: 'AWS returned an unexpected Systems Manager response. Inspect the instance before retrying.',
   automation_ec2_pair_failed: 'The remote EC2 pairing command failed. Check that Inheriti CLI is executable on the SSM command PATH, the instance role and Inheriti® Business connectivity. Remote output is withheld.',
@@ -261,10 +262,10 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   automation_github_workflow_ref_invalid: 'The verified GitHub connection has an invalid or mismatched workflow file or branch. Correct its ' +
     'trust settings and verify again.',
   organization_preference_invalid: 'The saved organisation preference is unreadable. Check organizations.json.',
-  organization_command_invalid: 'Usage: inheriti organizations list | organizations use [id]',
+  organization_command_invalid: `Usage: ${CLI_COMMAND} organizations list | organizations use [id]`,
   plan_id_required: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
   PlanIdRequired: 'Which plan? Pass a plan id, or run this in a terminal to pick one.',
-  operator_reauthentication_required: 'The session expired. Run `inheriti login` again.',
+  operator_reauthentication_required: `The session expired. Run \`${CLI_COMMAND} login\` again.`,
   operator_session_changed: 'The signed-in session changed during this command. Retry with the current account.',
   plan_not_found: 'No such plan in this Application.',
   plan_request_rate_limited: 'Too many requests. Try again shortly.',
@@ -285,10 +286,10 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   plan_share_count_invalid: 'The plan storage settings cannot protect this plan. Review the storage configuration.',
   reconciliation_required: 'This Organisation is being reconciled. Try again shortly.',
   login_could_not_open_a_browser: 'Could not open a browser. Open the sign-in URL printed in the terminal.',
-  OperatorNotSignedIn: 'Not signed in. Run `inheriti login` first.',
+  OperatorNotSignedIn: `Not signed in. Run \`${CLI_COMMAND} login\` first.`,
   AbortError: 'Reveal canceled.',
   use_canceled: 'Secret delivery canceled.',
-  reveal_cancellation_failed: 'The local reveal stopped, but server cancellation could not be confirmed. Run `inheriti plans abort ' +
+  reveal_cancellation_failed: `The local reveal stopped, but server cancellation could not be confirmed. Run \`${CLI_COMMAND} plans abort ` +
     'PLAN_ID` with this plan ID before revealing again, or wait for the request to expire.',
   master_key_relay_cancellation_failed: 'Could not confirm cancellation in SafeKey Mobile. The release request may still be pending; wait for ' +
     'it to expire before trying again.',
@@ -305,7 +306,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   reveal_denied: 'A participant denied this reveal. Nothing was released.',
   reveal_participant_revoked: 'A participant on this plan was revoked, so it cannot be opened.',
   reveal_reconciliation_required: 'This plan is being reconciled with its source. Try again shortly.',
-  reveal_restart_required: 'An earlier reveal of this plan cannot continue. Run `inheriti plans abort PLAN_ID` with this plan ' +
+  reveal_restart_required: `An earlier reveal of this plan cannot continue. Run \`${CLI_COMMAND} plans abort PLAN_ID\` with this plan ` +
     'ID, then retry your reveal command.',
   custodian_share_timed_out: 'Nobody approved the custodian request on SafeKey Mobile in time.',
   custodian_share_unavailable: 'The custodian share is unavailable or does not match this plan and device.',

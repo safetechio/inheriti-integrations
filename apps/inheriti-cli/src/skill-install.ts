@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, cp, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { cliCommandForPackage } from './install-identity.js';
 
 interface SkillManifest { schema: 1; cliVersion: string; deployment: string; sha256: string }
 export interface SkillInstallResult { status: 'current' | 'installed' | 'updated' | 'skipped' | 'busy'; backup?: string; reason?: string; target?: string }
@@ -54,8 +55,10 @@ export async function reconcileCliSkill(
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as SkillManifest;
   if (manifest.schema !== 1 || !manifest.cliVersion || !manifest.deployment || !/^[a-f0-9]{64}$/u.test(manifest.sha256))
     throw new Error('Invalid bundled skill manifest.');
-  const packageVersion = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8')) as { version?: string };
-  if (manifest.cliVersion !== packageVersion.version) throw new Error('Bundled skill version differs from the CLI.');
+  const pkg = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8')) as { name?: string; version?: string };
+  if (manifest.cliVersion !== pkg.version) throw new Error('Bundled skill version differs from the CLI.');
+  const command = cliCommandForPackage(pkg.name);
+  const skillName = command === 'inheriti' ? 'inheriti-cli' : `inheriti-cli-${command.slice('inheriti-'.length)}`;
   const source = join(packageRoot, 'skill', 'inheriti-cli');
   if ((await digestTree(source)) !== manifest.sha256) throw new Error('Bundled skill checksum mismatch.');
 
@@ -98,7 +101,7 @@ export async function reconcileCliSkill(
   if (!readySkills.isDirectory() || readySkills.isSymbolicLink()) return { status: 'skipped', reason: 'Unsafe skill directory' };
   if (effectiveUid !== undefined && readySkills.uid !== effectiveUid)
     return { status: 'skipped', reason: 'Unsafe skill directory ownership' };
-  const target = join(skillsRoot, 'inheriti-cli');
+  const target = join(skillsRoot, skillName);
   const lock = join(home, '.inheriti-cli-skill.lock');
   const recovery = join(home, '.inheriti-cli-skill-recovery.lock');
   const ownerFile = join(lock, 'owner');

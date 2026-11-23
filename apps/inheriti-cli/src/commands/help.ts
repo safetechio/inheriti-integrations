@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { BUILD_DEPLOYMENT } from '../configuration.js';
 import { CLI_FEATURE_FLAGS } from '../feature-flags.js';
 import { noColorFromEnvironment, terminalWordmark } from '@safetech/inheriti-elements-brand';
@@ -15,7 +16,7 @@ export function usage(environmentVariables: Readonly<Record<string, string | und
   const protectedEnabled = Boolean(BUILD_DEPLOYMENT && PROTECTED_FILE_FLAGS[BUILD_DEPLOYMENT]);
   return `${terminalWordmark({ noColor: noColorFromEnvironment(environmentVariables) })}
 
-inheriti <command>
+${CLI_COMMAND} <command>
 
   login              Sign in using the browser
   logout             Sign out and clear the local session
@@ -68,6 +69,11 @@ ${configuration}`;
 }
 
 export function commandUsage(topic: readonly string[], environmentVariables: Readonly<Record<string, string | undefined>>): string {
+  const help = rawCommandUsage(topic, environmentVariables);
+  return help.replace(/(?<![\w./-])inheriti(?= (?:skill|login|logout|organizations|automations|plans|members|secrets|setup|completion|update|help)\b)/gu, CLI_COMMAND);
+}
+
+function rawCommandUsage(topic: readonly string[], environmentVariables: Readonly<Record<string, string | undefined>>): string {
   const command = topic.join(' ');
   if (command === 'plans' && !Boolean(BUILD_DEPLOYMENT && CLI_FEATURE_FLAGS[BUILD_DEPLOYMENT].planCreation))
     return 'Usage: inheriti plans <list|show|logs|reveal|download|use|abort>';

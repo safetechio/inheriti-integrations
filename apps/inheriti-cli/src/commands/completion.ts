@@ -5,6 +5,7 @@ import { cached, completionCachePath } from '../completion/cache.js';
 import { assetCandidates, fieldCandidates, organizationCandidates, planCandidates, type Candidate } from '../completion/candidates.js';
 import { BUILD_DEPLOYMENT } from '../configuration.js';
 import { CLI_FEATURE_FLAGS } from '../feature-flags.js';
+import { CLI_COMMAND } from '../install-identity.js';
 
 const PLAN_ID_COMMANDS = new Set(['show', 'logs', 'reveal', 'download', 'use', 'abort']);
 const candidates = (...values: readonly (readonly [string, string])[]): Candidate[] =>
@@ -35,7 +36,7 @@ type Completion =
 
 export function printCompletionScript(terminal: Terminal, shell: string | undefined): number {
   if (!shell || !(COMPLETION_SHELLS as readonly string[]).includes(shell)) {
-    terminal.writeError(`Usage: inheriti completion <${COMPLETION_SHELLS.join('|')}>`);
+    terminal.writeError(`Usage: ${CLI_COMMAND} completion <${COMPLETION_SHELLS.join('|')}>`);
     return 1;
   }
   terminal.write(completionScript(shell as CompletionShell));

@@ -91,6 +91,26 @@ describe('CLI update selection', () => {
       expect(write).toHaveBeenCalledWith('Installed Inheriti CLI 1.2.0-dev.2. Rerun your command to use it.');
     } finally { vi.unstubAllGlobals(); }
   });
+
+  it('directs a legacy install to the named command after a channel migration', async () => {
+    const bytes = new TextEncoder().encode('package data');
+    const release = {
+      ...build('1.2.0-dev.2', `${process.platform}-${process.arch}`),
+      size: bytes.length,
+      checksum: createHash('sha256').update(bytes).digest('hex'),
+      fileName: 'safetech-inheriti-cli-dev-1.2.0-dev.2.tgz',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(bytes)));
+    const context = {
+      sessions: { load: async () => ({}) },
+      core: { listInternalBuilds: async () => [release], requestInternalBuildDownload: async () => ({ url: 'https://example.test/package' }) },
+    } as unknown as CliContext;
+    const terminal = { interactive: true, write: vi.fn(), writeError: vi.fn() } as unknown as Terminal;
+    try {
+      expect(await requireCliUpdate(context, terminal, '1.2.0-dev.1')).toBe(2);
+      expect(terminal.write).toHaveBeenCalledWith(expect.stringContaining('Sign in with inheriti-dev login'));
+    } finally { vi.unstubAllGlobals(); }
+  });
 });
 
 describe('Business CLI routing', () => {

@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createAutomationSetupOperations, inspectCloudTargetForPairing, pairCloudRunAutomation } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from '../configuration.js';
 import type { CliContext } from '../session.js';
@@ -6,7 +7,7 @@ import { renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 
 const allowed = new Set(['--connection', '--project', '--region', '--service', '--job', '--expect-revision']);
-const usage = 'Usage: inheriti automations pair google --connection ID --project PROJECT --region REGION (--service SERVICE | --job JOB) [--expect-revision GENERATION]';
+const usage = `Usage: ${CLI_COMMAND} automations pair google --connection ID --project PROJECT --region REGION (--service SERVICE | --job JOB) [--expect-revision GENERATION]`;
 
 export async function pairGoogleAutomationWorkload(
   context: CliContext, configuration: CliConfiguration, terminal: Terminal, argv: readonly string[],

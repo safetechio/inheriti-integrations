@@ -3,6 +3,7 @@ import { completionInstallPath, installCompletion } from '../completion/install.
 import { COMPLETION_SHELLS, type CompletionShell } from '../completion/shell.js';
 import type { Terminal } from '../output.js';
 import { promptSelect } from '../render/select.jsx';
+import { CLI_COMMAND } from '../install-identity.js';
 
 export async function setup(
   argv: readonly string[],
@@ -25,7 +26,7 @@ export async function setup(
     }
     if (skip) { terminal.write('Shell autocomplete skipped.'); return 0; }
     if (!(COMPLETION_SHELLS as readonly string[]).includes(shellName)) {
-      throw new Error('Choose a supported shell with inheriti setup --shell bash|zsh|fish.');
+      throw new Error(`Choose a supported shell with ${CLI_COMMAND} setup --shell bash|zsh|fish.`);
     }
     if (!yes && (!terminal.interactive || Boolean(env.CI))) {
       throw new Error('Setup requires an interactive terminal. Use --yes to enable autocomplete or --no-completion to skip.');

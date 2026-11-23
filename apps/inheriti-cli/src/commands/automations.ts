@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { copyFile, readFile, stat } from 'node:fs/promises';
@@ -48,7 +49,7 @@ async function choose(
 }
 
 export async function automationRuntimeInstructions(terminal: Terminal, cliVersion: string, argv: readonly string[] = []): Promise<number> {
-  const usage = 'Usage: inheriti automations runtime install-instructions [--container [--cli-tarball PATH]]';
+  const usage = `Usage: ${CLI_COMMAND} automations runtime install-instructions [--container [--cli-tarball PATH]]`;
   const tarball = argv.length === 3 && argv[0] === '--container' && argv[1] === '--cli-tarball' ? argv[2] : undefined;
   if (argv.length && !(argv.length === 1 && argv[0] === '--container') && !tarball) {
     terminal.writeError(usage);
@@ -79,7 +80,7 @@ export async function automationRuntimeInstructions(terminal: Terminal, cliVersi
     terminal.write(local
       ? '\nLinux EC2 instance\n\nThis local build cannot be installed through the EC2 command. Build a dev .tgz package for the TEST artifact flow.'
       : '\nLinux EC2 instance\n\nRun from your computer with AWS CLI and SSM:\n\n' +
-        'inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID\n\n' +
+        `${CLI_COMMAND} automations runtime install ec2 --region REGION --instance INSTANCE_ID\n\n` +
         'The command installs this CLI version remotely. Later, setup --install checks service-user access.');
   }
   if (target === 'container' || target === 'both') {
@@ -101,7 +102,7 @@ export async function automationRuntimeInstallEc2(
   signal?: AbortSignal,
   request: typeof fetch = fetch,
 ): Promise<number> {
-  const usage = 'Usage: inheriti automations runtime install ec2 --region REGION --instance INSTANCE_ID [--cli-tarball PATH --artifact-api-url LOCAL_HTTP_ORIGIN --artifact-download-origin HTTPS_TUNNEL_ORIGIN]';
+  const usage = `Usage: ${CLI_COMMAND} automations runtime install ec2 --region REGION --instance INSTANCE_ID [--cli-tarball PATH --artifact-api-url LOCAL_HTTP_ORIGIN --artifact-download-origin HTTPS_TUNNEL_ORIGIN]`;
   const entries = argv.filter((_, index) => index % 2 === 0).map((key, index) => [key, argv[index * 2 + 1]] as const);
   const options = Object.fromEntries(entries) as Record<string, string>;
   const tarball = options['--cli-tarball'];
@@ -251,7 +252,7 @@ export async function automationManage(
   const pair = verb === 'pair';
   const action = grant || pair ? maybeAction : verb;
   const options = flags(grant || pair ? tail : argv.slice(1));
-  const usage = 'Usage: inheriti automations create|verify|trust|disable|usage|pair start|grant create|activate|member|revoke [nonsecret flags]';
+  const usage = `Usage: ${CLI_COMMAND} automations create|verify|trust|disable|usage|pair start|grant create|activate|member|revoke [nonsecret flags]`;
   const actions = grant ? ['create', 'activate', 'member', 'revoke'] : pair ? ['start'] : ['create', 'verify', 'trust', 'disable', 'usage'];
   if (!options || !action || !actions.includes(action)) {
     terminal.writeError(usage);

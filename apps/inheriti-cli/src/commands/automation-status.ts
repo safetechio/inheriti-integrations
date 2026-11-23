@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createAutomationSetupOperations, createAutomationStatusReader } from '@safetech/inheriti-elements-core/node-base';
 import type { AutomationStatusSnapshot } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from '../configuration.js';
@@ -7,7 +8,7 @@ import { redact, renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 import { connectionChoice, operationalConnections } from './automation-choices.js';
 
-const usage = 'Usage: inheriti automations status [--organization ID] [--plan ID] [--connection ID] [--job ID] [--watch] [--json]';
+const usage = `Usage: ${CLI_COMMAND} automations status [--organization ID] [--plan ID] [--connection ID] [--job ID] [--watch] [--json]`;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const stepNames: Record<string, string> = { CONNECTION: 'Connection', IDENTITY: 'Workload identity', PLAN_ACCESS: 'Plan access', READY: 'Ready' };
 const actor = (action: { actor: string; responsibleMemberId?: string }) => action.responsibleMemberId ? `${action.actor}, member ${action.responsibleMemberId}` : action.actor;

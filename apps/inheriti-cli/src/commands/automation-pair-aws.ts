@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createAutomationSetupOperations, inspectCloudTargetForPairing, pairEcsAutomation, resolveAutomationImage, runningEcsServiceImage } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from '../configuration.js';
 import type { CliContext } from '../session.js';
@@ -6,7 +7,7 @@ import { renderJson } from '../output.js';
 import { promptSelect } from '../render/select.js';
 
 const allowed = new Set(['--connection', '--region', '--cluster', '--service', '--container', '--image', '--cli-path', '--expect-revision']);
-const usage = 'Usage: inheriti automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE [--image ECR_TAG_OR_DIGEST] [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]';
+const usage = `Usage: ${CLI_COMMAND} automations pair aws --connection ID --region REGION --cluster CLUSTER --service SERVICE [--image ECR_TAG_OR_DIGEST] [--container NAME] [--cli-path ABSOLUTE_PATH] [--expect-revision TASK_DEFINITION_ARN]`;
 
 export async function pairAwsAutomationService(
   context: CliContext, configuration: CliConfiguration, terminal: Terminal, argv: readonly string[],

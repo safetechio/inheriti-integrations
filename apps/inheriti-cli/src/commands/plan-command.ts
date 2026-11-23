@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createCliContext } from '../session.js';
 import { registerCliCancel } from '../cancellation.js';
 import type { CliConfiguration } from '../configuration.js';
@@ -24,7 +25,7 @@ export async function plans(
       terminal.writeError('Plan creation is unavailable.'); return 1;
     }
     const hints = parsePlanHints(rest);
-    if (!hints) { terminal.writeError('Usage: inheriti plans create [--title NAME] [--description TEXT] [--asset TYPE ...]'); return 1; }
+    if (!hints) { terminal.writeError(`Usage: ${CLI_COMMAND} plans create [--title NAME] [--description TEXT] [--asset TYPE ...]`); return 1; }
     const controller = new AbortController();
     const unregister = registerCliCancel(controller);
     try {

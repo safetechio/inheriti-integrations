@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { resolveAutomationFieldMappings } from '@safetech/inheriti-elements-core/node-base';
 import { createGoogleSecretPublisher } from '@safetech/inheriti-elements-core/google-secret-publisher';
 import type { CliContext } from '../session.js';
@@ -6,7 +7,7 @@ import { renderJson } from '../output.js';
 import { registerCliCancel } from '../cancellation.js';
 import { consumePlanFieldBatches, loadRevealPlan, renderRequestedValue } from './reveal.js';
 
-const usage = 'Usage: inheriti secrets publish google --plan PLAN_ID --project PROJECT_ID --secret-prefix PREFIX (--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]';
+const usage = `Usage: ${CLI_COMMAND} secrets publish google --plan PLAN_ID --project PROJECT_ID --secret-prefix PREFIX (--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]`;
 
 type Selection = { plan: string; project: string; prefix: string; apply: boolean; mapAll: boolean;
   mappings: { envName: string; selector: string }[]; only: string[]; except: string[] };

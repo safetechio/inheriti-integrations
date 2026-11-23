@@ -18,6 +18,8 @@ const artifacts = resolve(root, process.argv.find((value) => value.startsWith('-
 const stage = resolve(artifacts, 'stage');
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const sideBySide = process.argv.includes('--side-by-side') && (deployment === 'dev' || deployment === 'stg');
+const cliCommand = sideBySide ? `inheriti-${deployment}` : 'inheriti';
 const nodeEngine = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).engines?.node;
 if (typeof nodeEngine !== 'string' || !nodeEngine.trim()) throw new Error('Workspace Node.js engine is required');
 const packageVersion = packageVersionForDeployment(manifest.version, deployment);
@@ -38,7 +40,11 @@ const skillText = await readFile(skillFile, 'utf8');
 const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(skillText);
 if (!match || !/^name: /mu.test(match[1]) || !/^description: /mu.test(match[1]) || /^metadata:/mu.test(match[1]))
   throw new Error('The CLI skill needs name and description frontmatter without a source version.');
-await writeFile(skillFile, `---\n${match[1]}\nmetadata:\n  version: ${packageVersion}\n---\n${skillText.slice(match[0].length)}`);
+const skillHeader = sideBySide ? match[1].replace(/^name: inheriti-cli$/mu, `name: inheriti-cli-${deployment}`) : match[1];
+const commandNote = sideBySide
+  ? `\nUse \`${cliCommand}\` for local CLI commands in this skill, including login and help. Commands that run inside automation workloads use the command installed in that workload.\n`
+  : '';
+await writeFile(skillFile, `---\n${skillHeader}\nmetadata:\n  version: ${packageVersion}\n---\n${commandNote}${skillText.slice(match[0].length)}`);
 async function skillHash(directory) {
   const rootInfo = await lstat(directory);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Unsafe CLI skill directory.');
@@ -70,11 +76,11 @@ await cp(
 );
 
 await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
-  name: manifest.name,
+  name: sideBySide ? `${manifest.name}-${deployment}` : manifest.name,
   version: packageVersion,
   description: deployment === 'prod' ? 'Inheriti CLI.' : 'Inheriti CLI (TEST builds only).',
   type: manifest.type,
-  bin: manifest.bin,
+  bin: sideBySide ? { [cliCommand]: manifest.bin.inheriti } : manifest.bin,
   files: ['dist', 'fallbacks', 'skill'],
   engines: { node: nodeEngine },
   scripts: { postinstall: 'node dist/main.js __skill-install' },
@@ -84,7 +90,7 @@ await writeFile(resolve(stage, 'package.json'), `${JSON.stringify({
 }, null, 2)}\n`);
 
 const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
-  ['pack', '--pack-destination', artifacts],
+  ['pack', '--pack-destination', '..'],
   { cwd: stage, stdio: 'inherit', shell: process.platform === 'win32' });
 if (result.status !== 0) process.exit(result.status ?? 1);
 await rm(stage, { recursive: true, force: true });

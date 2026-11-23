@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createAwsSecretPublisher, resolveAutomationFieldMappings } from '@safetech/inheriti-elements-core/node-base';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
@@ -5,7 +6,7 @@ import { renderJson } from '../output.js';
 import { registerCliCancel } from '../cancellation.js';
 import { consumePlanFieldBatches, consumePlanFields, loadRevealPlan, renderRequestedValue } from './reveal.js';
 
-const usage = 'Usage: inheriti secrets publish aws --plan PLAN_ID --region AWS_REGION --account-id 12_DIGITS (--secret NAME | --parameter-prefix /PATH) (--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]';
+const usage = `Usage: ${CLI_COMMAND} secrets publish aws --plan PLAN_ID --region AWS_REGION --account-id 12_DIGITS (--secret NAME | --parameter-prefix /PATH) (--map KEY=ASSET.FIELD ... | --map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ...) [--apply]`;
 type Selection = { plan: string; region: string; accountId: string; secret?: string; prefix?: string; apply: boolean;
   mapAll: boolean; mappings: { envName: string; selector: string }[]; only: string[]; except: string[] };
 

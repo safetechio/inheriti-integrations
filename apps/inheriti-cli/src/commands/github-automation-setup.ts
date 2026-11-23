@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
@@ -12,8 +13,8 @@ import { pairGithubWorkflow } from './github-workflow-pairing.js';
 import { loadGithubDevArtifact, uploadGithubDevArtifact } from './github-dev-artifact.js';
 import { connectionChoice, operationalConnections } from './automation-choices.js';
 
-const usage = 'Usage: inheriti automations setup github --connection ID --plan ID --field ASSET.FIELD [--apply] [--retry]';
-const createUsage = 'Usage: inheriti automations create github [--repository OWNER/REPO] [--environment GH_ENV] [--workflow FILE.yml]';
+const usage = `Usage: ${CLI_COMMAND} automations setup github --connection ID --plan ID --field ASSET.FIELD [--apply] [--retry]`;
+const createUsage = `Usage: ${CLI_COMMAND} automations create github [--repository OWNER/REPO] [--environment GH_ENV] [--workflow FILE.yml]`;
 const repoPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const workflowPattern = /^[A-Za-z0-9_.-]+\.ya?ml$/;
 const branchPattern = /^[A-Za-z0-9._/-]+$/;

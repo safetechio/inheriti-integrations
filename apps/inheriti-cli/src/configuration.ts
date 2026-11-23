@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import type { ElementsEnvironment } from '@safetech/inheriti-elements-core';
 import { assertEnvironmentAllowed } from '@safetech/inheriti-elements-core';
 import { BUSINESS_DEPLOYMENTS, BUSINESS_DEVICE_CLIENT_ID, BUSINESS_INTERACTIVE_CLIENT_ID, businessDeployment, businessUiRpId } from '@safetech/inheriti-elements-core/node-base';
+import { CLI_COMMAND } from './install-identity.js';
 
 export interface CliConfiguration {
   apiUrl: string;
@@ -49,7 +50,8 @@ export function defaultConfigurationPath(
   if (environmentVariables.INHERITI_ELEMENTS_CONFIG) return environmentVariables.INHERITI_ELEMENTS_CONFIG;
   const home = environmentVariables.HOME ?? homedir();
   const base = environmentVariables.XDG_CONFIG_HOME ?? resolve(home, '.config');
-  const current = resolve(base, 'inheriti', 'config.json');
+  const current = resolve(base, CLI_COMMAND, 'config.json');
+  if (CLI_COMMAND !== 'inheriti') return current;
   const legacy = resolve(base, 'inheriti-elements', 'config.json');
   return existsSync(current) || !existsSync(legacy) ? current : legacy;
 }

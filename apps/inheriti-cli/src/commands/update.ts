@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { latestIntegrationBuild } from '@safetech/inheriti-elements-core/node-base';
+import { CLI_COMMAND } from '../install-identity.js';
 import type { CliContext } from '../session.js';
 import type { Terminal } from '../output.js';
 import type { InternalBuild } from '@safetech/inheriti-elements-core/node-base';
@@ -43,16 +44,22 @@ export async function updateCli(context: CliContext, terminal: Terminal, version
 
 async function installCliBuild(context: CliContext, terminal: Terminal, version: string, build: InternalBuild, install: boolean, required = false): Promise<0 | 1 | 2> {
   (required ? terminal.writeError : terminal.write)(`Inheriti CLI ${version} → ${build.version}`);
-  if (!install) { terminal.write('Run inheriti update --install to install it.'); return 0; }
+  const channel = /^safetech-inheriti-cli-(dev|stg)-[0-9]/u.exec(build.fileName)?.[1];
+  const command = channel ? `inheriti-${channel}` : 'inheriti';
+  if (CLI_COMMAND !== 'inheriti' && command !== CLI_COMMAND) {
+    terminal.writeError(`The offered update cannot replace ${CLI_COMMAND}. Download the current package for this environment from Inheriti Business.`);
+    return 1;
+  }
+  if (!install) { terminal.write(`Run ${CLI_COMMAND} update --install to install it.`); return 0; }
   if (!terminal.interactive) {
     terminal.writeError(required
-      ? 'An update is required. Run `inheriti update --install` in an interactive terminal, then retry.'
+      ? `An update is required. Run \`${CLI_COMMAND} update --install\` in an interactive terminal, then retry.`
       : 'Update installation requires an interactive terminal.');
     return 1;
   }
   const { promptSelect } = await import('../render/select.jsx');
   if (await promptSelect(required ? 'Update required. Install now?' : 'Install this update?', [{ value: 'yes', description: 'Install' }, { value: 'no', description: 'Cancel' }]) !== 'yes') {
-    if (required) terminal.writeError('Update required. Run `inheriti update --install` to continue.');
+    if (required) terminal.writeError(`Update required. Run \`${CLI_COMMAND} update --install\` to continue.`);
     return required ? 1 : 0;
   }
   const directory = await mkdtemp(join(tmpdir(), 'inheriti-update-'));
@@ -107,7 +114,7 @@ async function installCliBuild(context: CliContext, terminal: Terminal, version:
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`npm install exited with status ${result.status}.`);
     const entrypoint = fileURLToPath(import.meta.url);
-    if (basename(entrypoint) === 'main.js' && process.argv[1]) {
+    if (command === CLI_COMMAND && basename(entrypoint) === 'main.js' && process.argv[1]) {
       try {
         if (realpathSync(process.argv[1]) !== entrypoint) throw new Error('CLI entrypoint changed');
         const refreshed = spawnSync(process.execPath, [entrypoint, '__skill-install'], { stdio: 'inherit' });
@@ -117,6 +124,10 @@ async function installCliBuild(context: CliContext, terminal: Terminal, version:
   } finally {
     closeProgress();
     await rm(directory, { recursive: true, force: true });
+  }
+  if (command !== CLI_COMMAND) {
+    terminal.write(`Installed Inheriti CLI ${build.version}. Sign in with ${command} login, then use ${command} for this environment.`);
+    return required ? 2 : 0;
   }
   terminal.write(`Installed Inheriti CLI ${build.version}. ${required ? 'Rerun your command to use it.' : 'Start a new terminal session to use it.'}`);
   return required ? 2 : 0;

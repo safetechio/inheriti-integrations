@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { createAutomationSetupOperations, inspectEc2AutomationInstance, pairEc2Automation } from '@safetech/inheriti-elements-core/node-base';
 import type { CliConfiguration } from '../configuration.js';
 import type { CliContext } from '../session.js';
@@ -7,7 +8,7 @@ import { renderTo } from '../render/ink.js';
 import { Ec2PairReview, Ec2PairSuccess } from '../render/automation-ec2-pair.js';
 import { promptSelect } from '../render/select.js';
 
-const usage = 'Usage: inheriti automations pair ec2 --connection ID --region REGION --instance INSTANCE_ID [--expect-role IAM_ROLE_ARN]';
+const usage = `Usage: ${CLI_COMMAND} automations pair ec2 --connection ID --region REGION --instance INSTANCE_ID [--expect-role IAM_ROLE_ARN]`;
 
 export async function pairEc2AutomationInstance(
   context: CliContext, configuration: CliConfiguration, terminal: Terminal, argv: readonly string[], signal?: AbortSignal,

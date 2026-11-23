@@ -1,3 +1,5 @@
+import { CLI_COMMAND } from '../install-identity.js';
+
 /**
  * The scripts a shell sources to get candidates from the CLI itself.
  *
@@ -8,31 +10,33 @@
 export const COMPLETION_SHELLS = ['bash', 'zsh', 'fish'] as const;
 export type CompletionShell = (typeof COMPLETION_SHELLS)[number];
 
-const BASH = `# inheriti completion for bash
-_inheriti_complete() {
+const commandIdentifier = CLI_COMMAND.replaceAll('-', '_');
+
+const BASH = `# ${CLI_COMMAND} completion for bash
+_${commandIdentifier}_complete() {
   local candidates
-  candidates="$(inheriti __complete "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null | cut -f1)"
+  candidates="$(${CLI_COMMAND} __complete "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null | cut -f1)"
   COMPREPLY=($(compgen -W "\${candidates}" -- "\${COMP_WORDS[COMP_CWORD]}"))
 }
-complete -o bashdefault -o default -F _inheriti_complete inheriti
+complete -o bashdefault -o default -F _${commandIdentifier}_complete ${CLI_COMMAND}
 `;
 
-const ZSH = `#compdef inheriti
-# inheriti completion for zsh
-_inheriti() {
+const ZSH = `#compdef ${CLI_COMMAND}
+# ${CLI_COMMAND} completion for zsh
+_${commandIdentifier}() {
   local -a candidates
-  candidates=("\${(@f)$(inheriti __complete "\${words[@]:1:$((CURRENT-1))}" 2>/dev/null | sed 's/\\t/:/')}")
-  _describe -t candidates 'inheriti' candidates
+  candidates=("\${(@f)$(${CLI_COMMAND} __complete "\${words[@]:1:$((CURRENT-1))}" 2>/dev/null | sed 's/\\t/:/')}")
+  _describe -t candidates '${CLI_COMMAND}' candidates
 }
-compdef _inheriti inheriti
+compdef _${commandIdentifier} ${CLI_COMMAND}
 `;
 
-const FISH = `# inheriti completion for fish
-function __inheriti_complete
+const FISH = `# ${CLI_COMMAND} completion for fish
+function __${commandIdentifier}_complete
   set -l tokens (commandline -opc) (commandline -ct)
-  inheriti __complete $tokens[2..-1] 2>/dev/null
+  ${CLI_COMMAND} __complete $tokens[2..-1] 2>/dev/null
 end
-complete -c inheriti -a "(__inheriti_complete)"
+complete -c ${CLI_COMMAND} -a "(__${commandIdentifier}_complete)"
 `;
 
 export function completionScript(shell: CompletionShell): string {

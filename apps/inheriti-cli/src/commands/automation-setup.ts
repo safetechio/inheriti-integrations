@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import {
   createAutomationSetupOperations,
   generateAutomationRuntimeBundle,
@@ -21,7 +22,7 @@ import { cliAutomationProvider } from './automation-provider.js';
 import { githubAutomationSetup } from './github-automation-setup.js';
 
 const usage = [
-  'Usage: inheriti automations setup --plan PLAN_ID [--connection CONNECTION_ID]',
+  `Usage: ${CLI_COMMAND} automations setup --plan PLAN_ID [--connection CONNECTION_ID]`,
   '  (--map-all [--except ASSET.FIELD ...] | --only ASSET.FIELD ... | --map NAME=ASSET.FIELD ... | --field ASSET.FIELD --env-name NAME)',
   '  [--map NAME=ASSET.FIELD ...]  Override generated names when using --map-all or --only.',
   '  [--project PROJECT --region REGION (--job JOB | --service SERVICE)',
@@ -160,7 +161,7 @@ export async function automationSetup(
     return 1;
   }
   if (connection.provider === 'GITHUB') {
-    terminal.writeError('Use inheriti automations usage for GitHub Actions.');
+    terminal.writeError(`Use ${CLI_COMMAND} automations usage for GitHub Actions.`);
     return 1;
   }
   const bundle = generateAutomationRuntimeBundle({

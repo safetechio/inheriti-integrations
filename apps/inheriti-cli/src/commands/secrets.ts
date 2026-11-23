@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from '../install-identity.js';
 import { registerCliCancel } from '../cancellation.js';
 import { resolvePlanField } from './reveal.js';
 import { usePlan } from './use.js';
@@ -46,7 +47,7 @@ export async function secrets(
       unregister();
     }
   }
-  terminal.writeError('Usage: inheriti secrets exec <id> [--env NAME=asset.field ...] -- command | inheriti secrets ' +
+  terminal.writeError(`Usage: ${CLI_COMMAND} secrets exec <id> [--env NAME=asset.field ...] -- command | ${CLI_COMMAND} secrets ` +
     'resolve <id> --field asset.field --allow-plaintext-output');
   return 1;
 }

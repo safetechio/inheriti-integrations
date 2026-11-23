@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import type { OperatorSession, OperatorSessionStore } from '@safetech/inheriti-elements-core';
 import { INTEGRATION_AUTHORITY } from '@safetech/inheriti-elements-core/node-base';
 import { sessionIdentity } from './key-vault.js';
+import { CLI_COMMAND } from './install-identity.js';
 
 export class SessionStoreUnreadable extends Error {
   constructor(readonly code: string) { super(code); this.name = 'SessionStoreUnreadable'; }
@@ -15,7 +16,8 @@ let temporaryFileSequence = 0;
 export function defaultSessionPath(environmentVariables: Readonly<Record<string, string | undefined>>): string {
   if (environmentVariables.INHERITI_ELEMENTS_STATE_DIR) return resolve(environmentVariables.INHERITI_ELEMENTS_STATE_DIR, 'session.json');
   const stateHome = environmentVariables.XDG_STATE_HOME ?? resolve(homedir(), '.local', 'state');
-  const current = resolve(stateHome, 'inheriti', 'session.json');
+  const current = resolve(stateHome, CLI_COMMAND, 'session.json');
+  if (CLI_COMMAND !== 'inheriti') return current;
   const legacy = resolve(stateHome, 'inheriti-elements', 'session.json');
   return existsSync(current) || !existsSync(legacy) ? current : legacy;
 }
