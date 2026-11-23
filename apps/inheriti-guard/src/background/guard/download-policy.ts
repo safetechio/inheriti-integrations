@@ -1,4 +1,5 @@
 import { isEcosystemUrl } from './url-policy.js';
+import { isBusinessBuildDownload } from './business-build-downloads.js';
 
 const RISKY_EXTENSIONS = new Set([
   'html', 'htm', 'xhtml', 'svg', 'js', 'jse', 'exe', 'msi', 'dll', 'bat', 'cmd', 'com', 'scr',
@@ -32,5 +33,6 @@ export function shouldBlockDownload(candidate: DownloadCandidate, enabled = true
     || /^data:(text\/html|application\/xhtml\+xml|image\/svg\+xml)/i.test(lowered);
   if (inlineRisk) return fromEcosystem || lowered.includes('inheriti.com');
   if (!fromEcosystem) return false;
+  if ((!candidate.url || candidate.url === url) && isBusinessBuildDownload(url, candidate.referrer)) return false;
   return RISKY_EXTENSIONS.has(extension(candidate.filename || url));
 }
