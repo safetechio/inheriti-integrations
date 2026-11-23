@@ -20,11 +20,7 @@ export function getImporterFlowReadiness(input: {
 }): ImporterFlowReadiness {
   const sources =
     input.files.length > 0 &&
-    input.files.every(
-      (file) =>
-        file.status === 'imported' ||
-        (file.status === 'warning' && (!file.diagnostics?.length || file.warningsAcknowledged)),
-    );
+    input.files.every((file) => file.status === 'imported' || file.status === 'warning');
   const assets =
     input.preservationReady !== false &&
     input.assets.length > 0 &&

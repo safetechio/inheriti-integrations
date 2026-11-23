@@ -75,7 +75,8 @@ describe('plan creation reveal', () => {
     expect(screen.getByRole('button', { name: 'Create in: Your organisation', exact: true })).toBeTruthy();
     chooseNestedFolder();
     const destination = screen.getByRole('button', { name: 'Create in: Finance / Operations', exact: true });
-    expect(destination.getAttribute('title')).toBe('Finance / Operations');
+    fireEvent.mouseEnter(destination);
+    expect(screen.getByRole('tooltip', { name: 'Finance / Operations' })).toBeTruthy();
     fireEvent.click(within(screen.getByText('Finance', { selector: '.folder-tree-name' }).closest('[role="treeitem"]') as HTMLElement)
       .getByRole('button', { name: 'Collapse' }));
     const search = screen.getByRole('textbox', { name: 'Search folders or plans' }) as HTMLInputElement;

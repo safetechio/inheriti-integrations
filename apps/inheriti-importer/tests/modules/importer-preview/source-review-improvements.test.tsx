@@ -19,22 +19,20 @@ const files: ImportFile[] = [
 ];
 
 describe('source review improvements', () => {
-  it('sorts locked sources first, then unacknowledged warnings without mutating input', () => {
+  it('sorts locked sources first, then warnings without mutating input', () => {
     const { container } = render(<SourceImportStatus files={files} />);
     const cards = [...container.querySelectorAll('.source-file-card')];
     expect(cards[0].textContent).toContain('locked.kdbx');
     expect(cards[1].textContent).toContain('warning.1pux');
     expect(files[0].id).toBe('ready');
   });
-  it('removes an acknowledged source only from Warnings, keeping it in All', () => {
-    const { rerender } = render(<SourceImportStatus files={files} />);
+  it('keeps sources in the Warnings filter after the optional details close', () => {
+    const onViewWarnings = vi.fn();
+    render(<SourceImportStatus files={files} onViewWarnings={onViewWarnings} />);
     fireEvent.click(screen.getByRole('button', { name: 'Warnings 1' }));
     expect(screen.queryByText('ready.env')).toBeNull();
-    rerender(
-      <SourceImportStatus files={files.map((file) => ({ ...file, warningsAcknowledged: true }))} />,
-    );
-    expect(screen.getByText('No sources match this filter.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'All 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View warnings' }));
+    expect(onViewWarnings).toHaveBeenCalledWith(files[1]);
     expect(screen.getByText('warning.1pux')).toBeTruthy();
   });
   it('focuses unlock input and toggles visibility without losing credentials', () => {
@@ -49,11 +47,11 @@ describe('source review improvements', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
     expect(input.type).toBe('password');
   });
-  it('acknowledges parser warnings only through Understood', () => {
-    const onUnderstood = vi.fn();
-    render(<SourceWarningsModal file={files[1]} onDismiss={vi.fn()} onUnderstood={onUnderstood} />);
-    expect(onUnderstood).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Understood' }));
-    expect(onUnderstood).toHaveBeenCalledWith(files[1]);
+  it('closes informational warnings with Done', () => {
+    const onDismiss = vi.fn();
+    render(<SourceWarningsModal file={files[1]} onDismiss={onDismiss} />);
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 });

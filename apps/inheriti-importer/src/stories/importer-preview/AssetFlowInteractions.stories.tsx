@@ -4,7 +4,7 @@ import type { ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
 import type { ImporterWorkspaceAction } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-types';
 import { AppHeader } from '@modules/import/ui/components/AppHeader';
-import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import { getImportablePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
 import { createEmptyWorkspace, type WorkspaceState } from '@modules/plans/domain/workspace-model';
 import {
   createHistory,
@@ -31,8 +31,9 @@ export const SyntheticControlledAssetFlow = () => {
     if (
       action === 'accept' ||
       action === 'exclude' ||
+      action === 'restore' ||
       action === 'restore-suggestion' ||
-      getCorePlanAssetTypes().some((type) => action === `alternate:${type}`)
+      getImportablePlanAssetTypes().some((type) => action === `alternate:${type}`)
     )
       workspace.reviewAsset(action as ImporterWorkspaceAction, asset);
   };

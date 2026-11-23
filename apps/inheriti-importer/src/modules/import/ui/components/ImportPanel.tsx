@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { filesFromList, openVaultFiles } from '@shared/infrastructure/files';
 import { type OpenedVaultFile } from '@modules/import/domain/vault';
 import { Alert, Box, Text } from '@modules/_shared/ui/components';
@@ -14,6 +14,11 @@ type ImportPanelProps = {
   onRetry?: () => void;
 };
 
+function isFileDrag(event: DragEvent) {
+  const transfer = event.dataTransfer;
+  return transfer && (transfer.types?.includes('Files') || transfer.files?.length);
+}
+
 export function ImportPanel({
   busy,
   error,
@@ -24,30 +29,74 @@ export function ImportPanel({
 }: ImportPanelProps) {
   const uiTheme = useTheme();
   const [over, setOver] = useState(false);
-  const dropzoneRef = useRef<HTMLElement | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState(false);
+  const surfaceRef = useRef<HTMLElement | null>(null);
+  const importAvailability = useRef<symbol | null>(null);
+  const onImportRef = useRef(onImport);
+  const openingRef = useRef(false);
+  const loading = busy || opening;
+  const highlighted = over && !loading && !disabled;
 
-  useEffect(() => {
-    const element = dropzoneRef.current;
+  useLayoutEffect(() => {
+    onImportRef.current = onImport;
+  }, [onImport]);
+
+  useLayoutEffect(() => {
+    importAvailability.current = busy || disabled ? null : Symbol();
+    if (!importAvailability.current) setOver(false);
+    return () => {
+      importAvailability.current = null;
+    };
+  }, [busy, disabled]);
+
+  const openAndImport = useCallback(async (readFiles: () => Promise<OpenedVaultFile[]>) => {
+    const availability = importAvailability.current;
+    if (!availability || openingRef.current) return;
+
+    openingRef.current = true;
+    setOpening(true);
+    setOver(false);
+    setOpenError(false);
+    try {
+      const files = await readFiles();
+      // Discard reads that outlive the enabled panel.
+      if (importAvailability.current === availability && files.length) {
+        await onImportRef.current(files);
+      }
+    } catch {
+      if (importAvailability.current === availability) {
+        setOpenError(true);
+      }
+    } finally {
+      openingRef.current = false;
+      setOpening(false);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const element = surfaceRef.current;
     if (!element) return;
 
     const onDragOver = (event: globalThis.DragEvent) => {
+      if (!isFileDrag(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (disabled) return;
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-      setOver(true);
+      const canDrop = !!importAvailability.current && !openingRef.current;
+      if (event.dataTransfer) event.dataTransfer.dropEffect = canDrop ? 'copy' : 'none';
+      setOver(canDrop);
     };
     const onDragLeave = (event: globalThis.DragEvent) => {
       if (event.relatedTarget instanceof Node && element.contains(event.relatedTarget)) return;
       setOver(false);
     };
-    const onDrop = async (event: globalThis.DragEvent) => {
+    const onDrop = (event: globalThis.DragEvent) => {
+      if (!isFileDrag(event)) return;
       event.preventDefault();
       event.stopPropagation();
       setOver(false);
-      if (disabled) return;
       const files = event.dataTransfer?.files;
-      if (files?.length) await onImport(await filesFromList(files));
+      if (files?.length) void openAndImport(() => filesFromList(files));
     };
 
     element.addEventListener('dragover', onDragOver);
@@ -60,11 +109,12 @@ export function ImportPanel({
       element.removeEventListener('dragleave', onDragLeave);
       element.removeEventListener('drop', onDrop);
     };
-  }, [disabled, onImport]);
+  }, [openAndImport]);
 
   return (
     <Box
       className="empty-layout"
+      ref={surfaceRef}
       style={{
         flex: 1,
         minHeight: 'calc(100vh - 64px)',
@@ -76,8 +126,7 @@ export function ImportPanel({
       }}
     >
       <Box
-        className={`dropzone ${over ? 'over' : ''}`}
-        ref={dropzoneRef}
+        className={`dropzone ${highlighted ? 'over' : ''}`}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -86,8 +135,8 @@ export function ImportPanel({
           width: '100%',
           maxWidth: 880,
           gap: uiTheme.spacing.l,
-          borderColor: over ? uiTheme.colors.primary : 'transparent',
-          borderStyle: over ? 'dashed' : 'solid',
+          borderColor: highlighted ? uiTheme.colors.primary : 'transparent',
+          borderStyle: highlighted ? 'dashed' : 'solid',
           borderWidth: 1,
           borderRadius: uiTheme.radii.l,
           padding: uiTheme.spacing.xl,
@@ -155,11 +204,21 @@ export function ImportPanel({
           </Box>
           <Box className="choose-files-action" alignItems="center">
             <Button
-              title={busy ? 'Opening…' : 'Choose files'}
-              disabled={busy || disabled}
+              title={loading ? 'Opening…' : 'Choose files'}
+              disabled={loading || disabled}
               onPress={async () => {
-                if (busy || disabled) return;
-                await onImport(await openVaultFiles());
+                const availability = importAvailability.current;
+                if (!availability || openingRef.current) return;
+                try {
+                  const files = await openVaultFiles();
+                  if (importAvailability.current === availability && files.length) {
+                    await openAndImport(async () => files);
+                  }
+                } catch {
+                  if (importAvailability.current === availability) {
+                    setOpenError(true);
+                  }
+                }
               }}
             />
           </Box>
@@ -189,6 +248,9 @@ export function ImportPanel({
           </Box>
         ) : null}
         {error ? <Alert>{error}</Alert> : null}
+        {openError ? (
+          <Alert>Could not open the files. Drop them again or use Choose files.</Alert>
+        ) : null}
       </Box>
     </Box>
   );

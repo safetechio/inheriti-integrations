@@ -24,12 +24,23 @@ export function reconcileEditedBindings(
   const previous = projection.suggestions.filter((asset) => asset.fromNodeId === nodeId);
   const projected = projectSuggestions(
     session,
-    sourceSuggestions(session).filter((asset) => asset.fromNodeId === nodeId),
+    (context.sourceOriginals ?? sourceSuggestions(session)).filter(
+      (asset) => asset.fromNodeId === nodeId,
+    ),
     mappingOverrides,
     plainTextOverrides,
     plainTextAssetIds,
     typeOverrides,
     preservation,
+    {
+      ...context.organization,
+      assets: Object.fromEntries(
+        Object.entries(context.organization.assets).filter(
+          ([, asset]) => asset.fromNodeId === nodeId,
+        ),
+      ),
+    },
+    workspace,
   );
   const nextById = new Map(projected.map((asset) => [statusKey(asset), asset]));
   let next = workspace;

@@ -3,6 +3,8 @@ import { Box, ProgressBar, Text } from '@main-components';
 import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
 import type { ImportReviewControls } from '../AssetReviewQueue/import-review-controls';
 import type { ReviewAsset } from '../AssetReviewQueue';
+import { getReviewBlockers } from '../AssetReviewQueue/review-blockers';
+import type { ReviewRecoveryHandle } from '../AssetReviewQueue/types';
 import type { ChecklistItem, StagingState } from '../FinalStagingChecklist';
 import type { GroupingAsset, PlanDraft } from '../PlanGroupingSurface';
 import type { FolderWorkspaceProps } from '../PlanGroupingSurface/types';
@@ -12,7 +14,10 @@ import type { ImporterFlowReadiness } from './application/flow-readiness';
 import { FlowActions } from './components/FlowActions';
 import { FlowHeader, CancelImportControl } from './components/FlowHeader';
 import { FlowStepper } from './components/FlowStepper';
+import { QuickGuide } from './components/QuickGuide';
 import { StageContent } from './components/StageContent';
+import { SourceOmissionsModal } from './components/SourceOmissionsModal';
+import { useSourceOmissionConfirmation } from './hooks/use-source-omission-confirmation';
 import { LocalOrganizationKeyReleaseModal } from './components/LocalOrganizationKeyReleaseModal';
 import { ModalPortal } from '@modules/_shared/ui/components/Base/Portal';
 import { StagingSuccess } from '../FinalStagingChecklist/components/StagingSuccess';
@@ -38,6 +43,7 @@ export type ImporterFlowProps = {
   initialStagingState?: StagingState;
   showKeyboardHints?: boolean;
   autoAdvance?: boolean;
+  showQuickGuideOnFirstVisit?: boolean;
   callbacks?: ImporterFlowCallbacks;
   stagingState?: StagingState;
   stagingReady?: boolean;
@@ -61,6 +67,7 @@ export function ImporterFlow({
   initialStagingState,
   showKeyboardHints = true,
   autoAdvance = true,
+  showQuickGuideOnFirstVisit = false,
   callbacks,
   stagingState,
   stagingReady = true,
@@ -92,6 +99,7 @@ export function ImporterFlow({
   const assignmentTotal = flow.unassigned.length + assignedCount;
   const assignmentPercent = Math.round((100 * assignedCount) / Math.max(1, assignmentTotal));
   const visitedPlans = useRef(false);
+  const recoveryRef = useRef<ReviewRecoveryHandle>(null);
   useEffect(() => {
     if (stage !== 'plans' || visitedPlans.current) return;
     visitedPlans.current = true;
@@ -114,18 +122,45 @@ export function ImporterFlow({
   const undecided = flow.assets.filter(
     (item) => !['accepted', 'excluded'].includes(item.status),
   ).length;
+  const reviewBlockers =
+    stage === 'assets' && !flow.canGoNext
+      ? getReviewBlockers(flow.assets, flow.preservation?.coverage)
+      : undefined;
+  const reviewIssues = reviewBlockers
+    ? [
+        {
+          count: reviewBlockers.pendingNoteCount,
+          singular: 'note needs a destination',
+          plural: 'notes need a destination',
+          action: 'Resolve notes',
+        },
+        {
+          count: reviewBlockers.undecidedCount,
+          singular: 'asset to review',
+          plural: 'assets to review',
+          action: 'Review assets',
+        },
+        {
+          count: reviewBlockers.invalidFieldCount,
+          singular: 'field has an invalid mapping',
+          plural: 'fields have invalid mappings',
+          action: 'Fix mappings',
+        },
+        {
+          count: reviewBlockers.pendingFieldCount,
+          singular: 'field needs a destination',
+          plural: 'fields need a destination',
+          action: 'Resolve fields',
+        },
+      ].filter(({ count }) => count > 0)
+    : [];
+  const firstReviewIssue = reviewIssues[0];
   const sourceIssueGroups =
     Number(flow.files.length === 0) +
     Number(
       flow.files.some((file) => file.status === 'unlock-required' || file.status === 'unlocking'),
     ) +
-    Number(flow.files.some((file) => file.status === 'failed' || file.status === 'retrying')) +
-    Number(
-      flow.files.some(
-        (file) =>
-          file.status === 'warning' && file.diagnostics?.length && !file.warningsAcknowledged,
-      ),
-    );
+    Number(flow.files.some((file) => file.status === 'failed' || file.status === 'retrying'));
   const planIssueGroups = Number(flow.unassigned.length > 0) + Number(!flow.readiness.plans);
   const assetIssueGroups = Number(
     !flow.assets.length || undecided > 0 || preservation?.coverage.ready === false,
@@ -145,6 +180,19 @@ export function ImporterFlow({
     plans: flow.readiness.plans,
     staging: flow.readiness.staging && stagingReady,
   };
+  const sourceConfirmation = useSourceOmissionConfirmation(
+    flow.files,
+    readiness.sources && !flowLocked,
+    flow.goTo,
+  );
+  function selectStage(destination: ImporterFlowStage) {
+    if (stage === 'sources' && destination !== 'sources') {
+      sourceConfirmation.continueTo(destination);
+    } else {
+      flow.goTo(destination);
+    }
+  }
+
   const stageDescription = getStageDescription({
     stage,
     stagingState: flow.stagingState,
@@ -153,6 +201,12 @@ export function ImporterFlow({
     blockerCount,
     keyLoaded,
   });
+  const stageHelper =
+    stage === 'assets' && flow.assets.length > 0 && undecided === 0
+      ? flow.canGoNext
+        ? 'Asset review is complete.'
+        : 'Resolve the remaining import decisions before continuing.'
+      : stageHelpers[stage];
 
   if (stage === 'staging' && flow.stagingState === 'staged') {
     return (
@@ -188,7 +242,7 @@ export function ImporterFlow({
       <Box className="importer-flow-workspace">
         <FlowStepper
           stage={stage}
-          onSelect={flow.goTo}
+          onSelect={selectStage}
           files={flow.files}
           assets={flow.assets}
           unassigned={flow.unassigned}
@@ -218,15 +272,20 @@ export function ImporterFlow({
                 </Text>
               </Box>
               <Text variant="importerFooterNote" color="gray">
-                {stageHelpers[stage]}
+                {stageHelper}
               </Text>
             </Box>
             {flow.stagingState !== 'staged' ? (
-              <CancelImportControl
-                fileCount={flow.files.length}
-                planCount={flow.plans.length}
-                onCancel={flow.cancel}
-              />
+              <Box flexDirection="row" alignItems="center" gap="s">
+                {stage === 'assets' || stage === 'plans' ? (
+                  <QuickGuide key={`${stage}-${flowLocked}`} stage={stage} disabled={flowLocked} autoOpen={showQuickGuideOnFirstVisit} />
+                ) : null}
+                <CancelImportControl
+                  fileCount={flow.files.length}
+                  planCount={flow.plans.length}
+                  onCancel={flow.cancel}
+                />
+              </Box>
             ) : null}
           </Box>
           {stage === 'plans' ? (
@@ -256,6 +315,7 @@ export function ImporterFlow({
               description={stageDescription}
               checklist={checklist}
               flow={flow}
+              recoveryRef={recoveryRef}
               selectedPlanId={selectedPlanId}
               onSelectPlan={setSelectedPlanId}
               onCreatePlan={(options) => {
@@ -289,21 +349,39 @@ export function ImporterFlow({
           </Box>
           <FlowActions
             canGoBack={flow.canGoBack && !flowLocked}
-            canGoNext={flow.canGoNext}
+            canGoNext={flow.canGoNext && (stage !== 'sources' || !flowLocked)}
             onBack={flow.goBack}
-            onNext={flow.goNext}
+            onNext={stage === 'sources' ? () => selectStage('assets') : flow.goNext}
             showComplete={stage !== 'staging'}
             nextLabel={nextAction[stage]}
             summary={
               stage === 'plans'
-                ? `${flow.plans.length} draft ${flow.plans.length === 1 ? 'plan' : 'plans'} · ${flow.unassigned.length} ${flow.unassigned.length === 1 ? 'asset' : 'assets'} still unassigned`
-                : stage === 'assets' && preservation?.coverage.ready === false
-                  ? 'Resolve pending fields and notes destinations.'
+                ? `${flow.plans.length} draft ${flow.plans.length === 1 ? 'plan' : 'plans'} · ${flow.unassigned.length ? `${flow.unassigned.length} ${flow.unassigned.length === 1 ? 'asset' : 'assets'} still unassigned` : 'All assets assigned'}`
+                : firstReviewIssue
+                  ? reviewIssues
+                      .map(
+                        ({ count, singular, plural }) =>
+                          `${count} ${count === 1 ? singular : plural}`,
+                      )
+                      .join(' · ')
                   : undefined
+            }
+            recovery={
+              firstReviewIssue && {
+                label: firstReviewIssue.action,
+                onPress: () => recoveryRef.current?.resolve(),
+              }
             }
           />
         </Box>
       </Box>
+      {stage === 'sources' && sourceConfirmation.visible && (
+        <SourceOmissionsModal
+          sources={sourceConfirmation.sources}
+          onDismiss={sourceConfirmation.dismiss}
+          onConfirm={sourceConfirmation.confirm}
+        />
+      )}
       <LocalOrganizationKeyReleaseModal
         visible={localReleaseSimulatorVisible}
         onDismiss={() => setLocalReleaseSimulatorVisible(false)}
@@ -358,8 +436,7 @@ function getStageDescription({
   keyLoaded: boolean;
 }) {
   if (stage === 'sources' && sourceIssueGroups)
-    return 'Review source warnings, unlock or retry affected files, or remove them before continuing.';
-  if (stage === 'assets') return 'Accept or exclude every detected Asset before continuing.';
+    return 'Unlock or retry affected files, or remove them before continuing.';
   if (stage === 'plans' && planIssueGroups)
     return 'Create valid Plans and assign every accepted Asset before continuing.';
   if (stage !== 'staging') return 'This step is clear.';

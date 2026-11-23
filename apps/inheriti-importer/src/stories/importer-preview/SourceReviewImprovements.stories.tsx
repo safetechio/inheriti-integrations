@@ -6,14 +6,10 @@ import { sourceFiles } from './fixtures';
 
 export const SourceReview = () => {
   const [warning, setWarning] = useState<ImportFile | null>(null);
-  const [acknowledged, setAcknowledged] = useState<string[]>([]);
   return (
     <>
       <SourceImportStatus
-        files={sourceFiles.map((file) => ({
-          ...file,
-          warningsAcknowledged: acknowledged.includes(file.name),
-        }))}
+        files={sourceFiles}
         onViewWarnings={setWarning}
         onRetry={() => undefined}
         onUnlock={() => undefined}
@@ -22,10 +18,6 @@ export const SourceReview = () => {
       <SourceWarningsModal
         file={warning}
         onDismiss={() => setWarning(null)}
-        onUnderstood={(file) => {
-          setAcknowledged((current) => [...current, file.name]);
-          setWarning(null);
-        }}
       />
     </>
   );
@@ -44,7 +36,6 @@ export const SourceWarnings = () => (
       ],
     }}
     onDismiss={() => undefined}
-    onUnderstood={() => undefined}
   />
 );
 export const SourceUnlock = () => (

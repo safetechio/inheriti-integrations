@@ -4,7 +4,8 @@ import { ignoreSourceField, removeAsset } from '@modules/plans/domain/workspace-
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { NoteDestination, ReviewAsset, ReviewBatchResult } from '../../AssetReviewQueue/types';
 import { nativeNotes, type PreservationChoices } from './importer-workspace-notes';
-import { statusKey } from './importer-workspace-suggestions';
+import { projectSuggestions } from './importer-workspace-projection';
+import { sourceSuggestions, statusKey } from './importer-workspace-suggestions';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
 
 export function createPreservationActions(
@@ -14,16 +15,16 @@ export function createPreservationActions(
 ) {
   const { preservation, projection, session, setDecisions, updateWorkspace, byId } = context;
 
-  function invalidateAffected(fieldIds: string[], nodeIds: Set<string>, exclude = false) {
-    const fields = new Set(fieldIds);
-    const usesField = (asset: Pick<AssetDraft, 'fieldBindings'>) =>
-      Object.values(asset.fieldBindings).some((binding) =>
-        bindingSourceIds(binding).some((id) => fields.has(id)),
-      );
-    const assetIds = projection.suggestions
-      .filter((asset) => nodeIds.has(asset.fromNodeId) || (exclude && usesField(asset)))
-      .map(statusKey);
-    const affected = new Set(assetIds);
+  const usesFields = (fields: ReadonlySet<string>) => (asset: Pick<AssetDraft, 'fieldBindings'>) =>
+    Object.values(asset.fieldBindings).some((binding) =>
+      bindingSourceIds(binding).some((id) => fields.has(id)),
+    );
+
+  function invalidateAffected(fieldIds: string[], affected: Set<string>, exclude = false) {
+    const usesField = usesFields(new Set(fieldIds));
+    for (const asset of projection.suggestions) {
+      if (usesField(asset)) affected.add(statusKey(asset));
+    }
     setDecisions((current) => {
       const updated = { ...current };
       for (const id of affected) {
@@ -46,7 +47,39 @@ export function createPreservationActions(
       }
       return next;
     });
-    invalidate(assetIds);
+    invalidate([...affected]);
+  }
+
+  function updateNoteChoices(
+    choices: PreservationChoices,
+    noteIds: Set<string>,
+    fieldIds: string[],
+    affected: Set<string>,
+  ) {
+    if (noteIds.size) {
+      const { workspace, mappingOverrides, plainTextOverrides, plainTextAssetIds, typeOverrides } =
+        context;
+      // A destination change can move notes between the primary and a companion.
+      const usesNote = usesFields(noteIds);
+      const previous = new Set(projection.suggestions.filter(usesNote).map(statusKey));
+      const nextSuggestions = projectSuggestions(
+        session,
+        context.sourceOriginals ?? sourceSuggestions(session),
+        mappingOverrides,
+        plainTextOverrides,
+        plainTextAssetIds,
+        typeOverrides,
+        { ...choices, ignored: new Set(workspace.ignoredSourceFieldIds) },
+        context.organization,
+        workspace,
+      );
+      const next = new Set(nextSuggestions.filter(usesNote).map(statusKey));
+      for (const id of new Set([...previous, ...next])) {
+        if (previous.has(id) !== next.has(id)) affected.add(id);
+      }
+    }
+    setChoices(choices);
+    invalidateAffected(fieldIds, affected);
   }
 
   const actualByField = new Map(
@@ -69,9 +102,12 @@ export function createPreservationActions(
     const changedIds: string[] = [];
     const skippedIds: string[] = [];
     const sourceNotes = { ...preservation.sourceNotes };
+    const entryNotes = { ...preservation.entryNotes };
     const publicSkippedEntries = new Set(preservation.publicSkippedEntries);
-    const nodeIds = new Set<string>();
+    const affected = new Set<string>();
+    const noteIds = new Set<string>();
     const fieldIds: string[] = [];
+    const rescued = new Set(preservation.rescued);
     for (const source of sources) {
       sourceNotes[source.sourceId] = destination;
       for (const asset of projection.assets) {
@@ -80,24 +116,50 @@ export function createPreservationActions(
           preservation.entryNotes?.[asset.sourceNodeId] ||
           (destination === 'asset-notes' && !asset.note.publicAllowed)
         ) {
-          if (destination === 'asset-notes' && !preservation.entryNotes?.[asset.sourceNodeId])
+          if (
+            destination === 'asset-notes' &&
+            preservation.entryNotes?.[asset.sourceNodeId] === undefined &&
+            !publicSkippedEntries.has(asset.sourceNodeId)
+          ) {
             publicSkippedEntries.add(asset.sourceNodeId);
+            noteIds.add(asset.note.sourceFieldId);
+          }
           skippedIds.push(asset.id);
           continue;
         }
         const wasSkipped = publicSkippedEntries.delete(asset.sourceNodeId);
         const stale = hasStaleNote(asset, destination);
-        if (source.destination === destination && !wasSkipped && !stale) continue;
+        const wasReset = entryNotes[asset.sourceNodeId] === null;
+        if (wasReset) delete entryNotes[asset.sourceNodeId];
+        if (
+          source.destination === destination &&
+          asset.note.destination === destination &&
+          !wasSkipped &&
+          !stale &&
+          !wasReset
+        )
+          continue;
         changedIds.push(asset.id);
+        noteIds.add(asset.note.sourceFieldId);
         if (asset.note.destination !== destination || stale) {
-          nodeIds.add(asset.sourceNodeId);
+          affected.add(asset.id);
           fieldIds.push(asset.note.sourceFieldId);
+          if (destination === 'asset-notes') rescued.delete(asset.note.sourceFieldId);
         }
       }
     }
-    if (changedIds.length || sources.some((source) => source.destination !== destination)) {
-      setChoices({ ...preservation, sourceNotes, publicSkippedEntries });
-      invalidateAffected(fieldIds, nodeIds);
+    if (
+      noteIds.size ||
+      sources.some(
+        (source) => sourceNotes[source.sourceId] !== preservation.sourceNotes?.[source.sourceId],
+      )
+    ) {
+      updateNoteChoices(
+        { ...preservation, sourceNotes, entryNotes, publicSkippedEntries, rescued },
+        noteIds,
+        fieldIds,
+        affected,
+      );
     }
     return { changedIds, skippedIds };
   }
@@ -115,14 +177,16 @@ export function createPreservationActions(
       return { changedIds: [], skippedIds: [] };
     const rescued = new Set(preservation.rescued);
     if (destination === 'asset-notes') rescued.delete(current.note.sourceFieldId);
-    setChoices({
-      ...preservation,
-      rescued,
-      entryNotes: { ...preservation.entryNotes, [nodeId]: destination },
-    });
-    invalidateAffected(
-      changed ? [current.note.sourceFieldId] : [],
-      changed ? new Set([nodeId]) : new Set(),
+    const noteId = current.note.sourceFieldId;
+    updateNoteChoices(
+      {
+        ...preservation,
+        rescued,
+        entryNotes: { ...preservation.entryNotes, [nodeId]: destination },
+      },
+      new Set([noteId]),
+      changed ? [noteId] : [],
+      new Set(changed ? [current.id] : []),
     );
     return { changedIds: [asset.id], skippedIds: [] };
   }
@@ -157,6 +221,11 @@ export function createPreservationActions(
           .filter((asset) => asset.variant === 'additional-fields' && asset.type === 'PLAIN-TEXT')
           .map((asset) => [asset.fromNodeId, asset]),
       );
+      const rescuedNodes = new Set(
+        projection.suggestions
+          .filter((asset) => asset.variant === 'rescued-fields')
+          .map((asset) => asset.fromNodeId),
+      );
       const rescued = new Set(preservation.rescued);
       const rescueIds: string[] = [];
       const affected = new Set<string>();
@@ -167,6 +236,7 @@ export function createPreservationActions(
         const references = binding ? bindingSourceIds(binding) : [];
         if (
           companion &&
+          !rescuedNodes.has(nodeId) &&
           !draftIds.has(statusKey(companion)) &&
           Object.keys(companion.fieldBindings).length === 1 &&
           references.length === selected.size &&

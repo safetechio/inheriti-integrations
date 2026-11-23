@@ -74,6 +74,10 @@ it('renders only the first 100 rows but selects every matching asset from the li
   expect(screen.queryByLabelText('Inspect Account 999')).toBeNull();
   fireEvent.keyDown(window, { key: 'a', ctrlKey: true });
   expect(screen.queryByText('1000 selected')).toBeNull();
+  click('Select all');
+  expect(screen.getByText('1000 selected')).toBeTruthy();
+  click('Deselect all');
+  expect(screen.queryByText('1000 selected')).toBeNull();
   fireEvent.keyDown(list(), { key: 'a', ctrlKey: true });
   expect(screen.getByText('1000 selected')).toBeTruthy();
   const card = container.querySelector('.asset-review-selection')!;
@@ -86,6 +90,43 @@ it('renders only the first 100 rows but selects every matching asset from the li
   expect(screen.queryByLabelText('Inspect Account 0')).toBeNull();
   click('Previous assets');
   expect(screen.getByLabelText('Inspect Account 0')).toBeTruthy();
+});
+
+it('inspects the latest asset and callback after the same rows are projected again', () => {
+  const initial = asset('Alpha');
+  const onSelect = vi.fn();
+  const view = render(<AssetReviewQueue assets={[initial]} onSelect={onSelect} />);
+  click('All 1');
+  const updated: ReviewAsset = {
+    ...initial,
+    mapped: ['Username', 'Password'],
+    schemaFields: [{ key: 'secret.password', label: 'Password', sourceFieldId: 'password-field' }],
+    note: {
+      sourceFieldId: 'note-field',
+      destination: 'protected',
+      explicit: true,
+      inherited: false,
+      publicAllowed: false,
+    },
+  };
+  const onSelectUpdated = vi.fn();
+  view.rerender(<AssetReviewQueue assets={[updated]} onSelect={onSelectUpdated} />);
+
+  click('Inspect Alpha');
+  expect(onSelectUpdated).toHaveBeenCalledOnce();
+  expect(onSelectUpdated.mock.calls[0][0]).toBe(updated);
+  expect(onSelect).not.toHaveBeenCalled();
+
+  const renamed = { ...updated, name: 'Renamed Alpha' };
+  view.rerender(<AssetReviewQueue assets={[renamed]} onSelect={onSelectUpdated} />);
+  expect(within(list()).getByRole('button', { name: 'Inspect Renamed Alpha' })).toBeTruthy();
+
+  const accepted: ReviewAsset = { ...renamed, status: 'accepted' };
+  view.rerender(<AssetReviewQueue assets={[accepted]} onSelect={onSelectUpdated} />);
+  const row = within(list()).getByRole('button', { name: 'Inspect Renamed Alpha' });
+  expect(within(row).getByLabelText('Accepted')).toBeTruthy();
+  fireEvent.keyDown(row, { key: 'Enter' });
+  expect(onSelectUpdated).toHaveBeenLastCalledWith(accepted);
 });
 
 it('keeps inspection separate from checkboxes, command-click and shift range, and clears on Escape', () => {
@@ -109,6 +150,35 @@ it('keeps inspection separate from checkboxes, command-click and shift range, an
   fireEvent.keyDown(list(), { key: 'Escape' });
   expect(check('Select Alpha').checked).toBe(false);
   expect(screen.queryByText('2 selected')).toBeNull();
+});
+
+it('uses the current search results for shift selection and review auto-advance', () => {
+  const assets = ['Account Alpha', 'Other', 'Account Bravo'].map((id) => asset(id));
+  const onAction = vi.fn();
+  const onSelect = vi.fn();
+  const onReviewAssets = vi.fn(() => stayed);
+  render(
+    <AssetReviewQueue
+      assets={assets}
+      onAction={onAction}
+      onSelect={onSelect}
+      onReviewAssets={onReviewAssets}
+    />,
+  );
+
+  click('Search assets');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search assets' }), {
+    target: { value: 'account' },
+  });
+  fireEvent.click(check('Select Account Alpha'));
+  fireEvent.click(check('Select Account Bravo'), { shiftKey: true });
+  click('Accept selected');
+  expect(onReviewAssets).toHaveBeenCalledWith('accept', [assets[0], assets[2]]);
+
+  fireEvent.click(screen.getByRole('button', { name: /^Actions for / }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Exclude from import' }));
+  expect(onAction).toHaveBeenCalledWith('exclude', assets[0]);
+  expect(onSelect).toHaveBeenLastCalledWith(assets[2]);
 });
 
 it.each(['Escape', 'Clear'])(
@@ -155,8 +225,12 @@ it('filters exceptions with counts, clears selected assets on query and tab chan
   click('Missing mappings 1');
   click('Focus next issue');
   expect(onSelect).toHaveBeenLastCalledWith(invalid);
+  expect(screen.getByRole('dialog', { name: 'Missing — Issues' })).toBeTruthy();
+  click('Close Missing — Issues');
   click('Focus next issue');
   expect(onSelect).toHaveBeenLastCalledWith(omitted);
+  expect(screen.getByRole('dialog', { name: 'Omitted — Issues' })).toBeTruthy();
+  click('Close Omitted — Issues');
   click('Unmapped fields 1');
   expect(screen.queryByLabelText('Inspect Missing')).toBeNull();
   fireEvent.click(check('Select Omitted'));
@@ -193,6 +267,12 @@ it('shows mixed subtree selection, scopes to filtered members, and uses expansio
   expect(screen.queryByLabelText('Inspect Bravo')).toBeNull();
   click('Exclude selected');
   expect(onReviewAssets).toHaveBeenCalledWith('exclude', [alpha, bravo]);
+
+  click('Select all');
+  expect(screen.getByText('3 selected')).toBeTruthy();
+  expect(screen.queryByLabelText('Inspect Bravo')).toBeNull();
+  click('Exclude selected');
+  expect(onReviewAssets).toHaveBeenLastCalledWith('exclude', [alpha, bravo, other]);
 });
 
 it('uses batch shortcuts and retains Undo after a subsequent skipped action', () => {
@@ -244,7 +324,8 @@ it('opens tree rows on keyboard navigation and advances to the next pending asse
   fireEvent.keyDown(list(), { key: 'ArrowDown' });
   expect(onSelect).toHaveBeenLastCalledWith(bravo);
   expect(screen.getByLabelText('Inspect Bravo')).toBeTruthy();
-  click('Exclude');
+  fireEvent.click(screen.getByRole('button', { name: /^Actions for / }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Exclude from import' }));
   expect(action).toHaveBeenLastCalledWith('exclude', bravo);
   expect(onSelect).toHaveBeenLastCalledWith(alpha);
   rerender(
@@ -364,16 +445,18 @@ it('previews a compatible mapping count and requires confirmation before applyin
   );
   fireEvent.click(check('Select Compatible target'));
   fireEvent.click(check('Select Incompatible target'));
-  click('Apply mappings');
+  click('Apply this mapping…');
   const confirmation = screen.getByRole('group', { name: 'Confirm applying mappings' });
-  expect(confirmation.textContent).toContain('Inspected template · 1 compatible of 2 selected');
+  expect(confirmation.textContent).toContain(
+    'Inspected template · 1 of 2 selected assets will change',
+  );
   expect(onApplyMappings).not.toHaveBeenCalled();
   fireEvent.keyDown(confirmation, { key: 'A', ctrlKey: true, shiftKey: true });
   expect(onAcceptAllEligible).not.toHaveBeenCalled();
   fireEvent.keyDown(confirmation, { key: 'Escape' });
   expect(confirmation.isConnected).toBe(false);
   expect(check('Select Compatible target').checked).toBe(true);
-  click('Apply mappings');
+  click('Apply this mapping…');
   click('Confirm apply');
   expect(onApplyMappings).toHaveBeenCalledWith(template, [target, incompatible]);
   expect(screen.getByText('1 updated · 1 skipped')).toBeTruthy();
@@ -399,4 +482,72 @@ it('closes selection help on the first Escape and clears selection on the next',
   expect(check('Select Alpha').checked).toBe(true);
   fireEvent.keyDown(help, { key: 'Escape' });
   expect(check('Select Alpha').checked).toBe(false);
+});
+
+it('hides mapping actions when selected assets already have matching mappings', () => {
+  const fields = (id: string) => [
+    {
+      key: 'secret.password',
+      label: 'Password',
+      sourceFieldId: id,
+      candidates: [{ id, name: 'Password' }],
+    },
+  ];
+  const template = asset('Template', { schemaFields: fields('template-password') });
+  const target = asset('Already matching', { schemaFields: fields('target-password') });
+  const onApplyMappings = vi.fn();
+  render(
+    <AssetReviewQueue
+      assets={[template, target]}
+      onReviewAssets={() => stayed}
+      onApplyMappings={onApplyMappings}
+    />,
+  );
+  fireEvent.click(check('Select Already matching'));
+  expect(screen.queryByRole('button', { name: 'Apply this mapping…' })).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Confirm applying mappings' })).toBeNull();
+  expect(onApplyMappings).not.toHaveBeenCalled();
+});
+
+it('offers eligible review actions across tabs and clears selection on each tab switch', () => {
+  const assets = [
+    asset('Pending'),
+    asset('Approved', { status: 'accepted' }),
+    asset('Skipped', { status: 'excluded' }),
+  ];
+  const onReviewAssets = vi.fn(() => stayed);
+  const onAction = vi.fn();
+  render(<AssetReviewQueue assets={assets} onReviewAssets={onReviewAssets} onAction={onAction} />);
+
+  click('Select all');
+  expect(screen.getByText('1 selected')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Accept selected' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Exclude selected' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Restore selected' })).toBeNull();
+
+  click('Accepted 1');
+  expect(screen.queryByText('1 selected')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Accept', exact: true })).toBeNull();
+  click('Select all');
+  expect(screen.queryByRole('button', { name: 'Accept selected' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Exclude selected' })).toBeTruthy();
+
+  click('Excluded 1');
+  expect(screen.queryByText('1 selected')).toBeNull();
+  click('Select all');
+  expect(screen.queryByRole('button', { name: 'Accept selected' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Exclude selected' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Clear', exact: true })).toBeTruthy();
+  fireEvent.keyDown(list(), { key: 'a' });
+  fireEvent.keyDown(list(), { key: 'x' });
+  expect(onReviewAssets).not.toHaveBeenCalled();
+  click('Restore selected');
+  expect(onReviewAssets).toHaveBeenLastCalledWith('restore', [assets[2]]);
+
+  click('All 3');
+  click('Select all');
+  expect(screen.getByText('3 selected')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Accept selected' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Exclude selected' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Restore selected' })).toBeTruthy();
 });

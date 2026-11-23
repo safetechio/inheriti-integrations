@@ -1,5 +1,6 @@
 import {
-  hasIncludedSchemaField,
+  canReviewAsset,
+  reviewDecisionStatus,
   type AssetReviewStatus,
   type ReviewBatchAction,
   type ReviewBatchResult,
@@ -23,11 +24,7 @@ export function getReviewBatchResult(
   const result: ReviewBatchResult = { changedIds: [], skippedIds: [] };
   for (const id of new Set(ids)) {
     const asset = byId.get(id);
-    const eligible =
-      asset &&
-      (action === 'accept'
-        ? asset.status !== 'accepted' && hasIncludedSchemaField(asset)
-        : asset.status !== 'excluded');
+    const eligible = asset && canReviewAsset(action, asset);
     (eligible ? result.changedIds : result.skippedIds).push(id);
   }
   return result;
@@ -41,12 +38,13 @@ export function reviewBatch(state: FlowState, action: ReviewBatchAction, ids: st
   const statuses = new Map<string, AssetReviewStatus>();
   const reviewed = new Map<string, GroupingAsset>();
   const affectedPlans = new Map<string, PlanDraft>();
-  const status: AssetReviewStatus = action === 'accept' ? 'accepted' : 'excluded';
+  const status = reviewDecisionStatus[action];
   const assets = state.assets.map((asset) => {
     if (!changed.has(asset.id)) return asset;
     const { id, name, type, source, sourceId, folderPath } = asset;
     statuses.set(id, asset.status);
-    reviewed.set(id, { id, name, type, source, sourceId, folderPath, valid: true });
+    if (action !== 'restore')
+      reviewed.set(id, { id, name, type, source, sourceId, folderPath, valid: true });
     return { ...asset, status };
   });
 

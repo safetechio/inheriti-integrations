@@ -1,9 +1,27 @@
-import { Box, Button, Icon, FilterChip, NoItemsPlaceholder, Stack, Text } from '@main-components';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Button,
+  Icon,
+  FilterChip,
+  NoItemsPlaceholder,
+  Stack,
+  Text,
+  Tooltip,
+} from '@main-components';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useMarqueeSelection } from '@modules/_shared/ui/hooks/use-marquee-selection';
 import { AssetRow } from './components/AssetRow';
 import { Inspector } from './components/Inspector';
 import { ReviewGroupRow } from './components/ReviewGroupRow';
+import { ReviewPatterns } from './components/ReviewPatterns';
 import { ReviewSelectionCard, type ReviewResult } from './components/ReviewSelectionCard';
 import { ReviewSourceToolbar } from './components/ReviewSourceToolbar';
 import { ReviewSelectionHelp } from './components/ReviewSelectionHelp';
@@ -11,10 +29,17 @@ import { exceptionFilters, isPending, statusFilters, useReviewList } from './hoo
 import { useReviewSelection } from './hooks/use-review-selection';
 import { flattenReviewTree, indexReviewTree, type ReviewRow } from './review-tree';
 import { compatibleMappingUpdates } from './review-mapping';
-import { hasIncludedSchemaField, type AssetReviewQueueProps, type ReviewAsset } from './types';
+import {
+  canReviewAsset,
+  type AssetReviewQueueProps,
+  type ReviewAsset,
+  type ReviewBatchAction,
+} from './types';
 import { ImportCoverage } from './components/ImportCoverage';
 import { NotesDestination } from './components/NotesDestination';
+import type { FieldOperationResult } from './field-operations';
 import type { ImportReviewControls } from './import-review-controls';
+import { getReviewBlockers, isNoteDestinationPending } from './review-blockers';
 import { AssetViewPicker } from '../AssetViewPicker';
 import './styles.css';
 
@@ -25,6 +50,7 @@ export type {
   ReviewAssetField,
   ReviewAssetSourceCandidate,
   ReviewBatchResult,
+  ReviewRecoveryHandle,
 } from './types';
 
 const pageSize = 100;
@@ -33,6 +59,7 @@ const editable =
 
 export function AssetReviewQueue({
   assets,
+  recoveryRef,
   sourceFiles,
   selectedId,
   onSelect,
@@ -65,22 +92,93 @@ export function AssetReviewQueue({
     canShowTree,
     visible,
     issues,
+    issueCount,
     exceptionCounts,
-  } = useReviewList(assets, sourceFiles);
-  const noteSources =
-    preservation?.noteSources.filter((entry) => source === 'all' || entry.sourceId === source) ??
-    [];
+  } = useReviewList(assets, sourceFiles, preservation?.coverage);
+  const coverage = preservation?.coverage;
+  const allNoteSources = preservation?.noteSources;
   const setSourceNoteDestination = preservation?.onSetSourceNoteDestination;
-  const noteCount = noteSources.reduce((count, entry) => count + entry.fieldCount, 0);
-  const noteDestination = noteSources.every(
-    (entry) => entry.destination === noteSources[0]?.destination,
-  )
-    ? (noteSources[0]?.destination ?? null)
-    : null;
+  const {
+    noteSources,
+    noteCount,
+    noteDestination,
+    effectiveNoteDestination,
+    needsNoteDestination,
+    hasMixedDestinations,
+  } = useMemo(() => {
+    const noteSources =
+      allNoteSources?.filter((entry) => source === 'all' || entry.sourceId === source) ?? [];
+    const noteCount = noteSources.reduce((count, entry) => count + entry.fieldCount, 0);
+    const noteDestination = noteSources.every(
+      (entry) => entry.destination === noteSources[0]?.destination,
+    )
+      ? (noteSources[0]?.destination ?? null)
+      : null;
+    const excludedSourceFields = new Set(
+      coverage?.fields.filter(({ status }) => status === 'excluded').map(({ id }) => id),
+    );
+    const activeNotes = assets.flatMap((asset) =>
+      (source === 'all' || asset.sourceId === source) &&
+      asset.note &&
+      !excludedSourceFields.has(asset.note.sourceFieldId)
+        ? [asset.note]
+        : [],
+    );
+    const needsNoteDestination = assets.some(
+      (asset) =>
+        (source === 'all' || asset.sourceId === source) &&
+        isNoteDestinationPending(asset, excludedSourceFields),
+    );
+    const effectiveDestinations = new Set(activeNotes.map(({ destination }) => destination));
+    const resolvedNoteIds = new Set(activeNotes.map(({ sourceFieldId }) => sourceFieldId));
+    const nativeNoteIds = new Set(noteSources.flatMap(({ fieldIds }) => fieldIds ?? []));
+    const isUnresolvedNote = (id: string) =>
+      nativeNoteIds.has(id) && !resolvedNoteIds.has(id) && !excludedSourceFields.has(id);
+    const addDestination = (key: string) => {
+      if (key === 'meta.notes') effectiveDestinations.add('asset-notes');
+      else if (key.startsWith('secret.')) effectiveDestinations.add('protected');
+      else return false;
+      return true;
+    };
+    for (const field of coverage?.fields ?? []) {
+      if (!isUnresolvedNote(field.id)) continue;
+      for (const { fieldId, valid } of field.destinations) {
+        if (valid !== false && addDestination(fieldId)) resolvedNoteIds.add(field.id);
+      }
+    }
+    if ([...nativeNoteIds].some(isUnresolvedNote)) {
+      for (const asset of assets) {
+        if (asset.status === 'excluded') continue;
+        for (const field of asset.schemaFields ?? []) {
+          if (field.validationError) continue;
+          if (field.sourceFieldId && isUnresolvedNote(field.sourceFieldId))
+            addDestination(field.key);
+          if (
+            field.key === 'secret.text' &&
+            asset.plainTextSources?.some(({ id }) => isUnresolvedNote(id))
+          )
+            addDestination(field.key);
+        }
+      }
+    }
+    return {
+      noteSources,
+      noteCount,
+      noteDestination,
+      effectiveNoteDestination: effectiveDestinations.values().next().value ?? noteDestination,
+      needsNoteDestination,
+      hasMixedDestinations: effectiveDestinations.size > 1,
+    };
+  }, [allNoteSources, assets, coverage, source]);
   const assetNames = useMemo(
     () => new Map(assets.map((asset) => [asset.id, asset.name])),
     [assets],
   );
+  const openCoverage = useRef<(status: 'pending' | 'invalid') => void>(null);
+  const openNotes = useRef<() => void>(null);
+  const openIssues = useRef<() => void>(null);
+  const [openGlobalNotes, setOpenGlobalNotes] = useState(false);
+  const [issueAssetId, setIssueAssetId] = useState<string>();
   const [view, setView] = useState<'list' | 'tree'>('list');
   const [page, setPage] = useState(0);
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
@@ -88,6 +186,9 @@ export function AssetReviewQueue({
   const [revealId, setRevealId] = useState<string>();
   const [batchAccepted, setBatchAccepted] = useState<number | null>(null);
   const [batchResult, setBatchResult] = useState<ReviewResult>();
+  const [fieldResult, setFieldResult] = useState<string>();
+  const [pendingInspectIds, setPendingInspectIds] = useState<string[]>([]);
+  const [focusRevealedRow, setFocusRevealedRow] = useState(false);
 
   const treeActive = view === 'tree' && canShowTree;
   const tree = useMemo(
@@ -122,10 +223,51 @@ export function AssetReviewQueue({
   const bulkEnabled = Boolean(onReviewAssets);
   const selected =
     visible.find((asset) => asset.id === (selectedId ?? localInspectedId)) ?? navigableAssets[0];
+  useLayoutEffect(() => {
+    if (!openGlobalNotes) return;
+    setOpenGlobalNotes(false);
+    if (source === 'all') openNotes.current?.();
+  }, [openGlobalNotes, source]);
+  useLayoutEffect(() => {
+    if (!issueAssetId) return;
+    setIssueAssetId(undefined);
+    if (selected?.id === issueAssetId) openIssues.current?.();
+  }, [issueAssetId, selected]);
+  useImperativeHandle(recoveryRef, () => ({
+    resolve() {
+      const blockers = getReviewBlockers(assets, preservation?.coverage);
+      if (
+        blockers.pendingNoteCount &&
+        setSourceNoteDestination &&
+        preservation?.noteSources.length
+      ) {
+        setSource('all');
+        setOpenGlobalNotes(true);
+      } else if (blockers.undecidedCount) {
+        const next = assets.find(isPending);
+        if (!next) return;
+        setSearch('');
+        if (filter !== 'review') selection.replace([]);
+        setFilter('review');
+        setException(undefined);
+        setSource('all');
+        setPendingInspectIds([next.id]);
+      } else if (blockers.invalidFieldCount || blockers.pendingFieldCount) {
+        openCoverage.current?.(blockers.invalidFieldCount ? 'invalid' : 'pending');
+      }
+    },
+  }));
   const selectedAssets = useMemo(
     () => navigableAssets.filter((asset) => selection.selectedIdsSet.has(asset.id)),
     [navigableAssets, selection.selectedIdsSet],
   );
+  const selectedReviewActions = {
+    accept: selectedAssets.some((asset) => canReviewAsset('accept', asset)),
+    exclude: selectedAssets.some((asset) => canReviewAsset('exclude', asset)),
+    restore: selectedAssets.some((asset) => canReviewAsset('restore', asset)),
+  };
+  const allMatchingSelected = selectedAssets.length === navigableAssets.length;
+  const selectAll = () => selection.replace(navigableAssets.map(({ id }) => id));
   const compatibleCount = useMemo(
     () =>
       !onApplyMappings || !selected
@@ -145,10 +287,20 @@ export function AssetReviewQueue({
     getRowIds: (row) => (row.dataset.reviewAssetId ? [row.dataset.reviewAssetId] : []),
     excludeSelector: bulkEnabled ? undefined : '*',
   });
-  const inspect = (asset: ReviewAsset, reveal = false) => {
-    setLocalInspectedId(asset.id);
+  const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const inspection = useRef({ assetsById, onSelect });
+  useLayoutEffect(() => {
+    inspection.current = { assetsById, onSelect };
+  }, [assetsById, onSelect]);
+  const inspectRow = useCallback((assetId: string) => {
+    const { assetsById, onSelect } = inspection.current;
+    const asset = assetsById.get(assetId);
+    if (!asset) return;
+    setLocalInspectedId(assetId);
     onSelect?.(asset);
-    if (!reveal) return;
+  }, []);
+  const inspect = (asset: ReviewAsset) => {
+    inspectRow(asset.id);
     if (tree) {
       const path = tree.paths.get(asset.id) ?? [];
       setOpenFolders((current) =>
@@ -176,9 +328,53 @@ export function AssetReviewQueue({
       const item = row.getBoundingClientRect();
       if (item.top < viewport.top) list.scrollTop += item.top - viewport.top;
       else if (item.bottom > viewport.bottom) list.scrollTop += item.bottom - viewport.bottom;
+      if (focusRevealedRow)
+        row
+          .querySelector<HTMLElement>('[data-marquee-row-control]')
+          ?.focus({ preventScroll: true });
     }
+    setFocusRevealedRow(false);
     setRevealId(undefined);
-  }, [revealId, rows, currentPage, marquee.containerRef]);
+  }, [revealId, rows, currentPage, marquee.containerRef, focusRevealedRow]);
+
+  useLayoutEffect(() => {
+    if (!pendingInspectIds.length) return;
+    const readyId = pendingInspectIds.find((id) => assetNames.has(id));
+    const asset = assets.find(({ id }) => id === readyId);
+    if (!asset) {
+      setPendingInspectIds([]);
+      return;
+    }
+    if (!visible.some(({ id }) => id === asset.id)) {
+      setSearch('');
+      if (filter !== 'all') selection.replace([]);
+      setFilter('all');
+      setException(undefined);
+      if (source !== asset.sourceId) setSource('all');
+      return;
+    }
+    setPendingInspectIds([]);
+    setFocusRevealedRow(true);
+    inspect(asset);
+  });
+
+  const handleFieldResult = useCallback((result: FieldOperationResult) => {
+    const skipped = result.skippedNodeIds?.length;
+    if (result.success && result.removedAssetIds?.length) selection.replace([]);
+    setFieldResult(
+      skipped
+        ? `${result.message} ${skipped} ${skipped === 1 ? 'entry skipped' : 'entries skipped'}.`
+        : result.message.startsWith('Fields organized.')
+          ? undefined
+          : result.message,
+    );
+    if (result.success)
+      setPendingInspectIds([...result.createdAssetIds, ...result.changedAssetIds]);
+  }, []);
+  const inspectRelatedAsset = useCallback(
+    (asset: ReviewAsset) => setPendingInspectIds([asset.id]),
+    [],
+  );
   const clearSelection = () => {
     selection.replace([]);
     const list = marquee.containerRef.current;
@@ -194,6 +390,8 @@ export function AssetReviewQueue({
   };
   const changeFilter = (change: () => void) => {
     change();
+    setOpenGlobalNotes(false);
+    setIssueAssetId(undefined);
     selection.replace([]);
     changePage(0);
   };
@@ -204,13 +402,26 @@ export function AssetReviewQueue({
     );
     const next =
       after ?? navigableAssets.find((asset) => isPending(asset) && !changed.has(asset.id));
-    if (next) inspect(next, true);
+    if (next) inspect(next);
   };
   const singleReview = (action: string, asset: ReviewAsset) => {
     onAction?.(action, asset);
     if (autoAdvance && (action === 'accept' || action === 'exclude'))
       nextPending(asset.id, new Set([asset.id]));
   };
+  // Memoized children dispatch against the current filtered view and selection.
+  const commands = useRef({ toggle: selection.toggle, singleReview });
+  useLayoutEffect(() => {
+    commands.current = { toggle: selection.toggle, singleReview };
+  });
+  const toggleRow = useCallback(
+    (id: string, range: boolean) => commands.current.toggle(id, range),
+    [],
+  );
+  const reviewInspected = useCallback(
+    (action: string, asset: ReviewAsset) => commands.current.singleReview(action, asset),
+    [],
+  );
   const acceptAll = () => {
     const accepted = onAcceptAllEligible?.() ?? 0;
     if (!accepted) return;
@@ -218,14 +429,19 @@ export function AssetReviewQueue({
     setBatchResult(undefined);
     selection.replace([]);
   };
-  const reviewSelected = (action: 'accept' | 'exclude') => {
-    if (!onReviewAssets || !selectedAssets.length) return;
+  const reviewSelected = (action: ReviewBatchAction) => {
+    if (!onReviewAssets || !selectedReviewActions[action]) return;
     const result = onReviewAssets(action, selectedAssets);
-    setBatchResult({ ...result, label: action === 'accept' ? 'accepted' : 'excluded' });
+    setBatchResult({
+      ...result,
+      label:
+        action === 'restore' ? 'restored to review' : action === 'accept' ? 'accepted' : 'excluded',
+    });
     if (result.changedIds.length) setBatchAccepted(null);
     selection.replace([]);
     const changed = new Set(result.changedIds);
-    if (autoAdvance && selected && changed.has(selected.id)) nextPending(selected.id, changed);
+    if (action !== 'restore' && autoAdvance && selected && changed.has(selected.id))
+      nextPending(selected.id, changed);
   };
 
   const applyMappings = () => {
@@ -237,19 +453,26 @@ export function AssetReviewQueue({
   };
   const focusNextIssue = () => {
     const index = navigableAssets.findIndex((asset) => asset.id === selected?.id);
-    const issueIds = new Set(issues.map((asset) => asset.id));
     const next =
-      navigableAssets.find((asset, position) => position > index && issueIds.has(asset.id)) ??
-      navigableAssets.find((asset) => issueIds.has(asset.id));
-    if (next) inspect(next, true);
+      navigableAssets.find((asset, position) => position > index && issues.has(asset.id)) ??
+      navigableAssets.find((asset) => issues.has(asset.id));
+    if (!next) return;
+    inspect(next);
+    setIssueAssetId(next.id);
   };
+  const issueHint = issueCount
+    ? `Open the next asset with issues. ${issueCount} ${issueCount === 1 ? 'issue' : 'issues'} across ${issues.size} ${issues.size === 1 ? 'asset' : 'assets'} in this view.`
+    : 'No asset issues in this view';
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (event.defaultPrevented || document.querySelector('[role="dialog"][aria-modal="true"]'))
+        return;
       const target = event.target instanceof Element ? event.target : null;
       if (
-        target?.closest('.importer-coverage-card, .importer-review-note-control, [role="dialog"]')
+        target?.closest(
+          '.importer-coverage-card, .importer-review-note-control, .asset-source-fields-controls, .asset-review-pattern-popover, .asset-review-actions-menu, [role="dialog"]',
+        )
       )
         return;
       const editing = Boolean(target?.closest(editable));
@@ -271,7 +494,7 @@ export function AssetReviewQueue({
           marquee.containerRef.current?.contains(event.target)
         ) {
           event.preventDefault();
-          selection.replace(navigableAssets.map((asset) => asset.id));
+          selectAll();
         }
         return;
       }
@@ -279,14 +502,11 @@ export function AssetReviewQueue({
       if (key === 'a' || key === 'x') {
         const action = key === 'a' ? 'accept' : 'exclude';
         if (selectedAssets.length && bulkEnabled) {
-          event.preventDefault();
-          reviewSelected(action);
-        } else if (
-          onAction &&
-          (action === 'accept'
-            ? selected.status !== 'accepted' && hasIncludedSchemaField(selected)
-            : selected.status !== 'excluded')
-        ) {
+          if (selectedReviewActions[action]) {
+            event.preventDefault();
+            reviewSelected(action);
+          }
+        } else if (onAction && canReviewAsset(action, selected)) {
           event.preventDefault();
           singleReview(action, selected);
         }
@@ -296,7 +516,7 @@ export function AssetReviewQueue({
       event.preventDefault();
       const index = navigableAssets.findIndex((asset) => asset.id === selected.id);
       const next = navigableAssets[index + (key === 'arrowup' ? -1 : 1)];
-      if (next) inspect(next, true);
+      if (next) inspect(next);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -378,25 +598,31 @@ export function AssetReviewQueue({
       </Box>
       {preservation ? (
         <Box className="importer-review-preservation">
+          <ImportCoverage
+            coverage={preservation.coverage}
+            recoveryRef={openCoverage}
+            sourceNames={sources}
+            assetNames={assetNames}
+            reviewAssets={assets}
+            onReviewMapping={inspectRelatedAsset}
+            fieldOperations={preservation.fieldOperations}
+            onExcludeFields={preservation.onExcludeFields}
+          />
           {noteCount && setSourceNoteDestination ? (
             <NotesDestination
               key={source}
+              recoveryRef={openNotes}
               scope={source === 'all' ? 'All sources' : (noteSources[0]?.sourceName ?? 'Source')}
               count={noteCount}
               destination={noteDestination}
-              hasUnchosen={noteSources.some(({ destination }) => destination === null)}
+              effectiveDestination={effectiveNoteDestination}
+              hasUnchosen={needsNoteDestination}
+              hasMixedDestinations={hasMixedDestinations}
               onChange={(destination) =>
                 setSourceNoteDestination(source === 'all' ? null : source, destination)
               }
             />
           ) : null}
-          <ImportCoverage
-            coverage={preservation.coverage}
-            sourceNames={sources}
-            assetNames={assetNames}
-            onPreserveFields={preservation.onPreserveFields}
-            onExcludeFields={preservation.onExcludeFields}
-          />
         </Box>
       ) : null}
       {batchAccepted !== null ? (
@@ -413,6 +639,27 @@ export function AssetReviewQueue({
                 onUndoAcceptAll();
                 setBatchAccepted(null);
               }}
+            />
+          ) : null}
+        </Box>
+      ) : null}
+      {fieldResult || preservation?.fieldOperations?.canUndo ? (
+        <Box
+          role="status"
+          className="asset-source-fields-controls"
+          flexDirection="row"
+          alignItems="center"
+          gap="s"
+          flexWrap="wrap"
+        >
+          {fieldResult ? <Text variant="bodySmall">{fieldResult}</Text> : null}
+          {preservation?.fieldOperations?.canUndo ? (
+            <Button
+              title="Undo"
+              accessibilityLabel="Undo field changes"
+              variant="plain"
+              size="sm"
+              onPress={() => handleFieldResult(preservation.fieldOperations!.undo())}
             />
           ) : null}
         </Box>
@@ -483,31 +730,64 @@ export function AssetReviewQueue({
             flexDirection="row"
             alignItems="center"
             justifyContent="space-between"
+            flexWrap="wrap"
+            gap="xs"
           >
             <Text variant="bodySmall" semibold accessibilityRole="heading">
               Assets ({visible.length})
             </Text>
-            {issues.length ? (
-              <Box ref={(element) => element?.setAttribute('title', 'Focus next issue')}>
+            <Box flexDirection="row" alignItems="center" gap="xs" flexWrap="wrap">
+              {bulkEnabled ? (
+                <Button
+                  title={
+                    navigableAssets.length && allMatchingSelected ? 'Deselect all' : 'Select all'
+                  }
+                  size="sm"
+                  variant="plain"
+                  disabled={!navigableAssets.length}
+                  onPress={() => (allMatchingSelected ? selection.replace([]) : selectAll())}
+                />
+              ) : null}
+              {bulkEnabled ? (
+                <ReviewPatterns
+                  key={JSON.stringify([source, search, filter, exception])}
+                  assets={visible}
+                  issues={issues}
+                  onSelect={({ assetIds, representative }) => {
+                    selection.replace(assetIds);
+                    setFocusRevealedRow(true);
+                    inspect(representative);
+                  }}
+                />
+              ) : null}
+              <Tooltip content={issueHint}>
                 <Button
                   title={
                     <Text
                       className="asset-review-next-issue-label"
                       variant="buttonSmall"
-                      color="primary120"
+                      color={issueCount ? 'primary120' : 'gray'}
                     >
                       Next issue
                     </Text>
                   }
-                  endIcon={<Icon name="arrow-down" size={12} color="primary120" label="" />}
+                  endIcon={
+                    <Icon
+                      name="arrow-down"
+                      size={12}
+                      color={issueCount ? 'primary120' : 'gray'}
+                      label=""
+                    />
+                  }
                   accessibilityLabel="Focus next issue"
                   size="sm"
                   minHeight={32}
                   variant="plain"
+                  disabled={!issueCount}
                   onPress={focusNextIssue}
                 />
-              </Box>
-            ) : null}
+              </Tooltip>
+            </Box>
           </Box>
           <Stack
             gap="s"
@@ -530,17 +810,15 @@ export function AssetReviewQueue({
             ) : null}
             {rows.slice(firstRow, endRow).map((row) =>
               'asset' in row ? (
-                <Box key={row.key} style={{ paddingLeft: row.depth * 16 }}>
-                  <AssetRow
-                    asset={row.asset}
-                    inspected={row.asset.id === selected?.id}
-                    selected={selection.selectedIdsSet.has(row.asset.id)}
-                    onSelect={inspect}
-                    onToggle={
-                      bulkEnabled ? (range) => selection.toggle(row.asset.id, range) : undefined
-                    }
-                  />
-                </Box>
+                <AssetRow
+                  key={row.key}
+                  asset={row.asset}
+                  depth={row.depth}
+                  inspected={row.asset.id === selected?.id}
+                  selected={selection.selectedIdsSet.has(row.asset.id)}
+                  onSelect={inspectRow}
+                  onToggle={bulkEnabled ? toggleRow : undefined}
+                />
               ) : (
                 <ReviewGroupRow
                   key={row.key}
@@ -585,7 +863,21 @@ export function AssetReviewQueue({
           </Stack>
           <ReviewSelectionCard
             count={selectedAssets.length}
+            reviewActions={selectedReviewActions}
             result={batchResult}
+            removal={
+              selectedReviewActions.exclude &&
+              preservation?.fieldOperations?.remove &&
+              selectedAssets.some((asset) => asset.canRemoveDraft)
+                ? {
+                    canRemove: selectedAssets.every((asset) => asset.canRemoveDraft),
+                    onRemove: () =>
+                      handleFieldResult(
+                        preservation.fieldOperations!.remove!(selectedAssets.map(({ id }) => id)),
+                      ),
+                  }
+                : undefined
+            }
             mapping={
               onApplyMappings && selected && selectedAssets.length
                 ? {
@@ -613,12 +905,20 @@ export function AssetReviewQueue({
         <Box className="asset-review-inspector">
           <Inspector
             asset={selected}
-            onAction={onAction ? singleReview : undefined}
+            openIssuesRef={openIssues}
+            assets={assets}
+            onInspect={inspectRelatedAsset}
+            fieldOperations={preservation?.fieldOperations}
+            onFieldResult={handleFieldResult}
+            onAction={onAction ? reviewInspected : undefined}
             resolveSourceValue={resolveSourceValue}
             onMapField={onMapField}
             onEditPlainText={onEditPlainText}
+            onRenameAsset={preservation?.onRenameAsset}
             onSetNoteDestination={preservation?.onSetAssetNoteDestination}
             coverage={preservation?.coverage}
+            onPreserveFields={preservation?.onPreserveFields}
+            onExcludeFields={preservation?.onExcludeFields}
           />
         </Box>
       </Box>

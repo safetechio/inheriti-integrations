@@ -1,5 +1,5 @@
 import type { FlowState } from './flow-reducer';
-import type { ReviewAsset } from '../../AssetReviewQueue';
+import { canReviewAsset, type ReviewAsset } from '../../AssetReviewQueue/types';
 import type { PlanDraft } from '../../PlanGroupingSurface';
 
 export function removeAsset(plans: PlanDraft[], assetId: string) {
@@ -20,6 +20,24 @@ export function reviewAsset(
   asset: ReviewAsset,
   autoAdvance = true,
 ): FlowState {
+  const current = state.assets.find(({ id }) => id === asset.id);
+  if (!current || (current.status === 'excluded' && action !== 'restore')) return state;
+  if (
+    (action === 'accept' || action === 'exclude' || action === 'restore') &&
+    !canReviewAsset(action, current)
+  )
+    return state;
+  asset = current;
+  if (action === 'restore') {
+    return {
+      ...state,
+      stagingState: 'configured',
+      assets: state.assets.map((item) =>
+        item.id === asset.id ? { ...item, status: 'needs-review' } : item,
+      ),
+      selectedAssetId: asset.id,
+    };
+  }
   if (action === 'exclude') {
     const assets = state.assets.map((item) =>
       item.id === asset.id ? { ...item, status: 'excluded' as const } : item,
@@ -40,15 +58,6 @@ export function reviewAsset(
   const alternatives = alternateType
     ? asset.alternatives.filter((item) => item !== alternateType).concat(asset.type)
     : asset.alternatives;
-  if (alternateType && asset.status === 'excluded') {
-    return {
-      ...state,
-      stagingState: 'configured',
-      assets: state.assets.map((item) =>
-        item.id === asset.id ? { ...item, type, alternatives } : item,
-      ),
-    };
-  }
   const assigned = state.plans.some((plan) =>
     plan.assignedAssets?.some((item) => item.id === asset.id),
   );

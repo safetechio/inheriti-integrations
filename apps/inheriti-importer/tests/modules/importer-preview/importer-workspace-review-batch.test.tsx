@@ -86,7 +86,7 @@ function setup(session: ImportSession) {
 describe('selected review batches', () => {
   it('accepts eligible current rows, deduplicates input IDs, and isolates global undo', () => {
     const { session, addNode } = importSession();
-    for (const id of ['excluded', 'edited', 'global', 'invalid']) addNode(id, ['token', 'other']);
+    for (const id of ['excluded', 'edited', 'uncommitted', 'global', 'invalid']) addNode(id, ['token', 'other']);
     const { current, asset, reviewChanges } = setup(session);
     act(() => current().reviewAsset('exclude', asset('excluded')));
     act(() => current().mapAssetField(asset('invalid'), 'secret.apiKey', undefined));
@@ -100,21 +100,23 @@ describe('selected review batches', () => {
         { ...excluded, status: 'accepted' },
         edited,
         edited,
+        asset('uncommitted'),
         { ...invalid, schemaFields: undefined },
         { ...excluded, id: 'stale' },
       ]);
     });
     expect(result).toEqual({
-      changedIds: [excluded.id, edited.id],
-      skippedIds: [invalid.id, 'stale'],
+      changedIds: [edited.id, asset('uncommitted').id],
+      skippedIds: [excluded.id, invalid.id, 'stale'],
     });
     expect(reviewChanges).toHaveBeenCalledTimes(1);
-    expect(asset('excluded').status).toBe('accepted');
+    expect(asset('excluded').status).toBe('excluded');
     act(() => current().acceptAllEligible());
-    act(() => current().reviewAsset('accept', asset('edited')));
+    act(() => current().mapAssetField(asset('edited'), 'secret.apiKey', 'edited-1'));
     act(() => current().undoReviewBatch());
     expect(asset('excluded').status).toBe('excluded');
-    expect(asset('edited').status).toBe('accepted');
+    expect(asset('edited').status).toBe('needs-review');
+    expect(asset('uncommitted').status).not.toBe('accepted');
     expect(asset('global').status).toBe('accepted');
     act(() => current().undoAcceptAll());
     expect(asset('global').status).not.toBe('accepted');
@@ -365,4 +367,54 @@ describe('selected mapping batches', () => {
     ).toBeUndefined();
     expect(asset('target').status).toBe('needs-review');
   });
+});
+
+it('restores only excluded assets with their mappings and without reassigning them', () => {
+  const { session, addNode } = importSession();
+  addNode('assigned', ['token', 'other']);
+  addNode('pending', ['token']);
+  const { result, current, asset, assign } = setup(session);
+  const assigned = asset('assigned');
+  assign('assigned');
+  act(() => current().reviewAsset('exclude', asset('assigned')));
+  act(() => current().mapAssetField(assigned, 'secret.apiKey', 'assigned-1'));
+  act(() => current().reviewAsset('accept', assigned));
+  expect(asset('assigned').status).toBe('excluded');
+
+  let batch!: ReviewBatchResult;
+  act(() => {
+    batch = current().reviewAssets('restore', [assigned, asset('pending')]);
+  });
+  expect(batch).toEqual({ changedIds: [assigned.id], skippedIds: [asset('pending').id] });
+  expect(asset('assigned').status).toBe('needs-review');
+  expect(asset('assigned').schemaFields).toContainEqual(
+    expect.objectContaining({ key: 'secret.apiKey', sourceFieldId: 'assigned-1' }),
+  );
+  expect(result.current.workspace.plansByClientId.plan.assets).toEqual([]);
+  expect(current().unassigned.some(({ id }) => id === assigned.id)).toBe(false);
+
+  act(() => current().undoReviewBatch());
+  expect(asset('assigned').status).toBe('excluded');
+  expect(result.current.workspace.plansByClientId.plan.assets).toEqual([]);
+  act(() => current().reviewAsset('restore', assigned));
+  expect(asset('assigned').status).toBe('needs-review');
+});
+
+it('keeps a converted excluded asset excluded through type commands and edits', () => {
+  const { session, addNode } = importSession();
+  addNode('converted', ['token', 'other']);
+  const { current, asset } = setup(session);
+  act(() => current().reviewAsset('alternate:PLAIN-TEXT', asset('converted')));
+  const converted = asset('converted');
+  expect(converted).toMatchObject({ type: 'PLAIN-TEXT', convertedFromType: 'API-KEY' });
+  act(() => current().reviewAsset('exclude', converted));
+  for (const action of ['restore-suggestion', 'alternate:USER-PSWD'] as const) {
+    act(() => current().reviewAsset(action, converted));
+    expect(asset('converted')).toMatchObject({ status: 'excluded', type: 'PLAIN-TEXT' });
+  }
+  act(() => current().editPlainText(converted, 'edited while excluded'));
+  expect(asset('converted').status).toBe('excluded');
+  act(() => current().reviewAsset('restore', converted));
+  expect(asset('converted')).toMatchObject({ status: 'needs-review', type: 'PLAIN-TEXT' });
+  expect(asset('converted').plainTextValue?.reveal()).toBe('edited while excluded');
 });

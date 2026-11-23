@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useAnchoredPopover } from '@modules/_shared/ui/hooks/use-anchored-popover';
 import { createPortal } from 'react-dom';
 import { Box, Icon, Text } from '@main-components';
 import '../../../PlanGroupingSurface/components/SelectionHelpPopover/styles.css';
@@ -20,57 +20,7 @@ const steps = [
 ];
 
 export function ReviewSelectionHelp() {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const trigger = triggerRef.current?.getBoundingClientRect();
-      const panel = panelRef.current?.getBoundingClientRect();
-      if (!trigger || !panel) return;
-      setPosition({
-        top: Math.max(8, Math.min(trigger.bottom + 6, window.innerHeight - panel.height - 8)),
-        left: Math.max(
-          8,
-          Math.min(trigger.right - panel.width, window.innerWidth - panel.width - 8),
-        ),
-      });
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
-    };
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        setOpen(false);
-      } else if (['a', 'x'].includes(event.key.toLowerCase())) {
-        event.stopPropagation();
-      }
-    };
-    const outside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('keydown', escape, true);
-    document.addEventListener('mousedown', outside);
-    return () => {
-      document.removeEventListener('keydown', escape, true);
-      document.removeEventListener('mousedown', outside);
-    };
-  }, [open]);
+  const { open, setOpen, triggerRef, panelRef, position } = useAnchoredPopover();
   return (
     <>
       <button

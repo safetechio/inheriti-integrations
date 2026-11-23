@@ -198,7 +198,11 @@ describe('ImporterFlow controlled mode', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Inspect Second' }).classList.contains('is-selected'),
+    ).toBe(true);
+    expect(screen.getByRole('textbox', { name: 'Plain text value' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Accept', exact: true })).toBeNull();
   });
 
   it('confirms cancellation with the imported file and Plan counts', async () => {

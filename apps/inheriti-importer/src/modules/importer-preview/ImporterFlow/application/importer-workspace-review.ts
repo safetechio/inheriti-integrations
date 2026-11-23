@@ -1,6 +1,6 @@
 import type { ReviewAsset } from '../../AssetReviewQueue/types';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
-import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import { getImportablePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
 import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import {
   bindField,
@@ -9,7 +9,7 @@ import {
   unbindField,
 } from '@modules/plans/domain/workspace-commands';
 import { suggestedAssetToDraft } from '@modules/mapping/application/suggestion-engine';
-import { hasIncludedSchemaField } from '../../AssetReviewQueue/types';
+import { reviewDecisionStatus } from '../../AssetReviewQueue/types';
 import type { ImporterWorkspaceAction } from './importer-workspace-types';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
 import {
@@ -87,7 +87,9 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
   function reviewAsset(action: ImporterWorkspaceAction, asset: ReviewAsset) {
     const suggestion = byId(asset.id);
     if (!suggestion) return;
-    const original = originalSuggestionFor(session, sourceSuggestions(session), suggestion);
+    const original =
+      context.organization.assets[asset.id] ??
+      originalSuggestionFor(session, sourceSuggestions(session), suggestion);
     const originalId = original ? statusKey(original) : undefined;
     if (action.startsWith('alternate:')) {
       if (suggestion.variant === 'rescued-fields') return;
@@ -95,9 +97,7 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
       if (
         !original ||
         !originalId ||
-        !getCorePlanAssetTypes().includes(
-          type as ReturnType<typeof getCorePlanAssetTypes>[number],
-        ) ||
+        !getImportablePlanAssetTypes().some((candidate) => candidate === type) ||
         type === suggestion.type
       )
         return;
@@ -147,12 +147,10 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
         nextPlainTextAssetIds,
         nextTypeOverrides,
         context.preservation,
+        context.organization,
+        context.workspace,
       );
-      const finalSuggestion = effective.find(
-        (candidate) =>
-          candidate.fromNodeId === suggestion.fromNodeId &&
-          candidate.variant === suggestion.variant,
-      );
+      const finalSuggestion = effective.find((candidate) => statusKey(candidate) === convertedId);
       if (!finalSuggestion) return;
       const companion = effective.find(
         (candidate) =>
@@ -228,12 +226,9 @@ export function createReviewActions(context: ImporterWorkspaceContext) {
       restoreSuggestion(asset, suggestion.fromNodeId);
       return;
     }
-    if (action === 'accept' && !hasIncludedSchemaField(asset)) return;
+    if (action !== 'accept' && action !== 'exclude' && action !== 'restore') return;
     if (action === 'exclude') excludeAsset(suggestion);
-    setDecisions((current) => ({
-      ...current,
-      [asset.id]: action === 'exclude' ? 'excluded' : 'accepted',
-    }));
+    setDecisions((current) => ({ ...current, [asset.id]: reviewDecisionStatus[action] }));
   }
 
   return { reviewAsset };

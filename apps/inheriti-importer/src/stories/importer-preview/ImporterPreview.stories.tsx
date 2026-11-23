@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { reviewDecisionStatus } from '@modules/importer-preview/AssetReviewQueue/types';
 import { SourceImportStatus } from '@modules/importer-preview/SourceImportStatus';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
 import { AssetReviewQueue } from '@modules/importer-preview/AssetReviewQueue';
@@ -122,13 +123,13 @@ export const AssetReviewSchemaMapping = () => {
     );
   };
   const reviewAsset = (action: string, asset: ReviewAsset) => {
-    if (action !== 'accept' && action !== 'exclude') return;
+    if (action !== 'accept' && action !== 'exclude' && action !== 'restore') return;
     setAssets((current) =>
       current.map((item) =>
         item.id === asset.id
           ? {
               ...item,
-              status: action === 'accept' ? 'accepted' : 'excluded',
+              status: reviewDecisionStatus[action],
             }
           : item,
       ),

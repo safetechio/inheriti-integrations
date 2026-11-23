@@ -59,7 +59,7 @@ it('removes the drag preview on the next frame without inserting markup as HTML'
 
 it('explains an existing assignment without claiming the current plan is full', () => {
   render(<AssetSelectionToolbar assets={[asset]} plans={[{ ...plan, assets: 1, assignedAssets: [asset] }]} targetId="" onTarget={vi.fn()} onClear={vi.fn()} onMove={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Assign to plan' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move to plan' }));
   expect(screen.getByText('Already assigned')).toBeTruthy();
   expect(screen.getByText('Choose another plan to move these assets.')).toBeTruthy();
   expect(screen.queryByText(/No destination has enough space/)).toBeNull();
@@ -78,4 +78,28 @@ it('labels the active asset view so assigned assets are not mistaken for unassig
   fireEvent.click(screen.getByRole('button', { name: 'Unassigned · 0' }));
   expect(screen.getByText('Unassigned assets')).toBeTruthy();
   expect(screen.queryByText('Credential')).toBeNull();
+});
+
+
+it.each([false, true])('explains moving assigned assets into new plans (mixed selection = %s)', (mixed) => {
+  const fresh = { ...asset, id: 'fresh', name: 'Fresh credential' };
+  const selected = mixed ? [asset, fresh] : [asset];
+  const onCreate = vi.fn();
+  const onMove = vi.fn();
+  const target = { ...plan, id: 'target', name: 'Target plan' };
+  render(<AssetSelectionToolbar
+    assets={selected}
+    plans={[{ ...plan, assets: 1, assignedAssets: [asset] }, target]}
+    onCreate={onCreate} onClear={vi.fn()} onMove={onMove}
+  />);
+  expect(screen.queryByRole('button', { name: 'New plan', exact: true })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Assign to plan', exact: true })).toBeNull();
+  const create = screen.getByRole('button', { name: 'Move to new plan', exact: true });
+  fireEvent.mouseEnter(create.parentElement!);
+  expect(screen.getByRole('tooltip').textContent).toContain('1 assigned asset leaves its current plan');
+  fireEvent.click(create);
+  expect(onCreate).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: 'Move to plan', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: /Target plan/ }));
+  expect(onMove).toHaveBeenCalledWith(selected, target);
 });

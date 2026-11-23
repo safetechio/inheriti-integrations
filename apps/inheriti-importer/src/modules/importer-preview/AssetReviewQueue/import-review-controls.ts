@@ -1,7 +1,10 @@
 import type { NoteDestination, NoteSourceDecision, ReviewAsset, ReviewBatchResult } from './types';
 import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
 
+import type { FieldOperationControls } from './field-operations';
+
 export type ImportReviewControls = {
+  fieldOperations?: FieldOperationControls;
   coverage: SourceCoverage;
   noteSources: NoteSourceDecision[];
   onSetSourceNoteDestination?: (
@@ -14,4 +17,5 @@ export type ImportReviewControls = {
   ) => ReviewBatchResult;
   onPreserveFields?: (ids: string[]) => ReviewBatchResult;
   onExcludeFields?: (ids: string[]) => ReviewBatchResult;
+  onRenameAsset?: (asset: ReviewAsset, name: string) => boolean;
 };

@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createEmptyImportSession, SensitiveValue } from '@modules/import/domain/import-model';
 import { AssetReviewQueue, type ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
+import { AssetReviewDetails } from '@modules/importer-preview/AssetReviewQueue/components/AssetReviewDetails';
 import { sourceCoverage, type SourceCoverage } from '@modules/mapping/application/source-coverage';
 
 afterEach(cleanup);
@@ -80,16 +81,77 @@ const coverage: SourceCoverage = {
   ],
   diagnostics: [
     { ...warning, entryId: 'entry', message: 'Entry attachment was skipped.' },
+    {
+      ...warning,
+      entryId: 'entry',
+      sourcePath: ['items', '0', 'attachments'],
+      message: 'Entry attachment was skipped.',
+      count: 2,
+    },
     { ...warning, entryId: 'other', message: 'Other entry warning.' },
     { ...warning, entryId: 'entry', sourceId: 'other', message: 'Other source warning.' },
     { ...warning, message: 'File-wide warning.' },
   ],
 };
 
-const dialogName = { name: 'Work account — Review details' };
-const detailsButton = { name: 'View asset review details' };
+const dialogName = { name: 'Work account — Issues' };
+const detailsButton = { name: 'View asset issues' };
 
-it('shows scoped review reasons and coverage from the Details action without resolving values', () => {
+it('explains when an asset needs review without specific issues', () => {
+  render(
+    <AssetReviewQueue
+      assets={[{ ...account, schemaFields: [], unmapped: [], note: undefined }]}
+      selectedId={account.id}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', detailsButton));
+  expect(
+    within(screen.getByRole('dialog', dialogName)).getByText('No issues found. Ready for review.'),
+  ).toBeTruthy();
+});
+
+it('counts the scoped issues before opening and updates the badge as they are resolved', () => {
+  const duplicate = {
+    key: 'secret.website',
+    label: 'Website',
+    sourceFieldId: 'email',
+    validationError: 'Invalid website',
+  };
+  const asset = { ...account, schemaFields: [...account.schemaFields!, duplicate] };
+  const overlappingCoverage = {
+    ...coverage,
+    fields: coverage.fields.map((entry) =>
+      entry.id === 'notes' ? { ...entry, status: 'pending' as const } : entry,
+    ),
+  };
+  const details = (current: ReviewAsset, report: SourceCoverage) => (
+    <AssetReviewDetails
+      asset={current}
+      coverage={report}
+      sourceFields={report.fields.filter(
+        ({ sourceId, nodeId }) => sourceId === current.sourceId && nodeId === current.sourceNodeId,
+      )}
+      siblings={[]}
+    />
+  );
+  const view = render(details(asset, overlappingCoverage));
+  const badge = () => screen.getByRole('button', detailsButton);
+  expect(badge().textContent).toContain('Needs review (4)');
+  expect(screen.queryByRole('dialog', dialogName)).toBeNull();
+  view.rerender(details({ ...asset, status: 'excluded' }, overlappingCoverage));
+  expect(badge().textContent).toContain('Excluded');
+  expect(badge().textContent).not.toMatch(/\(\d+\)/);
+  view.rerender(
+    details(
+      { ...asset, schemaFields: [], unmapped: [], note: undefined },
+      { ...coverage, fields: [], diagnostics: [] },
+    ),
+  );
+  expect(badge().textContent).toContain('Suggested');
+  expect(badge().textContent).not.toMatch(/\(\d+\)/);
+});
+
+it('shows only scoped issues without repeating valid fields or resolving values', () => {
   const resolveSourceValue = vi.fn(() => new SensitiveValue('synthetic protected value'));
   const onSelect = vi.fn();
   render(
@@ -104,20 +166,21 @@ it('shows scoped review reasons and coverage from the Details action without res
   fireEvent.click(screen.getByRole('button', detailsButton));
   const dialog = within(screen.getByRole('dialog', dialogName));
   for (const label of [
-    'Work.1pux · Work vault · Accounts',
-    account.rationale,
     'Password — Required field is missing.',
     'Email — Invalid email',
     'Choose a destination for the imported notes. They remain protected while you decide.',
-    'Login name',
-    'Pending a destination',
-    'Invalid destination — review required',
-    'Explicitly excluded from import',
-    'Entry attachment was skipped.',
+    'Recovery token',
+    'Work email',
+    'No destination is assigned.',
   ])
     expect(dialog.getByText(label)).toBeTruthy();
 
   for (const label of [
+    'Work.1pux · Work vault · Accounts',
+    account.rationale,
+    'Needs review',
+    'Login name',
+    'Old token',
     'Other source field',
     'Other entry field',
     'Other entry warning.',
@@ -127,21 +190,23 @@ it('shows scoped review reasons and coverage from the Details action without res
   ])
     expect(dialog.queryByText(label)).toBeNull();
 
-  const username = within(dialog.getByText('Login name').parentElement!);
-  expect(username.getByText('Mapped · This asset · Username')).toBeTruthy();
-  expect(username.getByText('Preserved in an additional asset · Protected text')).toBeTruthy();
-  expect(username.queryByText('Protected text · This asset · Username')).toBeNull();
-  expect(dialog.getAllByRole('button')).toEqual([
-    dialog.getByRole('button', { name: 'Close Work account — Review details' }),
-    dialog.getByRole('button', { name: 'Done' }),
-  ]);
+  expect(dialog.queryByText('Entry attachment was skipped.')).toBeNull();
+  fireEvent.click(dialog.getByRole('button', { name: /Warnings/ }));
+  expect(dialog.getAllByText('Entry attachment was skipped.')).toHaveLength(1);
+  expect(dialog.getByText('Unsupported · 3')).toBeTruthy();
+  fireEvent.click(dialog.getByRole('button', { name: 'View details (3)' }));
+  expect(dialog.getAllByRole('listitem')).toHaveLength(2);
+  expect(dialog.getByText('items › 0 › attachments')).toBeTruthy();
+  expect(dialog.getByText('2 occurrences')).toBeTruthy();
+  expect(dialog.queryByText('Recovery token')).toBeNull();
+  expect(dialog.queryByText('Other entry warning.')).toBeNull();
   expect(resolveSourceValue).not.toHaveBeenCalled();
-  fireEvent.click(dialog.getByRole('button', { name: 'Done' }));
+  fireEvent.click(dialog.getByRole('button', { name: 'Close Work account — Issues' }));
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(onSelect).not.toHaveBeenCalled();
 });
 
-it('opens from the status badge by click, Enter or Space and isolates review shortcuts', async () => {
+it('opens from the keyboard-accessible Issues button and isolates review shortcuts', async () => {
   const onAcceptAllEligible = vi.fn(() => 1);
   const onAction = vi.fn();
   const onSelect = vi.fn();
@@ -158,13 +223,15 @@ it('opens from the status badge by click, Enter or Space and isolates review sho
   const selected = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Select Work account' });
   fireEvent.click(selected);
   expect(selected.checked).toBe(true);
-  const badge = screen.getByRole('button', { name: 'Needs review' });
+  expect(screen.queryByRole('button', { name: 'Needs review' })).toBeNull();
+  const badge = screen.getByRole('button', detailsButton);
+  expect(badge.textContent).toContain('Needs review');
+  expect(screen.getAllByRole('button', detailsButton)).toHaveLength(1);
   expect(badge.tabIndex).toBe(0);
   badge.focus();
   expect(document.activeElement).toBe(badge);
-  for (const key of ['click', 'Enter', ' ']) {
-    if (key === 'click') fireEvent.click(badge);
-    else fireEvent.keyDown(badge, { key });
+  {
+    fireEvent.click(badge);
     const dialog = screen.getByRole('dialog', dialogName);
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     const focused = document.activeElement!;
@@ -185,6 +252,67 @@ it('opens from the status badge by click, Enter or Space and isolates review sho
   expect(onAction).not.toHaveBeenCalled();
   expect(onAcceptAllEligible).not.toHaveBeenCalled();
   expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('repairs missing mappings and imported note destinations within Issues', () => {
+  const onMapField = vi.fn();
+  const onSetAssetNoteDestination = vi.fn(() => ({ changedIds: [account.id], skippedIds: [] }));
+  const item = {
+    ...account,
+    note: { ...account.note!, publicAllowed: false },
+    schemaFields: account.schemaFields!.map((field) =>
+      field.key === 'secret.password'
+        ? { ...field, candidates: [{ id: 'recovery', name: 'Recovery token', length: 10 }] }
+        : field,
+    ),
+  };
+  render(
+    <AssetReviewQueue
+      assets={[item]}
+      onMapField={onMapField}
+      preservation={{ coverage, noteSources: [], onSetAssetNoteDestination }}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', detailsButton));
+  const issues = within(screen.getByRole('dialog', dialogName));
+  fireEvent.click(issues.getByRole('button', { name: 'Choose Password source field' }));
+  fireEvent.click(issues.getByRole('button', { name: 'Map Password to Recovery token' }));
+  expect(onMapField).toHaveBeenCalledWith(item, 'secret.password', 'recovery');
+  const notes = issues.getByRole('radiogroup', { name: 'Notes destination for this asset' });
+  expect(within(notes).queryByRole('radio', { name: /Asset notes/ })).toBeNull();
+  fireEvent.click(within(notes).getByRole('radio', { name: 'As secret' }));
+  expect(onSetAssetNoteDestination).toHaveBeenCalledWith(item, 'protected');
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+});
+
+it('reports a missing required field without flagging other mapped fields as invalid', () => {
+  const item = {
+    ...account,
+    note: undefined,
+    schemaFields: [
+      { key: 'secret.username', label: 'Username', sourceFieldId: 'username' },
+      { key: 'secret.password', label: 'Password', required: true },
+    ],
+  };
+  const invalidAssetCoverage = {
+    ready: false,
+    diagnostics: [],
+    fields: [
+      field('username', 'Login name', 'invalid', {
+        destinations: [{ assetId: item.id, fieldId: 'secret.username', valid: false }],
+      }),
+    ],
+  };
+  render(
+    <AssetReviewQueue
+      assets={[item]}
+      preservation={{ coverage: invalidAssetCoverage, noteSources: [] }}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', detailsButton));
+  const issues = within(screen.getByRole('dialog', dialogName));
+  expect(issues.getByText('Password — Required field is missing.')).toBeTruthy();
+  expect(issues.queryByText(/Username|Login name/)).toBeNull();
 });
 
 it('closes when switching assets and uses only direct destinations for an asset without an entry ID', () => {
@@ -221,8 +349,9 @@ it('closes when switching assets and uses only direct destinations for an asset 
   rerender(<AssetReviewQueue {...props} selectedId={other.id} />);
   expect(screen.queryByRole('dialog')).toBeNull();
   fireEvent.click(screen.getByRole('button', detailsButton));
-  const dialog = within(screen.getByRole('dialog', { name: 'Other account — Review details' }));
-  expect(dialog.getByText('Other asset memo')).toBeTruthy();
+  const dialog = within(screen.getByRole('dialog', { name: 'Other account — Issues' }));
+  expect(dialog.queryByText('Other asset memo')).toBeNull();
+  expect(dialog.getByText('No field issues found for this asset.')).toBeTruthy();
   expect(dialog.queryByText('Login name')).toBeNull();
   expect(dialog.queryByText('File-wide warning.')).toBeNull();
 });
@@ -315,7 +444,33 @@ it('distinguishes an invalid destination from valid companion coverage for the s
   render(<AssetReviewQueue assets={[account]} preservation={{ coverage, noteSources: [] }} />);
   fireEvent.click(screen.getByRole('button', detailsButton));
   const dialog = within(screen.getByRole('dialog', dialogName));
-  expect(dialog.getByText('Invalid destination · This asset · Email')).toBeTruthy();
+  expect(dialog.getByText('Email — Invalid email')).toBeTruthy();
   expect(dialog.queryByText('Mapped · This asset · Email')).toBeNull();
-  expect(dialog.getByText('Preserved in an additional asset · Protected text')).toBeTruthy();
+  expect(dialog.queryByText(/Preserved in an additional asset/)).toBeNull();
+});
+
+
+it('opens parser-only warnings directly and restores Fields when actionable issues return', () => {
+  const openIssuesRef = { current: undefined as (() => void) | undefined };
+  const resolved = { ...account, schemaFields: [], unmapped: [], note: undefined };
+  const report = { ...coverage, fields: [] };
+  const details = (asset: ReviewAsset) => (
+    <AssetReviewDetails asset={asset} coverage={report} sourceFields={[]}
+      siblings={[]} openIssuesRef={openIssuesRef} />
+  );
+  const view = render(details(resolved));
+  expect(screen.getByRole('button', detailsButton).textContent).toContain('Warnings (1)');
+  expect(screen.queryByText('Needs review')).toBeNull();
+  fireEvent.click(screen.getByRole('button', detailsButton));
+  let dialog = within(screen.getByRole('dialog', { name: 'Work account — Warnings' }));
+  expect(dialog.getByText('Entry attachment was skipped.')).toBeTruthy();
+  expect(dialog.queryByText('Fields to resolve')).toBeNull();
+  expect(dialog.queryByText('No issues found. Ready for review.')).toBeNull();
+  fireEvent.click(dialog.getByRole('button', { name: 'Close Work account — Warnings' }));
+  view.rerender(details(account));
+  expect(screen.getByRole('button', detailsButton).textContent).toContain('Needs review');
+  act(() => openIssuesRef.current?.());
+  dialog = within(screen.getByRole('dialog', dialogName));
+  expect(dialog.getByText('Password — Required field is missing.')).toBeTruthy();
+  expect(dialog.queryByText('Entry attachment was skipped.')).toBeNull();
 });

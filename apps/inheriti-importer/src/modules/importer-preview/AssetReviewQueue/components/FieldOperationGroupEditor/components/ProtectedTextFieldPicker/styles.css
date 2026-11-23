@@ -1,0 +1,5 @@
+.asset-field-chooser-options [role='button'],
+.asset-field-chooser-options [role='button'] * {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}

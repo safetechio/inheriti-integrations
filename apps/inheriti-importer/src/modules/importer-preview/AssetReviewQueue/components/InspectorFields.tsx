@@ -10,12 +10,16 @@ import type { ImportReviewControls } from '../import-review-controls';
 
 export function InspectorFields({
   asset,
+  assets,
+  onInspect,
   resolveSourceValue,
   onMapField,
   onEditPlainText,
   onSetNoteDestination,
 }: {
   asset: ReviewAsset;
+  assets?: ReviewAsset[];
+  onInspect?: (asset: ReviewAsset) => void;
   onSetNoteDestination?: ImportReviewControls['onSetAssetNoteDestination'];
   resolveSourceValue?: (sourceFieldId: string) => SensitiveValue | undefined;
   onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;
@@ -35,6 +39,8 @@ export function InspectorFields({
       key={`${asset.id}:${field.key}:${field.sourceFieldId ?? 'unmapped'}`}
       gap="xs"
       className="asset-schema-field-row"
+      dataSet={{ reviewField: field.key }}
+      tabIndex={-1}
     >
       <Box gap="xs" className="asset-schema-secret-region">
         <Text variant="importerFieldLabel">
@@ -83,6 +89,8 @@ export function InspectorFields({
         <NotesField
           key={asset.id}
           asset={asset}
+          assets={assets}
+          onInspect={onInspect}
           field={metadataField}
           onSetNoteDestination={onSetNoteDestination}
           onMapField={onMapField}

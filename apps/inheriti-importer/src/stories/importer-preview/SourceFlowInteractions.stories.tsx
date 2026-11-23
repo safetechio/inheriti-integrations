@@ -68,10 +68,6 @@ export const SyntheticControlledSources = () => {
       <SourceWarningsModal
         file={warning}
         onDismiss={() => setWarning(null)}
-        onUnderstood={(file) => {
-          updateFile(file.id, { warningsAcknowledged: true });
-          setWarning(null);
-        }}
       />
     </>
   );

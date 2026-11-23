@@ -1,0 +1,606 @@
+.quick-guide-footer[class] {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.quick-guide-pagination [role='button']:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.quick-guide-scene-count[class] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.quick-guide-scene-shell {
+  transition: height 180ms ease;
+  overflow: hidden;
+}
+
+.quick-guide-scene-content {
+  animation: quick-guide-scene-in 180ms ease both;
+}
+
+@keyframes quick-guide-scene-in {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.quick-guide-caption {
+  min-height: 48px;
+}
+
+.quick-guide-illustration[class] {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  --guide-duration: 12s;
+}
+
+.quick-guide-frame {
+  grid-area: 1 / 1;
+  min-width: 0;
+  opacity: 0;
+  animation: quick-guide-first var(--guide-duration) steps(1, end) infinite;
+}
+
+.quick-guide-frame:nth-child(2) {
+  animation-name: quick-guide-second;
+}
+.quick-guide-frame:nth-child(3) {
+  animation-name: quick-guide-third;
+}
+.gesture-undo .quick-guide-frame:first-child {
+  animation-name: quick-guide-undo-first;
+}
+.gesture-undo .quick-guide-frame:nth-child(2) {
+  animation-name: quick-guide-undo-second;
+}
+
+.quick-guide-illustration.is-paused *,
+.quick-guide-illustration.is-paused *::after {
+  animation-play-state: paused !important;
+}
+
+/* Keep the interface still while the pointer demonstrates the action. */
+@keyframes quick-guide-first {
+  0%,
+  96% {
+    opacity: 1;
+  }
+  20% {
+    opacity: 0;
+  }
+}
+@keyframes quick-guide-second {
+  0%,
+  64% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+}
+@keyframes quick-guide-third {
+  0%,
+  96% {
+    opacity: 0;
+  }
+  64% {
+    opacity: 1;
+  }
+}
+@keyframes quick-guide-undo-first {
+  0%,
+  96% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0;
+  }
+}
+@keyframes quick-guide-undo-second {
+  0%,
+  64% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.quick-guide-gesture {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.quick-guide-demo-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  filter: drop-shadow(0 1px 1px white);
+  animation: quick-guide-cursor var(--guide-duration) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes quick-guide-cursor {
+  0%,
+  4% {
+    transform: translate(var(--start-x), var(--start-y));
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  14%,
+  20% {
+    transform: translate(var(--first-x), var(--first-y));
+    opacity: 1;
+  }
+  32%,
+  40% {
+    transform: translate(var(--second-x), var(--second-y));
+    opacity: 1;
+  }
+  58%,
+  70% {
+    transform: translate(var(--third-x), var(--third-y));
+    opacity: 1;
+  }
+  76%,
+  100% {
+    transform: translate(var(--third-x), var(--third-y));
+    opacity: 0;
+  }
+}
+.quick-guide-click-ring {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  animation: quick-guide-click var(--guide-duration) linear infinite;
+}
+@keyframes quick-guide-click {
+  0%,
+  14%,
+  21%,
+  32%,
+  40%,
+  58%,
+  66%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  16%,
+  35%,
+  61% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  19%,
+  38%,
+  64% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+.quick-guide-demo-menu {
+  position: absolute;
+  left: var(--menu-x);
+  top: var(--menu-y);
+  width: var(--menu-width);
+  z-index: 2;
+  box-shadow: 0 4px 16px rgb(16 24 40 / 14%);
+  animation: quick-guide-menu var(--guide-duration) ease infinite;
+}
+@keyframes quick-guide-menu {
+  0%,
+  18%,
+  42%,
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  22%,
+  38% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.quick-guide-drag-card {
+  position: absolute;
+  left: -40px;
+  top: -12px;
+  z-index: 2;
+  box-shadow: 0 6px 16px rgb(16 24 40 / 16%);
+  animation: quick-guide-drag var(--guide-duration) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes quick-guide-drag {
+  0%,
+  36% {
+    transform: translate(var(--drag-start-x), var(--drag-start-y)) rotate(-2deg);
+    opacity: 0;
+  }
+  40%,
+  42% {
+    transform: translate(var(--drag-start-x), var(--drag-start-y)) rotate(-2deg);
+    opacity: 1;
+  }
+  58%,
+  62% {
+    transform: translate(var(--drag-end-x), var(--drag-end-y)) rotate(0);
+    opacity: 1;
+  }
+  64%,
+  100% {
+    transform: translate(var(--drag-end-x), var(--drag-end-y)) rotate(0);
+    opacity: 0;
+  }
+}
+.gesture-assign .quick-guide-frame:nth-child(2) .quick-guide-pane:last-child,
+.gesture-group .quick-guide-frame:nth-child(2) .quick-guide-pane:last-child {
+  animation: quick-guide-drop-target var(--guide-duration) ease infinite;
+}
+@keyframes quick-guide-drop-target {
+  0%,
+  40%,
+  66%,
+  100% {
+    border-color: var(--gray-10);
+    background: white;
+  }
+  48%,
+  62% {
+    border-color: var(--primary);
+    background: var(--primary-5);
+  }
+}
+
+.quick-guide-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 172px;
+}
+
+.quick-guide-row {
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quick-guide-motion {
+  min-height: 36px;
+}
+
+.quick-guide-illustration.is-static .quick-guide-gesture {
+  display: none;
+}
+
+.quick-guide-illustration.is-static .quick-guide-frame {
+  animation: none;
+  display: none;
+}
+
+.quick-guide-illustration.is-static .quick-guide-frame:nth-child(3) {
+  display: flex;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-guide-scene-shell {
+    transition: none;
+  }
+
+  .quick-guide-scene-content {
+    animation: none;
+  }
+
+  .quick-guide-illustration .quick-guide-gesture {
+    display: none;
+  }
+
+  .quick-guide-illustration .quick-guide-frame {
+    animation: none;
+    display: none;
+  }
+
+  .quick-guide-illustration .quick-guide-frame:nth-child(3) {
+    display: flex;
+    opacity: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .quick-guide-caption {
+    min-height: 60px;
+  }
+}
+
+.quick-guide-demo-control.is-footer-control {
+  margin-top: auto;
+}
+.quick-guide-inline-choices {
+  overflow: hidden;
+}
+.gesture-mapping .quick-guide-arrow,
+.gesture-create .quick-guide-arrow,
+.gesture-accept .quick-guide-arrow {
+  visibility: hidden;
+}
+.gesture-create[class] {
+  min-height: 280px;
+}
+.gesture-create .quick-guide-frame:nth-child(-n + 2) .quick-guide-panes {
+  justify-content: center;
+}
+.gesture-create .quick-guide-frame:nth-child(-n + 2) .quick-guide-pane:first-child {
+  flex: 0 1 360px;
+}
+.gesture-create .quick-guide-frame:nth-child(-n + 2) .quick-guide-pane:last-child,
+.gesture-create .quick-guide-frame:nth-child(-n + 2) .quick-guide-arrow {
+  display: none;
+}
+.quick-guide-create-preview {
+  position: absolute;
+  inset: 8px;
+  z-index: 2;
+  animation: quick-guide-create-preview var(--guide-duration) steps(1, end) infinite;
+}
+@keyframes quick-guide-create-preview {
+  0%,
+  64% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.gesture-folders .quick-guide-demo-cursor {
+  animation-name: quick-guide-folder-cursor;
+}
+@keyframes quick-guide-folder-cursor {
+  0%,
+  4% {
+    transform: translate(var(--start-x), var(--start-y));
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  14%,
+  20% {
+    transform: translate(var(--first-x), var(--first-y));
+    opacity: 1;
+  }
+  32%,
+  36% {
+    transform: translate(var(--second-x), var(--second-y));
+    opacity: 1;
+  }
+  43%,
+  46% {
+    transform: translate(var(--fourth-x), var(--fourth-y));
+    opacity: 1;
+  }
+  58%,
+  70% {
+    transform: translate(var(--third-x), var(--third-y));
+    opacity: 1;
+  }
+  76%,
+  100% {
+    transform: translate(var(--third-x), var(--third-y));
+    opacity: 0;
+  }
+}
+.gesture-folders .quick-guide-demo-menu {
+  animation-name: quick-guide-folder-menu;
+}
+@keyframes quick-guide-folder-menu {
+  0%,
+  32%,
+  48%,
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  36%,
+  46% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.quick-guide-folder-editor {
+  position: absolute;
+  left: var(--menu-x);
+  top: var(--menu-y);
+  width: var(--menu-width);
+  z-index: 2;
+  animation: quick-guide-folder-parent var(--guide-duration) steps(1, end) infinite;
+}
+.quick-guide-folder-editor.folder-child {
+  top: calc(var(--menu-y) + 28px);
+  animation-name: quick-guide-folder-child;
+}
+@keyframes quick-guide-folder-parent {
+  0%,
+  32% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+}
+@keyframes quick-guide-folder-child {
+  0%,
+  64% {
+    opacity: 0;
+  }
+  48% {
+    opacity: 1;
+  }
+}
+.quick-guide-typed-name {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: quick-guide-type-parent var(--guide-duration) steps(14, end) infinite;
+}
+.folder-child .quick-guide-typed-name {
+  animation-name: quick-guide-type-child;
+}
+@keyframes quick-guide-type-parent {
+  0%,
+  20% {
+    max-width: 0;
+  }
+  28%,
+  100% {
+    max-width: 140px;
+  }
+}
+@keyframes quick-guide-type-child {
+  0%,
+  48% {
+    max-width: 0;
+  }
+  58%,
+  100% {
+    max-width: 100px;
+  }
+}
+
+.quick-guide-modal {
+  animation: quick-guide-modal-in 160ms ease-out both;
+}
+.quick-guide-modal.is-closing {
+  animation: quick-guide-modal-out 160ms ease-in both;
+}
+@keyframes quick-guide-modal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes quick-guide-modal-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quick-guide-modal,
+  .quick-guide-modal.is-closing {
+    animation: none;
+  }
+}
+
+.quick-guide-demo-checkbox {
+  position: relative;
+}
+.gesture-assign .quick-guide-frame:nth-child(2) .row-1 .quick-guide-demo-checkbox::after,
+.gesture-new-plan .quick-guide-frame:nth-child(2) .row-1 .quick-guide-demo-checkbox::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1px solid var(--gray-50);
+  border-radius: 2px;
+  background: white;
+  animation: quick-guide-next-checkbox var(--guide-duration) steps(1, end) infinite;
+}
+@keyframes quick-guide-next-checkbox {
+  0% {
+    opacity: 1;
+  }
+  36%,
+  100% {
+    opacity: 0;
+  }
+}
+.gesture-assign .quick-guide-frame:nth-child(2) .row-1,
+.gesture-new-plan .quick-guide-frame:nth-child(2) .row-1 {
+  animation: quick-guide-next-selection var(--guide-duration) steps(1, end) infinite;
+}
+@keyframes quick-guide-next-selection {
+  0% {
+    background: var(--gray-5);
+  }
+  36%,
+  100% {
+    background: var(--primary-5);
+  }
+}
+.quick-guide-modifier {
+  position: absolute;
+  top: 24px;
+  left: -32px;
+  white-space: nowrap;
+  animation: quick-guide-modifier var(--guide-duration) steps(1, end) infinite;
+}
+@keyframes quick-guide-modifier {
+  0% {
+    opacity: 1;
+  }
+  40%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.quick-guide-modifier[class] {
+  width: max-content;
+  min-width: 112px;
+}
+.quick-guide-scene-shell,
+.quick-guide-scene-content {
+  flex-shrink: 0;
+}
+
+.quick-guide-plan-name-editor {
+  position: absolute;
+  left: var(--menu-x);
+  top: var(--menu-y);
+  width: var(--menu-width);
+  z-index: 2;
+  animation: quick-guide-plan-name var(--guide-duration) steps(1, end) infinite;
+}
+@keyframes quick-guide-plan-name {
+  0%,
+  84% {
+    opacity: 0;
+  }
+  64% {
+    opacity: 1;
+  }
+}
+.quick-guide-plan-typed-name {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: quick-guide-type-plan-name var(--guide-duration) steps(11, end) infinite;
+}
+@keyframes quick-guide-type-plan-name {
+  0%,
+  66% {
+    max-width: 0;
+  }
+  78%,
+  100% {
+    max-width: 112px;
+  }
+}

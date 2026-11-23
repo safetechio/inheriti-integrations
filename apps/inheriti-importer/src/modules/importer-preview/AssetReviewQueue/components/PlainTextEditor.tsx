@@ -27,8 +27,11 @@ export function PlainTextEditor({
   );
   const hasEditedValue = Boolean(asset.plainTextValue);
   const hasValue = Boolean(
-    asset.plainTextValue?.length || selectedSource || asset.plainTextSources?.length,
+    asset.plainTextValue?.length ||
+    (textField?.sourceFieldId && selectedSource?.length !== 0) ||
+    asset.plainTextSources?.length,
   );
+  const editable = Boolean(onEdit) && asset.plainTextEditable !== false && (revealed || !hasValue);
 
   useEffect(() => {
     if (
@@ -75,28 +78,37 @@ export function PlainTextEditor({
   };
 
   return (
-    <Box gap="s">
+    <Box gap="s" dataSet={{ reviewField: 'secret.text' }} tabIndex={-1}>
       <FormTextarea
         label="Plain text secret"
         accessibilityLabel="Plain text value"
         value={revealed ? value : hasValue ? '•••••••' : ''}
-        editable={revealed && Boolean(onEdit)}
+        editable={editable}
         error={asset.schemaFields?.find((field) => field.key === 'secret.text')?.validationError}
         onChangeText={(next) => {
+          if (!editable) return;
           previousBinding.current = {
             assetId: asset.id,
             sourceBinding: JSON.stringify([undefined, undefined]),
           };
+          setRevealed(true);
           setValue(next);
           onEdit?.(asset, next);
         }}
       />
-      <Button
-        title={revealed ? 'Hide plain text' : 'Reveal plain text'}
-        variant="outlined"
-        size="sm"
-        onPress={toggle}
-      />
+      {hasValue || revealed ? (
+        <Button
+          title={revealed ? 'Hide plain text' : 'Reveal plain text'}
+          variant="outlined"
+          size="sm"
+          onPress={toggle}
+        />
+      ) : null}
+      {asset.plainTextEditable === false ? (
+        <Text variant="bodySmall" color="gray">
+          This text is built from preserved source fields. Use Issues to move or split those fields.
+        </Text>
+      ) : null}
       {textField?.candidates && (textField.candidates.length > 1 || hasEditedValue) ? (
         <Box gap="xs" className="asset-source-picker">
           <Text variant="smallUppercase" color="gray">
@@ -113,7 +125,7 @@ export function PlainTextEditor({
                 ? 'Your edited value will be stored.'
                 : 'Field names and values are combined into the Plain Text secret.'}
           </Text>
-          {selectedSource || hasEditedValue ? (
+          {onMapField && asset.plainTextEditable !== false && (selectedSource || hasEditedValue) ? (
             <Button
               title="Reset to all imported fields"
               variant="outlined"

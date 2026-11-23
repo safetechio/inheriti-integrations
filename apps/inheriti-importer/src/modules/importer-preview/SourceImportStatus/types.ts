@@ -13,7 +13,6 @@ export interface ImportFile {
   detail?: string;
   warningMessages?: string[];
   diagnostics?: ImportDiagnostic[];
-  warningsAcknowledged?: boolean;
 }
 export interface SourceImportStatusProps {
   files: ImportFile[];

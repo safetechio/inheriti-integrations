@@ -1,5 +1,6 @@
+import { isAutomaticallyMappable } from '@modules/import/domain/structured-extra-fields';
 import {
-  getCorePlanAssetTypes,
+  getImportablePlanAssetTypes,
   getPlanAssetFormFields,
 } from '@modules/plans/domain/asset-metadata';
 import type { ImportSession, ImportedField } from '@modules/import/domain/import-model';
@@ -16,6 +17,7 @@ import type { MappingOverrides } from './importer-workspace-types';
 
 /** Keep the additional text asset distinct from its structured sibling. */
 export const statusKey = (suggestion: SuggestedAsset) =>
+  suggestion.id ??
   `${suggestion.fromNodeId}:${
     suggestion.variant === 'rescued-fields'
       ? 'PLAIN-TEXT-RESCUED'
@@ -31,7 +33,7 @@ export function convertToCanonicalType(
   type: string,
   hasCompanion: boolean,
 ): SuggestedAsset {
-  if (!getCorePlanAssetTypes().includes(type as ReturnType<typeof getCorePlanAssetTypes>[number]))
+  if (!getImportablePlanAssetTypes().some((candidate) => candidate === type))
     return suggestion;
   if (type === 'PLAIN-TEXT') return convertToPlainText(session, suggestion, hasCompanion);
   const allowed = new Set(getPlanAssetFormFields(type).map((field) => field.source));
@@ -39,6 +41,7 @@ export function convertToCanonicalType(
     ...suggestion,
     type,
     confidence: 0,
+    evidence: undefined,
     rationale: 'Asset type changed during review. Map and validate its fields before accepting.',
     fieldBindings: Object.fromEntries(
       Object.entries(suggestion.fieldBindings).filter(([field]) => allowed.has(field)),
@@ -62,12 +65,20 @@ export function applyMappingOverrides(
 ): SuggestedAsset {
   const changes = overrides[statusKey(suggestion)];
   if (!changes) return suggestion;
-  const fieldBindings = { ...suggestion.fieldBindings };
-  Object.entries(changes).forEach(([target, sourceFieldId]) => {
+  let fieldBindings: SuggestedAsset['fieldBindings'] | undefined;
+  for (const [target, sourceFieldId] of Object.entries(changes)) {
+    const existing = suggestion.fieldBindings[target];
+    if (
+      sourceFieldId
+        ? existing?.kind === 'source' && existing.sourceFieldId === sourceFieldId
+        : !existing
+    )
+      continue;
+    fieldBindings ??= { ...suggestion.fieldBindings };
     if (sourceFieldId) fieldBindings[target] = { kind: 'source', sourceFieldId };
     else delete fieldBindings[target];
-  });
-  return { ...suggestion, fieldBindings };
+  }
+  return fieldBindings ? { ...suggestion, fieldBindings, evidence: undefined } : suggestion;
 }
 
 /** Find fields already represented by a suggestion's bindings. */
@@ -114,13 +125,18 @@ export function convertToPlainText(
   hasCompanion: boolean,
 ): SuggestedAsset {
   const fields = suggestionFields(session, suggestion);
+  const mappedIds = mappedFieldIds(suggestion);
+  const canIncludeNewFields = !hasCompanion && suggestion.type === 'PLAIN-TEXT';
   const converted = allFieldsAsPlainText(
     session,
     session.nodesById[suggestion.fromNodeId]!,
-    hasCompanion ? fields.filter((field) => mappedFieldIds(suggestion).has(field.id)) : fields,
+    fields.filter((field) => mappedIds.has(field.id) || (canIncludeNewFields && isAutomaticallyMappable(field))),
     false,
   );
   const notes = suggestion.fieldBindings['meta.notes'];
+  converted.id = suggestion.id;
+  converted.name = suggestion.name;
+  if (suggestion.variant) converted.variant = suggestion.variant;
   if (!notes) return converted;
   const text = plainTextValueWithoutNote(
     session,
@@ -136,31 +152,12 @@ export function convertToPlainText(
   return { ...converted, fieldBindings };
 }
 
-/** Rebuild the companion from fields left after structured mapping. */
-export function additionalFieldsSuggestion(
-  session: ImportSession,
-  structured: SuggestedAsset,
-  companion: SuggestedAsset,
-): SuggestedAsset {
-  const covered = mappedFieldIds(structured);
-  const unmatched = suggestionFields(session, structured).filter((field) => !covered.has(field.id));
-  return {
-    ...companion,
-    fieldBindings: allFieldsAsPlainText(
-      session,
-      session.nodesById[structured.fromNodeId]!,
-      unmatched,
-      false,
-    ).fieldBindings,
-  };
-}
-
 /** Build candidate assets from the current import session. */
 export function sourceSuggestions(session: ImportSession): SuggestedAsset[] {
   return suggestWithFallback([new FieldAliasSuggestionStrategy()], {
     session,
     nodeIds: session.rootNodeIds,
-    knownAssetTypes: new Set(getCorePlanAssetTypes()),
+    knownAssetTypes: new Set(getImportablePlanAssetTypes()),
   });
 }
 
@@ -169,8 +166,10 @@ export function originalSuggestionFor(
   originals: SuggestedAsset[],
   suggestion: SuggestedAsset,
 ): SuggestedAsset | undefined {
+  if (suggestion.id) return originals.find((item) => item.id === suggestion.id);
   const original = originals.find(
-    (item) => item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
+    (item) =>
+      !item.id && item.fromNodeId === suggestion.fromNodeId && item.variant === suggestion.variant,
   );
   if (original || suggestion.variant !== 'additional-fields') return original;
   const node = session.nodesById[suggestion.fromNodeId];
@@ -194,7 +193,7 @@ export function requiresExactAssetMatch(
   session: ImportSession,
   suggestion: SuggestedAsset,
 ): boolean {
-  if (suggestion.variant) return true;
+  if (suggestion.id || suggestion.variant) return true;
   const sourceId = session.nodesById[suggestion.fromNodeId]?.sourceId;
   if (session.sources.some((source) => source.id === sourceId && source.kind === 'onepassword'))
     return true;

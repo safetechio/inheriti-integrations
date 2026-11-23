@@ -1,194 +1,268 @@
-import { useState } from 'react';
-import { Badge, BaseModal, Box, Button, Text } from '@main-components';
-import { getAssetFieldDisplayName } from '@modules/_shared/domain/asset-field-display-name';
-import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
+import { useImperativeHandle, useState, type Ref } from 'react';
+import {
+  Badge,
+  BaseModal,
+  Box,
+  ChoiceGroup,
+  Icon,
+  ScrollableTabs,
+  Text,
+  Tooltip,
+} from '@main-components';
 import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
 import type { ReviewAsset } from '../../types';
+import {
+  assetSourceFieldRows,
+  selectableSourceFields,
+  sourceFieldDisplayName,
+} from '../../source-field-coverage';
+import { assetStatusForIssues, getAssetReviewIssues } from '../../asset-review-issues';
+import { SourceFieldResolver } from '../SourceFieldResolver';
+import { SourceFieldPicker } from '../SourceFieldPicker';
+import { noteOptions } from '../NotesDestination';
+import type { FieldOperationControls, FieldOperationResult } from '../../field-operations';
+import type { ImportReviewControls } from '../../import-review-controls';
+import { ImportDiagnosticCard } from '../../../components/ImportDiagnosticCard';
 import { statusBadge, statusLabel } from '../status';
 
 export function AssetReviewDetails({
   asset,
+  openIssuesRef,
   coverage,
   sourceFields,
+  siblings,
+  operations,
+  onFieldResult,
+  onExcludeFields,
+  onMapField,
+  onSetNoteDestination,
 }: {
   asset: ReviewAsset;
+  openIssuesRef?: Ref<() => void>;
   coverage?: SourceCoverage;
   sourceFields: SourceCoverage['fields'];
+  siblings: ReviewAsset[];
+  operations?: FieldOperationControls;
+  onFieldResult?: (result: FieldOperationResult) => void;
+  onExcludeFields?: ImportReviewControls['onExcludeFields'];
+  onMapField?: (asset: ReviewAsset, targetField: string, sourceFieldId?: string) => void;
+  onSetNoteDestination?: ImportReviewControls['onSetAssetNoteDestination'];
 }) {
   const [open, setOpen] = useState(false);
-  const showDetails = () => setOpen(true);
-  const dismiss = () => setOpen(false);
-  const fields = open ? sourceFields : [];
-  const diagnostics =
-    open && asset.sourceId && asset.sourceNodeId
-      ? coverage?.diagnostics.filter(
-          (diagnostic) =>
-            diagnostic.sourceId === asset.sourceId && diagnostic.entryId === asset.sourceNodeId,
-        )
-      : undefined;
-  const showReviewReasons = open && asset.status !== 'excluded';
-  const reviewReasons = showReviewReasons
-    ? (asset.schemaFields ?? []).flatMap((field) => {
-        if (field.validationError) return [`${field.label} — ${field.validationError}`];
-        const hasPlainText =
-          field.key === 'secret.text' &&
-          (asset.plainTextValue?.length || asset.plainTextSources?.length);
-        if (field.required && !field.sourceFieldId && !hasPlainText)
-          return [`${field.label} — Required field is missing.`];
-        return [];
-      })
-    : [];
-  if (showReviewReasons && asset.type !== 'PLAIN-TEXT') {
-    const protectedFields = asset.schemaFields?.filter(({ key }) => key.startsWith('secret.'));
-    if (protectedFields?.length && !protectedFields.some(({ sourceFieldId }) => sourceFieldId))
-      reviewReasons.push('Map at least one protected field before accepting this asset.');
-  }
-  const note = asset.note;
-  const notesPending =
-    showReviewReasons &&
-    note &&
-    !note.explicit &&
-    !fields.some(({ id, status }) => id === note.sourceFieldId && status === 'excluded');
-
-  return (
-    <Box
-      flexDirection="row"
-      alignItems="center"
-      justifyContent="flex-end"
-      flexWrap="wrap"
-      gap="xs"
-      className="asset-review-details-actions"
-    >
-      {asset.status !== 'suggested' ? (
-        <Badge
-          tone={statusBadge[asset.status].tone}
-          className="asset-review-details-badge"
-          accessibilityRole="button"
-          aria-haspopup="dialog"
-          onClick={showDetails}
-          {...keyboardActivation(showDetails)}
-        >
-          {statusLabel[asset.status]}
-        </Badge>
-      ) : null}
-      <Button
-        title="Details"
-        accessibilityLabel="View asset review details"
-        variant="plain"
-        size="sm"
-        minHeight={24}
-        onPress={showDetails}
-      />
-      <BaseModal
-        visible={open}
-        title={`${asset.name} — Review details`}
-        onDismiss={dismiss}
-        footer={<Button title="Done" variant="outlined" onPress={dismiss} />}
-      >
-        <Box gap="m" className="asset-review-details-content">
+  const [pane, setPane] = useState<'fields' | 'warnings'>('fields');
+  const dismiss = () => {
+    setOpen(false);
+    setPane('fields');
+  };
+  const { schema, bindingIssues, note, notesPending, unresolved, diagnostics, issueCount } =
+    getAssetReviewIssues(asset, sourceFields, siblings, coverage?.diagnostics);
+  const warningOnly = issueCount === 0 && diagnostics.length > 0;
+  const openDetails = () => {
+    setPane(warningOnly ? 'warnings' : 'fields');
+    setOpen(true);
+  };
+  useImperativeHandle(openIssuesRef, () => openDetails, [warningOnly]);
+  const resolvedStatus = assetStatusForIssues(asset, issueCount);
+  const warningBadge = warningOnly && !['accepted', 'excluded'].includes(resolvedStatus);
+  const badgeCount = resolvedStatus === 'needs-review' ? issueCount : 0;
+  const hasFieldActions = Boolean(
+    warningOnly &&
+    operations &&
+    onFieldResult &&
+    asset.status !== 'excluded' &&
+    ((asset.type === 'PLAIN-TEXT' && asset.plainTextValue) ||
+      selectableSourceFields(asset, assetSourceFieldRows(asset, sourceFields, siblings), siblings)
+        .length),
+  );
+  const fieldsAvailable = issueCount > 0 || hasFieldActions;
+  const showWarnings = (!fieldsAvailable || pane === 'warnings') && diagnostics.length > 0;
+  const title = `${asset.name} — ${warningOnly ? (showWarnings ? 'Warnings' : 'Included fields') : 'Issues'}`;
+  const bodyHeader =
+    diagnostics.length > 0 && fieldsAvailable ? (
+      <Box paddingHorizontal="m" borderBottomWidth={1} borderColor="gray10">
+        <ScrollableTabs
+          label="Asset issue sections"
+          tabs={[
+            { value: 'fields', label: issueCount ? 'Fields to resolve' : 'Included fields' },
+            { value: 'warnings', label: 'Warnings', count: diagnostics.length },
+          ]}
+          value={pane}
+          onChange={setPane}
+        />
+      </Box>
+    ) : undefined;
+  const warnings = diagnostics.map(([key, diagnostic]) => (
+    <ImportDiagnosticCard key={JSON.stringify([asset.id, key])} {...diagnostic} />
+  ));
+  const renderIssues = (selectableIds: ReadonlySet<string>, hasFieldActions = false) => {
+    const remaining = unresolved.filter(({ id }) => !selectableIds.has(id));
+    if (!bindingIssues.size && !notesPending && !remaining.length && hasFieldActions)
+      return (
+        <Text variant="bodySmall" color="gray">
+          These fields are already included in this asset. Select them only to split or reorganize
+          them.
+        </Text>
+      );
+    return (
+      <Box gap="m" className="asset-review-details-content">
+        {bindingIssues.size ? (
           <Box gap="xs">
-            <Text variant="bodySmall" color="gray">
-              {[asset.sourceFileName || asset.source, ...(asset.folderPath ?? [])].join(' · ')}
+            <Text variant="bodySmall" semibold accessibilityRole="heading">
+              Fix field mappings
             </Text>
-            <Text variant="bodyRegular" semibold>
-              {statusLabel[asset.status]}
+            {[...bindingIssues].map(([key, { message, sourceId }]) => {
+              const source = sourceFields.find(({ id }) => id === sourceId);
+              const field = schema.find(({ key: target }) => target === key);
+
+              return (
+                <Box
+                  key={key}
+                  padding="s"
+                  gap="xxs"
+                  borderWidth={1}
+                  borderColor="gray10"
+                  borderRadius="s"
+                >
+                  {source ? (
+                    <Text variant="bodySmall" semibold>
+                      {sourceFieldDisplayName(source.name)}
+                    </Text>
+                  ) : null}
+                  <Text variant="bodySmall" color="danger120">
+                    {message}
+                  </Text>
+                  {field && onMapField && field.candidates?.length ? (
+                    <SourceFieldPicker
+                      field={field}
+                      compactWhenUnmapped
+                      onChange={(sourceId) => onMapField(asset, key, sourceId)}
+                    />
+                  ) : null}
+                </Box>
+              );
+            })}
+          </Box>
+        ) : null}
+        {notesPending && note ? (
+          <Box gap="xs">
+            <Text variant="bodySmall" semibold accessibilityRole="heading">
+              Imported notes
             </Text>
-            {asset.rationale ? <Text variant="bodySmall">{asset.rationale}</Text> : null}
-            {reviewReasons.map((reason, index) => (
-              <Text key={index} variant="bodySmall" color="danger120">
-                {reason}
-              </Text>
-            ))}
-            {asset.status === 'needs-review' && !reviewReasons.length && !notesPending ? (
-              <Text variant="bodySmall">
-                Review the detected type and mapped fields before accepting.
-              </Text>
+            <Text variant="bodySmall">
+              Choose a destination for the imported notes. They remain protected while you decide.
+            </Text>
+            {onSetNoteDestination ? (
+              <ChoiceGroup
+                label="Notes destination for this asset"
+                value={null}
+                options={noteOptions.filter(
+                  ({ value }) => note.publicAllowed || value === 'protected',
+                )}
+                onChange={(value) => onSetNoteDestination(asset, value)}
+              />
             ) : null}
-            {notesPending ? (
-              <Text variant="bodySmall">
-                Choose a destination for the imported notes. They remain protected while you decide.
-              </Text>
-            ) : null}
-            {notesPending && note.reason ? (
+            {note.reason ? (
               <Text variant="bodySmall" color="gray">
                 {note.reason}
               </Text>
             ) : null}
           </Box>
+        ) : null}
+        {remaining.length > 0 ? (
           <Box gap="s">
             <Text variant="bodySmall" semibold accessibilityRole="heading">
-              Source field coverage
+              Fields to review
             </Text>
-            {fields.map((field) => (
-              <Box key={field.id} gap="xxs">
+            {remaining.map(({ id, name, reason }) => (
+              <Box
+                key={id}
+                padding="s"
+                gap="xxs"
+                borderWidth={1}
+                borderColor="gray10"
+                borderRadius="s"
+              >
                 <Text variant="bodySmall" semibold>
-                  {field.name}
+                  {name}
                 </Text>
-                {describeField(field, asset.id).map((description) => (
-                  <Text key={description} variant="bodySmall" color="gray">
-                    {description}
-                  </Text>
-                ))}
+                <Text variant="bodySmall" color="gray">
+                  {reason}
+                </Text>
               </Box>
             ))}
-            {!coverage ? (
-              <>
-                {asset.mapped.map((name, index) => (
-                  <Text key={`mapped:${index}`} variant="bodySmall">
-                    {name} — Mapped to this asset
-                  </Text>
-                ))}
-                {asset.unmapped.map((name, index) => (
-                  <Text key={`unmapped:${index}`} variant="bodySmall">
-                    {name} — Unmapped
-                  </Text>
-                ))}
-              </>
-            ) : null}
-            {!fields.length && (coverage || (!asset.mapped.length && !asset.unmapped.length)) ? (
-              <Text variant="bodySmall" color="gray">
-                No source field coverage for this asset.
-              </Text>
-            ) : null}
           </Box>
-          {diagnostics?.length ? (
-            <Box gap="xs">
-              <Text variant="bodySmall" semibold accessibilityRole="heading">
-                Import warnings
-              </Text>
-              {diagnostics.map(({ message, count }, index) => (
-                <Text key={index} variant="bodySmall" color="gray">
-                  {message}
-                  {count > 1 ? ` (${count})` : ''}
-                </Text>
-              ))}
-            </Box>
-          ) : null}
-        </Box>
-      </BaseModal>
-    </Box>
-  );
-}
-
-function describeField(field: SourceCoverage['fields'][number], assetId: string): string[] {
-  if (field.status === 'excluded') return ['Explicitly excluded from import'];
-  if (field.status === 'pending') return ['Pending a destination'];
-  if (field.status === 'invalid') return ['Invalid destination — review required'];
-  return [
-    ...new Set(
-      field.destinations.map((destination) => {
-        if (destination.valid === false) {
-          const asset = destination.assetId === assetId ? 'This asset' : 'Additional asset';
-          return `Invalid destination · ${asset} · ${getAssetFieldDisplayName(destination.fieldId)}`;
+        ) : null}
+        {!bindingIssues.size && !notesPending && !remaining.length && !hasFieldActions ? (
+          <Text variant="bodySmall" color="gray">
+            {asset.status === 'excluded'
+              ? 'This asset is excluded from the import.'
+              : asset.status === 'needs-review'
+                ? 'No issues found. Ready for review.'
+                : 'No field issues found for this asset.'}
+          </Text>
+        ) : null}
+      </Box>
+    );
+  };
+  return (
+    <>
+      <Tooltip
+        content={
+          badgeCount > 0
+            ? `${badgeCount} ${badgeCount === 1 ? 'issue' : 'issues'} to resolve`
+            : warningOnly
+              ? `${diagnostics.length} import ${diagnostics.length === 1 ? 'warning' : 'warnings'}`
+              : 'Review asset details'
         }
-        const preservation =
-          field.status === 'protected' && destination.fieldId === 'secret.text'
-            ? 'Protected text'
-            : 'Mapped';
-        if (destination.assetId !== assetId)
-          return `Preserved in an additional asset · ${preservation}`;
-        return `${preservation} · This asset · ${getAssetFieldDisplayName(destination.fieldId)}`;
-      }),
-    ),
-  ];
+      >
+        <button
+          type="button"
+          className="asset-review-issues-trigger"
+          aria-label="View asset issues"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={openDetails}
+        >
+          <Badge
+            tone={warningBadge ? 'info' : statusBadge[resolvedStatus].tone}
+            icon={warningBadge ? 'circle-info' : statusBadge[resolvedStatus].icon}
+          >
+            {warningBadge ? `Warnings (${diagnostics.length})` : statusLabel[resolvedStatus]}
+            {badgeCount > 0 ? ` (${badgeCount})` : null}
+          </Badge>
+        </button>
+      </Tooltip>
+      {open ? (
+        operations && onFieldResult ? (
+          <SourceFieldResolver
+            asset={asset}
+            fields={sourceFields}
+            siblings={siblings}
+            operations={operations}
+            title={title}
+            onDismiss={dismiss}
+            onExcludeFields={onExcludeFields}
+            renderIssues={renderIssues}
+            bodyHeader={bodyHeader}
+            warnings={showWarnings ? warnings : undefined}
+            onResult={(result) => {
+              dismiss();
+              onFieldResult(result);
+            }}
+          />
+        ) : (
+          <BaseModal
+            visible
+            title={title}
+            titleIcon={<Icon name="circle-exclamation" size={20} label="" />}
+            onDismiss={dismiss}
+            bodyHeader={bodyHeader}
+            bodyPaneKey={showWarnings ? 'warnings' : 'fields'}
+          >
+            {showWarnings ? warnings : renderIssues(new Set())}
+          </BaseModal>
+        )
+      ) : null}
+    </>
+  );
 }

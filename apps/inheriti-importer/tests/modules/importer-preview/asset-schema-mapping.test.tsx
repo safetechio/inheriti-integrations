@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AssetReviewQueue, type ReviewAsset } from '@modules/importer-preview/AssetReviewQueue';
 import { SensitiveValue } from '@modules/import/domain/import-model';
 
@@ -51,6 +51,7 @@ describe('Asset schema mapping', () => {
     );
 
     expect(screen.getByDisplayValue('•••••••')).toBeTruthy();
+    expect((screen.getByLabelText('Plain text value') as HTMLTextAreaElement).readOnly).toBe(true);
     expect(screen.queryByText('53% confidence')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
     expect(screen.getByRole('button', { name: 'Hide plain text' })).toBeTruthy();
@@ -58,6 +59,46 @@ describe('Asset schema mapping', () => {
     await waitFor(() => expect(editor.value).toBe('username: octo\npassword: secret'));
     fireEvent.change(editor, { target: { value: 'edited' } });
     expect(onEditPlainText).toHaveBeenCalledWith(expect.anything(), 'edited');
+  });
+
+  it('allows typing into empty Plain Text without revealing an imported value', () => {
+    const onEditPlainText = vi.fn();
+    const empty = { ...asset(), type: 'PLAIN-TEXT', schemaFields: [] };
+    render(<AssetReviewQueue assets={[empty]} onEditPlainText={onEditPlainText} />);
+    const editor = screen.getByLabelText('Plain text value') as HTMLTextAreaElement;
+    expect(editor.readOnly).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Reveal plain text' })).toBeNull();
+    fireEvent.change(editor, { target: { value: 'a' } });
+    fireEvent.change(editor, { target: { value: 'ab' } });
+    expect(editor.value).toBe('ab');
+    expect(onEditPlainText.mock.calls).toEqual([
+      [empty, 'a'],
+      [empty, 'ab'],
+    ]);
+  });
+
+  it('keeps protected field groups read-only after reveal', () => {
+    const onEditPlainText = vi.fn();
+    render(
+      <AssetReviewQueue
+        assets={[
+          {
+            ...asset(),
+            type: 'PLAIN-TEXT',
+            plainTextEditable: false,
+            plainTextSources: [{ id: 'source:region', name: 'region' }],
+          },
+        ]}
+        onEditPlainText={onEditPlainText}
+        resolveSourceValue={() => new SensitiveValue('synthetic region')}
+      />,
+    );
+    const editor = screen.getByLabelText('Plain text value') as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal plain text' }));
+    expect(editor.value).toBe('region: synthetic region');
+    expect(editor.readOnly).toBe(true);
+    expect(screen.getByText(/Use Issues to move or split those fields/)).toBeTruthy();
+    expect(onEditPlainText).not.toHaveBeenCalled();
   });
 
   it('resolves composite Plain Text sources only after reveal', async () => {
@@ -322,7 +363,9 @@ describe('Asset schema mapping', () => {
     render(<AssetReviewQueue assets={[asset()]} onAction={vi.fn()} onMapField={onMapField} />);
 
     fireEvent.click(screen.getByLabelText('Change API key source field'));
-    fireEvent.click(screen.getByLabelText('Map API key to endpoint'));
+    const choices = screen.getByRole('group', { name: 'API key source fields' });
+    fireEvent.click(within(choices).getByRole('button', { name: 'Map API key to endpoint' }));
+    expect(screen.queryByRole('group', { name: 'API key source fields' })).toBeNull();
     expect(onMapField).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'asset-1' }),
       'secret.apiKey',
@@ -357,7 +400,7 @@ describe('Asset schema mapping', () => {
     render(<AssetReviewQueue assets={[asset('')]} onAction={onAction} />);
 
     expect(
-      screen.getByText('Include at least one schema field before accepting this Asset.'),
+      screen.getByText('Choose a source for at least one secret field before accepting this asset.'),
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept' }).getAttribute('aria-disabled')).toBe(
       'true',

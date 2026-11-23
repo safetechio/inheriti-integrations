@@ -1,0 +1,48 @@
+.asset-review-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--importer-radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+.asset-review-actions-trigger:hover,
+.asset-review-action-item:hover:not(:disabled) {
+  background: var(--primary-5);
+}
+.asset-review-actions-trigger:focus-visible,
+.asset-review-action-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.asset-review-actions-menu {
+  position: fixed !important;
+  z-index: 10002;
+  width: min(340px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  box-shadow: 0 8px 24px rgb(15 16 72 / 15%);
+}
+.asset-review-action-item {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--importer-radius-control);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.asset-review-action-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

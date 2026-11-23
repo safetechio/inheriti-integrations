@@ -43,6 +43,40 @@ describe('importer flow readiness', () => {
     ).toBe(false);
   });
 
+  it('allows a processed warning source without reviewing diagnostics', () => {
+    expect(
+      getImporterFlowReadiness({
+        files: [
+          {
+            ...file,
+            status: 'warning',
+            entries: 0,
+            diagnostics: [
+              { code: 'attachment', kind: 'unsupported', message: 'Attachment skipped.', count: 1 },
+            ],
+          },
+        ],
+        assets: [],
+        unassigned: [],
+        plans: [],
+      }).sources,
+    ).toBe(true);
+  });
+
+  it.each(['failed', 'unlock-required', 'retrying', 'unlocking'] as const)(
+    'keeps a %s sibling source blocking progression',
+    (status) => {
+      expect(
+        getImporterFlowReadiness({
+          files: [file, { ...file, status }],
+          assets: [asset],
+          unassigned: [],
+          plans: [plan],
+        }),
+      ).toMatchObject({ sources: false, staging: false });
+    },
+  );
+
   it('requires every sibling Plan to be valid and within capacity', () => {
     const invalid = { ...plan, id: 'plan-2', valid: false };
     const overCapacity = { ...plan, id: 'plan-3', assets: 11, capacity: '11 / 10 Assets' };

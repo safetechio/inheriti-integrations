@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Box, Button, FilterChip, Text } from '@main-components';
-import type { ReviewAssetField, ReviewAssetSourceCandidate } from '../../types';
+import { useEffect, useRef, useState } from 'react';
+import { Box, Button, ScrollableTabs, Text } from '@main-components';
+import type { ReviewAssetField } from '../../types';
+import { sourceFieldDisplayName } from '../../source-field-coverage';
 
 export function SourceFieldPicker({
   field,
@@ -12,8 +13,8 @@ export function SourceFieldPicker({
   compactWhenUnmapped?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLElement>(null);
   const candidates = field.candidates ?? [];
-  const displayName = (name: string) => name.replace(/^extra:/i, '');
   useEffect(() => setOpen(false), [field.key, field.sourceFieldId]);
   if (candidates.length === 0)
     return (
@@ -28,7 +29,17 @@ export function SourceFieldPicker({
     );
 
   return (
-    <Box gap="xs" className="asset-source-picker">
+    <Box
+      gap="xs"
+      className="asset-source-picker"
+      onKeyDownCapture={(event: KeyboardEvent) => {
+        if (!open || event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        toggleRef.current?.querySelector<HTMLElement>('[role="button"]')?.focus();
+      }}
+    >
       <Box
         flexDirection="row"
         alignItems="center"
@@ -41,8 +52,8 @@ export function SourceFieldPicker({
             <Text variant="bodySmall" color="gray" style={{ fontSize: 11 }}>
               source
             </Text>
-            <Text variant="bodySmall" semibold>
-              {field.sourceFieldName ? displayName(field.sourceFieldName) : '—'}
+            <Text variant="bodySmall" semibold className="asset-source-field-label">
+              {field.sourceFieldName ? sourceFieldDisplayName(field.sourceFieldName) : '—'}
             </Text>
           </Box>
         ) : null}
@@ -57,32 +68,38 @@ export function SourceFieldPicker({
               accessibilityLabel={`Exclude ${field.label} field from this Asset`}
             />
           ) : null}
-          <Button
-            title={open ? 'Close' : field.sourceFieldId ? 'Change source' : 'Choose source'}
-            variant="outlined"
-            color="gray"
-            size="sm"
-            onPress={() => setOpen((current) => !current)}
-            accessibilityLabel={`${field.sourceFieldId ? 'Change' : 'Choose'} ${field.label} source field`}
-          />
+          <Box ref={toggleRef} dataSet={{ reviewSourceToggle: '' }}>
+            <Button
+              title={open ? 'Close' : field.sourceFieldId ? 'Change source' : 'Choose source'}
+              variant="outlined"
+              color="gray"
+              size="sm"
+              onPress={() => setOpen((current) => !current)}
+              accessibilityLabel={`${field.sourceFieldId ? 'Change' : 'Choose'} ${field.label} source field`}
+            />
+          </Box>
         </Box>
       </Box>
       {open ? (
-        <Box flexDirection="row" flexWrap="wrap" gap="xs" className="asset-source-options">
-          {candidates.map((candidate: ReviewAssetSourceCandidate) => (
-            <FilterChip
-              key={candidate.id}
-              variant="pill"
-              selected={candidate.id === field.sourceFieldId}
-              onPress={() => {
-                onChange(candidate.id);
-                setOpen(false);
-              }}
-              accessibilityLabel={`Map ${field.label} to ${displayName(candidate.name)}`}
-            >
-              {displayName(candidate.name)}
-            </FilterChip>
-          ))}
+        <Box className="asset-source-options">
+          <ScrollableTabs
+            label={`${field.label} source fields`}
+            variant="pill"
+            scrollLabel="source fields"
+            value={field.sourceFieldId ?? ''}
+            tabs={candidates.map((candidate) => {
+              const label = sourceFieldDisplayName(candidate.name);
+              return {
+                value: candidate.id,
+                label,
+                accessibilityLabel: `Map ${field.label} to ${label}`,
+              };
+            })}
+            onChange={(sourceFieldId) => {
+              onChange(sourceFieldId);
+              setOpen(false);
+            }}
+          />
         </Box>
       ) : null}
     </Box>

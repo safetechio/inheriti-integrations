@@ -1,10 +1,13 @@
+import { materialiseAsset } from '@modules/plans/domain/asset-materializer';
+import { validateAssetEditorValues } from '@modules/plans/domain/asset-metadata';
+import { isAutomaticallyMappable } from '@modules/import/domain/structured-extra-fields';
 import type { ImportedField, ImportSession } from '@modules/import/domain/import-model';
 import {
   allFieldsAsPlainText,
   bindingSourceIds,
   fieldsOf,
 } from '@modules/mapping/application/suggestion-engine';
-import type { SuggestedAsset, SuggestedFieldBinding } from '@modules/mapping/domain/suggestion';
+import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
 import type {
   ReviewAssetNote,
   NoteDestination,
@@ -13,12 +16,14 @@ import type {
 
 export interface PreservationChoices {
   sourceNotes?: Record<string, NoteDestination>;
-  entryNotes?: Record<string, NoteDestination>;
+  /** An explicit null returns this entry to pending, even with a source-level choice. */
+  entryNotes?: Record<string, NoteDestination | null>;
   rescued?: ReadonlySet<string>;
   publicSkippedEntries?: ReadonlySet<string>;
   ignored?: ReadonlySet<string>;
 }
 
+const defaultNoteDestination = 'asset-notes';
 const nativeNotesKinds = new Set(['onepassword', 'keepass', 'passbolt']);
 
 export function nativeNotes(session: ImportSession, nodeId: string): ImportedField | undefined {
@@ -31,7 +36,7 @@ export function nativeNotes(session: ImportSession, nodeId: string): ImportedFie
   )
     return undefined;
   const notes = fieldsOf(session, node).filter(
-    (field) => field.name === 'notes' && !field.value.isEmpty,
+    (field) => field.name === 'notes' && !field.value.isEmpty && isAutomaticallyMappable(field),
   );
   return notes.length === 1 ? notes[0] : undefined;
 }
@@ -40,21 +45,24 @@ export function projectNoteSources(
   session: ImportSession,
   choices: PreservationChoices,
 ): NoteSourceDecision[] {
-  const counts = new Map<string, number>();
+  const fieldIdsBySource = new Map<string, string[]>();
   for (const node of Object.values(session.nodesById)) {
     const field = nativeNotes(session, node.id);
-    if (field && !choices.ignored?.has(field.id))
-      counts.set(field.sourceId, (counts.get(field.sourceId) ?? 0) + 1);
+    if (!field || choices.ignored?.has(field.id)) continue;
+    const fieldIds = fieldIdsBySource.get(field.sourceId) ?? [];
+    fieldIds.push(field.id);
+    fieldIdsBySource.set(field.sourceId, fieldIds);
   }
   return session.sources.flatMap((source) => {
-    const fieldCount = counts.get(source.id);
-    return fieldCount
+    const fieldIds = fieldIdsBySource.get(source.id);
+    return fieldIds
       ? [
           {
             sourceId: source.id,
             sourceName: source.fileName,
-            fieldCount,
-            destination: choices.sourceNotes?.[source.id] ?? null,
+            fieldCount: fieldIds.length,
+            fieldIds,
+            destination: choices.sourceNotes?.[source.id] ?? defaultNoteDestination,
           },
         ]
       : [];
@@ -77,39 +85,44 @@ export function removeSourceBindings(
   return { ...suggestion, fieldBindings };
 }
 
-function hasProtectedValue(session: ImportSession, binding: SuggestedFieldBinding): boolean {
-  return binding.kind === 'literal'
-    ? Boolean(binding.value.reveal().trim())
-    : bindingSourceIds(binding).some(
-        (id) => !session.fieldsById[id]?.value.isEmpty && Boolean(session.fieldsById[id]),
-      );
+function hasProtectedValue(session: ImportSession, suggestion: SuggestedAsset): boolean {
+  if (!Object.keys(suggestion.fieldBindings).some((key) => key.startsWith('secret.'))) return false;
+  const { asset, errors } = materialiseAsset({ ...suggestion, id: suggestion.id ?? '' }, session);
+  const invalid = new Set(errors.map(({ assetFieldSource }) => assetFieldSource));
+  const validation = validateAssetEditorValues(asset.type, asset);
+  return Object.entries(asset.secret).some(([key, value]) => {
+    const path = `secret.${key}`;
+    const present =
+      typeof value === 'string' ? Boolean(value.trim()) : Array.isArray(value) && value.length > 0;
+    return present && !invalid.has(path) && !validation[path];
+  });
 }
 
 export function noteForAsset(
   session: ImportSession,
   suggestion: SuggestedAsset,
   choices: PreservationChoices,
+  legacyProtected = false,
 ): ReviewAssetNote | undefined {
   if (suggestion.variant) return;
   const field = nativeNotes(session, suggestion.fromNodeId);
   if (!field || choices.ignored?.has(field.id)) return;
   const override = choices.entryNotes?.[suggestion.fromNodeId];
-  const inherited = choices.sourceNotes?.[field.sourceId];
+  const sourceChoice = choices.sourceNotes?.[field.sourceId];
+  const inherited = override === undefined;
   const skipped = choices.publicSkippedEntries?.has(suggestion.fromNodeId);
   const withoutNote = removeSourceBindings(suggestion, new Set([field.id]));
   const publicAllowed =
-    !withoutNote.fieldBindings['meta.notes'] &&
-    Object.entries(withoutNote.fieldBindings).some(
-      ([key, binding]) => key.startsWith('secret.') && hasProtectedValue(session, binding),
-    );
+    !withoutNote.fieldBindings['meta.notes'] && hasProtectedValue(session, withoutNote);
+  const destination =
+    override === null || skipped
+      ? (override ?? 'protected')
+      : (override ?? sourceChoice ?? (legacyProtected ? 'protected' : defaultNoteDestination));
   return {
     sourceFieldId: field.id,
-    destination:
-      publicAllowed && (override ?? (skipped ? 'protected' : inherited)) === 'asset-notes'
-        ? 'asset-notes'
-        : 'protected',
-    explicit: Boolean(override || inherited),
-    inherited: !override && Boolean(inherited),
+    destination: publicAllowed && destination === 'asset-notes' ? 'asset-notes' : 'protected',
+    explicit: override !== null,
+    inherited,
     publicAllowed,
     reason: publicAllowed
       ? undefined
@@ -121,14 +134,16 @@ export function applyNativeNote(
   session: ImportSession,
   suggestion: SuggestedAsset,
   choices: PreservationChoices,
+  legacyProtected = false,
 ): SuggestedAsset {
-  const note = noteForAsset(session, suggestion, choices);
+  const note = noteForAsset(session, suggestion, choices, legacyProtected);
   if (!note) return suggestion;
   const adjusted = removeSourceBindings(suggestion, new Set([note.sourceFieldId]));
   if (note.destination === 'asset-notes') {
     adjusted.fieldBindings['meta.notes'] = { kind: 'source', sourceFieldId: note.sourceFieldId };
   }
   if (
+    choices.entryNotes?.[suggestion.fromNodeId] !== null &&
     suggestion.type === 'PLAIN-TEXT' &&
     adjusted.fieldBindings['secret.text']?.kind !== 'literal'
   ) {

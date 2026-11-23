@@ -96,7 +96,7 @@ describe('selected assets creation destination', () => {
     choose('Needs permissions');
     const createButton = screen.getByRole('button', { name: 'New plan', exact: true });
     expect(createButton.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.focus(createButton.parentElement!);
+    act(() => createButton.parentElement!.focus());
     expect(screen.getByRole('tooltip').textContent).toBe('Set folder permissions before creating plans here.');
     fireEvent.click(createButton);
     expect(create).not.toHaveBeenCalled();
@@ -108,4 +108,21 @@ describe('selected assets creation destination', () => {
     expect(picker('Your organisation')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Use organisation root' }).textContent).toContain('Your organisation');
   });
+});
+
+
+it('shows the full destination in a tooltip while retaining the searchable picker', () => {
+  const { view, props } = setup();
+  const name = 'A very long destination folder name '.repeat(4).trim();
+  view.rerender(<PlanGroupingSurface {...props} folders={{
+    ...workspace,
+    folders: [{ ...finance, name }],
+  }} />);
+  fireEvent.click(picker('Your organisation'));
+  choose(name);
+  const trigger = picker(name);
+  act(() => trigger.focus());
+  expect(screen.getByRole('tooltip').textContent).toBe(name);
+  fireEvent.click(trigger);
+  expect(screen.getByRole('combobox', { name: 'Choose a folder' })).toBeTruthy();
 });

@@ -1,0 +1,39 @@
+.importer-notes-help .importer-tooltip-anchor {
+  border-radius: var(--importer-radius-control);
+  cursor: help;
+  padding: 4px;
+}
+
+.importer-notes-help .importer-tooltip-anchor:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.importer-notes-trigger {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--importer-radius-control);
+  background: var(--importer-color-surface);
+  cursor: pointer;
+}
+
+.importer-notes-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.importer-notes-popover {
+  position: fixed !important;
+  z-index: 10002;
+  width: min(420px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgb(15 16 72 / 15%);
+}

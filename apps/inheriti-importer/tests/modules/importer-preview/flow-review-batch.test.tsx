@@ -122,7 +122,8 @@ it.each([false, true])('respects auto-advance set to %s in the review queue', (a
   );
   fireEvent.click(screen.getByRole('button', { name: 'Inspect First' }));
   onSelectAsset.mockClear();
-  fireEvent.click(screen.getByRole('button', { name: 'Exclude' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Actions for / }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Exclude from import' }));
   expect(onReviewAsset).toHaveBeenCalledWith('exclude', first);
   expect(onSelectAsset).toHaveBeenCalledTimes(Number(autoAdvance));
   expect(document.querySelector('.asset-inspector-heading-text')?.textContent).toBe(
@@ -144,4 +145,69 @@ it.each([false, true])('respects auto-advance set to %s on a direct flow review'
   );
   act(() => result.current.reviewAsset('exclude', first));
   expect(result.current.selectedAssetId).toBe(autoAdvance ? second.id : first.id);
+});
+
+it('updates filtered tab counts after restoring and undoing a batch', () => {
+  const excluded: ReviewAsset = { ...first, status: 'excluded' };
+  render(
+    <ImporterFlow
+      files={[{ name: first.source, format: 'Synthetic', status: 'imported' }]}
+      assets={[excluded, invalid]}
+      plans={[]}
+      unassigned={[]}
+      checklist={[]}
+      initialStage="assets"
+    />,
+  );
+  const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+  click('Excluded 1');
+  click('Select all');
+  click('Restore selected');
+  expect(screen.getByRole('button', { name: 'Excluded 0' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'To review 2' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Inspect First' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Select all' }).hasAttribute('disabled')).toBe(true);
+  click('Undo');
+  expect(screen.getByRole('button', { name: 'Excluded 1' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'To review 1' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Inspect First' })).toBeTruthy();
+});
+
+it('keeps a converted excluded row excluded until it is explicitly restored', () => {
+  const excluded: ReviewAsset = {
+    ...first,
+    status: 'excluded',
+    type: 'PLAIN-TEXT',
+    convertedFromType: 'USER-PSWD',
+    alternatives: ['USER-PSWD'],
+  };
+  const state = { ...initial, assets: [excluded] };
+  for (const action of ['alternate:USER-PSWD', 'restore-suggestion']) {
+    expect(
+      flowReducer(state, {
+        type: 'review-asset',
+        action,
+        asset: { ...excluded, status: 'needs-review' },
+        autoAdvance: false,
+      }),
+    ).toBe(state);
+  }
+
+  render(
+    <ImporterFlow
+      files={[{ name: first.source, format: 'Synthetic', status: 'imported' }]}
+      assets={[excluded]}
+      plans={[]}
+      unassigned={[]}
+      checklist={[]}
+      initialStage="assets"
+    />,
+  );
+  expect(screen.getByRole('combobox', { name: 'Asset type' }).hasAttribute('disabled')).toBe(true);
+  expect(screen.queryByRole('button', { name: /^Back to suggested/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for First' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Restore to review' }));
+  expect(screen.getByRole('button', { name: 'To review 1' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Excluded 0' })).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: 'Asset type' }).hasAttribute('disabled')).toBe(false);
 });

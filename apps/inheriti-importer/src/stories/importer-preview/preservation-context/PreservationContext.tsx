@@ -43,17 +43,9 @@ export function PreservationContext({ onReset }: { onReset: () => void }) {
   const [state, setState] = useState(createEmptyWorkspace);
   const [reviewRevision, setReviewRevision] = useState(0);
   const [warnings, setWarnings] = useState<ImportFile | null>(null);
-  const [acknowledged, setAcknowledged] = useState(new Set<string>());
   const input = useRef<HTMLInputElement>(null);
   const session = useMemo(() => importSessionFromVaultState(imports.state), [imports.state]);
-  const files = useMemo(
-    () =>
-      projectImportSources(imports.state).map((file) => ({
-        ...file,
-        warningsAcknowledged: acknowledged.has(file.id!),
-      })),
-    [imports.state, acknowledged],
-  );
+  const files = useMemo(() => projectImportSources(imports.state), [imports.state]);
   const preservationRevision = useMemo(() => Symbol(), [state, session, reviewRevision]);
   const workspace = useImporterWorkspace(session, state, setState, undefined, () =>
     setReviewRevision((revision) => revision + 1),
@@ -182,6 +174,8 @@ export function PreservationContext({ onReset }: { onReset: () => void }) {
           assets={workspace.assets}
           preservation={{
             coverage: workspace.coverage,
+            fieldOperations: workspace.fieldOperations,
+            onRenameAsset: workspace.renameAsset,
             noteSources: workspace.noteSources,
             onSetSourceNoteDestination: workspace.setSourceNoteDestination,
             onSetAssetNoteDestination: workspace.setAssetNoteDestination,
@@ -250,10 +244,6 @@ export function PreservationContext({ onReset }: { onReset: () => void }) {
       <SourceWarningsModal
         file={warnings}
         onDismiss={() => setWarnings(null)}
-        onUnderstood={(file) => {
-          setAcknowledged((current) => new Set([...current, file.id!]));
-          setWarnings(null);
-        }}
       />
     </>
   );

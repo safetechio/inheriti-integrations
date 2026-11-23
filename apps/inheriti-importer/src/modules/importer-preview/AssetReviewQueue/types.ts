@@ -1,8 +1,21 @@
+import type { Ref } from 'react';
 import type { SensitiveValue } from '@modules/import/domain/import-model';
 
 export type AssetReviewStatus = 'suggested' | 'needs-review' | 'accepted' | 'excluded' | 'fallback';
 
-export type ReviewBatchAction = 'accept' | 'exclude';
+export const reviewDecisionStatus = {
+  accept: 'accepted',
+  exclude: 'excluded',
+  restore: 'needs-review',
+} as const;
+
+export type ReviewBatchAction = keyof typeof reviewDecisionStatus;
+
+export function canReviewAsset(action: ReviewBatchAction, asset: ReviewAsset): boolean {
+  if (action === 'restore') return asset.status === 'excluded';
+  if (asset.status === 'excluded') return false;
+  return action === 'exclude' || (asset.status !== 'accepted' && hasIncludedSchemaField(asset));
+}
 
 export interface ReviewBatchResult {
   changedIds: string[];
@@ -20,6 +33,7 @@ export interface NoteSourceDecision {
   sourceId: string;
   sourceName: string;
   fieldCount: number;
+  fieldIds?: string[];
   destination: NoteDestination | null;
 }
 
@@ -35,7 +49,9 @@ export interface ReviewAssetNote {
 }
 
 export interface ReviewAsset {
+  canRemoveDraft?: boolean;
   id: string;
+  destinationAssetIds?: string[];
   name: string;
   type: string;
   status: AssetReviewStatus;
@@ -48,12 +64,16 @@ export interface ReviewAsset {
   source: string;
   sourceId?: string;
   sourceNodeId?: string;
+  sourcePatternKey?: string;
+  suggestionEvidence?: readonly string[];
+  ownsSourceDiagnostics?: boolean;
   sourceFileName?: string;
   folderPath?: string[];
   alternatives: string[];
   previewFields?: string[];
   schemaFields?: ReviewAssetField[];
   plainTextValue?: SensitiveValue;
+  plainTextEditable?: boolean;
   plainTextSources?: ReviewAssetSourceCandidate[];
   convertedFromType?: string;
   batchMappingSupported?: boolean;
@@ -78,7 +98,12 @@ export interface ReviewAssetField {
   manuallyMapped?: boolean;
 }
 
+export interface ReviewRecoveryHandle {
+  resolve(): void;
+}
+
 export interface AssetReviewQueueProps {
+  recoveryRef?: Ref<ReviewRecoveryHandle>;
   assets: ReviewAsset[];
   sourceFiles?: { id?: string; name: string }[];
   description?: string;

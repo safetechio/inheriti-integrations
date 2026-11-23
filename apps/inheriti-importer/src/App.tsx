@@ -35,9 +35,10 @@ import { usePlanBatchController } from '@modules/batch/application/use-plan-batc
 import { secureCleanup } from '@modules/_shared/application/secure-cleanup-controller';
 import { useAuthProvider } from '@shared/infrastructure/importer-api';
 import type { ElectronAuthProvider } from '@modules/auth/infrastructure/electron-auth-provider';
-import { getCorePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
+import { getImportablePlanAssetTypes } from '@modules/plans/domain/asset-metadata';
 import type { ImporterWorkspaceAction } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-types';
 import { useImporterFolders } from '@modules/organization/application/use-importer-folders';
+import { useGetSelectedOrganizationId } from '@modules/organization/infrastructure/selected-organization-api';
 
 const stagingChecklist: ChecklistItem[] = [
   {
@@ -78,6 +79,7 @@ export function App() {
 }
 
 function AuthenticatedImporter() {
+  const organizationId = useGetSelectedOrganizationId();
   const folders = useImporterFolders();
   const authProvider = useAuthProvider() as ElectronAuthProvider;
   const imports = useImportLifecycle();
@@ -85,7 +87,6 @@ function AuthenticatedImporter() {
     createHistory(createEmptyWorkspace()),
   );
   const [warningFile, setWarningFile] = useState<ImportFile | null>(null);
-  const [acknowledgedWarnings, setAcknowledgedWarnings] = useState<Set<string>>(() => new Set());
   const [stagingComplete, setStagingComplete] = useState(false);
   const [reviewRevision, setReviewRevision] = useState(0);
   const planWorkspace = workspaceHistory.present;
@@ -94,14 +95,7 @@ function AuthenticatedImporter() {
     () => Symbol(),
     [planWorkspace, importSession, reviewRevision],
   );
-  const files = useMemo(
-    () =>
-      projectImportSources(imports.state).map((file) => ({
-        ...file,
-        warningsAcknowledged: acknowledgedWarnings.has(warningKey(file)),
-      })),
-    [imports.state, acknowledgedWarnings],
-  );
+  const files = useMemo(() => projectImportSources(imports.state), [imports.state]);
 
   function setPlanWorkspace(next: WorkspaceState | ((current: WorkspaceState) => WorkspaceState)) {
     setWorkspaceHistory((history) =>
@@ -148,7 +142,6 @@ function AuthenticatedImporter() {
       replaceHistory(history, createEmptyWorkspace(), clearWorkspaceLiterals),
     );
     setWarningFile(null);
-    setAcknowledgedWarnings(new Set());
   }
 
   useEffect(() => secureCleanup.register(discardAll));
@@ -200,6 +193,7 @@ function AuthenticatedImporter() {
     files.length === 0 ? (
       <AppShell dirtyCount={0} accountActionsDisabled={imports.busy}>
         <ImportPanel
+          key={organizationId}
           busy={imports.busy}
           error={null}
           onImport={async (selectedFiles) => {
@@ -210,6 +204,7 @@ function AuthenticatedImporter() {
     ) : (
       <>
         <ImporterFlow
+          showQuickGuideOnFirstVisit
           folders={folders}
           headerActions={
             <AppHeader
@@ -221,6 +216,8 @@ function AuthenticatedImporter() {
           assets={workspace.assets}
           preservation={{
             coverage: workspace.coverage,
+            fieldOperations: workspace.fieldOperations,
+            onRenameAsset: workspace.renameAsset,
             noteSources: workspace.noteSources,
             onSetSourceNoteDestination: workspace.setSourceNoteDestination,
             onSetAssetNoteDestination: workspace.setAssetNoteDestination,
@@ -291,10 +288,6 @@ function AuthenticatedImporter() {
         <SourceWarningsModal
           file={warningFile}
           onDismiss={() => setWarningFile(null)}
-          onUnderstood={(file) => {
-            setAcknowledgedWarnings((current) => new Set(current).add(warningKey(file)));
-            setWarningFile(null);
-          }}
         />
       </>
     );
@@ -306,20 +299,12 @@ function AuthenticatedImporter() {
   );
 }
 
-function warningKey(file: ImportFile) {
-  return JSON.stringify([
-    file.id ?? file.name,
-    file.warningMessages,
-    file.diagnostics,
-    file.warnings,
-  ]);
-}
-
 function isSupportedReviewAction(action: string): action is ImporterWorkspaceAction {
   return (
     action === 'accept' ||
     action === 'exclude' ||
+    action === 'restore' ||
     action === 'restore-suggestion' ||
-    getCorePlanAssetTypes().some((type) => action === `alternate:${type}`)
+    getImportablePlanAssetTypes().some((type) => action === `alternate:${type}`)
   );
 }

@@ -1,5 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { groupImportDiagnostics } from '@modules/import/domain/import-diagnostic';
+import { createEmptyEntry } from '@modules/import/domain/vault';
+import { initialVaultState } from '@modules/import/infrastructure/stores/vault-store';
+import { projectImportSources } from '@modules/importer-preview/ImporterFlow/application/import-source-projection';
+import { SourceWarningsModal } from '@modules/importer-preview/SourceImportStatus/components/SourceWarningsModal';
 import { FileRow } from '@modules/importer-preview/SourceImportStatus/components/FileRow';
 import { SourceImportStatus } from '@modules/importer-preview/SourceImportStatus';
 import type { ImportFile } from '@modules/importer-preview/SourceImportStatus';
@@ -10,6 +15,118 @@ afterEach(() => {
 });
 
 describe('source file status', () => {
+  it('offers optional details for a source with warnings', () => {
+    const source: ImportFile = {
+      name: 'vault.csv',
+      format: 'CSV',
+      status: 'warning',
+      diagnostics: [{ code: 'unsupported', kind: 'skipped', message: 'Field skipped', count: 1 }],
+    };
+    const onViewWarnings = vi.fn();
+    render(<FileRow file={source} onViewWarnings={onViewWarnings} />);
+    const warningButton = screen.getByRole('button', { name: 'View warnings' });
+    fireEvent.focus(warningButton);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    fireEvent.click(warningButton);
+    expect(onViewWarnings).toHaveBeenCalledWith(source);
+  });
+
+  it('expands grouped source warnings by origin without exposing entry values', () => {
+    const warning = {
+      code: 'metadata',
+      kind: 'skipped' as const,
+      message: 'Some source metadata was omitted.',
+    };
+    const diagnostics = [
+      { ...warning, entryId: 'internal-entry-id', sourcePath: ['items', '0'], count: 3 },
+      { ...warning, entryId: 'different-source-entry', sourcePath: ['items', '1'], count: 1 },
+      { ...warning, count: 1 },
+    ];
+    const entry = createEmptyEntry({
+      id: 'internal-entry-id',
+      sourceId: 'source',
+      title: 'Work login',
+      password: 'synthetic private password',
+    });
+    const unrelated = createEmptyEntry({
+      id: 'different-source-entry',
+      sourceId: 'other-source',
+      title: 'Unrelated account title',
+    });
+    const [file] = projectImportSources({
+      ...initialVaultState,
+      entries: [entry, unrelated].map((entry) => ({ current: entry, original: entry })),
+      sources: [
+        {
+          id: 'source',
+          file: { name: 'vault.1pux', data: new ArrayBuffer(0) },
+          status: 'warning',
+          warnings: [],
+          diagnostics,
+        },
+      ],
+    });
+    const [[, group]] = groupImportDiagnostics(file.diagnostics);
+    expect(group.count).toBe(5);
+    expect(group.occurrences).toEqual([
+      { ...diagnostics[0], entryName: 'Work login' },
+      diagnostics[1],
+      diagnostics[2],
+    ]);
+
+    const onDismiss = vi.fn();
+    render(<SourceWarningsModal file={file} onDismiss={onDismiss} />);
+    const expand = screen.getByRole('button', { name: 'View details (5)' });
+    expect(expand.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Work login')).toBeNull();
+    fireEvent.keyDown(expand, { key: 'Enter' });
+
+    const rows = screen.getAllByRole('listitem');
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText('Work login')).toBeTruthy();
+    expect(within(rows[0]).getByText('items › 0')).toBeTruthy();
+    expect(within(rows[0]).getByText('3 occurrences')).toBeTruthy();
+    expect(within(rows[1]).getByText('items › 1')).toBeTruthy();
+    expect(within(rows[2]).getByText('Source-level detail')).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).not.toMatch(
+      /synthetic private password|internal-entry-id|Unrelated account title/,
+    );
+
+    const collapse = screen.getByRole('button', { name: 'Hide details' });
+    expect(collapse.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(collapse);
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it('paginates expanded warning details without mounting the full list', () => {
+    const diagnostics = Array.from({ length: 26 }, (_, index) => ({
+      code: 'metadata',
+      kind: 'skipped' as const,
+      message: 'Some source metadata was omitted.',
+      sourcePath: ['items', String(index)],
+      count: 1,
+    }));
+    const file: ImportFile = {
+      name: 'vault.1pux',
+      format: '1Password',
+      status: 'warning',
+      diagnostics,
+    };
+    render(<SourceWarningsModal file={file} onDismiss={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details (26)' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(25);
+    expect(screen.queryByText('items › 25')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Next warning details' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('items › 25')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous warning details' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(25);
+  });
+
   it('supports unlocking a KeePass source with only a key file', async () => {
     const source: ImportFile = {
       id: 'source-1',
@@ -373,4 +490,18 @@ describe('source file status', () => {
       screen.getByText(/value-bearing get-secret-value or secret show JSON response/),
     ).toBeTruthy();
   });
+});
+
+
+it('describes omitted source details without claiming every diagnostic is a transformation', () => {
+  render(<SourceWarningsModal
+    file={{
+      name: 'metadata.1pux', format: '1Password', status: 'imported',
+      diagnostics: [{ code: 'onepassword-container-metadata', kind: 'skipped',
+        count: 1, message: 'Export metadata was omitted.', sourcePath: ['export'] }],
+    }}
+    onDismiss={vi.fn()}
+  />);
+  expect(screen.getByText('Review what was skipped or converted, and why.')).toBeTruthy();
+  expect(screen.queryByText('The parser transformed some source fields.')).toBeNull();
 });

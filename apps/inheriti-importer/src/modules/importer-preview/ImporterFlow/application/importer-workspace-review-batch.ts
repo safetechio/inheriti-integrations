@@ -1,5 +1,5 @@
 import {
-  getCorePlanAssetTypes,
+  getImportablePlanAssetTypes,
   getPlanAssetFormFields,
 } from '@modules/plans/domain/asset-metadata';
 import { bindField, unbindField } from '@modules/plans/domain/workspace-commands';
@@ -13,7 +13,8 @@ import { listPlanDrafts } from '@modules/plans/domain/workspace-selectors';
 import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
 import { compatibleMappingUpdates } from '../../AssetReviewQueue/review-mapping';
 import {
-  hasIncludedSchemaField,
+  canReviewAsset,
+  reviewDecisionStatus,
   type AssetReviewStatus,
   type ReviewAsset,
   type ReviewBatchAction,
@@ -161,14 +162,9 @@ export function createReviewBatchActions(
   function reviewAssets(action: ReviewBatchAction, assets: ReviewAsset[]): ReviewBatchResult {
     const result: ReviewBatchResult = { changedIds: [], skippedIds: [] };
     const batch: ReviewBatch = new Map();
-    const decision = action === 'accept' ? 'accepted' : 'excluded';
+    const decision = reviewDecisionStatus[action];
     for (const { id, asset, suggestion } of requested(assets)) {
-      if (
-        !asset ||
-        !suggestion ||
-        asset.status === decision ||
-        (action === 'accept' && !hasIncludedSchemaField(asset))
-      ) {
+      if (!asset || !suggestion || !canReviewAsset(action, asset)) {
         result.skippedIds.push(id);
         continue;
       }
@@ -221,7 +217,7 @@ export function createReviewBatchActions(
     const batch: ReviewBatch = new Map();
     const [{ asset: template, suggestion: templateSuggestion }] = requested([templateInput]);
     const allowedFields = new Set(
-      template && getCorePlanAssetTypes().some((type) => type === template.type)
+      template && getImportablePlanAssetTypes().some((type) => type === template.type)
         ? getPlanAssetFormFields(template.type).map((field) => field.source)
         : [],
     );

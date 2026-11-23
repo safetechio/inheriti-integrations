@@ -24,8 +24,15 @@ function pendingFormat(source: ImportSourceRecord): string {
 }
 
 export function projectImportSources(state: VaultState): ImportFile[] {
+  const entriesById = new Map(state.entries.map(({ current }) => [current.id, current]));
   return state.sources.map((source) => {
     const vault = state.vaults.find((item) => item.id === source.vaultId || item.id === source.id);
+    const diagnostics = source.diagnostics?.map((diagnostic) => {
+      const entry = diagnostic.entryId ? entriesById.get(diagnostic.entryId) : undefined;
+      return entry && entry.sourceId === (source.vaultId ?? source.id)
+        ? { ...diagnostic, entryName: entry.title || 'Untitled entry' }
+        : diagnostic;
+    });
     return {
       id: source.id,
       name: source.file.name,
@@ -34,7 +41,7 @@ export function projectImportSources(state: VaultState): ImportFile[] {
       warnings:
         source.warnings.length +
         (source.diagnostics?.filter(({ kind }) => kind !== 'transformed').length ?? 0),
-      ...(source.diagnostics?.length ? { diagnostics: source.diagnostics } : {}),
+      ...(diagnostics?.length ? { diagnostics } : {}),
       status: source.status,
       detail: source.detail,
       warningMessages: source.warnings.slice(),

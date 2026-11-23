@@ -1,0 +1,33 @@
+.asset-review-pattern-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--importer-radius-control);
+  background: var(--importer-color-surface);
+  cursor: pointer;
+}
+.asset-review-pattern-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.asset-review-pattern-popover {
+  position: fixed !important;
+  z-index: 10002;
+  width: min(440px, calc(100vw - 16px));
+  max-height: min(480px, calc(100dvh - 16px));
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgb(15 16 72 / 15%);
+}
+.asset-review-pattern-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.asset-review-pattern-list > * {
+  flex-shrink: 0;
+}

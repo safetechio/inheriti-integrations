@@ -111,6 +111,7 @@ describe('useImporterWorkspace bulk plan actions', () => {
     });
 
     const review = result.current.importer.assets.find((asset) => asset.id === draft.id)!;
+    expect(review.status).toBe('accepted');
     act(() => result.current.importer.reviewAsset('accept', review));
     act(() => result.current.importer.deletePlans(result.current.importer.plans));
     expect(result.current.importer.plans).toEqual([]);

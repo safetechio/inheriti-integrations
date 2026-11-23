@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ReviewAsset } from '../types';
 
-export function useReviewSelection(assets: ReviewAsset[], rangeAssets: ReviewAsset[]) {
+export function useReviewSelection(assets: { id: string }[], rangeAssets: { id: string }[]) {
   const [ids, setIds] = useState<string[]>([]);
   const anchor = useRef<string | undefined>(undefined);
   const live = useMemo(() => new Set(assets.map((asset) => asset.id)), [assets]);

@@ -1,0 +1,39 @@
+.importer-coverage-summary {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  align-content: center;
+}
+
+.importer-coverage-feedback {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.mw-panel-body:has(> .importer-coverage-body) {
+  padding-top: 12px;
+}
+
+.importer-coverage-metadata {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.importer-coverage-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.importer-coverage-body > .importer-coverage-details {
+  flex: 1 1 min(19rem, 38vh);
+  min-height: 0;
+  height: auto;
+  overflow-x: hidden;
+}
+
+.importer-coverage-body > :not(.importer-coverage-details) {
+  flex-shrink: 0;
+}

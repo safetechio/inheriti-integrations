@@ -1,17 +1,22 @@
 // @vitest-environment happy-dom
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { SensitiveValue, type ImportSession } from '@modules/import/domain/import-model';
 import { useImporterWorkspace } from '@modules/importer-preview/ImporterFlow/application/importer-workspace';
+import { getImporterFlowReadiness } from '@modules/importer-preview/ImporterFlow/application/flow-readiness';
 import { AssetReviewQueue } from '@modules/importer-preview/AssetReviewQueue';
 import { createEmptyWorkspace } from '@modules/plans/domain/workspace-model';
-import { createPlan } from '@modules/plans/domain/workspace-commands';
+import { createAsset, createPlan } from '@modules/plans/domain/workspace-commands';
 import { materialiseAsset } from '@modules/plans/domain/asset-materializer';
 import { buildStagedAssetInput } from '@modules/batch/infrastructure/importer-tool-repo';
+import type { SuggestedAsset } from '@modules/mapping/domain/suggestion';
+import { projectAssets } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-review-projection';
 import { hasIncludedSchemaField } from '@modules/importer-preview/AssetReviewQueue/types';
 import {
+  applyMappingOverrides,
   assetMatchesSuggestion,
+  convertToCanonicalType,
   sourceSuggestions,
 } from '@modules/importer-preview/ImporterFlow/application/importer-workspace-suggestions';
 import {
@@ -72,6 +77,139 @@ function importSession(): ImportSession {
   };
 }
 
+function workspaceWithLegacyCompanion() {
+  return createAsset(
+    createPlan(createEmptyWorkspace(), { clientId: 'plan-1', name: 'Partner Plan' }),
+    {
+      planClientId: 'plan-1',
+      asset: {
+        id: 'entry-1:PLAIN-TEXT-ADDITIONAL',
+        type: 'PLAIN-TEXT',
+        name: 'Partner — additional fields',
+        fieldBindings: { 'secret.text': { kind: 'source', sourceFieldId: 'field-other' } },
+      },
+    },
+  );
+}
+
+it('computes a metadata-only review signature once per source node', () => {
+  const session = importSession();
+  const entry = session.nodesById['entry-1']!;
+  const readFieldType = vi.fn(() => 'concealed');
+  session.fieldsById['field-token']!.metadata = {
+    get sourceFieldType() {
+      return readFieldType();
+    },
+    sourceSection: 'Credentials',
+    sourceSectionIdentity: '0',
+  };
+  session.nodesById['entry-2'] = {
+    ...entry,
+    id: 'entry-2',
+    fieldIds: ['field-other-2', 'field-token-2'],
+  };
+  session.fieldsById['field-other-2'] = {
+    ...session.fieldsById['field-other']!,
+    id: 'field-other-2',
+    parentNodeId: 'entry-2',
+    value: new SensitiveValue('different-other-value'),
+  };
+  session.fieldsById['field-token-2'] = {
+    ...session.fieldsById['field-token']!,
+    id: 'field-token-2',
+    parentNodeId: 'entry-2',
+    metadata: {
+      sourceFieldType: 'concealed',
+      sourceSection: 'Credentials',
+      sourceSectionIdentity: '0',
+    },
+    value: new SensitiveValue('different-token-value'),
+  };
+  const first: SuggestedAsset = {
+    id: 'first',
+    type: 'API-KEY',
+    name: 'First',
+    fromNodeId: entry.id,
+    confidence: 1,
+    rationale: '',
+    fieldBindings: {},
+  };
+  const project = () =>
+    projectAssets(
+      session,
+      [
+        first,
+        { ...first, id: 'sibling', type: 'USER-PSWD' },
+        { ...first, id: 'separate', fromNodeId: 'entry-2' },
+      ],
+      createEmptyWorkspace(),
+      {},
+      new Set(),
+      {},
+      {},
+      {},
+      undefined,
+      [],
+    );
+  const [a, b, c] = project().map(({ sourcePatternKey }) => sourcePatternKey);
+  expect(readFieldType).toHaveBeenCalledOnce();
+  expect(a).toBeDefined();
+  expect([b, c]).toEqual([a, a]);
+  expect(a).not.toContain('first-token');
+  expect(a).not.toContain('different-token-value');
+  session.fieldsById['field-token-2']!.metadata.sourceSectionIdentity = '1';
+  expect(project()[2]?.sourcePatternKey).not.toBe(a);
+});
+
+it('clears suggestion evidence after manual canonical reclassification', () => {
+  const session = importSession();
+  const evidence = ['native-role'] as const;
+  const original: SuggestedAsset = {
+    name: 'API Key',
+    fromNodeId: 'entry-1',
+    type: 'API-KEY',
+    confidence: 1,
+    rationale: '',
+    fieldBindings: { 'secret.apiKey': { kind: 'source', sourceFieldId: 'field-token' } },
+    evidence,
+  };
+
+  const typed = convertToCanonicalType(session, original, 'USER-PSWD', false);
+  const text = convertToCanonicalType(session, original, 'PLAIN-TEXT', false);
+
+  expect(typed.type).toBe('USER-PSWD');
+  expect(typed.evidence).toBeUndefined();
+  expect(text.type).toBe('PLAIN-TEXT');
+  expect(text.evidence).toBeUndefined();
+  expect(original.evidence).toBe(evidence);
+});
+
+it('clears suggestion evidence only when a manual override changes a binding', () => {
+  const original: SuggestedAsset = {
+    id: 'manual-override',
+    name: 'API Key',
+    fromNodeId: 'entry-1',
+    type: 'API-KEY',
+    confidence: 1,
+    rationale: '',
+    fieldBindings: { 'secret.apiKey': { kind: 'source', sourceFieldId: 'field-token' } },
+    evidence: ['native-role'],
+  };
+  const apply = (changes: Record<string, string | undefined>) =>
+    applyMappingOverrides(original, { 'manual-override': changes });
+
+  expect(apply({ 'secret.apiKey': 'field-token', 'meta.notes': undefined })).toBe(original);
+  expect(apply({ 'secret.apiKey': 'field-other' })).toMatchObject({
+    fieldBindings: { 'secret.apiKey': { kind: 'source', sourceFieldId: 'field-other' } },
+    evidence: undefined,
+  });
+  expect(apply({ 'secret.apiKey': undefined })).toMatchObject({
+    fieldBindings: {},
+    evidence: undefined,
+  });
+  expect(original.evidence).toEqual(['native-role']);
+});
+
 describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('accepts eligible pending assets in one decision update and restores them with Undo', () => {
     const session = importSession();
@@ -113,14 +251,10 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       return useImporterWorkspace(session, workspace, setWorkspace);
     });
     const eligible = result.current.assets.filter(hasIncludedSchemaField);
-    expect(eligible.map((asset) => asset.id)).toEqual([
-      'entry-1:API-KEY',
-      'entry-1:PLAIN-TEXT-ADDITIONAL',
-      'entry-2:API-KEY',
-      'entry-2:PLAIN-TEXT-ADDITIONAL',
-    ]);
+    expect(eligible.map((asset) => asset.id)).toEqual(['entry-1:API-KEY', 'entry-2:API-KEY']);
     act(() => result.current.acceptAllEligible());
     act(() => result.current.reviewAsset('exclude', result.current.assets[0]!));
+    act(() => result.current.reviewAsset('restore', result.current.assets[0]!));
     act(() => result.current.reviewAsset('accept', result.current.assets[0]!));
     act(() => result.current.undoAcceptAll());
     expect(result.current.assets[0]?.status).toBe('accepted');
@@ -225,7 +359,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     });
     const asset = () => result.current.importer.assets[0]!;
     const suggested = () => result.current.importer.suggestions[0]!;
-    expect(asset().note).toMatchObject({ destination: 'protected', explicit: false });
+    expect(asset().note).toMatchObject({ destination: 'asset-notes', inherited: true });
     act(() => result.current.importer.setSourceNoteDestination('source-1', 'protected'));
     expect(suggested().fieldBindings['meta.notes']).toBeUndefined();
     expect(
@@ -278,6 +412,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     });
     const asset = () => result.current.importer.assets[0]!;
     act(() => result.current.importer.editPlainText(asset(), 'Edited value'));
+    act(() => result.current.importer.setAssetNoteDestination(asset(), 'protected'));
     act(() => result.current.importer.mapAssetField(asset(), 'meta.notes', undefined));
     expect(result.current.importer.suggestions[0]!.fieldBindings['secret.text']).toMatchObject({
       kind: 'literal',
@@ -392,6 +527,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     });
     const primary = () =>
       result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT')!;
+    act(() => result.current.importer.setSourceNoteDestination('source-1', 'protected'));
     act(() =>
       result.current.importer.mapAssetField(
         result.current.importer.assets.find((asset) => asset.type === 'USER-PSWD')!,
@@ -429,38 +565,63 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     expect(assignedValue.secret.text).toContain('notes: second-token');
     expect(result.current.importer.suggestions.some((asset) => asset.variant)).toBe(false);
   });
-  it('still matches a single generic suggestion to a legacy source-bound draft', () => {
+  it('shows the mapped destination of a legacy source-bound draft as the current asset', () => {
     const session = importSession();
-    const suggestion = sourceSuggestions(session)[0]!;
+    const draft = {
+      id: 'legacy-asset',
+      type: 'API-KEY' as const,
+      name: 'Partner',
+      fieldBindings: {
+        'secret.apiKey': { kind: 'source' as const, sourceFieldId: 'field-token' },
+      },
+    };
+    expect(assetMatchesSuggestion(session, draft, sourceSuggestions(session)[0]!)).toBe(true);
+    const initialWorkspace = createAsset(
+      createPlan(createEmptyWorkspace(), { clientId: 'plan-1', name: 'Partner Plan' }),
+      { planClientId: 'plan-1', asset: draft },
+    );
+    const { result } = renderHook(() => {
+      const [workspace, setWorkspace] = useState(initialWorkspace);
+      return useImporterWorkspace(session, workspace, setWorkspace);
+    });
+    const primary = result.current.assets.find((asset) => asset.type === 'API-KEY')!;
     expect(
-      assetMatchesSuggestion(
-        session,
-        {
-          id: 'legacy-asset',
-          type: 'API-KEY',
-          name: 'Partner',
-          fieldBindings: {
-            'secret.apiKey': { kind: 'source', sourceFieldId: 'field-token' },
-          },
-        },
-        suggestion,
-      ),
-    ).toBe(true);
+      result.current.coverage.fields.find(({ id }) => id === 'field-token')?.destinations,
+    ).toEqual([{ assetId: draft.id, fieldId: 'secret.apiKey', valid: true }]);
+    const view = render(
+      <AssetReviewQueue
+        assets={result.current.assets}
+        selectedId={primary.id}
+        preservation={{
+          coverage: result.current.coverage,
+          noteSources: result.current.noteSources,
+        }}
+      />,
+    );
+    fireEvent.click(
+      within(view.container).getByRole('button', { name: /^Accepted/, pressed: false }),
+    );
+    const fields = within(within(view.container).getByRole('region', { name: 'Source fields' }));
+    expect(fields.getByText('Mapped · This asset · API key')).toBeTruthy();
+    expect(fields.queryByText('Preserved in an additional asset · Mapped')).toBeNull();
+    fireEvent.click(within(view.container).getByRole('button', { name: 'View asset issues' }));
+    const details = within(view.getByRole('dialog', { name: 'Partner — Issues' }));
+    expect(details.getByText('other')).toBeTruthy();
+    expect(details.getByText('No destination is assigned.')).toBeTruthy();
+    expect(details.queryByText('Mapped · This asset · API key')).toBeNull();
+    view.unmount();
   });
   it('keeps generic notes companions independent after overlapping remaps', () => {
     const session = importSession();
     session.fieldsById['field-other'].name = 'notes';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
     });
     const primaryId = 'entry-1:API-KEY';
     const companionId = 'entry-1:PLAIN-TEXT-ADDITIONAL';
-    for (const id of [primaryId, companionId]) {
+    for (const id of [primaryId]) {
       const asset = result.current.importer.assets.find((item) => item.id === id)!;
       act(() => result.current.importer.reviewAsset('accept', asset));
       act(() =>
@@ -472,7 +633,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     }
     expect(
       result.current.workspace.plansByClientId['plan-1']!.assets.map((item) => item.id),
-    ).toEqual([primaryId, companionId]);
+    ).toEqual([companionId, primaryId]);
     act(() =>
       result.current.importer.mapAssetField(
         result.current.importer.assets.find((item) => item.id === primaryId)!,
@@ -541,10 +702,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       value: new SensitiveValue('Instructions'),
       metadata: {},
     };
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
@@ -567,15 +725,17 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     act(() => result.current.importer.mapAssetField(primary(), 'secret.text', 'field-other'));
     act(() => result.current.importer.mapAssetField(primary(), 'secret.text', undefined));
 
-    const draft = result.current.workspace.plansByClientId['plan-1']!.assets[0]!;
+    const draft = result.current.workspace.plansByClientId['plan-1']!.assets.find(
+      (asset) => asset.id === primary().id,
+    )!;
     const reviewed = result.current.importer.suggestions.find(
       (item) => item.fromNodeId === 'entry-1' && item.type === 'PLAIN-TEXT' && !item.variant,
     )!;
     expect(draft.fieldBindings['secret.text']).toEqual(reviewed.fieldBindings['secret.text']);
-    expect(materialiseAsset(draft, session).asset.secret.text).toBe(
-      'token: first-token\nnotes: Instructions',
-    );
-    expect(draft.fieldBindings['meta.notes']).toBeUndefined();
+    expect(materialiseAsset(draft, session).asset).toMatchObject({
+      secret: { text: 'first-token' },
+      meta: { notes: 'Instructions' },
+    });
     expect(
       result.current.importer.suggestions.find((asset) => asset.variant)?.fieldBindings[
         'secret.text'
@@ -585,10 +745,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('resets companion mapping from structured fields after the primary becomes edited Plain Text', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
@@ -604,13 +761,6 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       ),
     );
     act(() => result.current.importer.editPlainText(primary(), 'Edited credential'));
-    act(() => result.current.importer.reviewAsset('accept', companion()));
-    act(() =>
-      result.current.importer.assignAsset(
-        result.current.importer.unassigned.find((asset) => asset.id === companion().id)!,
-        result.current.importer.plans[0]!,
-      ),
-    );
     act(() => result.current.importer.mapAssetField(companion(), 'secret.text', 'field-token'));
     act(() => result.current.importer.mapAssetField(companion(), 'secret.text', undefined));
 
@@ -626,23 +776,13 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('resets an assigned companion mapping to its unmatched fields only', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
     });
     const companion = () =>
       result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
-    act(() => result.current.importer.reviewAsset('accept', companion()));
-    act(() =>
-      result.current.importer.assignAsset(
-        result.current.importer.unassigned[0]!,
-        result.current.importer.plans[0]!,
-      ),
-    );
     act(() => result.current.importer.mapAssetField(companion(), 'secret.text', 'field-token'));
     act(() => result.current.importer.mapAssetField(companion(), 'secret.text', undefined));
 
@@ -656,10 +796,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('preserves an edited companion value when the structured mapping changes', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
@@ -667,13 +804,6 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     const companion = () =>
       result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
     act(() => result.current.importer.editPlainText(companion(), 'Reviewed additional context'));
-    act(() => result.current.importer.reviewAsset('accept', companion()));
-    act(() =>
-      result.current.importer.assignAsset(
-        result.current.importer.unassigned[0]!,
-        result.current.importer.plans[0]!,
-      ),
-    );
     act(() =>
       result.current.importer.mapAssetField(
         result.current.importer.assets.find((asset) => asset.type === 'API-KEY')!,
@@ -689,10 +819,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('keeps an assigned companion aligned with the visible uncovered fields across type changes', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
@@ -703,13 +830,6 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       )!;
     const companion = () =>
       result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
-    act(() => result.current.importer.reviewAsset('accept', companion()));
-    act(() =>
-      result.current.importer.assignAsset(
-        result.current.importer.unassigned.find((asset) => asset.id === companion().id)!,
-        result.current.importer.plans[0]!,
-      ),
-    );
     act(() => result.current.importer.reviewAsset('alternate:USER-PSWD', primary()));
     const reviewed = result.current.importer.suggestions.find(
       (item) => item.variant === 'additional-fields',
@@ -745,23 +865,13 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('preserves additional-fields identity when a companion returns to Plain Text', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
     });
     const companion = () =>
       result.current.importer.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')!;
-    act(() => result.current.importer.reviewAsset('accept', companion()));
-    act(() =>
-      result.current.importer.assignAsset(
-        result.current.importer.unassigned.find((asset) => asset.id === companion().id)!,
-        result.current.importer.plans[0]!,
-      ),
-    );
     act(() =>
       result.current.importer.reviewAsset(
         'alternate:USER-PSWD',
@@ -787,10 +897,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
   it('moves a displaced 1Password field into the reviewed and assigned companion', () => {
     const session = importSession();
     session.sources[0]!.kind = 'onepassword';
-    const initialWorkspace = createPlan(createEmptyWorkspace(), {
-      clientId: 'plan-1',
-      name: 'Partner Plan',
-    });
+    const initialWorkspace = workspaceWithLegacyCompanion();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
       return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
@@ -869,13 +976,14 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
     it(`keeps 1Password additional fields separate when converting with companion ${companionFirst ? 'first' : 'second'}`, () => {
       const session = importSession();
       session.sources[0]!.kind = 'onepassword';
-      const initialWorkspace = createPlan(createEmptyWorkspace(), {
-        clientId: 'plan-1',
-        name: 'Partner Plan',
-      });
+      const initialWorkspace = workspaceWithLegacyCompanion();
       const { result } = renderHook(() => {
         const [workspace, setWorkspace] = useState(initialWorkspace);
-        return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+        return {
+          workspace,
+          setWorkspace,
+          importer: useImporterWorkspace(session, workspace, setWorkspace),
+        };
       });
       expect(result.current.importer.assets.map((asset) => asset.id)).toEqual([
         'entry-1:API-KEY',
@@ -890,9 +998,21 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
         );
       };
       const companionId = 'entry-1:PLAIN-TEXT-ADDITIONAL';
-      if (companionFirst) assign(companionId);
       assign('entry-1:API-KEY');
-      if (!companionFirst) assign(companionId);
+      if (!companionFirst) {
+        act(() =>
+          result.current.setWorkspace((workspace) => {
+            const plan = workspace.plansByClientId['plan-1']!;
+            return {
+              ...workspace,
+              plansByClientId: {
+                ...workspace.plansByClientId,
+                'plan-1': { ...plan, assets: [...plan.assets].reverse() },
+              },
+            };
+          }),
+        );
+      }
       act(() =>
         result.current.importer.reviewAsset(
           'alternate:PLAIN-TEXT',
@@ -1004,10 +1124,35 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       clientId: 'plan-1',
       name: 'Partner Plan',
     });
+    const unrelatedAsset = {
+      id: 'unrelated',
+      name: 'Unrelated',
+      type: 'PLAIN-TEXT',
+      fieldBindings: {
+        'secret.text': { kind: 'literal' as const, value: new SensitiveValue('unrelated value') },
+      },
+    };
+    const onReviewChange = vi.fn();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(initialWorkspace);
-      return { workspace, importer: useImporterWorkspace(session, workspace, setWorkspace) };
+      return {
+        workspace,
+        setWorkspace,
+        importer: useImporterWorkspace(session, workspace, setWorkspace, undefined, onReviewChange),
+      };
     });
+
+    const readiness = () => {
+      const { assets, plans, unassigned, coverage, executionCoverage } = result.current.importer;
+      return getImporterFlowReadiness({
+        files: [{ name: 'source.env', format: 'dotenv', status: 'imported' }],
+        assets,
+        plans,
+        unassigned,
+        preservationReady: coverage.ready,
+        executionCoverageReady: executionCoverage.ready,
+      });
+    };
 
     act(() => result.current.importer.reviewAsset('accept', result.current.importer.assets[0]!));
     act(() =>
@@ -1016,9 +1161,40 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
         result.current.importer.plans[0]!,
       ),
     );
-    act(() => result.current.importer.editPlainText(result.current.importer.assets[0]!, 'edited'));
+    act(() =>
+      result.current.setWorkspace((current) =>
+        createAsset(current, { planClientId: 'plan-1', asset: unrelatedAsset }),
+      ),
+    );
+    expect(readiness().staging).toBe(true);
+    const before = result.current.importer;
+    const operation = before.fieldOperations.preview({
+      sourceAssetId: before.assets[0]!.id,
+      action: 'plain-text',
+      fieldIds: ['field-token'],
+    });
+    expect(operation.canConfirm).toBe(true);
+    act(() =>
+      result.current.setWorkspace((current) => ({ ...current, revision: current.revision + 1 })),
+    );
+    expect(result.current.importer.assets).toBe(before.assets);
+    expect(result.current.importer.fieldOperations.commit(operation).success).toBe(false);
 
-    expect(result.current.importer.assets[0]?.plainTextValue?.reveal()).toBe('edited');
+    for (const [index, value] of ['e', 'edi', 'edited'].entries()) {
+      const previous = result.current.importer;
+      act(() => result.current.importer.editPlainText(result.current.importer.assets[0]!, value));
+      const current = result.current.importer;
+      const draft = result.current.workspace.plansByClientId['plan-1'].assets[0]!;
+      expect(result.current.workspace.plansByClientId['plan-1'].assets[1]).toBe(unrelatedAsset);
+      expect(current.assets[0]?.plainTextValue?.reveal()).toBe(value);
+      expect(current.assets[0]?.plainTextValue).not.toBe(previous.assets[0]?.plainTextValue);
+      if (index > 0) expect(current.executionCoverage).toBe(previous.executionCoverage);
+      expect(buildStagedAssetInput(materialiseAsset(draft, session).asset).fields).toContainEqual({
+        fieldId: 'secret.text',
+        value,
+      });
+    }
+
     const binding =
       result.current.workspace.plansByClientId['plan-1'].assets[0]?.fieldBindings['secret.text'];
     expect(binding?.kind).toBe('literal');
@@ -1040,6 +1216,7 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       result.current.workspace.plansByClientId['plan-1'].assets[0]?.fieldBindings['secret.text'],
     ).toEqual({ kind: 'source', sourceFieldId: 'field-token' });
 
+    onReviewChange.mockClear();
     act(() =>
       result.current.importer.mapAssetField(
         result.current.importer.assets[0]!,
@@ -1060,6 +1237,53 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
         { sourceFieldId: 'field-other', name: 'other' },
       ],
     });
+    expect(result.current.importer.assets[0]?.status).toBe('suggested');
+    expect(result.current.workspace.plansByClientId['plan-1'].assets).toHaveLength(2);
+    expect(readiness()).toMatchObject({ assets: false, plans: true, staging: false });
+    expect(onReviewChange).toHaveBeenCalled();
+
+    act(() => result.current.importer.reviewAsset('accept', result.current.importer.assets[0]!));
+    expect(result.current.importer.assets[0]?.status).toBe('accepted');
+    expect(readiness().staging).toBe(true);
+  });
+
+  it('shares unchanged review rows until the import session changes', () => {
+    const session = importSession();
+    session.fieldsById['field-token'].name = 'unknown';
+    session.rootNodeIds.push('entry-2');
+    session.nodesById['entry-2'] = {
+      ...session.nodesById['entry-1']!,
+      id: 'entry-2',
+      name: 'Other',
+      fieldIds: ['field-other-2'],
+    };
+    session.fieldsById['field-other-2'] = {
+      ...session.fieldsById['field-other']!,
+      id: 'field-other-2',
+      parentNodeId: 'entry-2',
+    };
+    const replacement = {
+      ...session,
+      nodesById: {
+        ...session.nodesById,
+        'entry-1': { ...session.nodesById['entry-1']!, name: 'Replacement' },
+      },
+    };
+    const workspace = createEmptyWorkspace();
+    const setWorkspace = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ currentSession }) => useImporterWorkspace(currentSession, workspace, setWorkspace),
+      { initialProps: { currentSession: session } },
+    );
+
+    expect(result.current.suggestions[0]?.name).toBe('Partner');
+    const unrelated = result.current.assets[1];
+    expect(unrelated?.name).toBe('Other');
+    act(() => result.current.editPlainText(result.current.assets[0]!, 'edited'));
+    expect(result.current.assets[1]).toBe(unrelated);
+    rerender({ currentSession: replacement });
+    expect(result.current.suggestions[0]?.name).toBe('Replacement');
+    expect(result.current.assets[1]).not.toBe(unrelated);
   });
 
   it('offers canonical types and applies the structured-to-plain-text override', () => {
@@ -1078,9 +1302,8 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
       result.current.assets[0]?.schemaFields?.find((field) => field.key === 'secret.text')
         ?.sourceFieldId,
     ).toBe('field-token');
-    expect(
-      result.current.suggestions.find((asset) => asset.variant)?.fieldBindings['secret.text'],
-    ).toEqual({ kind: 'source', sourceFieldId: 'field-other' });
+    expect(result.current.suggestions).toHaveLength(1);
+    expect(result.current.assets[0]?.unmappedSourceFieldIds).toEqual(['field-other']);
     expect(JSON.stringify(result.current.assets[0])).not.toContain('first-token');
     act(() => result.current.editPlainText(result.current.assets[0]!, 'edited fallback'));
     expect(result.current.assets[0]?.plainTextValue?.reveal()).toBe('edited fallback');
@@ -1090,13 +1313,18 @@ describe('useImporterWorkspace schema mapping lifecycle', () => {
 
   it('reclassifies to a canonical structured type and requires a valid mapping before acceptance', () => {
     const session = importSession();
+    const onReviewChange = vi.fn();
     const { result } = renderHook(() => {
       const [workspace, setWorkspace] = useState(createEmptyWorkspace());
-      return useImporterWorkspace(session, workspace, setWorkspace);
+      return useImporterWorkspace(session, workspace, setWorkspace, undefined, onReviewChange);
     });
     const originalType = result.current.assets[0]!.type;
-    act(() => result.current.reviewAsset('alternate:UNKNOWN-TYPE', result.current.assets[0]!));
-    expect(result.current.assets[0]?.type).toBe(originalType);
+    for (const type of ['UNKNOWN-TYPE', 'DOCUMENT', 'IMAGE', 'VIDEO']) {
+      expect(result.current.assets[0]?.alternatives).not.toContain(type);
+      act(() => result.current.reviewAsset(`alternate:${type}`, result.current.assets[0]!));
+      expect(result.current.assets[0]?.type).toBe(originalType);
+    }
+    expect(onReviewChange).not.toHaveBeenCalled();
     act(() => result.current.reviewAsset('alternate:USER-PSWD', result.current.assets[0]!));
     expect(result.current.assets[0]?.type).toBe('USER-PSWD');
     expect(

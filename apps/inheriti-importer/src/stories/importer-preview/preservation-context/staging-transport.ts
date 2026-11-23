@@ -63,6 +63,48 @@ async function sha256(bytes: Uint8Array<ArrayBuffer>) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/** Rebuild the fixture container from normalized leaves before checking its original hash. */
+function reconstructExpandedField(
+  fields: SourceCoverage['fields'],
+  session: ImportSession,
+  name: string,
+) {
+  // Unknown 1Password properties carry their full slash-delimited owner path; section fields
+  // start with their native field ID. Both retain the exact relative container structure.
+  const rootDepth = name.includes('/') ? name.split('/').length : 1;
+  let root: Record<string, unknown> | unknown[] | undefined;
+  for (const field of fields) {
+    const source = session.fieldsById[field.id]!;
+    const path = JSON.parse(source.metadata?.sourcePath ?? '[]').slice(rootDepth) as (
+      string | number
+    )[];
+    check(path.length, 'Expanded fixture field has no relative source path');
+    root ??= typeof path[0] === 'number' ? [] : {};
+    let parent = root as Record<string | number, unknown>;
+    path.forEach((key, index) => {
+      if (index === path.length - 1) {
+        const text = source.value.reveal();
+        const value =
+          source.metadata?.sourceFieldType === 'number'
+            ? Number(text)
+            : source.metadata?.sourceFieldType === 'boolean'
+              ? text === 'true'
+              : text;
+        Object.defineProperty(parent, key, { value, enumerable: true, configurable: true });
+      } else {
+        if (!Object.hasOwn(parent, key))
+          Object.defineProperty(parent, key, {
+            value: typeof path[index + 1] === 'number' ? [] : {},
+            enumerable: true,
+            configurable: true,
+          });
+        parent = parent[key] as Record<string | number, unknown>;
+      }
+    });
+  }
+  return JSON.stringify(root);
+}
+
 export async function auditStaged(
   transport: StagingTransport,
   entries: readonly PlanBatchEntry[],
@@ -197,8 +239,20 @@ export async function auditStaged(
           field.nodeId === node.id &&
           (field.name === expected.field || field.name === `extra:${expected.field}`),
       );
-      check(field, 'Manifest source field is missing from coverage');
-      const value = session.fieldsById[field.id]!.value.reveal();
+      const expanded = field
+        ? []
+        : coverage.fields.filter(
+            (candidate) =>
+              candidate.nodeId === node.id &&
+              (candidate.name.startsWith(`extra:${expected.field}.`) ||
+                candidate.name.startsWith(`extra:${expected.field}[`)),
+          );
+      check(field || expanded.length, 'Manifest source field is missing from coverage');
+      const checked = field ? [field] : expanded;
+      const value = field
+        ? session.fieldsById[field.id]!.value.reveal()
+        : reconstructExpandedField(checked, session, expected.field);
+
       check(
         (await sha256(new TextEncoder().encode(value))) === expected.sha256,
         'Manifest source hash differs',
@@ -208,10 +262,20 @@ export async function auditStaged(
           !body.includes(value) && !body.includes(JSON.stringify(value).slice(1, -1)),
           'Fixture value leaked into an encrypted staging request',
         );
+      for (const leaf of expanded) {
+        const text = session.fieldsById[leaf.id]!.value.reveal();
+        if (text.length >= 12)
+          check(
+            !body.includes(text) && !body.includes(JSON.stringify(text).slice(1, -1)),
+            'Expanded fixture value leaked into an encrypted staging request',
+          );
+      }
       return {
         hash: expected.sha256,
-        status: field.status,
-        paths: field.destinations.map((entry) => entry.fieldId),
+        status: checked[0].status,
+        paths: [
+          ...new Set(checked.flatMap((part) => part.destinations.map((entry) => entry.fieldId))),
+        ],
       };
     }),
   );

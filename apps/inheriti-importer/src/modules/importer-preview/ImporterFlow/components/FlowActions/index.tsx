@@ -1,4 +1,5 @@
-import { Box, Button, Icon, Text } from '@main-components';
+import { Box, Button, Icon, Pressable, Text } from '@main-components';
+import { keyboardActivation } from '@modules/_shared/ui/keyboard-activation';
 import { useTheme } from '@modules/_shared/ui/theme/AppTheme';
 import './styles.css';
 
@@ -10,6 +11,7 @@ type FlowActionsProps = {
   showComplete: boolean;
   nextLabel: string;
   summary?: string;
+  recovery?: { label: string; onPress: () => void };
 };
 
 export function FlowActions({
@@ -20,6 +22,7 @@ export function FlowActions({
   showComplete,
   nextLabel,
   summary,
+  recovery,
 }: FlowActionsProps) {
   const theme = useTheme();
 
@@ -50,7 +53,37 @@ export function FlowActions({
         disabled={!canGoBack}
         onPress={onBack}
       />
-      {summary ? (
+      {summary && recovery ? (
+        <Box
+          className="importer-flow-recovery"
+          flexDirection="row"
+          flexWrap="wrap"
+          alignItems="center"
+          gap="xs"
+          style={{ marginLeft: 'auto' }}
+        >
+          <Text variant="importerFooterNote" color="gray" accessibilityLiveRegion="polite">
+            {summary}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={recovery.label}
+            onPress={recovery.onPress}
+            {...keyboardActivation(recovery.onPress)}
+          >
+            <Box flexDirection="row" alignItems="center" gap="xxs">
+              <Text
+                variant="buttonSmall"
+                color="primary"
+                style={{ textDecorationLine: 'underline' }}
+              >
+                {recovery.label}
+              </Text>
+              <Icon name="arrow-right" size={11} color={theme.colors.primary} label="" />
+            </Box>
+          </Pressable>
+        </Box>
+      ) : summary ? (
         <Text variant="importerFooterNote" color="gray" style={{ marginLeft: 'auto' }}>
           {summary}
         </Text>

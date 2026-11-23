@@ -11,7 +11,12 @@ export const SourceTreeWithBulkAcceptance = () => {
   const [selectedId, setSelectedId] = useState<string>();
   const workspace = useImporterWorkspace(session, state, setState);
   const onAction = (action: string, asset: ReviewAsset) => {
-    if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion')
+    if (
+      action === 'accept' ||
+      action === 'exclude' ||
+      action === 'restore' ||
+      action === 'restore-suggestion'
+    )
       workspace.reviewAsset(action, asset);
   };
   return (

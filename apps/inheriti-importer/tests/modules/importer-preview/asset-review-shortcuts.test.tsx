@@ -301,14 +301,13 @@ describe('AssetReviewQueue keyboard shortcuts', () => {
     );
   });
 
-  it('disables the decision already made while allowing the opposite decision', () => {
+  it('hides the redundant decision while allowing exclusion', () => {
     const accepted = { ...asset, status: 'accepted' as const };
     render(<AssetReviewQueue assets={[accepted]} onAction={vi.fn()} />);
-    expect((screen.getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    expect((screen.getByRole('button', { name: 'Exclude' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    expect(screen.queryByRole('button', { name: 'Accept', exact: true })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Actions for / }));
+    expect(
+      (screen.getByRole('menuitem', { name: 'Exclude from import' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });

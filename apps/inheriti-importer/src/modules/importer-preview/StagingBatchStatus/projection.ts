@@ -13,9 +13,13 @@ export function projectStagingBatch(
   items: readonly PlanBatchControllerItem[],
   plans: readonly { id: string; name: string }[],
 ) {
+  const namesById = new Map<string, string>();
+  for (const plan of plans) {
+    if (!namesById.has(plan.id)) namesById.set(plan.id, plan.name);
+  }
   const projected: StagingBatchPlan[] = items.map((item) => ({
     planId: item.planId,
-    name: plans.find((plan) => plan.id === item.planId)?.name ?? item.planId,
+    name: namesById.get(item.planId) ?? item.planId,
     outcome: stagingOutcome(item.status),
     retry:
       item.status === 'FAILED_CREATE'

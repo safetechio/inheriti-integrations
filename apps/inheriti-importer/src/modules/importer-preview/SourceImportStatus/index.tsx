@@ -15,7 +15,7 @@ export function SourceImportStatus({
   onRemove,
 }: SourceImportStatusProps) {
   const [filter, setFilter] = useState<'all' | 'warnings' | 'locked'>('all');
-  const warnings = files.filter((file) => file.status === 'warning' && !file.warningsAcknowledged);
+  const warnings = files.filter((file) => file.status === 'warning');
   const locked = files.filter(
     (file) => file.status === 'unlock-required' || file.status === 'unlocking',
   );
@@ -23,7 +23,7 @@ export function SourceImportStatus({
   const rank = (file: (typeof files)[number]) =>
     file.status === 'unlock-required' || file.status === 'unlocking'
       ? 0
-      : file.status === 'warning' && !file.warningsAcknowledged
+      : file.status === 'warning'
         ? 1
         : 2;
   return (

@@ -86,7 +86,12 @@ function ReviewBulkStory({
     }
   }, [scenario, workspace]);
   const onAction = (action: string, asset: ReviewAsset) => {
-    if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion') {
+    if (
+      action === 'accept' ||
+      action === 'exclude' ||
+      action === 'restore' ||
+      action === 'restore-suggestion'
+    ) {
       workspace.reviewAsset(action, asset);
     } else if (action.startsWith('alternate:')) {
       workspace.reviewAsset(`alternate:${action.slice('alternate:'.length)}`, asset);

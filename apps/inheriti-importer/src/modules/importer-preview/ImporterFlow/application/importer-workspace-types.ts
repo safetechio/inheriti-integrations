@@ -4,6 +4,7 @@ import type {
   AssetReviewStatus,
   NoteSourceDecision,
   ReviewAsset,
+  ReviewBatchAction,
 } from '../../AssetReviewQueue/types';
 import type { GroupingAsset, PlanDraft } from '../../PlanGroupingSurface';
 import type { WorkspaceState } from '@modules/plans/domain/workspace-model';
@@ -17,7 +18,7 @@ export type {
 export type { NoteDestination, NoteSourceDecision } from '../../AssetReviewQueue/types';
 
 export type ImporterWorkspaceAction =
-  'accept' | 'exclude' | `alternate:${string}` | 'restore-suggestion';
+  ReviewBatchAction | `alternate:${string}` | 'restore-suggestion';
 
 export type WorkspaceSetter = (
   next: WorkspaceState | ((current: WorkspaceState) => WorkspaceState),
@@ -42,3 +43,12 @@ export type MappingOverrides = Record<string, Record<string, string | undefined>
 export type PlainTextOverrides = Record<string, SensitiveValue>;
 export type ReviewDecisions = Record<string, AssetReviewStatus>;
 export type AssetTypeOverrides = Record<string, string>;
+
+export interface FieldOrganization {
+  assets: Record<string, SuggestedAsset>;
+  owners: Record<string, string>;
+  generatedAssetIds?: ReadonlySet<string>;
+  /** Fields released by draft removal require an explicit destination. */
+  releasedFieldIds?: ReadonlySet<string>;
+  names?: Record<string, string>;
+}

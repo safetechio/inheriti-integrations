@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Button, Card, Text, Tooltip } from '@main-components';
-import type { ReviewBatchResult } from '../../types';
+import type { ReviewBatchAction, ReviewBatchResult } from '../../types';
 
 export type ReviewResult = ReviewBatchResult & { label: string };
 
 export function ReviewSelectionCard({
   count,
+  reviewActions,
   result,
   mapping,
   onReview,
   onClear,
   onUndo,
+  removal,
 }: {
   count: number;
+  reviewActions: Record<ReviewBatchAction, boolean>;
+  removal?: { canRemove: boolean; onRemove: () => void };
   result?: ReviewResult;
   mapping?: {
     template: string;
@@ -20,14 +24,15 @@ export function ReviewSelectionCard({
     compatibleCount: number;
     onApply: () => void;
   };
-  onReview: (action: 'accept' | 'exclude') => void;
+  onReview: (action: ReviewBatchAction) => void;
   onClear: () => void;
   onUndo?: () => void;
 }) {
   const [confirmTemplateId, setConfirmTemplateId] = useState<string>();
   const cardRef = useRef<HTMLElement | null>(null);
   const popupRef = useRef<HTMLElement | null>(null);
-  const confirming = Boolean(mapping && confirmTemplateId === mapping.templateId);
+  const canApplyMapping = Boolean(mapping && mapping.compatibleCount > 0);
+  const confirming = canApplyMapping && confirmTemplateId === mapping?.templateId;
   useEffect(() => setConfirmTemplateId(undefined), [mapping?.templateId, count]);
   useEffect(() => {
     if (!confirming) return;
@@ -68,35 +73,62 @@ export function ReviewSelectionCard({
           <Text variant="bodySmall" semibold>
             {count} selected
           </Text>
-          <Tooltip content="Accept eligible selected assets for import. Invalid assets are skipped.">
-            <Button
-              title="Accept selected"
-              size="sm"
-              onPress={() => {
-                setConfirmTemplateId(undefined);
-                onReview('accept');
-              }}
-            />
-          </Tooltip>
-          <Tooltip content="Remove selected assets and their plan assignments from this import only.">
-            <Button
-              title="Exclude selected"
-              size="sm"
-              color="danger"
-              variant="outlined"
-              onPress={() => {
-                setConfirmTemplateId(undefined);
-                onReview('exclude');
-              }}
-            />
-          </Tooltip>
-          {mapping ? (
-            <Tooltip content="Preview applying this template to compatible selected assets. Manual mappings are kept.">
+          {reviewActions.accept ? (
+            <Tooltip content="Accept eligible selected assets for import. Invalid assets are skipped.">
               <Button
-                title="Apply mappings"
+                title="Accept selected"
+                size="sm"
+                onPress={() => {
+                  setConfirmTemplateId(undefined);
+                  onReview('accept');
+                }}
+              />
+            </Tooltip>
+          ) : null}
+          {reviewActions.exclude ? (
+            <Tooltip content="Selected assets will not be imported. You can recover them from Excluded.">
+              <Button
+                title="Exclude selected"
+                size="sm"
+                color="danger"
+                variant="outlined"
+                onPress={() => {
+                  setConfirmTemplateId(undefined);
+                  onReview('exclude');
+                }}
+              />
+            </Tooltip>
+          ) : null}
+          {reviewActions.restore ? (
+            <Tooltip content="Return selected excluded assets to To review with their field choices.">
+              <Button
+                title="Restore selected"
+                size="sm"
+                onPress={() => {
+                  setConfirmTemplateId(undefined);
+                  onReview('restore');
+                }}
+              />
+            </Tooltip>
+          ) : null}
+          {mapping && canApplyMapping ? (
+            <Tooltip content="Reuse the open asset’s field choices. Each entry keeps its own values and manual mappings.">
+              <Button
+                title="Apply this mapping…"
                 size="sm"
                 variant="outlined"
                 onPress={() => setConfirmTemplateId(confirming ? undefined : mapping.templateId)}
+              />
+            </Tooltip>
+          ) : null}
+          {removal?.canRemove ? (
+            <Tooltip content="Remove these drafts. Fields without another destination return to Unassigned. You can undo this.">
+              <Button
+                title={count === 1 ? 'Remove draft asset' : 'Remove draft assets'}
+                size="sm"
+                color="danger"
+                variant="plain"
+                onPress={removal.onRemove}
               />
             </Tooltip>
           ) : null}
@@ -122,11 +154,11 @@ export function ReviewSelectionCard({
           aria-label="Confirm applying mappings"
         >
           <Text variant="bodySmall" className="asset-review-mapping-summary">
-            Template <Text semibold>{mapping.template}</Text> · {mapping.compatibleCount} compatible
-            of {count} selected
+            <Text semibold>{mapping.template}</Text> · {mapping.compatibleCount} of {count} selected
+            assets will change
           </Text>
           <Text variant="bodySmall" color="gray">
-            Matching fields only. Updated assets return to review.
+            Copies field choices. Each asset keeps its values and manual mappings.
           </Text>
           <Box flexDirection="row" gap="s" flexWrap="wrap">
             <Tooltip content="Apply the template to compatible selected assets for review. Manual mappings are kept.">

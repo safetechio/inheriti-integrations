@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
-import { hasIncludedSchemaField, type ReviewAsset, type AssetReviewQueueProps } from '../types';
+import {
+  hasIncludedSchemaField,
+  type ReviewAsset,
+  type AssetReviewQueueProps,
+  type ImportCoverage,
+} from '../types';
 import { sourceKey, sourceName } from '../review-tree';
+import { indexAssetReviewIssues } from '../asset-review-issues';
+import { isUndecided } from '../review-blockers';
 
 export const statusFilters = [
   ['all', 'All'],
@@ -15,8 +22,7 @@ export const exceptionFilters = [
   ['omitted', 'Unmapped fields'],
 ] as const;
 
-export const isPending = (asset: ReviewAsset) =>
-  asset.status !== 'accepted' && asset.status !== 'excluded';
+export const isPending = isUndecided;
 const exceptions = {
   invalid: (asset: ReviewAsset) => !hasIncludedSchemaField(asset),
   missing: (asset: ReviewAsset) => {
@@ -34,12 +40,12 @@ const exceptions = {
       secrets.some((field) => !field.sourceFieldId && (field.required || field.validationError))
     );
   },
-  omitted: (asset: ReviewAsset) => asset.unmapped.length > 0,
 };
 
 export function useReviewList(
   assets: ReviewAsset[],
   sourceFiles: AssetReviewQueueProps['sourceFiles'],
+  coverage?: ImportCoverage,
 ) {
   const [filter, setFilter] = useState<(typeof statusFilters)[number][0]>(() =>
     assets.some(isPending) ? 'review' : 'all',
@@ -67,34 +73,49 @@ export function useReviewList(
     }
     return { counts, eligibleCount };
   }, [assets]);
+  const entries = useMemo(() => {
+    const getIssues = indexAssetReviewIssues(assets, coverage);
+    return assets.map((asset) => {
+      const assetIssues = asset.status === 'excluded' ? undefined : getIssues(asset);
+      return {
+        asset,
+        source: sourceKey(asset),
+        searchName: asset.name.toLocaleLowerCase(),
+        status: isPending(asset) ? 'review' : asset.status,
+        issueCount: assetIssues?.issueCount ?? 0,
+        exceptions: {
+          invalid: exceptions.invalid(asset),
+          missing: exceptions.missing(asset),
+          omitted: Boolean(coverage ? assetIssues?.unresolved.length : asset.unmapped.length),
+        },
+      };
+    });
+  }, [assets, coverage]);
   const result = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     const exceptionCounts = { invalid: 0, missing: 0, omitted: 0 };
     const visible: ReviewAsset[] = [];
-    const issues: ReviewAsset[] = [];
-    for (const asset of assets) {
+    const issues = new Map<string, number>();
+    let issueCount = 0;
+    for (const entry of entries) {
       if (
-        (source !== 'all' && sourceKey(asset) !== source) ||
-        !asset.name.toLocaleLowerCase().includes(query) ||
-        (filter !== 'all' && (filter === 'review' ? !isPending(asset) : asset.status !== filter))
+        (source !== 'all' && entry.source !== source) ||
+        !entry.searchName.includes(query) ||
+        (filter !== 'all' && filter !== entry.status)
       )
         continue;
-      let matches = true;
-      let hasIssue = false;
       for (const [key] of exceptionFilters) {
-        const found = Boolean(exceptions[key](asset));
-        if (found) {
-          exceptionCounts[key]++;
-          hasIssue = true;
-        }
-        if (exception === key) matches = found;
+        if (entry.exceptions[key]) exceptionCounts[key]++;
       }
-      if (!matches) continue;
-      visible.push(asset);
-      if (hasIssue) issues.push(asset);
+      if (exception && !entry.exceptions[exception]) continue;
+      visible.push(entry.asset);
+      if (entry.issueCount) {
+        issues.set(entry.asset.id, entry.issueCount);
+        issueCount += entry.issueCount;
+      }
     }
-    return { visible, issues, exceptionCounts };
-  }, [assets, exception, filter, search, source]);
+    return { visible, issues, issueCount, exceptionCounts };
+  }, [entries, exception, filter, search, source]);
   const canShowTree = useMemo(
     () =>
       source === 'all'

@@ -1,6 +1,8 @@
 import { Box, Button, Text } from '@main-components';
 import type { PlanBatchControllerItem } from '@modules/batch/application/use-plan-batch-controller';
-import { projectStagingBatch } from './projection';
+import { useCallback, useLayoutEffect, useRef } from 'react';
+import { PlanStatusRow } from './components/PlanStatusRow';
+import { projectStagingBatch, type StagingBatchPlan } from './projection';
 import './styles.css';
 
 export type StagingBatchStatusProps = {
@@ -22,6 +24,14 @@ export function StagingBatchStatus({
   onCancel,
   embedded = false,
 }: StagingBatchStatusProps) {
+  const retryHandlers = useRef({ create: onRetryCreate, configure: onRetryConfigure });
+  useLayoutEffect(() => {
+    retryHandlers.current = { create: onRetryCreate, configure: onRetryConfigure };
+  }, [onRetryCreate, onRetryConfigure]);
+  const onRetry = useCallback((retry: NonNullable<StagingBatchPlan['retry']>, planId: string) => {
+    retryHandlers.current[retry](planId);
+  }, []);
+
   if (!items.length) return null;
   const batch = projectStagingBatch(items, plans);
   if (!running && batch.completed === items.length) return null;
@@ -48,54 +58,13 @@ export function StagingBatchStatus({
         </Text>
       ) : null}
       {batch.plans.map((plan) => (
-        <Box key={plan.planId} flexDirection="row" alignItems="center" gap="s">
-          <Box flex={1}>
-            <Box
-              accessibilityRole="progressbar"
-              accessibilityLabel={`${plan.name}: ${plan.outcome}`}
-              aria-valuemin={plan.outcome === 'Staging' ? undefined : 0}
-              aria-valuemax={plan.outcome === 'Staging' ? undefined : 100}
-              aria-valuenow={
-                plan.outcome === 'Staging' ? undefined : plan.outcome === 'Staged' ? 100 : 0
-              }
-              aria-valuetext={plan.outcome}
-              ref={(element) => element?.setAttribute('title', `${plan.name}: ${plan.outcome}`)}
-              height={22}
-              backgroundColor="gray10"
-              borderRadius="pill"
-              overflow="hidden"
-              className="staging-plan-track"
-            >
-              {plan.outcome === 'Staged' || plan.outcome === 'Staging' ? (
-                <Box
-                  width={plan.outcome === 'Staged' ? '100%' : 100}
-                  height={22}
-                  className={`staging-plan-fill ${plan.outcome === 'Staging' ? 'is-active' : ''}`}
-                >
-                  <Text variant="bodySmall" color="white" className="staging-plan-label">
-                    {embedded ? plan.name : `${plan.name} · ${plan.outcome}`}
-                  </Text>
-                </Box>
-              ) : null}
-              {plan.outcome !== 'Staged' && plan.outcome !== 'Staging' ? (
-                <Text variant="bodySmall" color="gray120" className="staging-plan-label">
-                  {plan.name} · {plan.outcome}
-                </Text>
-              ) : null}
-            </Box>
-          </Box>
-          {plan.retry ? (
-            <Button
-              title="Retry staging"
-              variant="plain"
-              size="sm"
-              disabled={running}
-              onPress={() =>
-                plan.retry === 'create' ? onRetryCreate(plan.planId) : onRetryConfigure(plan.planId)
-              }
-            />
-          ) : null}
-        </Box>
+        <PlanStatusRow
+          key={plan.planId}
+          {...plan}
+          embedded={embedded}
+          retryDisabled={running && plan.retry !== null}
+          onRetry={onRetry}
+        />
       ))}
     </Box>
   );

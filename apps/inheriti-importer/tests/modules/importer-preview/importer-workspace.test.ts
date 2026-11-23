@@ -74,7 +74,7 @@ function usernamePasswordSession(): ImportSession {
 }
 
 describe('projectImporterWorkspace', () => {
-  it('reviews a 1Password structured asset and unmatched Plain Text independently', () => {
+  it('retains unmatched 1Password fields on the structured review without creating a second asset', () => {
     const imported = usernamePasswordSession();
     imported.sources[0]!.kind = 'onepassword';
     imported.nodesById['entry-1']!.fieldIds.push('entry-1:notes');
@@ -104,14 +104,10 @@ describe('projectImporterWorkspace', () => {
     const result = projectImporterWorkspace(imported, workspace);
     expect(result.assets.map((asset) => [asset.type, asset.status])).toEqual([
       ['USER-PSWD', 'accepted'],
-      ['PLAIN-TEXT', 'fallback'],
     ]);
-    expect(result.suggestions[1]?.fieldBindings['secret.text']).toEqual({
-      kind: 'source',
-      sourceFieldId: 'entry-1:notes',
-    });
-    expect(result.assets[1]?.mapped).toEqual(['extra:notes']);
-    expect(result.assets[1]?.unmapped).toEqual([]);
+    expect(result.assets[0]?.unmappedSourceFieldIds).toEqual(['entry-1:notes']);
+    expect(result.coverage.fields.find(({ id }) => id === 'entry-1:notes')?.status).toBe('pending');
+    expect(result.executionCoverage.ready).toBe(false);
   });
 
   it('matches 1Password suggestions by ID even when Plain Text bindings overlap', () => {
@@ -141,10 +137,16 @@ describe('projectImporterWorkspace', () => {
       },
     });
 
-    const result = projectImporterWorkspace(imported, workspace);
-    expect(
-      result.assets.find((asset) => asset.id === 'entry-1:PLAIN-TEXT-ADDITIONAL')?.status,
-    ).toBe('fallback');
+    const id = 'entry-1:PLAIN-TEXT-ADDITIONAL';
+    const result = projectImporterWorkspace(
+      imported,
+      workspace,
+      {},
+      {
+        [id]: { 'secret.text': 'entry-1:notes' },
+      },
+    );
+    expect(result.assets.find((asset) => asset.id === id)?.status).toBe('fallback');
   });
   it('initializes single-field entries as Plain Text fallbacks', () => {
     const result = projectImporterWorkspace(session(), createEmptyWorkspace());

@@ -1,3 +1,5 @@
+import type { Ref } from 'react';
+import type { ReviewRecoveryHandle } from '../../../AssetReviewQueue/types';
 import { ImportCoverage } from '../../../AssetReviewQueue/components/ImportCoverage';
 import { AssetReviewQueue } from '../../../AssetReviewQueue';
 import { FinalStagingChecklist, type ChecklistItem } from '../../../FinalStagingChecklist';
@@ -19,6 +21,7 @@ type StageContentProps = {
   description: string;
   checklist: ChecklistItem[];
   flow: ImporterFlowState;
+  recoveryRef?: Ref<ReviewRecoveryHandle>;
   selectedPlanId?: string;
   onSelectPlan: (id: string) => void;
   onCreatePlan: NonNullable<PlanGroupingSurfaceProps['onCreatePlan']>;
@@ -42,6 +45,7 @@ export function StageContent({
   description,
   checklist,
   flow,
+  recoveryRef,
   selectedPlanId,
   onSelectPlan,
   onCreatePlan,
@@ -75,7 +79,7 @@ export function StageContent({
       <AssetReviewQueue
         assets={flow.assets}
         sourceFiles={flow.files}
-        description={description}
+        recoveryRef={recoveryRef}
         selectedId={flow.selectedAssetId}
         onSelect={flow.selectAsset}
         onAction={flow.reviewAsset}

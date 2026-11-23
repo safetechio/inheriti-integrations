@@ -4,7 +4,7 @@ import type { ReviewAsset } from '../../AssetReviewQueue/types';
 import type { ImporterWorkspaceContext } from './use-importer-workspace';
 import { nativeNotes } from './importer-workspace-notes';
 import { reconcileEditedBindings } from './importer-workspace-companion';
-import { suggestionFields } from './importer-workspace-suggestions';
+import { mappedFieldIds, statusKey } from './importer-workspace-suggestions';
 
 export function createMappingActions(context: ImporterWorkspaceContext) {
   const {
@@ -33,12 +33,34 @@ export function createMappingActions(context: ImporterWorkspaceContext) {
       nativeNotes(session, suggestion.fromNodeId)?.id === sourceFieldId
     )
       return;
-    if (
-      sourceFieldId &&
-      (context.preservation.ignored?.has(sourceFieldId) ||
-        !suggestionFields(session, suggestion).some((field) => field.id === sourceFieldId))
-    )
-      return;
+    if (sourceFieldId) {
+      const projectedField = context.projection.assets
+        .find((candidate) => candidate.id === asset.id)
+        ?.schemaFields?.find(({ key }) => key === targetField);
+      if (!projectedField?.candidates?.some(({ id }) => id === sourceFieldId)) return;
+    }
+
+    const nextOrganization =
+      context.organization.assets[asset.id] && sourceFieldId
+        ? {
+            ...context.organization,
+            owners: { ...context.organization.owners, [sourceFieldId]: asset.id },
+          }
+        : context.organization;
+    if (nextOrganization !== context.organization) {
+      if (
+        nativeNotes(session, suggestion.fromNodeId)?.id === sourceFieldId ||
+        context.projection.suggestions.some(
+          (other) =>
+            statusKey(other) !== asset.id &&
+            other.fromNodeId === suggestion.fromNodeId &&
+            other.type !== 'PLAIN-TEXT' &&
+            mappedFieldIds(other).has(sourceFieldId!),
+        )
+      )
+        return;
+      context.setOrganization(nextOrganization);
+    }
 
     const isPlainTextValue = suggestion.type === 'PLAIN-TEXT' && targetField === 'secret.text';
     const edits = { ...mappingOverrides[asset.id], [targetField]: sourceFieldId };
@@ -52,10 +74,12 @@ export function createMappingActions(context: ImporterWorkspaceContext) {
     }
     if (!Object.keys(edits).length) delete nextMappings[asset.id];
     setMappingOverrides(nextMappings);
-    setDecisions((current) => ({ ...current, [asset.id]: 'needs-review' }));
+    setDecisions((current) =>
+      current[asset.id] === 'excluded' ? current : { ...current, [asset.id]: 'needs-review' },
+    );
     updateWorkspace((current) =>
       reconcileEditedBindings(
-        context,
+        { ...context, organization: nextOrganization },
         current,
         suggestion.fromNodeId,
         asset.id,
@@ -73,7 +97,9 @@ export function createMappingActions(context: ImporterWorkspaceContext) {
     plainTextOverrides[asset.id]?.clear();
     const nextPlainText = { ...plainTextOverrides, [asset.id]: new SensitiveValue(value) };
     setPlainTextOverrides(nextPlainText);
-    setDecisions((current) => ({ ...current, [asset.id]: 'needs-review' }));
+    setDecisions((current) =>
+      current[asset.id] === 'excluded' ? current : { ...current, [asset.id]: 'needs-review' },
+    );
     updateWorkspace((current) =>
       reconcileEditedBindings(
         context,
