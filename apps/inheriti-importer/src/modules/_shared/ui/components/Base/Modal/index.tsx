@@ -8,26 +8,37 @@ import { theme } from '@modules/_shared/ui/theme/AppTheme';
 /** Shared header/body/footer modal shell — reuses the panel's spacing classes. */
 export function BaseModal({
   visible,
+  className,
   title,
   titleIcon,
   description,
   onDismiss,
   footer,
+  bodyHeader,
+  bodyPaneKey,
+  bodyScrollRef,
+  scrollBody = true,
   children,
   maxWidth = 560,
 }: {
   visible: boolean;
+  className?: string;
   title: string;
   titleIcon?: ReactNode;
   description?: string;
   onDismiss: () => void;
   footer?: ReactNode;
+  bodyHeader?: ReactNode;
+  bodyPaneKey?: string;
+  bodyScrollRef?: (node: HTMLElement | null) => void;
+  scrollBody?: boolean;
   children: ReactNode;
   maxWidth?: number;
 }) {
   return (
     <ModalPortal visible={visible} onRequestClose={onDismiss}>
       <Box
+        className={className}
         flex={1}
         justifyContent="center"
         alignItems="center"
@@ -71,7 +82,9 @@ export function BaseModal({
                 >
                   {cloneElement(titleIcon, { color: theme.colors.primary })}
                 </Box>
-              ) : titleIcon}
+              ) : (
+                titleIcon
+              )}
               <Box gap="xs" flex={1} style={{ minWidth: 0 }}>
                 <Text variant="heading3">{title}</Text>
                 {description ? (
@@ -90,11 +103,18 @@ export function BaseModal({
               <Icon name="xmark" type="font-awesome-6" color="gray" />
             </Pressable>
           </Box>
-          <ScrollView style={{ flex: 1 }}>
-            <Box className="mw-panel-body" gap="m">
+          {bodyHeader}
+          {scrollBody ? (
+            <ScrollView key={bodyPaneKey} ref={bodyScrollRef} style={{ flex: 1 }}>
+              <Box className="mw-panel-body" gap="m">
+                {children}
+              </Box>
+            </ScrollView>
+          ) : (
+            <Box className="mw-panel-body" gap="m" style={{ flex: 1, minHeight: 0 }}>
               {children}
             </Box>
-          </ScrollView>
+          )}
           {footer ? (
             <Box className="mw-panel-footer" flexDirection="row" justifyContent="flex-end" gap="s">
               {footer}

@@ -19,10 +19,14 @@ export function Alert({
   children,
   tone = 'danger',
   dismissable = true,
+  compact = false,
+  action,
 }: {
   children: ReactNode;
   tone?: AlertTone;
   dismissable?: boolean;
+  compact?: boolean;
+  action?: ReactNode;
 }) {
   const uiTheme = useTheme();
   const tokens = TONE_TOKENS[tone];
@@ -33,21 +37,31 @@ export function Alert({
   return (
     <Box
       accessibilityRole="alert"
-      padding={uiTheme.importer.spacing.sectionGap}
+      padding={compact ? 's' : uiTheme.importer.spacing.sectionGap}
       borderWidth={1}
       borderRadius={uiTheme.importer.borders.inputRadius}
       backgroundColor={tokens.background}
       borderColor={tokens.border}
     >
-      <Box flexDirection="row" alignItems="center" justifyContent="space-between" gap="s">
-        <Text variant="bodySmall" color={tokens.text} style={{ flex: 1 }}>
+      <Box
+        flexDirection="row"
+        alignItems="center"
+        justifyContent={action ? 'flex-start' : 'space-between'}
+        gap="s"
+      >
+        <Text
+          variant="bodySmall"
+          color={tokens.text}
+          style={action ? { flexShrink: 1, minWidth: 0 } : { flex: 1, minWidth: 0 }}
+        >
           {children}
         </Text>
+        {action ? <Box flexShrink={0}>{action}</Box> : null}
         {dismissable ? (
           <Pressable
             accessibilityLabel="Dismiss alert"
             onPress={() => setVisible(false)}
-            style={{ padding: 4 }}
+            style={{ padding: 4, marginLeft: action ? 'auto' : undefined }}
           >
             <Icon
               name="xmark"

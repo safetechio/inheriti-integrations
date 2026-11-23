@@ -1,0 +1,36 @@
+.choice-group-option {
+  position: relative;
+  cursor: pointer;
+  border: 1px solid var(--gray-30);
+  border-radius: 8px;
+  background: var(--importer-color-surface);
+  display: flex;
+  flex: 1 1 180px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.choice-group-option.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-5);
+}
+
+.choice-group-option:has(.choice-group-radio:focus-visible) {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.choice-group-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.choice-group-option:has(:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}

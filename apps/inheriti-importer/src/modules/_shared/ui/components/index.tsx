@@ -36,6 +36,7 @@ export { PanelHeader } from './PanelHeader';
 export { NoItemsPlaceholder } from './Base/NoItemsPlaceholder';
 export { Stack, type StackProps } from './Layout/Stack';
 export { FilterChip, type FilterChipProps } from './Base/FilterChip';
+export { ScrollableTabs, type ScrollableTab } from './Base/ScrollableTabs';
 export { InteractiveSurface, type InteractiveSurfaceProps } from './Base/InteractiveSurface';
 export {
   Meter,
@@ -49,3 +50,5 @@ export { FormTextInput, type FormTextInputProps } from './Form/TextInput';
 export { FormTextarea, type FormTextareaProps } from './Form/Textarea';
 export { FormSelect, type FormSelectProps } from './Form/Select';
 export { FormSearchableSelect } from './Form/SearchableSelect';
+
+export { ChoiceGroup } from './Base/ChoiceGroup';

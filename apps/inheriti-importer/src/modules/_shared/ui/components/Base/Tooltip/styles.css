@@ -2,7 +2,7 @@
 .importer-tooltip-anchor:has(button:disabled) > * { pointer-events: none; }
 .importer-tooltip {
   position: fixed;
-  z-index: 10000;
+  z-index: 10002;
   transform: translate(-50%, -100%);
   max-width: min(320px, calc(100vw - 16px));
   padding: 10px;

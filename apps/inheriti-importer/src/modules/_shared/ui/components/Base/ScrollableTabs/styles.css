@@ -1,0 +1,52 @@
+.scrollable-tabs {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.scrollable-tabs-strip {
+  display: block !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  user-select: none;
+}
+
+.scrollable-tabs-strip[data-dragging],
+.scrollable-tabs-strip[data-dragging] * {
+  cursor: grabbing !important;
+}
+
+.scrollable-tabs-track {
+  width: max-content;
+  flex-wrap: nowrap !important;
+  white-space: nowrap;
+}
+
+.scrollable-tabs-arrow {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid var(--line);
+  border-radius: var(--importer-radius-control);
+  background: var(--importer-color-surface);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scrollable-tabs-left { left: 0; }
+.scrollable-tabs-right { right: 0; }
+
+.scrollable-tabs:hover > .scrollable-tabs-arrow,
+.scrollable-tabs:focus-within > .scrollable-tabs-arrow {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .scrollable-tabs-arrow {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

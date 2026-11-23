@@ -26,6 +26,8 @@ export interface ButtonProps {
   endIcon?: ReactNode;
   testID?: string;
   accessibilityLabel?: string;
+  'aria-expanded'?: boolean;
+  'aria-controls'?: string;
   minHeight?: number;
   paddingHorizontal?: number | keyof Theme['spacing'];
   textVariant?: keyof Theme['textVariants'];
@@ -85,6 +87,8 @@ export function Button({
   endIcon,
   testID,
   accessibilityLabel,
+  'aria-expanded': expanded,
+  'aria-controls': controls,
   minHeight,
   paddingHorizontal,
   textVariant,
@@ -106,6 +110,8 @@ export function Button({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
+      aria-expanded={expanded}
+      aria-controls={controls}
       style={block ? { alignSelf: 'stretch' } : undefined}
       {...(isDisabled ? {} : keyboardActivation(onPress))}
     >

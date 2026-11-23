@@ -6,9 +6,39 @@ import type { FormSelectProps } from '../Select';
 import { useSearchableSelect } from './hooks/use-searchable-select';
 import './styles.css';
 
-export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: boolean }) {
-  const { label, value, options, disabled, helperText, autoFocus } = props;
-  const { root, fieldId, query, open, matches, activeIndex, activeId, optionId, onBlur, searchFor, choose, onKeyDown } = useSearchableSelect(props, autoFocus);
+export function FormSearchableSelect(
+  props: FormSelectProps & {
+    autoFocus?: boolean;
+    placeholder?: string;
+    searchPlaceholder?: string;
+    noMatchesText?: string;
+  },
+) {
+  const {
+    label,
+    value,
+    options,
+    disabled,
+    helperText,
+    autoFocus,
+    placeholder = 'Choose a folder',
+    searchPlaceholder = 'Search folders',
+    noMatchesText = 'No matching folders.',
+  } = props;
+  const {
+    root,
+    fieldId,
+    query,
+    open,
+    matches,
+    activeIndex,
+    activeId,
+    optionId,
+    onBlur,
+    searchFor,
+    choose,
+    onKeyDown,
+  } = useSearchableSelect(props, autoFocus);
   const theme = useTheme();
   const field = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -24,7 +54,11 @@ export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: bool
 
   return (
     <Box ref={root} gap="xs">
-      <label htmlFor={fieldId}><Text variant="bodySmall" semibold>{label}</Text></label>
+      <label htmlFor={fieldId}>
+        <Text variant="bodySmall" semibold>
+          {label}
+        </Text>
+      </label>
       <Box position="relative">
         <input
           ref={field}
@@ -40,13 +74,18 @@ export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: bool
           autoFocus={autoFocus}
           spellCheck={false}
           disabled={disabled}
-          placeholder={open ? 'Search folders' : 'Choose a folder'}
-          value={open ? query ?? '' : selectedLabel}
-          onClick={() => { if (!open) searchFor(''); }}
+          placeholder={open ? searchPlaceholder : placeholder}
+          value={open ? (query ?? '') : selectedLabel}
+          onClick={() => {
+            if (!open) searchFor('');
+          }}
           onChange={(event) => searchFor(event.currentTarget.value)}
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
-          onBlur={() => { setFocused(false); onBlur(); }}
+          onBlur={() => {
+            setFocused(false);
+            onBlur();
+          }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
@@ -57,7 +96,11 @@ export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: bool
             paddingRight: theme.spacing.xxl,
             border: `1px solid ${active ? theme.colors.primary : theme.colors.gray30}`,
             borderRadius: theme.importer.borders.controlRadius,
-            backgroundColor: disabled ? theme.colors.gray5 : active ? theme.colors.primary5 : theme.colors.white,
+            backgroundColor: disabled
+              ? theme.colors.gray5
+              : active
+                ? theme.colors.primary5
+                : theme.colors.white,
             opacity: disabled ? 0.65 : 1,
             color: theme.colors.gray120,
             fontFamily: theme.textVariants.bodyRegular.fontFamily,
@@ -69,8 +112,20 @@ export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: bool
             cursor: disabled ? 'not-allowed' : open ? 'text' : 'pointer',
           }}
         />
-        <Box aria-hidden={true} position="absolute" right={theme.importer.spacing.sectionGap} top={0} bottom={0} justifyContent="center" style={{ pointerEvents: 'none' }}>
-          <Icon name={open ? 'magnifying-glass' : 'chevron-down'} size={12} color={theme.colors.gray120} />
+        <Box
+          aria-hidden={true}
+          position="absolute"
+          right={theme.importer.spacing.sectionGap}
+          top={0}
+          bottom={0}
+          justifyContent="center"
+          style={{ pointerEvents: 'none' }}
+        >
+          <Icon
+            name={open ? 'magnifying-glass' : 'chevron-down'}
+            size={12}
+            color={theme.colors.gray120}
+          />
         </Box>
       </Box>
       {open ? (
@@ -88,23 +143,41 @@ export function FormSearchableSelect(props: FormSelectProps & { autoFocus?: bool
                 role="option"
                 aria-selected={option.value === value}
                 className="form-searchable-select-option"
-                backgroundColor={index === activeIndex ? 'primary10' : option.value === value ? 'primary5' : undefined}
+                backgroundColor={
+                  index === activeIndex
+                    ? 'primary10'
+                    : option.value === value
+                      ? 'primary5'
+                      : undefined
+                }
                 padding="s"
                 onMouseDown={(event: MouseEvent) => event.preventDefault()}
                 onClick={() => choose(option.value)}
               >
-                <Text variant="bodySmall" semibold={option.value === value} style={{ overflowWrap: 'anywhere' }}>
+                <Text
+                  variant="bodySmall"
+                  semibold={option.value === value}
+                  style={{ overflowWrap: 'anywhere' }}
+                >
                   {option.label}
                 </Text>
               </Box>
             ))}
           </Box>
           {matches.length === 0 ? (
-            <Box padding="s"><Text variant="bodySmall" color="gray" accessibilityRole="status">No matching folders.</Text></Box>
+            <Box padding="s">
+              <Text variant="bodySmall" color="gray" accessibilityRole="status">
+                {noMatchesText}
+              </Text>
+            </Box>
           ) : null}
         </Box>
       ) : null}
-      {helperText ? <Text nativeID={helperId} variant="bodySmall" color="gray">{helperText}</Text> : null}
+      {helperText ? (
+        <Text nativeID={helperId} variant="bodySmall" color="gray">
+          {helperText}
+        </Text>
+      ) : null}
     </Box>
   );
 }
