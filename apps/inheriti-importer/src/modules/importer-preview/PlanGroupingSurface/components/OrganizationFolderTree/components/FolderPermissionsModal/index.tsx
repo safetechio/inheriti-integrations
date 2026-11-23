@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { BaseModal, Box, Button, Icon, Text } from '@main-components';
+import { BaseModal, Box, Button, ChoiceGroup, Icon, Text } from '@main-components';
 import type { Folder, FolderWorkspaceProps } from '../../../../types';
 import type { FolderTeamsPolicy } from '@modules/organization/domain/plan-folder';
 import { useFolderChangePreview } from '../../hooks/use-folder-change-preview';
 import { TeamsSelectInput } from '@modules/organization/ui/components/TeamsSelectInput';
 import { FolderImpactSkeleton } from '../FolderImpactSkeleton';
-import './styles.css';
 
 export function FolderPermissionsModal({ folder: currentFolder, workspace, onDismiss }: { folder: Folder; workspace: FolderWorkspaceProps; onDismiss: () => void }) {
   const [folder] = useState(currentFolder);
@@ -28,7 +27,18 @@ export function FolderPermissionsModal({ folder: currentFolder, workspace, onDis
   };
   return <BaseModal visible title={`Permissions for ${folder.name}`} titleIcon={<Icon name="shield-halved" size={20} color="primary"/>} description="Choose which teams can access this shared folder." onDismiss={() => { if (!saving) onDismiss(); }} footer={<><Button title="Cancel" variant="outlined" color="gray" onPress={onDismiss} disabled={saving}/><Button title={saving ? 'Saving permissions…' : 'Save permissions'} loading={saving} disabled={stale || saving || pending || !!previewError || !preview || !!preview.blockers.length || !workspace.onChangeFolderPolicy} onPress={() => void save()}/></>}>
     <Box gap="m">
-      {folder.parentId ? <Box gap="s"><Text variant="bodySmall" semibold>Permission policy</Text><Box flexDirection="row" gap="s" style={{ flexWrap: 'wrap' }}>{(['inherit', 'own'] as const).map((choice) => <label key={choice} className={`folder-permissions-choice${mode === choice ? ' is-selected' : ''}`}><input className="folder-permissions-native-input" type="radio" name="folder-policy-mode" aria-label={choice === 'inherit' ? 'Inherit permissions' : 'Use own policy'} checked={mode === choice} disabled={saving || stale} onChange={() => setMode(choice)}/><Text variant="bodySmall" semibold>{choice === 'inherit' ? 'Inherit permissions' : 'Use own policy'}</Text><Text variant="bodySmall" color="gray">{choice === 'inherit' ? 'Use the parent folder’s access.' : 'Choose teams for this folder.'}</Text></label>)}</Box></Box> : null}
+      {folder.parentId ? (
+        <ChoiceGroup
+          label="Permission policy"
+          value={mode}
+          options={[
+            { value: 'inherit', label: 'Inherit permissions', description: 'Use the parent folder’s access.' },
+            { value: 'own', label: 'Use own policy', description: 'Choose teams for this folder.' },
+          ]}
+          disabled={saving || stale}
+          onChange={setMode}
+        />
+      ) : null}
       {mode === 'own' ? (
         <Box gap="s" backgroundColor="gray5" borderRadius="s" padding="m" borderWidth={1} borderColor="gray10">
           <Text variant="bodySmall" semibold>Teams with access</Text>

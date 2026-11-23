@@ -86,7 +86,7 @@ describe('assigned asset interactions', () => {
     expect(screen.getByText('2 selected')).toBeTruthy();
     expect(create).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'New plan', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to new plan', exact: true }));
     expect(create).toHaveBeenCalledExactlyOnceWith([credential, note], {
       name: '2 imported assets', folderId: 'payments', scope: 'SHARED',
     });
@@ -106,7 +106,7 @@ describe('assigned asset interactions', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Credential' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create in: Your organisation' }));
     fireEvent.click(screen.getByRole('option', { name: 'Finance / Needs permissions' }));
-    const createButton = screen.getByRole('button', { name: 'New plan', exact: true });
+    const createButton = screen.getByRole('button', { name: 'Move to new plan', exact: true });
     expect(createButton.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(createButton);
     expect(create).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('assigned asset interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create in: Finance / Needs permissions' }));
     fireEvent.click(screen.getByRole('option', { name: 'Your organisation' }));
     expect(screen.getByText('1 selected')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'New plan', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to new plan', exact: true }));
     expect(create).toHaveBeenCalledExactlyOnceWith([credential], {
       name: 'Credential', folderId: null, scope: 'SHARED',
     });

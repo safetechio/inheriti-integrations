@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Box, Button, Checkbox, Icon, Text, theme } from '@main-components';
 import type { GroupingAsset } from '../../types';
 import { getAssetTypeDisplayName } from '@modules/_shared/domain/asset-type-display-name';
@@ -5,23 +6,24 @@ import { getAssetTypeDisplayName } from '@modules/_shared/domain/asset-type-disp
 interface AssetRowProps {
   asset: GroupingAsset;
   dragged: boolean;
-  onStart: (event: DragEvent) => void;
+  onStart: (asset: GroupingAsset, event: DragEvent) => void;
   onEnd: () => void;
-  onAssign?: () => void;
+  onAssign?: (asset: GroupingAsset) => void;
   assignDisabled?: boolean;
   selected?: boolean;
-  onSelect?: (event: {
+  onSelect?: (assetId: string, rows: GroupingAsset[] | undefined, event: {
     shiftKey?: boolean;
     ctrlKey?: boolean;
     metaKey?: boolean;
     toggle?: boolean;
   }) => void;
+  selectionRows?: GroupingAsset[];
   onFocusSelect?: () => void;
   showTypeIcon?: boolean;
   showAssign?: boolean;
 }
 
-export function AssetRow({
+export const AssetRow = memo(function AssetRow({
   asset,
   dragged,
   onStart,
@@ -30,6 +32,7 @@ export function AssetRow({
   assignDisabled = false,
   selected = false,
   onSelect,
+  selectionRows,
   onFocusSelect,
   showTypeIcon = false,
   showAssign = true,
@@ -39,13 +42,13 @@ export function AssetRow({
       dataSet={{ marqueeAssetId: asset.id }}
       className={`plan-asset-row ${dragged ? 'is-dragged' : ''} ${selected ? 'is-selected' : ''}`}
       draggable={Boolean(asset.valid)}
-      onDragStart={onStart}
+      onDragStart={(event: DragEvent) => onStart(asset, event)}
       onDragEnd={onEnd}
       onClick={(event: MouseEvent) => {
         if (!(event.ctrlKey || event.metaKey || event.shiftKey)) return;
         if ((event.target as HTMLElement).closest('button, input, [role="button"], [role="checkbox"]')) return;
         event.stopPropagation();
-        onSelect?.({ ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey });
+        onSelect?.(asset.id, selectionRows, { ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey });
       }}
       flexDirection="row"
       justifyContent="space-between"
@@ -61,7 +64,7 @@ export function AssetRow({
             onFocus={onFocusSelect}
             onClick={(event) => {
               event.stopPropagation();
-              onSelect({
+              onSelect(asset.id, selectionRows, {
                 shiftKey: event.shiftKey,
                 ctrlKey: event.ctrlKey,
                 metaKey: event.metaKey,
@@ -103,9 +106,9 @@ export function AssetRow({
           title="Assign"
           size="sm"
           disabled={assignDisabled || !onAssign}
-          onPress={() => onAssign?.()}
+          onPress={() => onAssign?.(asset)}
         />
       ) : null}
     </Box>
   );
-}
+});

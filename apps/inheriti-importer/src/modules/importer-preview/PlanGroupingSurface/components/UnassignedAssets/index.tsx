@@ -7,8 +7,9 @@ import {
   NoItemsPlaceholder,
   Stack,
   Text,
+  Tooltip,
 } from '@main-components';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AssetRow } from '../AssetRow';
 import { SourceAssetTree } from '../SourceAssetTree';
 import { SelectionHelpPopover } from '../SelectionHelpPopover';
@@ -20,6 +21,9 @@ import { hasPlanCapacity } from '../../capacity';
 import type { useAssetSelection } from '../../hooks/use-asset-selection';
 import { useMarqueeSelection } from '@modules/_shared/ui/hooks/use-marquee-selection';
 import { setItemDragImage } from '@modules/_shared/ui/drag/set-item-drag-image';
+
+const emptyAssets: GroupingAsset[] = [];
+const emptyIds: string[] = [];
 
 type UnassignedAssetsProps = {
   assets: GroupingAsset[];
@@ -33,7 +37,7 @@ type UnassignedAssetsProps = {
 };
 export function UnassignedAssets({
   assets,
-  assigned = [],
+  assigned = emptyAssets,
   footer,
   selectedPlan,
   grouping,
@@ -43,17 +47,22 @@ export function UnassignedAssets({
 }: UnassignedAssetsProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'unassigned' | 'assigned' | 'all'>('unassigned');
-  const allAssets = [...assets, ...assigned];
+  const allAssets = useMemo(() => [...assets, ...assigned], [assets, assigned]);
   const candidates = filter === 'all' ? allAssets : filter === 'assigned' ? assigned : assets;
   const heading = filter === 'all' ? 'All assets' : filter === 'assigned' ? 'Assigned assets' : 'Unassigned assets';
   const [searchOpen, setSearchOpen] = useState(false);
   const [source, setSource] = useState('all');
   const [limit, setLimit] = useState(100);
   const [view, setView] = useState<'tree' | 'list'>('list');
-  const sources = useMemo(() => [...new Map(allAssets.map((asset) => [asset.sourceId ?? asset.source ?? 'Unknown source', asset.source ?? 'Unknown source'])).entries()], [assets, assigned]);
+  const sources = useMemo(() => [...new Map(allAssets.map((asset) => [asset.sourceId ?? asset.source ?? 'Unknown source', asset.source ?? 'Unknown source'])).entries()], [allAssets]);
+  const searchEntries = useMemo(() => candidates.map((asset) => ({
+    asset,
+    sourceId: asset.sourceId ?? asset.source ?? 'Unknown source',
+    text: [asset.name, asset.source, ...(asset.folderPath ?? [])].join(' ').toLocaleLowerCase(),
+  })), [candidates]);
   const selectedSource = source === 'all' || sources.some(([id]) => id === source) ? source : 'all';
   const marquee = useMarqueeSelection({
-    selectedIds: selection?.selectedIds ?? [],
+    selectedIds: selection?.selectedIds ?? emptyIds,
     onSelect: (ids) => selection?.replaceSelection(ids, 'unassigned'),
     resetKey: `${view}\u0000${selectedSource}\u0000${query}\u0000${filter}`,
     rowSelector: '[data-marquee-asset-id]',
@@ -62,48 +71,62 @@ export function UnassignedAssets({
   useEffect(() => {
     if (selectedSource !== source) setSource('all');
   }, [selectedSource, source]);
-  const visible = candidates.filter(
-    (asset) =>
-      (selectedSource === 'all' || (asset.sourceId ?? asset.source ?? 'Unknown source') === selectedSource) &&
-      [asset.name, asset.source, ...(asset.folderPath ?? [])].join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
-  );
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = useMemo(() => searchEntries
+    .filter(({ sourceId, text }) => (selectedSource === 'all' || sourceId === selectedSource) && text.includes(needle))
+    .map(({ asset }) => asset), [searchEntries, selectedSource, needle]);
   const filterKey = `${selectedSource}\u0000${query}\u0000${filter}`;
+  const clearSelection = selection?.clear;
   useEffect(() => {
-    selection?.clear();
+    clearSelection?.();
     setLimit(100);
-  }, [filterKey]);
-  const visibleIds = visible.map((asset) => asset.id).join('\u0000');
-  useEffect(() => {
-    selection?.setVisibleUnassignedIds(visible.map((asset) => asset.id));
-  }, [visibleIds]);
-  const assetRow = (asset: GroupingAsset, selectionRows: GroupingAsset[] = visible) => (
+  }, [filterKey, clearSelection]);
+  const visibleUnassigned = selection?.visibleUnassigned;
+  useLayoutEffect(() => {
+    if (visibleUnassigned) visibleUnassigned.current = visible;
+  }, [visibleUnassigned, visible]);
+
+  const commands = useRef({ selection, grouping, selectedPlan, onAssign, visible });
+  useLayoutEffect(() => {
+    commands.current = { selection, grouping, selectedPlan, onAssign, visible };
+  }, [selection, grouping, selectedPlan, onAssign, visible]);
+  const selectAsset = useCallback<NonNullable<React.ComponentProps<typeof AssetRow>['onSelect']>>((id, rows, event) => {
+    const { selection, visible } = commands.current;
+    selection?.select(id, rows ?? visible, 'unassigned', event);
+  }, []);
+  const focusSelection = useCallback(() => commands.current.selection?.focusPane('unassigned'), []);
+  const startDrag = useCallback((asset: GroupingAsset, event: DragEvent) => {
+    const { grouping, selection } = commands.current;
+    grouping.startDrag(asset.id);
+    selection?.startDrag(asset.id);
+    const count = selection?.selectedIdSet.has(asset.id) ? selection.selectedIds.length : 1;
+    if (event.dataTransfer) setItemDragImage(event.dataTransfer, event.currentTarget as HTMLElement, asset.name, count, `${count} ${count === 1 ? 'asset' : 'assets'}`, '[data-drag-icon]');
+  }, []);
+  const endDrag = useCallback(() => {
+    commands.current.grouping.endDrag();
+    commands.current.selection?.endDrag();
+  }, []);
+  const assignAsset = useCallback((asset: GroupingAsset) => {
+    const { grouping, selectedPlan, onAssign } = commands.current;
+    if (selectedPlan) grouping.assign(asset, selectedPlan, onAssign);
+  }, []);
+
+  const canAssign = selectedPlan && hasPlanCapacity(selectedPlan);
+  const assetRow = (asset: GroupingAsset, selectionRows?: GroupingAsset[]) => (
     <AssetRow
       key={asset.id}
       asset={asset}
       showTypeIcon={folderMode}
       showAssign={false}
-      selected={selection?.selectedIds.includes(asset.id)}
-      onSelect={
-        selection ? (event) => selection.select(asset.id, selectionRows, 'unassigned', event) : undefined
-      }
-      onFocusSelect={selection ? () => selection.focusPane('unassigned') : undefined}
+      selected={selection?.selectedIdSet.has(asset.id)}
+      selectionRows={selectionRows}
+      onSelect={selection ? selectAsset : undefined}
+      onFocusSelect={selection ? focusSelection : undefined}
       dragged={grouping.draggedId === asset.id}
-      onStart={(event) => {
-        grouping.startDrag(asset.id);
-        selection?.startDrag(asset.id);
-        const count = selection?.selectedIdSet.has(asset.id) ? selection.selectedIds.length : 1;
-        if (event.dataTransfer) setItemDragImage(event.dataTransfer, event.currentTarget as HTMLElement, asset.name, count, `${count} ${count === 1 ? 'asset' : 'assets'}`, '[data-drag-icon]');
-      }}
-      onEnd={() => {
-        grouping.endDrag();
-        selection?.endDrag();
-      }}
-      assignDisabled={!asset.valid || !selectedPlan || !hasPlanCapacity(selectedPlan)}
-      onAssign={
-        asset.valid && selectedPlan && hasPlanCapacity(selectedPlan) && onAssign
-          ? () => grouping.assign(asset, selectedPlan, onAssign)
-          : undefined
-      }
+      onStart={startDrag}
+      onEnd={endDrag}
+      assignDisabled={!asset.valid || !canAssign}
+      onAssign={asset.valid && canAssign && onAssign ? assignAsset : undefined}
     />
   );
   return (
@@ -176,11 +199,22 @@ export function UnassignedAssets({
             onPress={() => setFilter(status)}
           >{`${status === 'unassigned' ? 'Unassigned' : status === 'assigned' ? 'Assigned' : 'All'} · ${status === 'unassigned' ? assets.length : status === 'assigned' ? assigned.length : allAssets.length}`}</FilterChip>)}
         </Box> : null}
-        <Box flexDirection="row" gap="s" alignItems="center">
+        <Box flexDirection="row" gap="s" alignItems="center" flexWrap="wrap">
           <AssetViewPicker view={view} onChange={setView} />
           <Text variant="bodySmall" color="gray">
             {visible.length} {visible.length === 1 ? 'asset' : 'assets'} · {sources.length} {sources.length === 1 ? 'source' : 'sources'}
           </Text>
+          {selection ? (
+            <Tooltip content="Select all assets matching the current filters.">
+              <Button
+                title="Select all"
+                size="sm"
+                variant="plain"
+                disabled={!visible.length}
+                onPress={() => selection.selectAll(visible, 'unassigned')}
+              />
+            </Tooltip>
+          ) : null}
         </Box>
         <Box className="plan-source-scroll" tabIndex={0} aria-label={`${heading} ${view}`} ref={marquee.setContainerRef}>
           {visible.length ? (

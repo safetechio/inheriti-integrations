@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GroupingAsset, PlanDraft } from '../types';
 
 export function useAssetSelection(unassigned: GroupingAsset[], plans: PlanDraft[]) {
@@ -6,7 +6,7 @@ export function useAssetSelection(unassigned: GroupingAsset[], plans: PlanDraft[
   const [anchor, setAnchor] = useState<string>();
   const [pane, setPane] = useState<string>();
   const [dragIds, setDragIds] = useState<string[]>([]);
-  const endDrag = useCallback(() => setDragIds([]), []);
+  const endDrag = useCallback(() => setDragIds((current) => current.length ? [] : current), []);
   useEffect(() => {
     window.addEventListener('drop', endDrag);
     window.addEventListener('dragend', endDrag);
@@ -17,33 +17,35 @@ export function useAssetSelection(unassigned: GroupingAsset[], plans: PlanDraft[
       window.removeEventListener('blur', endDrag);
     };
   }, [endDrag]);
-  const [visibleUnassignedIds, setVisibleUnassignedIds] = useState<string[]>([]);
-  const all = [...unassigned, ...plans.flatMap((plan) => plan.assignedAssets ?? [])];
-  const live = new Set(all.map((asset) => asset.id));
-  const selectedIds = ids.filter((id) => live.has(id));
-  const selectedIdSet = new Set(selectedIds);
+  const visibleUnassigned = useRef<GroupingAsset[]>([]);
+  const assigned = useMemo(() => plans.flatMap((plan) => plan.assignedAssets ?? []), [plans]);
+  const all = useMemo(() => [...unassigned, ...assigned], [unassigned, assigned]);
+  const allById = useMemo(() => new Map(all.map((asset) => [asset.id, asset])), [all]);
+  const selectedIds = useMemo(() => ids.filter((id) => allById.has(id)), [ids, allById]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   useEffect(() => {
     setIds((current) =>
-      current.every((id) => live.has(id)) ? current : current.filter((id) => live.has(id)),
+      current.every((id) => allById.has(id)) ? current : current.filter((id) => allById.has(id)),
     );
-  }, [unassigned, plans]);
-  const clear = () => {
-    setIds([]);
+  }, [allById]);
+  const clear = useCallback(() => {
+    setIds((current) => current.length ? [] : current);
     setAnchor(undefined);
-  };
+  }, []);
   const select = (
     id: string,
     rows: GroupingAsset[],
     nextPane: string,
     event: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; toggle?: boolean },
   ) => {
-    const visible = rows.map((asset) => asset.id);
     setPane(nextPane);
-    if (event.shiftKey && pane === nextPane && anchor && visible.includes(anchor)) {
-      const start = visible.indexOf(anchor);
-      const end = visible.indexOf(id);
+    const start = event.shiftKey && pane === nextPane && anchor
+      ? rows.findIndex((asset) => asset.id === anchor)
+      : -1;
+    if (start >= 0) {
+      const end = rows.findIndex((asset) => asset.id === id);
       setIds((current) => [
-        ...new Set([...current, ...visible.slice(Math.min(start, end), Math.max(start, end) + 1)]),
+        ...new Set([...current, ...rows.slice(Math.min(start, end), Math.max(start, end) + 1).map((asset) => asset.id)]),
       ]);
     } else if (event.ctrlKey || event.metaKey || event.toggle) {
       setIds((current) =>
@@ -86,21 +88,25 @@ export function useAssetSelection(unassigned: GroupingAsset[], plans: PlanDraft[
     setAnchor(group[0]);
   };
   const startDrag = (id: string, groupIds?: string[]) =>
-    setDragIds(groupIds ?? (selectedIds.includes(id) ? selectedIds : [id]));
+    setDragIds(groupIds ?? (selectedIdSet.has(id) ? selectedIds : [id]));
   const focusPane = (nextPane: string) => {
     if (pane !== nextPane) {
-      setIds([]);
-      setAnchor(undefined);
+      clear();
       setPane(nextPane);
     }
   };
+  const assets = useMemo(
+    () => selectedIds.length ? all.filter((asset) => selectedIdSet.has(asset.id)) : [],
+    [all, selectedIds, selectedIdSet],
+  );
   return {
     selectedIds,
     selectedIdSet,
     pane,
     dragIds,
-    visibleUnassignedIds,
-    setVisibleUnassignedIds,
+    visibleUnassigned,
+    assigned,
+    allById,
     focusPane,
     select,
     selectAll,
@@ -109,6 +115,6 @@ export function useAssetSelection(unassigned: GroupingAsset[], plans: PlanDraft[
     clear,
     startDrag,
     endDrag,
-    assets: all.filter((asset) => selectedIdSet.has(asset.id)),
+    assets,
   };
 }

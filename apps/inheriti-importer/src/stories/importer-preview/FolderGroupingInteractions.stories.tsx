@@ -92,7 +92,12 @@ function FolderGroupingStory({
           stagingReady={false}
           callbacks={{
             onReviewAsset: (action, asset) => {
-              if (action === 'accept' || action === 'exclude' || action === 'restore-suggestion')
+              if (
+                action === 'accept' ||
+                action === 'exclude' ||
+                action === 'restore' ||
+                action === 'restore-suggestion'
+              )
                 workspace.reviewAsset(action, asset);
             },
             onReviewAssets: workspace.reviewAssets,
@@ -171,6 +176,7 @@ export const UndoRedoBatchHistory = () => <FolderGroupingStory scenario="history
 export const LargeSyntheticSet = () => <FolderGroupingStory scenario="large" />;
 export const NoAcceptedAssets = () => <FolderGroupingStory scenario="empty" />;
 export const FullFlowCreatePlans = () => <FolderGroupingStory scenario="ready" fullFlow />;
+export const FullFlowLargeCreatePlans = () => <FolderGroupingStory scenario="large" fullFlow />;
 FullFlowCreatePlans.meta = { iframed: true };
 
 function OrganisationFolderPreview({

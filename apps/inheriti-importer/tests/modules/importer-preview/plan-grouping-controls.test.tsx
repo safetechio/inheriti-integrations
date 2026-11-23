@@ -180,6 +180,31 @@ describe('PlanGroupingSurface controls', () => {
     expect(screen.queryByText('1 selected')).toBeNull();
   });
 
+  it('replaces stale range anchors and rows when the asset search changes', () => {
+    const assets = [
+      { ...validAsset, folderPath: ['Matching'] },
+      { ...validAsset, id: 'asset-3', name: 'Second', folderPath: ['Other'] },
+      { ...validAsset, id: 'asset-4', name: 'Third', folderPath: ['Matching'] },
+    ];
+    render(<PlanGroupingSurface unassigned={assets} plans={[plan]} onAssignMany={vi.fn()} />);
+
+    const first = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Select Credential' });
+    const third = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Select Third' });
+    fireEvent.click(first);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search unassigned assets' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search unassigned assets' }), {
+      target: { value: '  MATCHING  ' },
+    });
+    expect(first.checked).toBe(false);
+    expect(screen.queryByRole('checkbox', { name: 'Select Second' })).toBeNull();
+
+    fireEvent.click(third, { shiftKey: true });
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    fireEvent.click(first, { shiftKey: true });
+    expect(screen.getByText('2 selected')).toBeTruthy();
+  });
+
   it('blocks a batch that exceeds the selected plan capacity', () => {
     const onAssignMany = vi.fn();
     render(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, Icon, IconAction, NoItemsPlaceholder, Text, Tooltip } from '@main-components';
 import { useMarqueeSelection } from '@modules/_shared/ui/hooks/use-marquee-selection';
 import { setItemDragImage } from '@shared/ui/drag/set-item-drag-image';
@@ -8,7 +8,7 @@ import { PlanRow } from './components/PlanRow';
 import { FolderActionsMenu } from './components/FolderActionsMenu';
 import { FolderTreeSkeleton } from './components/FolderTreeSkeleton';
 import { InlineFolderEditor } from './components/InlineFolderEditor';
-import { FolderTreeHeader } from './components/FolderTreeHeader';
+import { FolderTreeHeader, type FolderTreeSearch } from './components/FolderTreeHeader';
 import { FolderSelectionToolbar } from './components/FolderSelectionToolbar';
 import { FolderMoveModal } from './components/FolderMoveModal';
 import { MovePlansModal } from './components/MovePlansModal';
@@ -17,8 +17,7 @@ import { PlanAssetTreeRow } from './components/PlanAssetTreeRow';
 import { AssetActionsMenu } from './components/AssetActionsMenu';
 import { AssetSelectionToolbar, folderTarget } from '../AssetSelectionToolbar';
 import type { useAssetSelection } from '../../hooks/use-asset-selection';
-import { folderPath, folderPathLabel } from '../../hooks/folder-path';
-import { canCreatePlanAtDestination } from '@modules/organization/domain/plan-folder';
+import { useFolderTreeIndex } from './hooks/use-folder-tree-index';
 
 type Props = {
   workspace: FolderWorkspaceProps;
@@ -81,18 +80,32 @@ export function OrganizationFolderTree({
   const [collapsedSearchIds, setCollapsedSearchIds] = useState<string[]>([]);
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [selectedFolderIds, setSelectedFolderIds] = useState<string[]>([]);
-  const livePlanIds = plans.map((plan) => plan.id).join('\0');
+  const livePlanIds = useMemo(() => plans.map((plan) => plan.id).join('\0'), [plans]);
   useEffect(() => {
     const live = new Set(plans.map((plan) => plan.id));
     setSelectedPlanIds((current) => current.every((id) => live.has(id)) ? current : current.filter((id) => live.has(id)));
   }, [livePlanIds]);
   const selectedAssetIds = assetSelection?.selectedIds.join(',');
   useEffect(() => {
-    if (selectedAssetIds) { setSelectedPlanIds([]); setSelectedFolderIds([]); }
+    if (selectedAssetIds) {
+      setSelectedPlanIds((current) => current.length ? [] : current);
+      setSelectedFolderIds((current) => current.length ? [] : current);
+    }
   }, [selectedAssetIds]);
   const selectionAnchor = useRef<string | undefined>(undefined);
+  const searchRef = useRef<FolderTreeSearch>(null);
+  const latestQuery = useRef('');
   const [query, setQuery] = useState('');
-  useEffect(() => { setCollapsedSearchIds([]); }, [query, workspace.scope]);
+  const [withPlans, setWithPlans] = useState(false);
+  const changeQuery = (value: string) => {
+    latestQuery.current = value;
+    setQuery(value);
+  };
+  const clearQuery = () => {
+    searchRef.current?.clear();
+    changeQuery('');
+  };
+  useEffect(() => { setCollapsedSearchIds((current) => current.length ? [] : current); }, [query, workspace.scope]);
   const [editing, setEditing] = useState<{ folder?: Folder; parentId: string | null }>();
   // Restore the draft if collapsing or filtering unmounts the input.
   const draftName = useRef('');
@@ -110,7 +123,11 @@ export function OrganizationFolderTree({
   const [moveSelectedIds, setMoveSelectedIds] = useState<string[]>();
   const expandTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hoveredFolder = useRef<string | null | undefined>(undefined);
-  const clearFolderDrag = () => { setDraggedFolderIds([]); clearTimeout(expandTimer.current); hoveredFolder.current = undefined; };
+  const clearFolderDrag = () => {
+    setDraggedFolderIds((current) => current.length ? [] : current);
+    clearTimeout(expandTimer.current);
+    hoveredFolder.current = undefined;
+  };
   const folderRoots = (ids: string[]) => moveRoots(workspace.folders, ids);
   const validFolderDrop = (ids: string[], id: string | null) =>
     Boolean(workspace.onMoveFolder && workspace.onPreviewFolderChange) && validFolderDestination(workspace.folders, folderRoots(ids), id, workspace.scope);
@@ -135,7 +152,11 @@ export function OrganizationFolderTree({
     clearFolderDrag(); setDropId(undefined);
   };
   useEffect(() => {
-    const clearDropTarget = () => { setDropId(undefined); clearFolderDrag(); setDraggedPlanIds([]); };
+    const clearDropTarget = () => {
+      setDropId(undefined);
+      clearFolderDrag();
+      setDraggedPlanIds((current) => current.length ? [] : current);
+    };
     window.addEventListener('drop', clearDropTarget);
     window.addEventListener('dragend', clearDropTarget);
     window.addEventListener('blur', clearDropTarget);
@@ -148,39 +169,40 @@ export function OrganizationFolderTree({
       clearTimeout(expandTimer.current);
     };
   }, []);
-  const visibleFolders = workspace.folders.filter((folder) => folder.scope === workspace.scope);
-  const visiblePlans = plans.filter(
-    (plan) => (plan.sharingModel === 'PRIVATE' ? 'PERSONAL' : 'SHARED') === workspace.scope,
-  );
-  const matchesPlanSearch = (plan: PlanDraft) => plan.name.toLowerCase().includes(query.toLowerCase());
-  const matchesFolderSearch = (folder: Folder) => {
-    const search = query.toLowerCase();
-    const descendantsMatch = (id: string, visited: Set<string>): boolean => {
-      if (visited.has(id)) return false;
-      visited.add(id);
-      return visibleFolders.some((child) => child.parentId === id &&
-        (child.name.toLowerCase().includes(search) || descendantsMatch(child.id, visited)));
-    };
-    return folder.name.toLowerCase().includes(search) || descendantsMatch(folder.id, new Set()) ||
-      visiblePlans.some((plan) => plan.folderId === folder.id && matchesPlanSearch(plan));
-  };
+  const {
+    visibleFolders, visiblePlans, folderById, pathById, roots, childrenById, readyDestinations,
+    draftIndexesByFolderId, plansByFolderId, searchFolderIds, searchPlans, searchPlansByFolderId, matchesPlanSearch,
+  } = useFolderTreeIndex(workspace.folders, plans, workspace.scope, query, withPlans);
+  const expandedFolderIds = new Set(expanded);
+  const expandedPlanIds = new Set(expandedPlans);
+  const collapsedFolderIds = new Set(collapsedSearchIds);
+  const isFolderVisible = (id: string) => (!query && !withPlans) || searchFolderIds.has(id);
+  useEffect(() => {
+    if (!withPlans) return;
+    setSelectedFolderIds((current) =>
+      current.every((id) => searchFolderIds.has(id))
+        ? current
+        : current.filter((id) => searchFolderIds.has(id)),
+    );
+  }, [withPlans, searchFolderIds]);
+  const isFolderOpen = (id: string) => query ? !collapsedFolderIds.has(id) : expandedFolderIds.has(id);
   const [visibleReveal, setVisibleReveal] = useState<PlanRevealRequest>();
   const [renamingPlanId, setRenamingPlanId] = useState<string>();
   const handledReveal = useRef(0);
   useLayoutEffect(() => {
-    if (!revealRequest || handledReveal.current === revealRequest.sequence || workspace.loading) return;
+    if (!revealRequest || handledReveal.current === revealRequest.sequence || workspace.loading || query !== latestQuery.current) return;
     const plan = visiblePlans.find((item) => item.id === revealRequest.id);
     if (!plan || (workspace.error && !workspace.hasLoaded && !visibleFolders.length)) return;
     handledReveal.current = revealRequest.sequence;
 
-    const path = folderPath(workspace.folders, plan.folderId, workspace.scope);
+    const path = pathById.get(plan.folderId ?? '') ?? [];
     const ancestorIds = new Set(path.map((folder) => folder.id));
     setExpanded((current) => [...new Set([...current, ...ancestorIds])]);
     setExpandedPlans((current) => current.includes(plan.id) ? current : [...current, plan.id]);
 
     if (query) {
-      if (!matchesPlanSearch(plan) || path.some((folder) => !matchesFolderSearch(folder)))
-        setQuery('');
+      if (!searchPlans.some((item) => item.id === plan.id))
+        clearQuery();
       else
         setCollapsedSearchIds((current) => current.filter((id) => !ancestorIds.has(id)));
     }
@@ -191,8 +213,8 @@ export function OrganizationFolderTree({
     if (renamingPlanId && !visiblePlans.some((plan) => plan.id === renamingPlanId))
       setRenamingPlanId(undefined);
   }, [renamingPlanId, plans, workspace.scope]);
-  const visibleAssets = visiblePlans.flatMap((plan) => expandedPlans.includes(plan.id) || Boolean(query) ? plan.assignedAssets ?? [] : []);
   const renderedAssets = () => {
+    const visibleAssets = searchPlans.flatMap((plan) => expandedPlanIds.has(plan.id) ? plan.assignedAssets ?? [] : []);
     const assetsById = new Map(visibleAssets.map((asset) => [asset.id, asset]));
     return Array.from(marquee.containerRef.current?.querySelectorAll<HTMLElement>('[data-assigned-asset-id]') ?? []).flatMap((row) => {
       const asset = assetsById.get(row.dataset.assignedAssetId!);
@@ -219,7 +241,7 @@ export function OrganizationFolderTree({
     return () => document.removeEventListener('keydown', onKeyDown);
   });
   const destinationReady = (folderId: string | null) =>
-    canCreatePlanAtDestination(folderId, workspace.scope, workspace.folders);
+    readyDestinations.has(folderId);
   const canCreateFromAssets = (assets: GroupingAsset[], folderId: string | null) =>
     Boolean(onCreatePlansFromAssets && destinationReady(folderId) && assets.length && assets.every((asset) => asset.valid !== false));
   const plansBeingDragged = () => draggedPlanIds.map((id) => plans.find((plan) => plan.id === id));
@@ -244,18 +266,22 @@ export function OrganizationFolderTree({
     }
   }, [workspace.scope]);
   useEffect(() => {
-    if (localTargetFolderId && !visibleFolders.some((folder) => folder.id === localTargetFolderId)) {
+    if (localTargetFolderId && !folderById.has(localTargetFolderId)) {
       setLocalTargetFolderId(null);
       onTargetFolderChange?.(null);
     }
   }, [localTargetFolderId, workspace.folders, workspace.scope]);
   useEffect(() => {
-    const ancestors = folderPath(workspace.folders, targetFolderId, workspace.scope).slice(0, -1).map((folder) => folder.id);
+    const ancestors = (pathById.get(targetFolderId ?? '') ?? []).slice(0, -1).map((folder) => folder.id);
     if (!ancestors.length) return;
-    setExpanded((current) => [...new Set([...current, ...ancestors])]);
+    if (!query) setExpanded((current) => [...new Set([...current, ...ancestors])]);
     setCollapsedSearchIds((current) => current.filter((id) => !ancestors.includes(id)));
   }, [targetFolderId, workspace.scope, workspace.folders]);
-  useEffect(() => { setSelectedPlanIds([]); setSelectedFolderIds([]); assetSelection?.clear(); }, [query]);
+  useEffect(() => {
+    setSelectedPlanIds((current) => current.length ? [] : current);
+    setSelectedFolderIds((current) => current.length ? [] : current);
+    assetSelection?.clear();
+  }, [query]);
   const selectPlan = (plan: PlanDraft, event: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; toggle?: boolean }) => {
     const ids = Array.from(marquee.containerRef.current?.querySelectorAll<HTMLElement>('[data-plan-row-id]') ?? []).map((row) => row.dataset.planRowId!);
     setSelectedFolderIds([]);
@@ -274,8 +300,8 @@ export function OrganizationFolderTree({
     assetSelection?.clear();
     setSelectedFolderIds((current) => current.includes(folder.id) ? current.filter((id) => id !== folder.id) : [...current, folder.id].slice(0, 100));
   };
-  const marquee = useMarqueeSelection({ selectedIds: selectedPlanIds, onSelect: (ids) => { setSelectedFolderIds([]); assetSelection?.clear(); setSelectedPlanIds(ids.slice(0, 100)); }, resetKey: `${workspace.scope}:${query}`, rowSelector: '[data-plan-row-id]', getRowIds: (element) => [element.dataset.planRowId!], onStart: () => setSelectedFolderIds([]), excludeSelector: '[data-assigned-asset-id]' });
-  const assetMarquee = useMarqueeSelection({ selectedIds: assetSelection?.pane === 'organization' ? assetSelection.selectedIds : [], onSelect: (ids) => { setSelectedPlanIds([]); setSelectedFolderIds([]); assetSelection?.replaceSelection(ids, 'organization'); }, resetKey: `${workspace.scope}:${query}`, rowSelector: '[data-assigned-asset-id]', startSelector: '[data-assigned-asset-id]', getRowIds: (element) => [element.dataset.assignedAssetId!], onStart: () => { setSelectedPlanIds([]); setSelectedFolderIds([]); } });
+  const marquee = useMarqueeSelection({ selectedIds: selectedPlanIds, onSelect: (ids) => { setSelectedFolderIds([]); assetSelection?.clear(); setSelectedPlanIds(ids.slice(0, 100)); }, resetKey: `${workspace.scope}:${query}:${withPlans}`, rowSelector: '[data-plan-row-id]', getRowIds: (element) => [element.dataset.planRowId!], onStart: () => setSelectedFolderIds([]), excludeSelector: '[data-assigned-asset-id]' });
+  const assetMarquee = useMarqueeSelection({ selectedIds: assetSelection?.pane === 'organization' ? assetSelection.selectedIds : [], onSelect: (ids) => { setSelectedPlanIds([]); setSelectedFolderIds([]); assetSelection?.replaceSelection(ids, 'organization'); }, resetKey: `${workspace.scope}:${query}:${withPlans}`, rowSelector: '[data-assigned-asset-id]', startSelector: '[data-assigned-asset-id]', getRowIds: (element) => [element.dataset.assignedAssetId!], onStart: () => { setSelectedPlanIds([]); setSelectedFolderIds([]); } });
   const { setContainerRef: setPlanMarqueeRef } = marquee;
   const { setContainerRef: setAssetMarqueeRef } = assetMarquee;
   const setMarqueeRef = useCallback((element: HTMLElement | null) => {
@@ -298,8 +324,14 @@ export function OrganizationFolderTree({
 
   const begin = (parentId: string | null, folder?: Folder) => {
     if (saving.current) return;
-    if (parentId) setExpanded((current) => current.includes(parentId) ? current : [...current, parentId]);
+    if (parentId) {
+      setExpanded((current) => current.includes(parentId) ? current : [...current, parentId]);
+      setCollapsedSearchIds((current) =>
+        current.includes(parentId) ? current.filter((id) => id !== parentId) : current,
+      );
+    }
     if (editing?.parentId === parentId && editing.folder?.id === folder?.id) return;
+    if (!folder) setWithPlans(false);
     cancelled.current = false;
     draftName.current = folder?.name ?? '';
     setEditing({ parentId, folder });
@@ -371,18 +403,28 @@ export function OrganizationFolderTree({
     createFromAssets(dragAssets, folderId);
     setDropId(undefined);
   };
-  const countLocalDrafts = (folderIds: string[]) => {
-    const selected = new Set(folderIds);
-    return plans.filter((plan) => {
-      let id = plan.folderId;
-      const seen = new Set<string>();
-      while (id && !seen.has(id)) {
-        if (selected.has(id)) return true;
-        seen.add(id);
-        id = workspace.folders.find((folder) => folder.id === id)?.parentId;
+  const getBranch = (id: string, searchOnly: boolean) => {
+    const folderIds = new Set([id]);
+    const planIds = new Set<string>();
+    for (const folderId of folderIds) {
+      for (const child of childrenById.get(folderId) ?? []) {
+        if (!searchOnly || isFolderVisible(child.id)) folderIds.add(child.id);
       }
-      return false;
-    }).length;
+      const plansById = searchOnly ? searchPlansByFolderId : plansByFolderId;
+      for (const plan of plansById.get(folderId) ?? []) planIds.add(plan.id);
+    }
+    return { folderIds, planIds };
+  };
+  const branchOpenById = new Map<string, boolean>();
+  const isBranchOpen = (id: string): boolean => {
+    const cached = branchOpenById.get(id);
+    if (cached !== undefined) return cached;
+    branchOpenById.set(id, false);
+    const open = isFolderOpen(id) &&
+      (searchPlansByFolderId.get(id) ?? []).every((plan) => expandedPlanIds.has(plan.id)) &&
+      (childrenById.get(id) ?? []).every((child) => !isFolderVisible(child.id) || isBranchOpen(child.id));
+    branchOpenById.set(id, open);
+    return open;
   };
   const clearClosedSelection = (folderIds: Set<string>, planIds: Set<string>) => {
     setSelectedFolderIds((current) => current.filter((id) => !folderIds.has(id)));
@@ -397,37 +439,26 @@ export function OrganizationFolderTree({
   };
   const toggleFolder = (id: string, open: boolean) => {
     if (open) {
-      const branchIds = new Set<string>([id]);
-      for (let changed = true; changed;) {
-        changed = false;
-        for (const folder of visibleFolders) if (folder.parentId && branchIds.has(folder.parentId) && !branchIds.has(folder.id)) {
-          branchIds.add(folder.id); changed = true;
-        }
-      }
-      clearClosedSelection(branchIds, new Set(visiblePlans.filter((plan) => plan.folderId && branchIds.has(plan.folderId)).map((plan) => plan.id)));
+      const { folderIds, planIds } = getBranch(id, false);
+      clearClosedSelection(folderIds, planIds);
     }
-    setExpanded((current) => open ? current.filter((item) => item !== id) : [...new Set([...current, id])]);
     if (query) setCollapsedSearchIds((current) => open ? [...new Set([...current, id])] : current.filter((item) => item !== id));
+    else setExpanded((current) => open ? current.filter((item) => item !== id) : [...new Set([...current, id])]);
   };
   const row = (folder: Folder, depth: number): React.ReactNode => {
-    const children = visibleFolders.filter((item) => item.parentId === folder.id);
-    const planCount = countLocalDrafts([folder.id]);
-    if (query && !matchesFolderSearch(folder)) return null;
-    const open = query ? !collapsedSearchIds.includes(folder.id) : expanded.includes(folder.id);
-    const branchIds = new Set<string>([folder.id]);
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const item of visibleFolders) if (!branchIds.has(item.id) && item.parentId && branchIds.has(item.parentId)) {
-        branchIds.add(item.id); changed = true;
-      }
-    }
-    const branchPlanIds = visiblePlans.filter((plan) => plan.folderId && branchIds.has(plan.folderId)).map((plan) => plan.id);
-    const branchOpen = [...branchIds].every((id) => expanded.includes(id) || (query && !collapsedSearchIds.includes(id))) && branchPlanIds.every((id) => expandedPlans.includes(id));
+    if (!isFolderVisible(folder.id)) return null;
+    const children = childrenById.get(folder.id) ?? [];
+    const folderPlans = searchPlansByFolderId.get(folder.id) ?? [];
+    const planCount = draftIndexesByFolderId.get(folder.id)?.length ?? 0;
+    const canCreatePlan = destinationReady(folder.id);
+    const open = isFolderOpen(folder.id);
+    const branchOpen = isBranchOpen(folder.id);
     const toggleBranch = () => {
-      if (branchOpen) clearClosedSelection(branchIds, new Set(branchPlanIds));
-      setExpanded((current) => branchOpen ? current.filter((id) => !branchIds.has(id)) : [...new Set([...current, ...branchIds])]);
-      setExpandedPlans((current) => branchOpen ? current.filter((id) => !branchPlanIds.includes(id)) : [...new Set([...current, ...branchPlanIds])]);
-      if (query) setCollapsedSearchIds((current) => branchOpen ? [...new Set([...current, ...branchIds])] : current.filter((id) => !branchIds.has(id)));
+      const { folderIds, planIds } = getBranch(folder.id, true);
+      if (branchOpen) clearClosedSelection(folderIds, planIds);
+      if (!query) setExpanded((current) => branchOpen ? current.filter((id) => !folderIds.has(id)) : [...new Set([...current, ...folderIds])]);
+      setExpandedPlans((current) => branchOpen ? current.filter((id) => !planIds.has(id)) : [...new Set([...current, ...planIds])]);
+      if (query) setCollapsedSearchIds((current) => branchOpen ? [...new Set([...current, ...folderIds])] : current.filter((id) => !folderIds.has(id)));
     };
     return (
       <Box key={folder.id}>
@@ -493,7 +524,7 @@ export function OrganizationFolderTree({
             <Text className="folder-tree-name" variant="bodySmall">{folder.name}</Text>
           </Box>
           {targetFolderId === folder.id ? <Tooltip content="New plans will be created here"><Box alignItems="center" justifyContent="center" width={18} height={18}><Icon name="bullseye" size={12} color="primary" label="New plan destination" /></Box></Tooltip> : null}
-          {!destinationReady(folder.id) ? (
+          {!canCreatePlan ? (
             <Text
               variant="bodySmall"
               color="warning120"
@@ -509,8 +540,8 @@ export function OrganizationFolderTree({
           <FolderActionsMenu
             folder={folder}
             workspace={workspace}
-            localDraftCount={countLocalDrafts([folder.id])}
-            canCreatePlan={destinationReady(folder.id)}
+            localDraftCount={planCount}
+            canCreatePlan={canCreatePlan}
             onCreatePlan={
               onCreatePlan
                 ? () => onCreatePlan({ folderId: folder.id, scope: workspace.scope })
@@ -526,14 +557,8 @@ export function OrganizationFolderTree({
           <Box>
             {editor(folder.id, undefined, depth + 1)}
             {children.map((child) => row(child, depth + 1))}
-            {visiblePlans
-              .filter(
-                (plan) =>
-                  plan.folderId === folder.id &&
-                  (!query || matchesPlanSearch(plan)),
-              )
-              .map((plan) => planRow(plan, depth + 1))}
-            {!query && !children.length && !visiblePlans.some((plan) => plan.folderId === folder.id) && editing?.parentId !== folder.id ? (
+            {folderPlans.map((plan) => planRow(plan, depth + 1))}
+            {!query && !children.length && !folderPlans.length && editing?.parentId !== folder.id ? (
               <Box className="folder-tree-empty" padding="s" style={{ paddingLeft: (depth + 1) * 28 + 20 }}>
                 <Text variant="bodySmall" color="gray50">No plans in this folder.</Text>
               </Box>
@@ -551,17 +576,17 @@ export function OrganizationFolderTree({
       active={dropId === plan.id}
       dropValid={dropValid}
       selected={selectedPlanIds.includes(plan.id)}
-      open={expandedPlans.includes(plan.id)}
+      open={expandedPlanIds.has(plan.id)}
       revealSequence={visibleReveal?.id === plan.id ? visibleReveal.sequence : undefined}
       onRevealComplete={() => setVisibleReveal(undefined)}
       onRename={renamingPlanId === plan.id && onRenamePlan ? (name) => {
         if (name !== undefined && name !== plan.name) {
-          if (query && !matchesPlanSearch({ ...plan, name })) setQuery('');
+          if (!matchesPlanSearch({ ...plan, name }, latestQuery.current)) clearQuery();
           onRenamePlan(plan, name);
         }
         setRenamingPlanId(undefined);
       } : undefined}
-      onToggle={() => { if (expandedPlans.includes(plan.id)) clearClosedSelection(new Set(), new Set([plan.id])); setExpandedPlans((current) => current.includes(plan.id) ? current.filter((id) => id !== plan.id) : [...current, plan.id]); }}
+      onToggle={() => { if (expandedPlanIds.has(plan.id)) clearClosedSelection(new Set(), new Set([plan.id])); setExpandedPlans((current) => current.includes(plan.id) ? current.filter((id) => id !== plan.id) : [...current, plan.id]); }}
       onToggleSelection={(event) => selectPlan(plan, event)}
       onDragStart={(event) => { if (!event.dataTransfer) return; const ids = selectedPlanIds.includes(plan.id) ? selectedPlanIds : [plan.id]; const count = ids.length; setDraggedPlanIds(ids); event.dataTransfer.setData('text/plan-id', plan.id); setItemDragImage(event.dataTransfer, event.currentTarget as HTMLElement, plan.name, count, `${count} ${count === 1 ? 'plan' : 'plans'}`, '.plan-mosaic'); }}
       dragAssets={dragAssets}
@@ -586,13 +611,15 @@ export function OrganizationFolderTree({
   return (
     <Box className="organization-folder-tree" gap="s">
       <FolderTreeHeader
+        searchRef={searchRef}
         onNewFolder={() => begin(null)}
         canNewFolder={!!workspace.onCreateFolder && !pending}
         refreshing={workspace.refreshing}
-        query={query}
-        onQueryChange={setQuery}
+        onQueryChange={changeQuery}
+        withPlans={withPlans}
+        onWithPlansChange={setWithPlans}
         onRootTarget={() => chooseTarget(null)}
-        targetPath={folderPathLabel(workspace.folders, targetFolderId, workspace.scope)}
+        targetPath={pathById.get(targetFolderId ?? '')?.map((folder) => folder.name).join(' / ') || 'Your organisation'}
         destinationWarning={!destinationReady(targetFolderId)}
       />
       <Box className="folder-tree-columns" flexDirection="row" alignItems="center">
@@ -637,21 +664,16 @@ export function OrganizationFolderTree({
         {!workspace.loading && (!workspace.error || workspace.hasLoaded || visibleFolders.length > 0) ? (
           <>
             {editor(null)}
-            {visibleFolders
-              .filter(
-                (folder) =>
-                  !folder.parentId ||
-                  !visibleFolders.some((parent) => parent.id === folder.parentId),
-              )
-              .map((folder) => row(folder, 0))}
-            {visiblePlans
-              .filter(
-                (plan) =>
-                  (!plan.folderId || !visibleFolders.some((folder) => folder.id === plan.folderId)) &&
-                  (!query || matchesPlanSearch(plan)),
-              )
-              .map((plan) => planRow(plan, 0))}
-            {!workspace.error && !visibleFolders.length && !visiblePlans.length && !editing ? (
+            {roots.map((folder) => row(folder, 0))}
+            {searchPlansByFolderId.get(null)?.map((plan) => planRow(plan, 0))}
+            {withPlans && !workspace.error && !searchPlans.length && !editing ? (
+              <Box padding="m">
+                <Text variant="bodySmall" color="gray">
+                  {query ? 'No draft plans match this search.' : 'No draft plans in this view.'}
+                </Text>
+              </Box>
+            ) : null}
+            {!withPlans && !workspace.error && !visibleFolders.length && !visiblePlans.length && !editing ? (
               <Box flex={1} minHeight={220} alignItems="center" justifyContent="center" padding="m">
                 <NoItemsPlaceholder
                   iconName={TREE_ICON_NAMES.folder}
@@ -682,7 +704,7 @@ export function OrganizationFolderTree({
           ) : null}
         </Box>
       ) : null}
-      {selectedFolderIds.length ? <Box className="folder-tree-selection"><FolderSelectionToolbar folders={visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id))} workspace={workspace} localDraftCount={countLocalDrafts(selectedFolderIds)} onClear={() => setSelectedFolderIds([])} /></Box> : null}
+      {selectedFolderIds.length ? <Box className="folder-tree-selection"><FolderSelectionToolbar folders={visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id))} workspace={workspace} localDraftCount={new Set(selectedFolderIds.flatMap((id) => draftIndexesByFolderId.get(id) ?? [])).size} onClear={() => setSelectedFolderIds([])} /></Box> : null}
       {assetSelection?.pane === 'organization' && assetSelection.assets.length ? (
         <AssetSelectionToolbar
           assets={assetSelection.assets}

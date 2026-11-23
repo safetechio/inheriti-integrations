@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Box, Button, Text, Tooltip } from '@main-components';
 import { canCreatePlanAtDestination } from '@modules/organization/domain/plan-folder';
 import { folderPathLabel } from '../../hooks/folder-path';
@@ -28,7 +28,7 @@ export function folderTarget(
   };
 }
 
-export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove, onUnassign, onCreate, createDestination, moveLabel = 'Assign to plan' }: {
+export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove, onUnassign, onCreate, createDestination, moveLabel }: {
   assets: GroupingAsset[];
   plans: PlanDraft[];
   onTarget?: (id: string) => void;
@@ -41,6 +41,19 @@ export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove
 }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
+  const assignedIds = useMemo(
+    () => new Set(plans.flatMap((plan) => (plan.assignedAssets ?? []).map((asset) => asset.id))),
+    [plans],
+  );
+  const assignedCount = assets.filter((asset) => assignedIds.has(asset.id)).length;
+  const createLabel = assignedCount ? 'Move to new plan' : 'New plan';
+  const assignmentLabel = moveLabel ?? (assignedCount ? 'Move to plan' : 'Assign to plan');
+  const createHint = assignedCount
+    ? `Move selected assets into new plans in the chosen folder. ${assignedCount} assigned ${assignedCount === 1 ? 'asset leaves its current plan' : 'assets leave their current plans'}. Large selections are split across plans.`
+    : 'Create plans from the selected assets in the chosen folder. Large selections are split across plans.';
+  const assignmentHint = assignedCount
+    ? 'Move selected assets to an existing plan. Assigned assets leave their current plans; assets already in the target stay there.'
+    : 'Search for an existing plan and assign the selected assets there.';
   if (!assets.length) return null;
   return <Box className="asset-selection-toolbar">
     <Box className="asset-selection-toolbar-content" flexDirection="row" justifyContent="space-between" alignItems="center" gap="m">
@@ -50,11 +63,11 @@ export function AssetSelectionToolbar({ assets, plans, onTarget, onClear, onMove
         <Text className="asset-selection-hint" variant="xSmall" color="gray">Shift+click to extend · Esc to clear</Text>
       </Box>
       <Box className="asset-selection-actions" flexDirection="row" alignItems="center" gap="s">
-        {onCreate ? <Tooltip content={createDestination?.blockedReason ?? 'Create plans from the selected assets in the chosen folder. Large selections are split across plans.'}>
-          <Button title="New plan" size="sm" minHeight={34} variant="outlined" color="gray" onPress={onCreate} disabled={Boolean(createDestination?.blockedReason) || assets.some((asset) => asset.valid === false)} />
+        {onCreate ? <Tooltip content={createDestination?.blockedReason ?? createHint}>
+          <Button title={createLabel} size="sm" minHeight={34} variant="outlined" color="gray" onPress={onCreate} disabled={Boolean(createDestination?.blockedReason) || assets.some((asset) => asset.valid === false)} />
         </Tooltip> : null}
-        <Tooltip content="Search for an existing plan and move the selected assets there.">
-          <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{moveLabel}</button>
+        <Tooltip content={assignmentHint}>
+          <button ref={anchor} type="button" className="asset-selection-assign" disabled={!onMove || !plans.length} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{assignmentLabel}</button>
         </Tooltip>
         <Box className="asset-selection-clear">
           <Tooltip content="Deselect all assets. Plan assignments are kept.">

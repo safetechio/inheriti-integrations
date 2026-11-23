@@ -19,7 +19,7 @@ export function createFolderGroupingFixture(large = false) {
     entries: 4,
     status: 'imported',
   });
-  const count = large ? 200 : 13;
+  const count = large ? 2100 : 13;
   for (let index = 0; index < count; index++) {
     const sourceId = index < 11 ? 'synthetic-vault' : 'synthetic-second-vault';
     const path = index < 11 ? ['Infrastructure', 'Database'] : ['Infrastructure', 'Database'];

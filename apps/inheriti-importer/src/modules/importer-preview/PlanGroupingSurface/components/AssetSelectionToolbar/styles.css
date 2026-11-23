@@ -17,26 +17,29 @@
 .asset-selection-plan-list { flex-shrink: 1; min-height: 0; gap: 4px; }
 
 .asset-selection-toolbar-content { min-width: 0; }
-.asset-selection-summary { max-width: 100%; }
+.asset-selection-summary { flex: 1 1 180px; min-width: 0; max-width: 100%; }
 .asset-selection-actions { min-width: 0; max-width: 100%; flex-shrink: 1; }
 .asset-selection-actions button { max-width: 100%; }
 
 @media (max-width: 1100px) {
   .asset-selection-toolbar-content { position: relative; flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
-  .asset-selection-summary { min-width: 0; min-height: 34px; padding-right: 48px; justify-content: center; }
+  .asset-selection-summary { flex: none; min-width: 0; min-height: 34px; padding-right: 48px; justify-content: center; }
   .asset-selection-hint { display: none; }
   .asset-selection-actions { position: static !important; justify-content: flex-start; }
   .asset-selection-assign { padding: 0 8px; font-size: 12px; }
   .asset-selection-clear { position: absolute; right: 0; top: 0; }
 }
 
-.asset-selection-destination-row { min-width: 0; }
+.asset-selection-destination-row { min-width: 0; max-width: 100%; }
 .asset-selection-destination-row > :first-child { flex-shrink: 0; }
+.asset-selection-destination-row > .importer-tooltip-anchor { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .asset-selection-destination {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex: 1;
   min-width: 0;
+  max-width: 100%;
   padding: 0;
   color: var(--gray);
   background: none;
@@ -46,7 +49,8 @@
   text-underline-offset: 2px;
 }
 .asset-selection-destination:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.asset-selection-destination-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-selection-destination-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-selection-destination > :last-child { flex-shrink: 0; }
 .asset-selection-folder-popover { max-width: calc(100vw - 16px); }
 .asset-selection-folder-popover input:focus {
   outline: 2px solid var(--primary) !important;

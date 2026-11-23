@@ -20,28 +20,34 @@ export function SourceAssetTree({
 }) {
   const roots = useMemo(() => buildSourceTree(assets), [assets]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const initialOpen = new Set<string>();
-  let first = roots[0];
-  while (first) {
-    initialOpen.add(first.key);
-    first = first.children[0]!;
-  }
+  const initialOpen = useMemo(() => {
+    const open = new Set<string>();
+    let first: SourceTreeNode | undefined = roots[0];
+    while (first) {
+      open.add(first.key);
+      first = first.children[0];
+    }
+    return open;
+  }, [roots]);
   const [limits, setLimits] = useState<Record<string, number>>({});
-  const selected = new Set(selection?.selectedIds);
+  const selected = selection?.selectedIdSet;
   const toggle = (key: string, open: boolean) =>
     setExpanded((current) => ({ ...current, [key]: !open }));
-  const visibleRows: GroupingAsset[] = [];
-  const collectVisibleRows = (node: SourceTreeNode) => {
-    if (!(expanded[node.key] ?? initialOpen.has(node.key))) return;
-    const limit = limits[node.key] ?? 100;
-    node.children.slice(0, limit).forEach(collectVisibleRows);
-    visibleRows.push(...node.assets.slice(0, limit));
-  };
-  roots.forEach(collectVisibleRows);
+  const visibleRows = useMemo(() => {
+    const rows: GroupingAsset[] = [];
+    const collectVisibleRows = (node: SourceTreeNode) => {
+      if (!(expanded[node.key] ?? initialOpen.has(node.key))) return;
+      const limit = limits[node.key] ?? 100;
+      node.children.slice(0, limit).forEach(collectVisibleRows);
+      rows.push(...node.assets.slice(0, limit));
+    };
+    roots.forEach(collectVisibleRows);
+    return rows;
+  }, [roots, limits, expanded, initialOpen]);
   const row = (node: SourceTreeNode, depth: number): ReactNode => {
     const open = expanded[node.key] ?? initialOpen.has(node.key);
-    const checked = node.descendants.every((asset) => selected.has(asset.id));
-    const partial = !checked && node.descendants.some((asset) => selected.has(asset.id));
+    const checked = node.descendants.every((asset) => selected?.has(asset.id));
+    const partial = !checked && node.descendants.some((asset) => selected?.has(asset.id));
     const limit = limits[node.key] ?? 100;
     const draggable = !!selection && node.descendants.every((asset) => asset.valid !== false);
     return (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BaseModal, Box, Button, Checkbox, Icon, PanelHeader, Stack, Text, Tooltip, theme } from '@main-components';
 import { UnassignedAssets } from './components/UnassignedAssets';
 import { PlanDraftList } from './components/PlanDraftList';
@@ -96,24 +96,16 @@ export function PlanGroupingSurface({
   const deletingAssetCount = deletingPlans.reduce((sum, plan) => sum + (plan?.assignedAssets?.length ?? 0), 0);
   const canDeleteSelected = deletingPlanIds.length > 0 && deletingPlans.every(Boolean);
   const detailsPlan = plans.find((plan) => plan.id === detailsPlanId);
-  const selectedUnassigned = unassigned.filter((asset) => selection.selectedIdSet.has(asset.id));
-  const selectedAssigned = plans
-    .flatMap((plan) => plan.assignedAssets ?? [])
-    .filter((asset) => selection.selectedIdSet.has(asset.id));
-  const allAssets = new Map(
-    [...unassigned, ...plans.flatMap((plan) => plan.assignedAssets ?? [])].map((asset) => [
-      asset.id,
-      asset,
-    ]),
-  );
-  const dragIds = selection.dragIds.length
-    ? selection.dragIds
-    : grouping.draggedId
-      ? [grouping.draggedId]
+  const selectedUnassigned = selection.assets.length ? unassigned.filter((asset) => selection.selectedIdSet.has(asset.id)) : [];
+  const selectedAssigned = selection.assets.length ? selection.assigned.filter((asset) => selection.selectedIdSet.has(asset.id)) : [];
+  const { allById, dragIds: selectedDragIds } = selection;
+  const { draggedId } = grouping;
+  const dragAssets = useMemo(() => {
+    const dragIds = selectedDragIds.length ? selectedDragIds : draggedId ? [draggedId] : [];
+    return dragIds.every((id) => allById.has(id))
+      ? [...new Set(dragIds)].map((id) => allById.get(id)!)
       : [];
-  const dragAssets = dragIds.every((id) => allAssets.has(id))
-    ? [...new Set(dragIds)].map((id) => allAssets.get(id)!)
-    : [];
+  }, [selectedDragIds, draggedId, allById]);
   return (
     <Stack
       gap="l"
@@ -140,12 +132,9 @@ export function PlanGroupingSurface({
           !event.shiftKey &&
           selection.pane && selection.pane !== 'organization'
         ) {
-          const rows =
-            selection.pane === 'unassigned'
-              ? [...unassigned, ...plans.flatMap((plan) => plan.assignedAssets ?? [])].filter(
-                  (asset) => selection.visibleUnassignedIds.includes(asset.id),
-                )
-              : (plans.find((plan) => plan.id === selection.pane)?.assignedAssets ?? []);
+          const rows = selection.pane === 'unassigned'
+            ? selection.visibleUnassigned.current
+            : plans.find((plan) => plan.id === selection.pane)?.assignedAssets ?? [];
           event.preventDefault();
           selection.selectAll(rows, selection.pane);
         }
@@ -167,12 +156,12 @@ export function PlanGroupingSurface({
       <Box
         className="plan-grouping-columns"
         flexDirection="row"
-        gap="l"
+        gap={folders ? 'm' : 'l'}
         style={{ flexWrap: 'wrap' }}
       >
         <UnassignedAssets
           assets={unassigned}
-          assigned={folders ? plans.flatMap((plan) => plan.assignedAssets ?? []) : undefined}
+          assigned={folders ? selection.assigned : undefined}
           selectedPlan={selectedPlan}
           grouping={grouping}
           onAssign={onAssign}
@@ -236,6 +225,7 @@ export function PlanGroupingSurface({
             ) : undefined
           }
         />
+        {folders ? <Box className="plan-grouping-direction-slot"><Box className="plan-grouping-direction" aria-hidden="true" width={28} height={28} alignItems="center" justifyContent="center" borderRadius="pill" borderWidth={1} borderColor="primary30" backgroundColor="white"><Icon name="arrow-right" size={12} color={theme.colors.primary} /></Box></Box> : null}
         <Stack gap="m" className="plan-draft-column" style={{ flex: '1 1 440px', minWidth: 0 }}>
           {!folders ? (
             <PanelHeader

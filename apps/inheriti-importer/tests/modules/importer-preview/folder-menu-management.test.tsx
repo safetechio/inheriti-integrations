@@ -63,7 +63,7 @@ describe('folder management', () => {
     fireEvent.click(screen.getByLabelText('Actions for Accounts'));
     fireEvent.click(screen.getByText('Permissions'));
     expect(screen.getByText('Inherit permissions')).toBeTruthy();
-    expect(screen.getByLabelText('Inherit permissions').className).toContain('folder-permissions-native-input');
+    expect(screen.getByLabelText('Inherit permissions').className).toContain('choice-group-radio');
     expect(screen.queryByText('Deny')).toBeNull();
     fireEvent.focus(screen.getByRole('textbox', { name: 'Search teams' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Team A' }));

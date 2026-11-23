@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Box, FormSearchableSelect, Icon, Text, theme } from '@main-components';
+import { Box, FormSearchableSelect, Icon, Text, Tooltip, theme } from '@main-components';
 
 export type FolderTarget = {
   label: string;
@@ -54,10 +54,10 @@ export function FolderTargetPopover({ target }: { target: FolderTarget }) {
   return (
     <Box className="asset-selection-destination-row" flexDirection="row" alignItems="center" gap="xs">
       <Text variant="xSmall" bold>Create in:</Text>
+      <Tooltip content={target.label}>
       <button
         type="button"
         ref={anchor}
-        title={target.label}
         className="asset-selection-destination"
         aria-label={`Create in: ${target.label}`}
         aria-haspopup="dialog"
@@ -68,6 +68,7 @@ export function FolderTargetPopover({ target }: { target: FolderTarget }) {
         <Text className="asset-selection-destination-label" variant="xSmall" color="gray">{target.label}</Text>
         <Box aria-hidden={true}><Icon name="chevron-right" size={9} color={theme.colors.gray} /></Box>
       </button>
+      </Tooltip>
       {placement ? createPortal(
         <Box
           ref={popup}

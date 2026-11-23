@@ -356,11 +356,12 @@
 .organization-folder-tree .folder-tree-selection {
   flex-shrink: 0;
   min-width: 0;
+  margin: 4px 8px 8px;
   padding: 10px 12px 10px 16px;
   border: 1px solid var(--gray-10);
   border-radius: 10px;
   background: var(--importer-color-surface);
-  box-shadow: 0 6px 20px rgba(17,24,39,.12);
+  box-shadow: 0 2px 8px rgba(17,24,39,.08);
 }
 .folder-tree-search input,
 .plan-asset-search input {
@@ -401,3 +402,14 @@
 .source-status-filters { flex-wrap: wrap; }
 .folder-tree-heading > :first-child { min-width: 0; max-width: 100%; }
 .folder-tree-heading > :last-child { margin-left: auto; }
+
+.plan-grouping-direction-slot[class] { position: relative; flex: 0 0 0; width: 0; align-self: stretch; }
+.plan-grouping-direction[class] {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+}
+@media (max-width: 760px) { .plan-grouping-direction-slot[class] { display: none; } }
