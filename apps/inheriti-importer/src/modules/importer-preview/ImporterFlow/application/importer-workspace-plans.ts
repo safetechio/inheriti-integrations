@@ -109,21 +109,6 @@ export function createPlanActions(context: ImporterWorkspaceContext) {
     return ids;
   }
 
-  function ensureFirstPlan() {
-    const id = crypto.randomUUID();
-    updateWorkspace((current) => {
-      if (current.planOrder.length) return current;
-      const created = createPlan(current, { clientId: id, name: 'Plan 1' });
-      return {
-        ...created,
-        plansByClientId: {
-          ...created.plansByClientId,
-          [id]: { ...created.plansByClientId[id], placeholder: true },
-        },
-      };
-    });
-  }
-
   function autoGroupUnassigned(preserveStructure: boolean) {
     const assets = projection.unassigned.filter((asset) => asset.valid);
     if (!assets.length) return;
@@ -182,7 +167,6 @@ export function createPlanActions(context: ImporterWorkspaceContext) {
     unassignAssets,
     createPlan: createNewPlan,
     createPlansFromAssets,
-    ensureFirstPlan,
     autoGroupUnassigned,
     deletePlan,
     deletePlans,

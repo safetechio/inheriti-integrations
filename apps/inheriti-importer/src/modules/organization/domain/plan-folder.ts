@@ -12,6 +12,8 @@ export interface PlanFolder {
   revision: number;
   policy?: FolderTeamsPolicy | null;
   effectivePolicy?: FolderTeamsPolicy | null;
+  usePlanPermissions?: boolean;
+  effectiveUsePlanPermissions?: boolean;
 }
 
 export interface FolderChangePreview {
@@ -22,6 +24,8 @@ export interface FolderChangePreview {
   removedDeniedTeamIds: string[];
   blockers: string[];
   scope?: PlanFolderScope;
+  usePlanPermissions?: boolean;
+  effectiveUsePlanPermissions?: boolean;
 }
 
 export function canCreatePlanAtDestination(
@@ -31,5 +35,5 @@ export function canCreatePlanAtDestination(
 ): boolean {
   if (folderId === null) return true;
   const folder = folders.find((item) => item.id === folderId && item.scope === scope);
-  return !!folder && (scope === 'PERSONAL' || !!(folder.effectivePolicy ?? folder.policy));
+  return !!folder && (scope === 'PERSONAL' || folder.effectiveUsePlanPermissions === true || !!(folder.effectivePolicy ?? folder.policy));
 }

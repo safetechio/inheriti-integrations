@@ -229,7 +229,6 @@ export function PreservationContext({ onReset }: { onReset: () => void }) {
             onAutoGroupUnassigned: workspace.autoGroupUnassigned,
             onCreatePlan: workspace.createPlan,
             onCreatePlansFromAssets: workspace.createPlansFromAssets,
-            onEnsureFirstPlan: workspace.ensureFirstPlan,
             onDeletePlan: workspace.deletePlan,
             onDeletePlans: workspace.deletePlans,
             onUpdatePlan: workspace.updatePlanMetadata,

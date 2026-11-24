@@ -125,23 +125,22 @@ describe('ImporterFlow controlled mode', () => {
   });
 
   it.each(['controlled', 'uncontrolled'])(
-    'keeps the %s grouping step empty after deleting its initial draft and revisiting',
+    'opens the %s grouping step without a draft and only creates one on request',
     (mode) => {
-      const ensureFirstPlan = vi.fn();
       function Flow() {
         const [plans, setPlans] = useState<PlanDraft[]>([]);
         return (
           <ImporterFlow
-            initialStage="plans"
+            initialStage="assets"
             files={[file]}
             assets={[asset]}
-            unassigned={[]}
+            unassigned={[asset]}
             plans={plans}
             checklist={checklist}
             callbacks={mode === 'controlled' ? {
-              onEnsureFirstPlan: () => {
-                ensureFirstPlan();
+              onCreatePlan: () => {
                 setPlans([{ ...plan, name: 'Plan 1', assets: 0, valid: false }]);
+                return plan.id;
               },
               onDeletePlan: () => setPlans([]),
             } : undefined}
@@ -150,18 +149,23 @@ describe('ImporterFlow controlled mode', () => {
       }
 
       render(<Flow />);
-      fireEvent.click(screen.getByRole('button', { name: 'Delete Plan 1' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Delete plan' }));
-
+      const enterGrouping = () => fireEvent.click(screen.getByRole('button', { name: /Create plans/ }));
       const expectEmpty = () => {
-        expect(screen.queryByRole('button', { name: 'Select Plan 1' })).toBeNull();
+        expect(screen.getByText('0 of 1 asset assigned')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Select Plan \d+$/ })).toBeNull();
         expect(screen.getByRole('button', { name: 'Continue' }).getAttribute('aria-disabled')).toBe('true');
       };
+
+      enterGrouping();
+      expectEmpty();
+      fireEvent.click(screen.getByRole('button', { name: 'New plan' }));
+      expect(screen.getByRole('button', { name: 'Select Plan 1' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Plan 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete plan' }));
       expectEmpty();
       fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-      fireEvent.click(screen.getByRole('button', { name: /Create plans/ }));
+      enterGrouping();
       expectEmpty();
-      if (mode === 'controlled') expect(ensureFirstPlan).toHaveBeenCalledTimes(1);
     },
   );
 

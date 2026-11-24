@@ -1,7 +1,7 @@
 import type { Folder, FolderWorkspaceProps, PlanDraft } from '@modules/importer-preview/PlanGroupingSurface/types';
-import type { FolderTeamsPolicy } from '@modules/organization/domain/plan-folder';
+import { canCreatePlanAtDestination, type FolderTeamsPolicy } from '@modules/organization/domain/plan-folder';
 
-type Changes = { policy?: FolderTeamsPolicy | null; parentId?: string | null };
+type Changes = { policy?: FolderTeamsPolicy | null; usePlanPermissions?: boolean; parentId?: string | null };
 
 function descendants(folders: Folder[], id: string): string[] {
   const children = folders.filter((folder) => folder.parentId === id);
@@ -10,14 +10,17 @@ function descendants(folders: Folder[], id: string): string[] {
 
 function resolvePolicies(folders: Folder[]): Folder[] {
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
-  const effective = (folder: Folder, seen = new Set<string>()): FolderTeamsPolicy | null => {
-    if (folder.scope === 'PERSONAL' || seen.has(folder.id)) return null;
-    if (folder.policy) return folder.policy;
+  const governingFolder = (folder: Folder, seen = new Set<string>()): Folder | undefined => {
+    if (folder.scope === 'PERSONAL' || seen.has(folder.id)) return undefined;
+    if (folder.policy || folder.usePlanPermissions) return folder;
     seen.add(folder.id);
     const parent = folder.parentId ? byId.get(folder.parentId) : undefined;
-    return parent ? effective(parent, seen) : null;
+    return parent ? governingFolder(parent, seen) : undefined;
   };
-  return folders.map((folder) => ({ ...folder, effectivePolicy: effective(folder) }));
+  return folders.map((folder) => {
+    const source = governingFolder(folder);
+    return { ...folder, effectivePolicy: source?.policy ?? null, effectiveUsePlanPermissions: source?.usePlanPermissions === true };
+  });
 }
 
 function change(folders: Folder[], folder: Folder, changes: Changes): Folder[] {
@@ -43,8 +46,8 @@ export function folderAdapter(
     const ids = new Set(selected.map((folder) => folder.id));
     if (selected.some((folder) => !folders.some((item) => item.id === folder.id && item.revision === folder.revision)))
       throw new Error('Folder changed. Reopen the editor.');
-    if (folders.some((folder) => folder.parentId && ids.has(folder.parentId) && !ids.has(folder.id)))
-      throw new Error('Select child folders too before deleting.');
+    if (folders.some((folder) => folder.parentId && ids.has(folder.parentId)))
+      throw new Error('Move or delete the subfolders first.');
     if (plans.some((plan) => plan.folderId && ids.has(plan.folderId)))
       throw new Error('Move local drafts out before deleting folders.');
     apply(folders.filter((folder) => !ids.has(folder.id)));
@@ -69,8 +72,9 @@ export function folderAdapter(
       const affectedPlanIds = plans.filter((plan) => plan.folderId && affected.includes(plan.folderId)).map((plan) => plan.id);
       try {
         const next = change(folders, folder, changes);
-        const blocked = plans.some((plan) => plan.folderId && affected.includes(plan.folderId) && folder.scope === 'SHARED' && !next.find((item) => item.id === plan.folderId)?.effectivePolicy);
-        const teams = (items: Folder[], kind: 'allow' | 'deny') => [...new Set(affected.flatMap((id) => items.find((item) => item.id === id)?.effectivePolicy?.teams[kind] ?? []))];
+        const blocked = plans.some((plan) => plan.folderId && affected.includes(plan.folderId) && folder.scope === 'SHARED' && !canCreatePlanAtDestination(plan.folderId, folder.scope, next));
+        const governed = affected.filter((id) => !next.find((item) => item.id === id)?.effectiveUsePlanPermissions);
+        const teams = (items: Folder[], kind: 'allow' | 'deny') => [...new Set(governed.flatMap((id) => items.find((item) => item.id === id)?.effectivePolicy?.teams[kind] ?? []))];
         const difference = (oldIds: string[], newIds: string[]) => newIds.filter((id) => !oldIds.includes(id));
         return {
           affectedPlanIds,
@@ -85,10 +89,10 @@ export function folderAdapter(
         return { affectedPlanIds, addedTeamIds: [], removedTeamIds: [], addedDeniedTeamIds: [], removedDeniedTeamIds: [], blockers: [(error as Error).message], scope: folder.scope };
       }
     },
-    onChangeFolderPolicy: async (folder, policy) => {
-      const preview = await folderAdapter(folders, setFolders, plans).onPreviewFolderChange!(folder, { policy });
+    onChangeFolderPolicy: async (folder, policy, usePlanPermissions) => {
+      const preview = await folderAdapter(folders, setFolders, plans).onPreviewFolderChange!(folder, { policy, usePlanPermissions });
       if (preview.blockers.length) throw new Error(preview.blockers[0]);
-      apply(change(folders, folder, { policy }));
+      apply(change(folders, folder, { policy, usePlanPermissions }));
     },
     onMoveFolder: async (folder, parentId) => {
       const preview = await folderAdapter(folders, setFolders, plans).onPreviewFolderChange!(folder, { parentId });

@@ -51,6 +51,7 @@ export async function exerciseStep3(page, { reset, output, summary }) {
       await step3.waitFor();
       total = Number((await status('All').innerText()).split('·')[1]);
       await progress(0);
+      assert.equal(await right.locator('[data-plan-row-id]').count(), 0, 'Step 3 starts without draft plans');
       await body();
       summary.passed.push(label);
       console.log(`PASS ${label}`);
@@ -80,6 +81,11 @@ export async function exerciseStep3(page, { reset, output, summary }) {
     await btn('New plan', left).click();
     await nameDraft(name, commit);
     await plan(name).waitFor();
+  }
+  async function createEmptyPlan() {
+    await menu('Finance', 'New plan');
+    await nameDraft('Plan 1');
+    await plan('Plan 1').waitFor();
   }
   async function expandPlan(name) {
     const expand = btn(`Expand ${name}`, plan(name));
@@ -132,6 +138,7 @@ export async function exerciseStep3(page, { reset, output, summary }) {
   });
 
   await check('single and multi-asset drag to draft and folder, then between drafts', async () => {
+    await createEmptyPlan();
     await drag(asset(service(1)), plan('Plan 1'));
     await progress(1);
     await selectAssets([service(2), service(3)]);
@@ -184,6 +191,7 @@ export async function exerciseStep3(page, { reset, output, summary }) {
   });
 
   await check('assigned row menu moves and unassigns, draft delete and history buttons/keyboard', async () => {
+    await createEmptyPlan();
     await assignTo('Plan 1', [service(3)]);
     await progress(1);
     await createPlan('Menu draft', [service(1), service(2)]);
@@ -225,6 +233,7 @@ export async function exerciseStep3(page, { reset, output, summary }) {
   });
 
   await check('near-capacity drag cannot partially assign an oversized selection', async () => {
+    await createEmptyPlan();
     await search.fill('Service');
     await box(service(1), left).click();
     await box(service(9), left).click({ modifiers: ['Shift'] });
@@ -444,13 +453,6 @@ export async function exerciseStep3(page, { reset, output, summary }) {
     await progress(0);
     await btn('Redo').click();
     await progress(total);
-    // An empty initial draft may still need deletion after every asset is assigned.
-    if (!(await next.isEnabled()) && await plan('Plan 1').count()) {
-      assert.equal(await plan('Plan 1').locator('.folder-plan-count').innerText(), '0 assets');
-      await menu('Plan 1', 'Delete plan');
-      await btn('Delete plan', dialog('Delete plan?')).click();
-      await progress(total);
-    }
     assert.equal(await next.isEnabled(), true);
     await page.screenshot({ path: join(output, 'ready-step3.png') });
   });

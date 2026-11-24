@@ -70,7 +70,6 @@ export type ImporterFlowCallbacks = {
     assets: GroupingAsset[],
     options: { name: string; folderId: string | null; scope: 'SHARED' | 'PERSONAL' },
   ) => string[];
-  onEnsureFirstPlan?: () => void;
   onDeletePlan?: (plan: PlanDraft) => void;
   onDeletePlans?: (plans: PlanDraft[]) => void;
   onUpdatePlan?: (plan: PlanDraft, values: PlanMetadataValues) => void;
@@ -290,11 +289,6 @@ export function useImporterFlow(initial: InitialState, controlled?: ControlledIm
       stagingRevision.current += 1;
       dispatch(action);
       return ids;
-    },
-    ensureFirstPlan: () => {
-      if (plans.length) return;
-      if (isControlled) controlled?.callbacks.onEnsureFirstPlan?.();
-      else dispatch({ type: 'create-plan', id: 'plan-1' });
     },
     deletePlan: (plan: PlanDraft) => {
       if (isControlled) controlled?.callbacks.onDeletePlan?.(plan);

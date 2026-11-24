@@ -50,7 +50,7 @@ describe('folder management', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save permissions', exact: true }));
     await screen.findByText('Revision changed');
     expect(screen.getByRole('button', { name: 'Remove Team A' })).toBeTruthy();
-    expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(folder, { teams: { allow: ['team'], deny: [] } });
+    expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(folder, { teams: { allow: ['team'], deny: [] } }, undefined);
   });
 
   it('offers inheritance only for a child and keeps existing denied teams when saving an own policy', async () => {
@@ -69,7 +69,7 @@ describe('folder management', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Team A' }));
     await waitFor(() => expect(screen.getByText('Save permissions').closest('button')?.disabled).toBe(false));
     fireEvent.click(screen.getByText('Save permissions'));
-    await waitFor(() => expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(child, { teams: { allow: ['existing-team', 'team'], deny: ['legacy'] } }));
+    await waitFor(() => expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(child, { teams: { allow: ['existing-team', 'team'], deny: ['legacy'] } }, undefined));
   });
 
   it('saves inherited permissions as null for a child', async () => {
@@ -84,16 +84,89 @@ describe('folder management', () => {
     fireEvent.click(screen.getByText('Inherit permissions'));
     await waitFor(() => expect(screen.getByText('Save permissions').closest('button')?.disabled).toBe(false));
     fireEvent.click(screen.getByText('Save permissions'));
-    await waitFor(() => expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(child, null));
+    await waitFor(() => expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(child, null, undefined));
+  });
+
+  it('previews and saves permissions per plan without a folder team policy', async () => {
+    const props = workspace();
+    props.onPreviewFolderChange = vi.fn().mockResolvedValue({ affectedPlanIds: ['existing'], addedTeamIds: [], removedTeamIds: [], addedDeniedTeamIds: [], removedDeniedTeamIds: [], blockers: [] });
+    props.onChangeFolderPolicy = vi.fn().mockResolvedValue(undefined);
+    render(<FolderActionsMenu folder={folder} workspace={props} canCreatePlan={false} onNewSubfolder={vi.fn()} onRename={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('Actions for Accounts'));
+    fireEvent.click(screen.getByText('Permissions'));
+    fireEvent.click(screen.getByRole('radio', { name: 'Permissions per plan' }));
+    expect(screen.queryByRole('textbox', { name: 'Search teams' })).toBeNull();
+    await waitFor(() => expect(props.onPreviewFolderChange).toHaveBeenLastCalledWith(folder, { policy: null, usePlanPermissions: true }));
+    const save = screen.getByRole<HTMLButtonElement>('button', { name: 'Save permissions' });
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    expect(props.onChangeFolderPolicy).toHaveBeenCalledWith(folder, null, true);
+  });
+
+  it('opens the same folder actions from the row context menu and the ellipsis', () => {
+    const props = { ...workspace(), onRenameFolder: vi.fn(), onDeleteFolder: vi.fn() };
+    render(<OrganizationFolderTree workspace={props} plans={[]} dragAssets={[]} />);
+    const row = screen.getByRole('treeitem', { name: /Accounts/ });
+    const actions = () => Array.from(document.querySelectorAll('.folder-menu-item'), (item) => item.getAttribute('aria-label'));
+    const ellipsis = screen.getByRole('button', { name: 'Actions for Accounts' });
+    fireEvent.click(ellipsis);
+    const expected = actions();
+    expect(expected).toContain('Delete');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.activeElement).toBe(ellipsis);
+
+    const rightClick = () => fireEvent.contextMenu(screen.getByText('Accounts'), { button: 2, clientX: 100, clientY: 100 });
+    expect(rightClick()).toBe(false);
+    expect(actions()).toEqual(expected);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(actions()).toEqual([]);
+    expect(document.activeElement).toBe(row);
+
+    rightClick();
+    fireEvent.click(screen.getByRole('button', { name: 'Rename', exact: true }));
+    expect(screen.getByRole('textbox', { name: 'Rename Accounts' })).toBeTruthy();
+    expect(actions()).toEqual([]);
+  });
+
+  it('blocks parent deletion even with selected children and protects existing assigned plans', () => {
+    const child = { ...folder, id: 'child', name: 'Cards', parentId: folder.id };
+    const props = { ...workspace(), folders: [folder, child], onDeleteFolder: vi.fn(), onDeleteFolders: vi.fn() };
+    const tree = (folders: FolderWorkspaceProps) => <OrganizationFolderTree workspace={folders} plans={[]} dragAssets={[]} />;
+    const view = render(tree(props));
+    expect(screen.getByText('0 draft plans')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Accounts' }));
+    const deleteParent = screen.getByRole<HTMLButtonElement>('button', { name: 'Delete', exact: true });
+    expect(deleteParent.disabled).toBe(true);
+    expect(deleteParent.title).toBe('Move or delete the subfolders first.');
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    fireEvent.click(screen.getByRole('treeitem', { name: /Accounts/ }), { ctrlKey: true });
+    const bulkDelete = () => screen.getByText('Delete selected').closest('button')!;
+    expect(bulkDelete().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand', exact: true }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /Cards/ }), { ctrlKey: true });
+    expect(bulkDelete().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('treeitem', { name: /Accounts/ }), { ctrlKey: true });
+    expect(bulkDelete().disabled).toBe(false);
+
+    view.rerender(tree({ ...props, assignments: [{ folderId: child.id }] }));
+    expect(bulkDelete().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Cards' }));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Delete', exact: true }).title)
+      .toBe('Move existing plans out before deleting.');
+    expect(props.onDeleteFolder).not.toHaveBeenCalled();
+    expect(props.onDeleteFolders).not.toHaveBeenCalled();
   });
 
   it('blocks local draft deletion and confirms bulk deletion', async () => {
     const props = workspace();
     props.onDeleteFolders = vi.fn().mockResolvedValue(undefined);
     const clear = vi.fn();
-    const view = render(<FolderSelectionToolbar folders={[folder]} workspace={props} localDraftCount={1} onClear={clear} />);
+    const view = render(<FolderSelectionToolbar folders={[folder]} workspace={props} deleteBlocker="Move 1 local draft plan out before deleting." onClear={clear} />);
     expect(screen.getByText('Delete selected').closest('button')?.disabled).toBe(true);
-    view.rerender(<FolderSelectionToolbar folders={[folder]} workspace={props} localDraftCount={0} onClear={clear} />);
+    view.rerender(<FolderSelectionToolbar folders={[folder]} workspace={props} onClear={clear} />);
     fireEvent.click(screen.getByText('Delete selected'));
     expect(props.onDeleteFolders).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Delete folders'));

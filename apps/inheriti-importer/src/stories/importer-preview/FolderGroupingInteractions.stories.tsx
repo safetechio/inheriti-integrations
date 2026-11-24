@@ -127,7 +127,6 @@ function FolderGroupingStory({
             onAutoGroupUnassigned: workspace.autoGroupUnassigned,
             onCreatePlan: workspace.createPlan,
             onCreatePlansFromAssets: workspace.createPlansFromAssets,
-            onEnsureFirstPlan: workspace.ensureFirstPlan,
             onDeletePlan: workspace.deletePlan,
             onDeletePlans: workspace.deletePlans,
             onUpdatePlan: workspace.updatePlanMetadata,

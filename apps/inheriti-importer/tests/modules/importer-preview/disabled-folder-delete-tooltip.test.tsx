@@ -12,10 +12,10 @@ const workspace = (onDeleteFolders: FolderWorkspaceProps['onDeleteFolders']): Fo
 
 it('explains a blocked folder delete without opening confirmation', () => {
   const remove = vi.fn();
-  render(<FolderSelectionToolbar folders={[folder]} workspace={workspace(remove)} localDraftCount={2} onClear={vi.fn()} />);
+  render(<FolderSelectionToolbar folders={[folder]} workspace={workspace(remove)} deleteBlocker="Move 2 local draft plans out before deleting." onClear={vi.fn()} />);
   const button = screen.getByText('Delete selected');
   fireEvent.focus(button.closest('.importer-tooltip-anchor')!);
-  expect(screen.getByRole('tooltip').textContent).toBe('Move the 2 plans out of the selected folders before deleting them.');
+  expect(screen.getByRole('tooltip').textContent).toBe('Move 2 local draft plans out before deleting.');
   fireEvent.click(button);
   expect(screen.queryByText('Delete folders?')).toBeNull();
   expect(remove).not.toHaveBeenCalled();
@@ -24,7 +24,7 @@ it('explains a blocked folder delete without opening confirmation', () => {
 });
 
 it('keeps enabled delete directly actionable', () => {
-  render(<FolderSelectionToolbar folders={[folder]} workspace={workspace(vi.fn())} localDraftCount={0} onClear={vi.fn()} />);
+  render(<FolderSelectionToolbar folders={[folder]} workspace={workspace(vi.fn())} onClear={vi.fn()} />);
   const button = screen.getByRole('button', { name: 'Delete selected' });
   fireEvent.mouseEnter(button.closest('.importer-tooltip-anchor')!);
   expect(screen.getByRole('tooltip').textContent).toBe('Review and confirm deleting the selected folders from the organisation.');

@@ -8,6 +8,7 @@ import {
   getSelectedOrganizationSnapshot,
   setActiveOrganizationAccount,
 } from '@modules/organization/infrastructure/selected-organization-api';
+import { ApiStatusError } from '@modules/_shared/domain/api-status-error';
 import type { PlanFolder } from '@modules/organization/domain/plan-folder';
 
 const capabilityState = vi.hoisted(() => ({ canManagePlanFolders: true }));
@@ -91,6 +92,19 @@ describe('useImporterFolders', () => {
 
     expect(result.current.scope).toBe('SHARED');
     expect(result.current).not.toHaveProperty('onScopeChange');
+  });
+
+  it.each(['single', 'bulk'] as const)('refreshes the catalog and explains a %s delete conflict', async (kind) => {
+    const assignments = [{ folderId: folder.id, planId: 'remote-plan', revision: 1 }];
+    const { client, wrapper } = setup({ items: [folder], assignments });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useImporterFolders(), { wrapper });
+    await waitFor(() => expect(result.current.assignments).toEqual(assignments));
+
+    transport.request.mockRejectedValueOnce(new ApiStatusError('plan_folder_not_empty', 400));
+    const remove = kind === 'single' ? () => result.current.onDeleteFolder!(folder) : () => result.current.onDeleteFolders!([folder]);
+    await expect(remove()).rejects.toThrow('A folder still contains plans or subfolders.');
+    expect(invalidate).toHaveBeenCalledOnce();
   });
 
   it('reports team loading and failure, then retries the teams query', async () => {

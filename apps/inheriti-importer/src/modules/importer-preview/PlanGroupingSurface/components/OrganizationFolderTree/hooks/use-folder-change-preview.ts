@@ -3,7 +3,7 @@ import type { Folder, FolderWorkspaceProps } from '../../../types';
 import type { FolderChangePreview, FolderTeamsPolicy } from '@modules/organization/domain/plan-folder';
 
 type Entry = { folderId: string; preview: FolderChangePreview };
-type Changes = { policy?: FolderTeamsPolicy | null; parentId?: string | null };
+type Changes = { policy?: FolderTeamsPolicy | null; usePlanPermissions?: boolean; parentId?: string | null };
 
 export function useFolderChangePreview({ folders, workspace, changes, enabled = true }: {
   folders: Folder[];

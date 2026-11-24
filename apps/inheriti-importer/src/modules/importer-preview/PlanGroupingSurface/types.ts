@@ -34,6 +34,7 @@ import type { FolderChangePreview } from '@modules/organization/domain/plan-fold
 export type Folder = PlanFolder;
 export interface FolderWorkspaceProps {
   folders: Folder[];
+  assignments?: ReadonlyArray<{ folderId: string }>;
   teams?: Array<{ id: string; name: string }>;
   teamsLoading?: boolean;
   teamsError?: string;
@@ -51,8 +52,8 @@ export interface FolderWorkspaceProps {
     policy?: FolderTeamsPolicy | null;
   }) => Promise<void>;
   onRenameFolder?: (folder: Folder, name: string) => Promise<void>;
-  onPreviewFolderChange?: (folder: Folder, changes: { policy?: FolderTeamsPolicy | null; parentId?: string | null }) => Promise<FolderChangePreview>;
-  onChangeFolderPolicy?: (folder: Folder, policy: FolderTeamsPolicy | null) => Promise<void>;
+  onPreviewFolderChange?: (folder: Folder, changes: { policy?: FolderTeamsPolicy | null; usePlanPermissions?: boolean; parentId?: string | null }) => Promise<FolderChangePreview>;
+  onChangeFolderPolicy?: (folder: Folder, policy: FolderTeamsPolicy | null, usePlanPermissions?: boolean) => Promise<void>;
   onMoveFolder?: (folder: Folder, parentId: string | null) => Promise<void>;
   onDeleteFolder?: (folder: Folder) => Promise<void>;
   onDeleteFolders?: (folders: Folder[]) => Promise<void>;

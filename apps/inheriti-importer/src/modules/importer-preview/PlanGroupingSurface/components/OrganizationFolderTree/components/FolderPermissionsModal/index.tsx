@@ -9,36 +9,34 @@ import { FolderImpactSkeleton } from '../FolderImpactSkeleton';
 export function FolderPermissionsModal({ folder: currentFolder, workspace, onDismiss }: { folder: Folder; workspace: FolderWorkspaceProps; onDismiss: () => void }) {
   const [folder] = useState(currentFolder);
   const stale = folder.id !== currentFolder.id || folder.revision !== currentFolder.revision;
-  const [mode, setMode] = useState<'inherit' | 'own'>(folder.parentId && folder.policy === null ? 'inherit' : 'own');
+  const [mode, setMode] = useState<'inherit' | 'own' | 'plan'>(folder.usePlanPermissions ? 'plan' : folder.parentId && folder.policy === null ? 'inherit' : 'own');
   const [allow, setAllow] = useState(folder.policy?.teams.allow ?? []);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const policy: FolderTeamsPolicy | null = mode === 'inherit' && folder.parentId
-    ? null
-    : { teams: { allow, deny: folder.policy?.teams.deny ?? [] } };
-  const { previews, pending, error: previewError, retry } = useFolderChangePreview({ folders: [folder], workspace, changes: { policy }, enabled: !stale });
+  const policy: FolderTeamsPolicy | null = mode === 'own' ? { teams: { allow, deny: folder.policy?.teams.deny ?? [] } } : null;
+  const usePlanPermissions = mode === 'plan' || folder.usePlanPermissions ? mode === 'plan' : undefined;
+  const { previews, pending, error: previewError, retry } = useFolderChangePreview({ folders: [folder], workspace, changes: { policy, usePlanPermissions }, enabled: !stale });
   const preview = previews.find((item) => item.folderId === folder.id)?.preview;
   const save = async () => {
     if (stale || saving || !preview || pending || previewError || preview.blockers.length || !workspace.onChangeFolderPolicy) return;
     setSaving(true); setError('');
-    try { await workspace.onChangeFolderPolicy(folder, policy); onDismiss(); }
+    try { await workspace.onChangeFolderPolicy(folder, policy, usePlanPermissions); onDismiss(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update permissions.'); }
     finally { setSaving(false); }
   };
-  return <BaseModal visible title={`Permissions for ${folder.name}`} titleIcon={<Icon name="shield-halved" size={20} color="primary"/>} description="Choose which teams can access this shared folder." onDismiss={() => { if (!saving) onDismiss(); }} footer={<><Button title="Cancel" variant="outlined" color="gray" onPress={onDismiss} disabled={saving}/><Button title={saving ? 'Saving permissions…' : 'Save permissions'} loading={saving} disabled={stale || saving || pending || !!previewError || !preview || !!preview.blockers.length || !workspace.onChangeFolderPolicy} onPress={() => void save()}/></>}>
+  return <BaseModal visible title={`Permissions for ${folder.name}`} titleIcon={<Icon name="shield-halved" size={20} color="primary"/>} description="Choose how permissions are set for plans in this folder." onDismiss={() => { if (!saving) onDismiss(); }} footer={<><Button title="Cancel" variant="outlined" color="gray" onPress={onDismiss} disabled={saving}/><Button title={saving ? 'Saving permissions…' : 'Save permissions'} loading={saving} disabled={stale || saving || pending || !!previewError || !preview || !!preview.blockers.length || !workspace.onChangeFolderPolicy} onPress={() => void save()}/></>}>
     <Box gap="m">
-      {folder.parentId ? (
-        <ChoiceGroup
+      <ChoiceGroup<'inherit' | 'own' | 'plan'>
           label="Permission policy"
           value={mode}
           options={[
-            { value: 'inherit', label: 'Inherit permissions', description: 'Use the parent folder’s access.' },
+            ...(folder.parentId ? [{ value: 'inherit' as const, label: 'Inherit permissions', description: 'Use the parent folder’s permission settings.' }] : []),
             { value: 'own', label: 'Use own policy', description: 'Choose teams for this folder.' },
+            { value: 'plan', label: 'Permissions per plan', description: 'Each plan keeps its own permissions when moved into this folder.' },
           ]}
           disabled={saving || stale}
           onChange={setMode}
         />
-      ) : null}
       {mode === 'own' ? (
         <Box gap="s" backgroundColor="gray5" borderRadius="s" padding="m" borderWidth={1} borderColor="gray10">
           <Text variant="bodySmall" semibold>Teams with access</Text>

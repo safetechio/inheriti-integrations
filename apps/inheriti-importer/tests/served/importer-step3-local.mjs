@@ -213,6 +213,7 @@ try {
     await txt('Draft plan creation').waitFor();
     await skipGuide();
     await right().waitFor();
+    assert.equal(await right().locator('[data-plan-row-id]').count(), 0, 'Step 3 starts without draft plans');
     await btn('Use organisation root').click();
     await progress(0);
   });

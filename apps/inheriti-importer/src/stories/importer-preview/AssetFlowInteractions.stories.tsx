@@ -65,7 +65,6 @@ export const SyntheticControlledAssetFlow = () => {
           onAssignAsset: workspace.assignAsset,
           onUnassignAsset: workspace.unassignAsset,
           onCreatePlan: workspace.createPlan,
-          onEnsureFirstPlan: workspace.ensureFirstPlan,
           onDeletePlan: workspace.deletePlan,
           onUpdatePlan: workspace.updatePlanMetadata,
           onCancel: reset,

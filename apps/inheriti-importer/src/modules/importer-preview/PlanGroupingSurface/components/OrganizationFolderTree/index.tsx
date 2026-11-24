@@ -80,6 +80,8 @@ export function OrganizationFolderTree({
   const [collapsedSearchIds, setCollapsedSearchIds] = useState<string[]>([]);
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [selectedFolderIds, setSelectedFolderIds] = useState<string[]>([]);
+  const [folderContextMenu, setFolderContextMenu] = useState<{ id: string; x: number; y: number }>();
+  const closeFolderContextMenu = useCallback(() => setFolderContextMenu(undefined), []);
   const livePlanIds = useMemo(() => plans.map((plan) => plan.id).join('\0'), [plans]);
   useEffect(() => {
     const live = new Set(plans.map((plan) => plan.id));
@@ -173,6 +175,25 @@ export function OrganizationFolderTree({
     visibleFolders, visiblePlans, folderById, pathById, roots, childrenById, readyDestinations,
     draftIndexesByFolderId, plansByFolderId, searchFolderIds, searchPlans, searchPlansByFolderId, matchesPlanSearch,
   } = useFolderTreeIndex(workspace.folders, plans, workspace.scope, query, withPlans);
+  const assignedFolderIds = useMemo(
+    () => new Set(workspace.assignments?.map(({ folderId }) => folderId)),
+    [workspace.assignments],
+  );
+  const selectedFolders = visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id));
+  const selectedFolderSet = new Set(selectedFolders.map(({ id }) => id));
+
+  function deleteBlocker(ids: ReadonlySet<string>, draftCount: number) {
+    if (draftCount > 0) {
+      return `Move ${draftCount} local draft ${draftCount === 1 ? 'plan' : 'plans'} out before deleting.`;
+    }
+    for (const id of ids) {
+      if (assignedFolderIds.has(id)) return 'Move existing plans out before deleting.';
+    }
+    for (const id of ids) {
+      if (childrenById.get(id)?.length) return 'Move or delete the subfolders first.';
+    }
+    return undefined;
+  }
   const expandedFolderIds = new Set(expanded);
   const expandedPlanIds = new Set(expandedPlans);
   const collapsedFolderIds = new Set(collapsedSearchIds);
@@ -477,6 +498,14 @@ export function OrganizationFolderTree({
         <Box
           className={`folder-tree-row ${dropId === folder.id ? dropValid ? 'over-valid' : 'over-invalid' : ''} ${targetFolderId === folder.id && open ? 'is-target' : ''} ${selectedFolderIds.includes(folder.id) ? 'is-selected' : ''}`}
           role="treeitem" tabIndex={0} aria-expanded={open} aria-selected={selectedFolderIds.includes(folder.id)}
+          onContextMenu={(event: MouseEvent) => {
+            const row = event.currentTarget;
+            if (!(row instanceof HTMLElement) || !(event.target instanceof Node) || !row.contains(event.target)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            row.focus();
+            setFolderContextMenu({ id: folder.id, x: event.clientX, y: event.clientY });
+          }}
           onClick={(event: MouseEvent) => { if ((event.target as HTMLElement).closest('button, input, [role="button"], [role="dialog"]')) return; if (event.ctrlKey || event.metaKey || event.shiftKey) selectFolder(folder, event); else { chooseTarget(folder.id); toggleFolder(folder.id, open); } }}
           onKeyDown={(event: KeyboardEvent) => { if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return; event.preventDefault(); if (event.ctrlKey || event.metaKey || event.shiftKey) selectFolder(folder, event); else { chooseTarget(folder.id); toggleFolder(folder.id, open); } }}
           flexDirection="row"
@@ -547,12 +576,14 @@ export function OrganizationFolderTree({
           ) : null}
           <Tooltip content={branchOpen ? 'Collapse all folders and plans' : 'Expand all folders and plans'}><IconAction name={branchOpen ? 'angles-up' : 'angles-down'} label={`${branchOpen ? 'Collapse' : 'Expand'} all in ${folder.name}`} onPress={toggleBranch} /></Tooltip>
           <Text className="folder-tree-count" color="gray" variant="bodySmall">
-            {planCount} {planCount === 1 ? 'plan' : 'plans'}
+            {planCount} {planCount === 1 ? 'draft plan' : 'draft plans'}
           </Text>
           <FolderActionsMenu
             folder={folder}
             workspace={workspace}
-            localDraftCount={planCount}
+            deleteBlocker={deleteBlocker(new Set([folder.id]), planCount)}
+            contextAnchor={folderContextMenu?.id === folder.id ? folderContextMenu : undefined}
+            onDismissContextMenu={closeFolderContextMenu}
             canCreatePlan={canCreatePlan}
             onCreatePlan={
               onCreatePlan
@@ -716,7 +747,19 @@ export function OrganizationFolderTree({
           ) : null}
         </Box>
       ) : null}
-      {selectedFolderIds.length ? <Box className="folder-tree-selection"><FolderSelectionToolbar folders={visibleFolders.filter((folder) => selectedFolderIds.includes(folder.id))} workspace={workspace} localDraftCount={new Set(selectedFolderIds.flatMap((id) => draftIndexesByFolderId.get(id) ?? [])).size} onClear={() => setSelectedFolderIds([])} /></Box> : null}
+      {selectedFolders.length ? (
+        <Box className="folder-tree-selection">
+          <FolderSelectionToolbar
+            folders={selectedFolders}
+            workspace={workspace}
+            deleteBlocker={deleteBlocker(
+              selectedFolderSet,
+              new Set(selectedFolders.flatMap(({ id }) => draftIndexesByFolderId.get(id) ?? [])).size,
+            )}
+            onClear={() => setSelectedFolderIds([])}
+          />
+        </Box>
+      ) : null}
       {assetSelection?.pane === 'organization' && assetSelection.assets.length ? (
         <AssetSelectionToolbar
           assets={assetSelection.assets}

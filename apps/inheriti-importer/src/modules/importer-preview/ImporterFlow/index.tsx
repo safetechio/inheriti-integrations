@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Box, ProgressBar, Text } from '@main-components';
 import type { SourceCoverage } from '@modules/mapping/application/source-coverage';
 import type { ImportReviewControls } from '../AssetReviewQueue/import-review-controls';
@@ -98,13 +98,7 @@ export function ImporterFlow({
   const assignedCount = flow.plans.reduce((sum, plan) => sum + plan.assets, 0);
   const assignmentTotal = flow.unassigned.length + assignedCount;
   const assignmentPercent = Math.round((100 * assignedCount) / Math.max(1, assignmentTotal));
-  const visitedPlans = useRef(false);
   const recoveryRef = useRef<ReviewRecoveryHandle>(null);
-  useEffect(() => {
-    if (stage !== 'plans' || visitedPlans.current) return;
-    visitedPlans.current = true;
-    if (flow.plans.length === 0) flow.ensureFirstPlan();
-  }, [stage, flow.plans.length, flow.ensureFirstPlan]);
   const flowLocked = ['releasing', 'encrypting', 'retry', 'failed-stage', 'staged'].includes(
     flow.stagingState,
   );
