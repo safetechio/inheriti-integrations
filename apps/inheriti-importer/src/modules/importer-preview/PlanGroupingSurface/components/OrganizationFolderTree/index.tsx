@@ -482,6 +482,8 @@ export function OrganizationFolderTree({
     if (!isFolderVisible(folder.id)) return null;
     const children = childrenById.get(folder.id) ?? [];
     const folderPlans = searchPlansByFolderId.get(folder.id) ?? [];
+    const directDrafts = plansByFolderId.get(folder.id) ?? [];
+    const moveDraftDestination = folder.parentId;
     const planCount = draftIndexesByFolderId.get(folder.id)?.length ?? 0;
     const canCreatePlan = destinationReady(folder.id);
     const open = isFolderOpen(folder.id);
@@ -581,6 +583,13 @@ export function OrganizationFolderTree({
           <FolderActionsMenu
             folder={folder}
             workspace={workspace}
+            moveDraftsOut={onMovePlans || (directDrafts.length === 1 && onMovePlan) ? {
+              count: directDrafts.length,
+              destination: moveDraftDestination ? folderById.get(moveDraftDestination)?.name ?? 'Parent folder' : 'Organisation root',
+              onMove: directDrafts.length && destinationReady(moveDraftDestination)
+                ? () => movePlans(directDrafts, moveDraftDestination)
+                : undefined,
+            } : undefined}
             deleteBlocker={deleteBlocker(new Set([folder.id]), planCount)}
             contextAnchor={folderContextMenu?.id === folder.id ? folderContextMenu : undefined}
             onDismissContextMenu={closeFolderContextMenu}

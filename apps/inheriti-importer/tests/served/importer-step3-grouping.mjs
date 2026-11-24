@@ -418,6 +418,52 @@ export async function exerciseStep3(page, { reset, output, summary }) {
     await location('Finance');
   });
 
+  await check('Move drafts out uses the parent or root, keeps assets and can be undone in one step', async () => {
+    await newFolder('Draft intake', 'Finance');
+    for (const [index, name] of ['Intake draft A', 'Intake draft B'].entries()) {
+      await drag(asset(service(index + 1)), folder('Draft intake'));
+      await nameDraft(name);
+    }
+    const move = dialog('Move drafts out?');
+    const action = 'Move drafts out…';
+    const first = 'Intake draft A';
+    const second = 'Intake draft B';
+    async function location(draft, destinationName) {
+      await btn(draft, right).click();
+      const details = dialog(draft);
+      await txt(`Location in your organisation: ${destinationName}`, details).waitFor();
+      await btn('Close', details).click();
+    }
+
+    await folderSearch.fill(first);
+    await plan(second).waitFor({ state: 'hidden' });
+    await menu('Draft intake', action);
+    await txt('Move 2 drafts to Finance.', move).waitFor();
+    await btn('Cancel', move).click();
+    await location(first, 'Draft intake');
+    await menu('Draft intake', action);
+    await btn('Move', move).click();
+    await folderSearch.clear();
+    await progress(2);
+    await location(first, 'Finance');
+    await location(second, 'Finance');
+    await btn('Undo').click();
+    await expandFolder('Draft intake');
+    await location(first, 'Draft intake');
+    await location(second, 'Draft intake');
+    await btn('Redo').click();
+    await drag(asset(service(3)), folder('Draft intake'));
+    await nameDraft('Stays in subfolder');
+
+    await menu('Finance', action);
+    await txt('Move 2 drafts to Organisation root.', move).waitFor();
+    await btn('Move', move).click();
+    await location(first, 'Organisation root');
+    await location(second, 'Organisation root');
+    await location('Stays in subfolder', 'Draft intake');
+    await progress(3);
+  });
+
   await check('redo cannot recreate a draft inside a deleted fixture folder', async () => {
     await newFolder('STEP3 Redo Folder', 'Engineering');
     await progress(0);

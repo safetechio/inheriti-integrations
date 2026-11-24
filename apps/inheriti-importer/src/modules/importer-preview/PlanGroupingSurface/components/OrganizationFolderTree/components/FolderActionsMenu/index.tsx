@@ -5,9 +5,10 @@ import type { Folder, FolderWorkspaceProps } from '../../../../types';
 import { FolderPermissionsModal } from '../FolderPermissionsModal';
 import { FolderMoveModal } from '../FolderMoveModal';
 
-export function FolderActionsMenu({ folder, workspace, canCreatePlan, onCreatePlan, onNewSubfolder, onRename, deleteBlocker, editingPending = false, contextAnchor, onDismissContextMenu }: {
+export function FolderActionsMenu({ folder, workspace, canCreatePlan, onCreatePlan, onNewSubfolder, onRename, moveDraftsOut, deleteBlocker, editingPending = false, contextAnchor, onDismissContextMenu }: {
   folder: Folder; workspace: FolderWorkspaceProps; canCreatePlan: boolean; onCreatePlan?: () => void;
   onNewSubfolder: () => void; onRename: () => void; deleteBlocker?: string; editingPending?: boolean;
+  moveDraftsOut?: { count: number; destination: string; onMove?: () => void };
   contextAnchor?: { x: number; y: number };
   onDismissContextMenu?: () => void;
 }) {
@@ -17,7 +18,7 @@ export function FolderActionsMenu({ folder, workspace, canCreatePlan, onCreatePl
     setOpenFromButton(false);
     if (contextAnchor) onDismissContextMenu?.();
   }, [contextAnchor, onDismissContextMenu]);
-  const [dialog, setDialog] = useState<'permissions' | 'move' | 'delete'>();
+  const [dialog, setDialog] = useState<'permissions' | 'move' | 'move-drafts-out' | 'delete'>();
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const deleting = useRef(false);
@@ -92,12 +93,30 @@ export function FolderActionsMenu({ folder, workspace, canCreatePlan, onCreatePl
         <Box className="folder-menu-separator"/>
         {item('Rename', 'pen', Boolean(workspace.onRenameFolder) && !editingPending, onRename)}
         {workspace.onMoveFolder ? item('Move to', 'folder-open', true, () => setDialog('move')) : null}
+        {moveDraftsOut?.count ? item('Move drafts out…', 'arrow-up', Boolean(moveDraftsOut.onMove), () => setDialog('move-drafts-out'), false,
+          moveDraftsOut.onMove ? undefined : 'The parent folder must allow plans before drafts can be moved there.') : null}
         {folder.scope === 'SHARED' && workspace.onChangeFolderPolicy ? item('Permissions', 'user-shield', true, () => setDialog('permissions')) : null}
         {workspace.onDeleteFolder ? <><Box className="folder-menu-separator"/>{item('Delete', 'trash', !deleteBlocker, () => { setError(''); setDialog('delete'); }, true, deleteBlocker)}</> : null}
       </Box>, document.body) : null}
     </Box>
     {dialog === 'permissions' ? <FolderPermissionsModal folder={folder} workspace={workspace} onDismiss={() => setDialog(undefined)}/> : null}
     {dialog === 'move' ? <FolderMoveModal folder={folder} workspace={workspace} onDismiss={() => setDialog(undefined)}/> : null}
+    {dialog === 'move-drafts-out' && moveDraftsOut ? (
+      <BaseModal
+        visible
+        title="Move drafts out?"
+        titleIcon={<Icon name="arrow-up" size={20} color="primary"/>}
+        onDismiss={() => setDialog(undefined)}
+        footer={<>
+          <Button title="Cancel" variant="outlined" color="gray" onPress={() => setDialog(undefined)}/>
+          <Button title="Move" disabled={!moveDraftsOut.onMove} onPress={() => { moveDraftsOut.onMove?.(); setDialog(undefined); }}/>
+        </>}
+      >
+        <Text>{moveDraftsOut.count
+          ? `Move ${moveDraftsOut.count} ${moveDraftsOut.count === 1 ? 'draft' : 'drafts'} to ${moveDraftsOut.destination}.`
+          : 'This folder has no drafts to move.'}</Text>
+      </BaseModal>
+    ) : null}
     {dialog === 'delete' ? <BaseModal visible title="Delete folder?" titleIcon={<Icon name="trash" size={20} color="danger120"/>} onDismiss={dismissDelete} footer={<><Button title="Cancel" variant="outlined" color="gray" disabled={pending} onPress={dismissDelete}/><Button title={pending ? 'Deleting folder…' : 'Delete folder'} color="danger" loading={pending} disabled={pending || Boolean(deleteBlocker)} onPress={() => void deleteFolder()}/></>}><Box gap="s" backgroundColor="gray5" borderRadius="s" padding="m" style={{ borderWidth: 1, borderColor: '#e5e7eb' }}><Text variant="bodySmall" semibold>Folder to delete</Text><Text variant="bodySmall">{folder.name}</Text><Text variant="bodySmall" color="gray">Delete this folder from the organisation? This cannot be undone.</Text>{deleteBlocker ? <Text color="danger120">{deleteBlocker}</Text> : null}{error ? <Text color="danger120" accessibilityRole="alert">{error}</Text> : null}</Box></BaseModal> : null}
   </>;
 }
